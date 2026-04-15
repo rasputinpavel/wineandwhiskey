@@ -276,7 +276,7 @@ bot.on("message:text", async (ctx) => {
 const notifyChatIds = (process.env.NOTIFY_CHAT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 if (notifyChatIds.length > 0) {
-  cron.schedule("0 9 * * *", async () => {
+  cron.schedule("30 9 * * *", async () => {
     console.log("Sending morning briefing...");
     try {
       const text = await generateMorningBriefing();
@@ -293,7 +293,7 @@ if (notifyChatIds.length > 0) {
     }
   }, { timezone: "Asia/Bangkok" });
 
-  console.log(`Morning briefing scheduled at 9:00 Bangkok → chat IDs: ${notifyChatIds.join(", ")}`);
+  console.log(`Morning briefing scheduled at 9:30 Bangkok → chat IDs: ${notifyChatIds.join(", ")}`);
 } else {
   console.log("NOTIFY_CHAT_IDS not set — morning briefing disabled.");
 }
