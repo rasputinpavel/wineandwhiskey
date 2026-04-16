@@ -133,6 +133,8 @@ function getSession(chatId: number): ChatSession {
   return session;
 }
 
+const MAX_TOOL_CALLS = 4; // максимум итераций в одном ответе
+
 // Основной обработчик — agentic loop с tool use и памятью разговора
 async function askClaude(chatId: number, userQuestion: string): Promise<string> {
   const today = todayInThailand();
@@ -149,6 +151,7 @@ async function askClaude(chatId: number, userQuestion: string): Promise<string> 
   messages.push({ role: "user", content: userContent });
 
   // Agentic loop — Claude может вызвать несколько инструментов подряд
+  let toolCallCount = 0;
   while (true) {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -175,8 +178,12 @@ async function askClaude(chatId: number, userQuestion: string): Promise<string> 
 
     // Если Claude хочет использовать инструменты
     if (response.stop_reason === "tool_use") {
-      const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
+      toolCallCount++;
+      if (toolCallCount > MAX_TOOL_CALLS) {
+        return "Запрос слишком сложный — попробуй разбить на несколько отдельных вопросов.";
+      }
 
+      const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
       messages.push({ role: "assistant", content: response.content });
 
       const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(

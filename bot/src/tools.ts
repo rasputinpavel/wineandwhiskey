@@ -11,11 +11,20 @@ async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
   let cursor: string | undefined;
   do {
     const url = `${BASE_URL}${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
-    if (!res.ok) throw new Error(`Loyverse ${res.status}: ${path}`);
-    const data = await res.json();
-    results.push(...(data[key] ?? []));
-    cursor = data.cursor;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000); // 15 сек на запрос
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token()}` },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`Loyverse ${res.status}: ${path}`);
+      const data = await res.json();
+      results.push(...(data[key] ?? []));
+      cursor = data.cursor;
+    } finally {
+      clearTimeout(timeout);
+    }
   } while (cursor);
   return results;
 }
