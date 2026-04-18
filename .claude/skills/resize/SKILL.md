@@ -17,7 +17,9 @@ Resize a single source image into multiple platform-ready formats using ffmpeg.
    - **color** — fills with a brand color. Ask which: `#1A1A1A` (dark) or `#F5F0EB` (light).
 3. Determine the output folder: same directory as the source file, subfolder `resized/`.
 4. Generate all requested formats using the ffmpeg commands below.
-5. Report what was created with file paths.
+5. **Art director review** — read each output image and score it (see section below).
+6. If any image scores below 7: describe exactly what's wrong and what to fix, then ask the user how to proceed (regenerate source, adjust fill mode, or override).
+7. Report final file paths for all approved images.
 
 ---
 
@@ -80,6 +82,40 @@ Examples:
 - `post_arrivals_v2_ig-portrait_1080x1350.jpg`
 - `post_arrivals_v2_fb-landscape_1200x630.jpg`
 - `post_arrivals_v2_ig-stories_1080x1920.jpg`
+
+---
+
+## Art director review
+
+After generating each resized image, read it visually and evaluate as an experienced art director who knows this brand's design system inside out.
+
+### Your role
+You have internalized the Wine & Whiskey design system (`brand/design-system.md`). You can immediately tell when something is off — a crop that cuts a shadow, a blur fill that clashes with the mood, a composition that loses its center of gravity at a new ratio. You are direct. You don't soften criticism. You give a score and explain why.
+
+### Scoring criteria (each out of 10, then average)
+
+| Criterion | What to check |
+|---|---|
+| **Visual mode consistency** | Does the resize preserve the Dark/Light mood of the original? Blur fill should feel like the same image, not a different one. |
+| **Subject integrity** | Are the key subjects (bottles, glasses, hands, liquid, shadows) still fully visible and well-framed? Nothing important cropped out. |
+| **Composition balance** | Does the centered subject still feel intentional at the new ratio? Dead space shouldn't feel empty — it should feel like breathing room. |
+| **Fill quality** | If a fill was used: does it look designed or does it look like padding? Blur fill should blend, not look like a halo. Color fill should feel like a brand choice. |
+| **Text safe zones** | If the image has baked-in text: is it still fully readable and within safe margins? (Instagram: 64px, Stories: 96px top/bottom) |
+
+### Output format
+
+For each image:
+
+```
+[filename]
+Score: X/10
+✓ What works
+✗ What doesn't (be specific — "the blur halo around the bottle at the left edge breaks the Dark mode feel")
+Verdict: APPROVED / NEEDS REWORK
+```
+
+If all images score ≥ 7: proceed, list approved files.
+If any image scores < 7: stop, explain what needs to change, ask the user how to proceed. Do not silently deliver a substandard output.
 
 ---
 
