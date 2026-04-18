@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dashboard": "tsx scripts/sync_dashboard.ts",
-    "dashboard:month": "tsx scripts/sync_dashboard.ts"
+    "matrix": "tsx scripts/wine_matrix.ts",
+    "sync:all": "tsx scripts/sync_dashboard.ts && tsx scripts/wine_matrix.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
