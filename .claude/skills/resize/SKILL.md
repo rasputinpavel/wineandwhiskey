@@ -93,17 +93,24 @@ When converting square → landscape (e.g. 1:1 → 1.91:1), the subject may need
 
 ## Platform formats
 
-| Platform | Format | Dimensions | When to use |
-|---|---|---|---|
-| Instagram | Feed square | 1080×1080 | Standard feed post |
-| Instagram | Feed portrait | 1080×1350 | More real estate in feed |
-| Instagram | Stories / Reels | 1080×1920 | Vertical full-screen |
-| Facebook | Feed square | 1080×1080 | Photo post |
-| Facebook | Landscape | 1200×630 | Link preview, ads, event cover |
-| Facebook | Stories | 1080×1920 | Vertical full-screen |
-| Telegram | Landscape | 1280×720 | Channel post wide |
-| Telegram | Square | 1080×1080 | Channel post square |
-| Universal | 16:9 | 1920×1080 | Presentations, ads |
+The user never needs to specify dimensions. They say a format name — you resolve it.
+
+| What the user says | Dimensions | Notes |
+|---|---|---|
+| `instagram post`, `ig post`, `instagram feed`, `ig square` | 1080×1080 | Standard feed |
+| `instagram portrait`, `ig portrait`, `ig 4:5` | 1080×1350 | More feed real estate |
+| `instagram stories`, `ig stories`, `instagram reels`, `ig reels`, `reels` | 1080×1920 | Vertical full-screen |
+| `facebook post`, `fb post`, `facebook feed`, `fb feed` | 1080×1080 | Square photo post |
+| `facebook landscape`, `fb landscape`, `facebook cover`, `fb ad`, `facebook link` | 1200×630 | Link preview / ad / event cover |
+| `facebook stories`, `fb stories` | 1080×1920 | Vertical full-screen |
+| `telegram post`, `telegram`, `tg post` | 1280×720 | Wide channel post |
+| `telegram square`, `tg square` | 1080×1080 | Square channel post |
+| `16:9`, `widescreen`, `presentation` | 1920×1080 | Universal wide |
+| `all instagram` | 1080×1080 + 1080×1350 + 1080×1920 | All three IG formats |
+| `all facebook`, `all fb` | 1080×1080 + 1200×630 + 1080×1920 | All three FB formats |
+| `all` | Every format in the table | Full set |
+
+If the user names a platform without a format (e.g. just "Facebook"), ask: feed, landscape, or stories? Unless they said "all Facebook".
 
 ---
 
