@@ -30,11 +30,21 @@ Wine & Whiskey is a neighbourhood wine store with a bar feel — not pretentious
 | Expert | Region, producer, vintage | "2019 is one of the best years for Barolo this decade." |
 
 **Principles:**
+- **Short is the point.** The visual tells the story. The text adds one thing the visual can't. 1–2 sentences for most posts. 3 max for events and announcements. Never more.
+- **Clipped, not clunky.** Sentences read like notes, not paragraphs. "Malbec 2021. Dark fruit, a hint of oak. 1 490 ฿." That's enough.
 - Concrete: region, grape, year, flavour. Not "exquisite" — "Sangiovese, Tuscany, dry."
-- Short: one idea per post. Period at the end, not ellipsis.
+- One idea per post. Period at the end, not ellipsis.
 - Eye level: not top-down ("allow us to present"), not bottom-up ("especially for you").
 - No hype: "15-year whisky" not "legendary spirit for the discerning few."
 - No fishing: not "guess what we opened today 🍷🤩" — "Opened a Brunello today. Worth it if you haven't tried."
+
+**Length hard limits:**
+| Post type | Max sentences |
+|---|---|
+| Product, reminder, Friday, Reels hook | 1–2 |
+| Promo / deal | 2–3 |
+| Event announcement | 3 |
+| Review response | 3–5 (conversational, not post copy) |
 
 **Banned words/phrases:**
 - "Treat yourself", "For true connoisseurs", "Legendary / iconic", "Exclusive collection"
@@ -70,41 +80,33 @@ Every post is from the Wine & Whiskey team — not a brand robot, not an algorit
 
 ### 1. Product — new arrival or wine/whiskey of the week
 - Lead with the name (original language): Château X, Glenfiddich 18, Barolo Cannubi
-- Follow with: grape/style · region · vintage (if relevant)
-- 1–2 flavour notes (concrete, not flowery)
-- Optional: price or "in stock now"
-- Length: 2–4 lines
+- Grape/style · region · vintage in one beat, not a sentence
+- 1 flavour note, concrete. Price if relevant.
+- Example: "Barolo Cannubi 2019. Tar, rose, ten years of patience. 3 200 ฿."
 
 ### 2. Event announcement
-- What + when + where (if not obvious)
-- Tone: calm or direct
-- No exclamation overload — one max
-- Length: 3–5 lines
+- What + when. Where only if it's not obvious (we're a wine store).
+- One sentence for the event, one for why it's worth showing up. Date/time on a separate line.
+- No exclamation overload — one max.
 
 ### 3. Promotion / deal
-- State the fact clearly: price, dates, what's included
-- No "unmissable opportunity" language
-- Length: 2–4 lines
+- State the fact: what, price or discount, how long.
+- No "unmissable opportunity" language.
+- Example: "Thursday deal — Côtes du Rhône at 690 ฿. Today only."
 
 ### 4. Reminder / brand awareness
-- A reason to think of us today — season, weather, day of week, moment
-- No hard sell
-- Length: 1–3 lines
+- One line. A reason to think of us today — weather, day, what's happening in Phuket.
+- No hard sell. We're just here.
 
-### 5. Friday meme
-- This accompanies an image — keep text minimal
-- Acknowledge it's Friday, nudge toward the weekend
-- Light register, slight humour — but dry, not loud
-- Length: 1–2 lines max
-- No more than 1 emoji
+### 5. Friday post
+- Accompanies an image. Text is the caption, not the story.
+- Dry humour, light touch. Acknowledge it's Friday, leave the rest to the visual.
+- One emoji max, only if it earns its place.
 
 ### 6. Reels / short video caption
 - First line = the hook. Must work as a standalone sentence someone would stop scrolling for.
-- Keep it punchy — Reels reach new people, not just regulars. Assume they don't know us yet.
-- Give them a reason to follow: a tasting note they haven't heard, a take, a local angle
-- Body: 1–3 lines max. The video does the talking.
-- CTA optional but never pushy: "link in bio", "come find us", "ask us what's open"
-- Length: 2–4 lines total
+- Reels reach people who don't know us — write for them, not regulars.
+- CTA optional, never pushy: "come find us", "ask us what's open."
 
 ### 7. Google Maps review response
 - Respond as the store itself — warm, genuine, human
