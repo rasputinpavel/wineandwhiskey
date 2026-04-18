@@ -1,6 +1,6 @@
 ---
 name: resize
-description: Resize a source image into platform-ready formats for Instagram, Facebook, Telegram. Handles aspect ratio mismatch with blur background or brand color fill using ffmpeg.
+description: Resize a source image into platform-ready formats for Instagram, Facebook, Telegram. Analyzes image mode, extends canvas intelligently, then runs art director review. Max 3 rework loops before escalating to human.
 ---
 
 # Creative Resizer — Social Media Formats
@@ -12,14 +12,82 @@ Resize a single source image into multiple platform-ready formats using ffmpeg.
 ## When invoked
 
 1. Ask the user: **which image** (path) and **which platforms/formats** are needed.
-2. Ask **fill mode** if the source aspect ratio doesn't match the target:
-   - **blur** (default) — scales up + blurs the source as background, places original centered on top. Looks intentional, not lazy.
-   - **color** — fills with a brand color. Ask which: `#1A1A1A` (dark) or `#F5F0EB` (light).
-3. Determine the output folder: same directory as the source file, subfolder `resized/`.
-4. Generate all requested formats using the ffmpeg commands below.
-5. **Art director review** — read each output image and score it (see section below).
-6. If any image scores below 7: describe exactly what's wrong and what to fix, then ask the user how to proceed (regenerate source, adjust fill mode, or override).
-7. Report final file paths for all approved images.
+2. **Analyze the source image** before touching anything — read it and determine:
+   - Visual mode: Dark or Light (see design system)
+   - Where the key subjects are (center? lower third? offset?)
+   - Whether there is baked-in text and where it sits
+   - What the background is (solid dark, stone, marble, wood, etc.)
+3. Choose the right **extension strategy** for each target format (see section below). Do not ask the user — decide based on your analysis.
+4. Determine the output folder: same directory as the source file, subfolder `resized/`.
+5. Generate all requested formats.
+6. **Art director review** — read each output image and score it (see section below).
+7. If score < 7: rework with a different strategy. Max **3 attempts per image**. After 3 failed attempts — stop and call the human (see escalation).
+8. Report final file paths for all approved images.
+
+---
+
+## Extension strategies
+
+Blur is banned. It always looks unnatural — a visible halo, a mood mismatch, an obvious patch job.
+
+Instead, choose based on image analysis:
+
+### Strategy A — Solid background extend (Dark mode images)
+Dark mode images (`#1A1A1A` or near-black background) are seamless with a solid pad. The background is already flat — extending it with the same color is invisible.
+
+```bash
+ffmpeg -y -i INPUT \
+  -vf "scale=W:H:force_original_aspect_ratio=decrease, \
+       pad=W:H:(ow-iw)/2:(oh-ih)/2:color=0x1A1A1A" \
+  -frames:v 1 -update 1 -q:v 2 OUTPUT
+```
+
+For subjects that are not centered (e.g. text on one side, product on other): adjust the x offset to keep the subject in the visually correct position rather than dead center. Use `pad=W:H:XOFFSET:(oh-ih)/2:color=0x1A1A1A`.
+
+### Strategy B — Edge-sampled extend (Light mode images)
+Light mode images (stone, marble, travertine backgrounds) — extend using the edge pixel color sampled from the nearest border. Gives a smooth, gradient-like continuation.
+
+Step 1: sample the dominant edge color with ffmpeg metadata (or eyeball from the image read):
+```bash
+ffmpeg -y -i INPUT -vf "cropdetect,scale=1:1:flags=area" -frames:v 1 -update 1 /tmp/sample.jpg 2>&1
+```
+
+Step 2: use the sampled hex color in a solid pad. Light stone typically samples to `#D4C9BC` (Pale Stone) or `#EDE0D0` (Cream) — use the closest brand color.
+
+```bash
+ffmpeg -y -i INPUT \
+  -vf "scale=W:H:force_original_aspect_ratio=decrease, \
+       pad=W:H:(ow-iw)/2:(oh-ih)/2:color=SAMPLED_HEX" \
+  -frames:v 1 -update 1 -q:v 2 OUTPUT
+```
+
+### Strategy C — Smart crop (when the source has enough content)
+If the source image is larger than the target ratio requires — don't add any fill. Crop intelligently by finding the gravity point (where the key subject is) and crop around it.
+
+```bash
+# Center crop
+ffmpeg -y -i INPUT \
+  -vf "crop=W:H:(iw-W)/2:(ih-H)/2" \
+  -frames:v 1 -update 1 -q:v 2 OUTPUT
+
+# Subject offset crop — adjust X/Y to keep subject in frame
+ffmpeg -y -i INPUT \
+  -vf "crop=W:H:XOFFSET:YOFFSET" \
+  -frames:v 1 -update 1 -q:v 2 OUTPUT
+```
+
+### Strategy D — Subject reposition + extend
+When converting square → landscape (e.g. 1:1 → 1.91:1), the subject may need to shift left or right to leave breathing room on one side, with the extension filling the other. Combine scale + pad with asymmetric offset.
+
+### Choosing the strategy
+
+| Situation | Use |
+|---|---|
+| Dark mode, adding side space | A (solid `#1A1A1A`) |
+| Light mode, adding side space | B (edge-sampled brand color) |
+| Source has room, just needs different crop | C (smart crop) |
+| Subject needs repositioning to balance at new ratio | D (reposition + extend) |
+| Unsure | Read the image, pick what would be invisible to the eye |
 
 ---
 
@@ -39,40 +107,6 @@ Resize a single source image into multiple platform-ready formats using ffmpeg.
 
 ---
 
-## ffmpeg commands
-
-### Fill mode: blur background
-
-```bash
-ffmpeg -y -i INPUT \
-  -filter_complex \
-    "[0:v]scale=W:H:force_original_aspect_ratio=increase,crop=W:H,boxblur=40:5[bg]; \
-     [0:v]scale=W:H:force_original_aspect_ratio=decrease[fg]; \
-     [bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p" \
-  -frames:v 1 -update 1 -q:v 2 OUTPUT
-```
-
-Replace `W` and `H` with target width and height. Replace `INPUT` / `OUTPUT` with actual paths.
-
-### Fill mode: solid color background
-
-```bash
-ffmpeg -i INPUT \
-  -vf "scale=W:H:force_original_aspect_ratio=decrease, \
-       pad=W:H:(ow-iw)/2:(oh-ih)/2:color=HEXCOLOR" \
-  -q:v 2 OUTPUT
-```
-
-`HEXCOLOR` format for ffmpeg: `0x1A1A1A` (no `#`).
-
-### When source already matches ratio (no fill needed)
-
-```bash
-ffmpeg -i INPUT -vf "scale=W:H" -q:v 2 OUTPUT
-```
-
----
-
 ## Output naming convention
 
 `{original-name}_{platform}_{WxH}.jpg`
@@ -87,43 +121,64 @@ Examples:
 
 ## Art director review
 
-After generating each resized image, read it visually and evaluate as an experienced art director who knows this brand's design system inside out.
+After generating each image, read it and evaluate as an experienced art director who has internalized the Wine & Whiskey design system.
 
 ### Your role
-You have internalized the Wine & Whiskey design system (`brand/design-system.md`). You can immediately tell when something is off — a crop that cuts a shadow, a blur fill that clashes with the mood, a composition that loses its center of gravity at a new ratio. You are direct. You don't soften criticism. You give a score and explain why.
+You know this system better than anyone. You feel immediately when something is off — a fill that reads as a patch, a crop that amputates a shadow, a composition that lost its tension at a new ratio. You are direct. You don't comfort. You score and explain.
 
-### Scoring criteria (each out of 10, then average)
+### Scoring criteria (average to final score)
 
 | Criterion | What to check |
 |---|---|
-| **Visual mode consistency** | Does the resize preserve the Dark/Light mood of the original? Blur fill should feel like the same image, not a different one. |
-| **Subject integrity** | Are the key subjects (bottles, glasses, hands, liquid, shadows) still fully visible and well-framed? Nothing important cropped out. |
-| **Composition balance** | Does the centered subject still feel intentional at the new ratio? Dead space shouldn't feel empty — it should feel like breathing room. |
-| **Fill quality** | If a fill was used: does it look designed or does it look like padding? Blur fill should blend, not look like a halo. Color fill should feel like a brand choice. |
-| **Text safe zones** | If the image has baked-in text: is it still fully readable and within safe margins? (Instagram: 64px, Stories: 96px top/bottom) |
+| **Mode integrity** | Does the resize preserve the Dark/Light mood? Extended areas must feel like they belong to the same image. |
+| **Subject integrity** | Bottles, glasses, hands, liquid, shadows — fully visible, nothing cropped out, nothing awkwardly cut. |
+| **Composition balance** | Subject placement feels intentional at the new ratio. Empty space reads as breathing room, not neglect. |
+| **Extension quality** | Fill looks like part of the original, not added. No visible seams, no color mismatch, no halo. |
+| **Text safe zones** | Baked-in text fully readable, within margins. (Feed: 64px, Stories: 96px top/bottom) |
 
-### Output format
-
-For each image:
+### Output format per image
 
 ```
 [filename]
+Strategy used: [A / B / C / D]
 Score: X/10
-✓ What works
-✗ What doesn't (be specific — "the blur halo around the bottle at the left edge breaks the Dark mode feel")
-Verdict: APPROVED / NEEDS REWORK
+✓ [what works]
+✗ [what doesn't — be specific: "the cream pad on the left is 20% lighter than the stone in the original, visible seam at the join"]
+Verdict: APPROVED / NEEDS REWORK — [what to try next]
 ```
 
-If all images score ≥ 7: proceed, list approved files.
-If any image scores < 7: stop, explain what needs to change, ask the user how to proceed. Do not silently deliver a substandard output.
+### Rework loop
+
+- Max **3 attempts** per image before escalating.
+- Each attempt: try a different strategy or adjust offset/color. State what changed and why.
+- Track attempts: **Attempt 1/3**, **Attempt 2/3**, **Attempt 3/3**.
+
+### Escalation (after 3 failed attempts)
+
+Stop. Do not produce a substandard file. Tell the human:
+
+```
+⚠ [filename] could not reach score 7 after 3 attempts.
+
+Attempts summary:
+1. [strategy] — score X — [why it failed]
+2. [strategy] — score X — [why it failed]
+3. [strategy] — score X — [why it failed]
+
+Root cause: [honest diagnosis — e.g. "the source image doesn't have enough background area to extend naturally to 1.91:1. A new source crop or a redesigned composition is needed."]
+
+Options:
+→ Generate a new source image at the correct aspect ratio
+→ Accept attempt [N] (score X) and publish with awareness of the flaw
+→ Skip this format
+```
 
 ---
 
 ## Notes
 
 - Source quality: always use the highest-res source available.
-- `-q:v 2` = near-lossless JPEG quality. Use `-q:v 1` for maximum quality if file size isn't a concern.
+- `-q:v 2` = near-lossless JPEG quality.
 - For PNG sources with transparency: output as PNG, not JPG.
+- If the source already matches the target ratio exactly: scale only, no fill.
 - If the user doesn't specify platforms, ask. Don't assume.
-- If the source image is already the correct size for a requested format, skip ffmpeg and copy the file.
-- After generating, list all output files clearly so the user can find them.
