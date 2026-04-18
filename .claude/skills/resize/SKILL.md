@@ -151,8 +151,10 @@ Strategy used: [A / B / C / D]
 Score: X/10
 ✓ [what works]
 ✗ [what doesn't — be specific: "the cream pad on the left is 20% lighter than the stone in the original, visible seam at the join"]
-Verdict: APPROVED / NEEDS REWORK — [what to try next]
+Verdict: APPROVED (score ≥ 7) / NEEDS REWORK (score < 7)
 ```
+
+The verdict is binary. No "approved with caveats", no "approved but...". Score ≥ 7 = APPROVED, done. Score < 7 = NEEDS REWORK, state exactly what to fix.
 
 ### Rework loop
 
