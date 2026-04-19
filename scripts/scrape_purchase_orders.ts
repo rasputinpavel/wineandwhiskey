@@ -142,15 +142,31 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   }
 
   // Fresh login
-  await page.goto("https://r.loyverse.com/", { waitUntil: "domcontentloaded" });
+  await page.goto("https://r.loyverse.com/", { waitUntil: "networkidle" });
   await delay(2000);
 
-  const emailInput = page.locator('input[type="email"], input[name="email"], input[placeholder*="email" i]').first();
-  await emailInput.waitFor({ timeout: 15_000 });
+  if (DEBUG) await page.screenshot({ path: "debug-login.png" });
+
+  // Loyverse may use Angular with ng- attributes — try broad set of selectors
+  const emailSelector = [
+    'input[type="email"]',
+    'input[name="email"]',
+    'input[placeholder*="email" i]',
+    'input[placeholder*="Email" i]',
+    'input[formcontrolname="email"]',
+    'input[formcontrolname="login"]',
+    'input[formcontrolname="username"]',
+    'input:not([type="password"]):not([type="hidden"]):not([type="checkbox"])',
+  ].join(", ");
+
+  const emailInput = page.locator(emailSelector).first();
+  await emailInput.waitFor({ timeout: 20_000 });
   await emailInput.fill(LOYVERSE_EMAIL);
+  await delay(500);
 
   await page.locator('input[type="password"]').first().fill(LOYVERSE_PASSWORD);
-  await page.locator('button[type="submit"], input[type="submit"]').first().click();
+  await delay(300);
+  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first().click();
 
   // Wait for navigation (hash routing may not trigger waitForURL)
   await delay(5000);
@@ -176,11 +192,13 @@ async function discoverIds(page: Page): Promise<Map<string, number>> {
     if (!ct.includes("json")) return;
     try {
       const body = await response.json();
-      const orders: any[] = body.purchase_orders ?? body.orders ?? body.data ?? [];
+      if (DEBUG) console.log(`  [xhr] ${response.url().slice(0, 80)} → keys: ${Object.keys(body).join(", ")}`);
+      const orders: any[] = body.purchase_orders ?? body.orders ?? body.data ?? body.items ?? [];
       if (!Array.isArray(orders)) return;
       for (const o of orders) {
+        if (DEBUG) console.log(`  [xhr-item] keys: ${Object.keys(o).join(", ")}, sample: ${JSON.stringify(o).slice(0, 100)}`);
         const numId = o.id ?? o.loyverse_id ?? o.order_id;
-        const poNum = o.order_number ?? o.po_number ?? o.number ?? o.name;
+        const poNum = o.order ?? o.order_number ?? o.po_number ?? o.number ?? o.name;
         if (numId && poNum && /^PO\d+$/i.test(String(poNum))) {
           idMap.set(String(poNum).toUpperCase(), Number(numId));
         }
@@ -188,42 +206,52 @@ async function discoverIds(page: Page): Promise<Map<string, number>> {
     } catch { /* non-JSON, skip */ }
   });
 
-  await page.goto("https://r.loyverse.com/dashboard/#/inventory/orders", { waitUntil: "domcontentloaded" });
+  // Navigate to dashboard, then click Items (goods) → Purchase Orders
+  await page.goto("https://r.loyverse.com/dashboard/", { waitUntil: "networkidle" });
+  await delay(3000);
 
+  if (DEBUG) await page.screenshot({ path: "debug-sidebar.png" });
+
+  // Loyverse Angular sidebar: menu items are div.nav-parent with class = section name
+  // "goods" = Items section (contains Purchase Orders per user guidance)
+  // Try "goods" first, fallback to "inventory"
+  const menuItem = page.locator(".nav-parent.inventory, #lv_menu_item_inventory_small").first();
+  await menuItem.waitFor({ timeout: 10_000 });
+  await menuItem.click();
+  await delay(2000);
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+  if (DEBUG) await page.screenshot({ path: "debug-after-goods.png" });
+
+  // Click "Purchase orders" in the submenu (exact text from DOM)
+  const poSubMenu = page.locator('text="Purchase orders"').first();
+  await poSubMenu.waitFor({ timeout: 10_000 });
+  await poSubMenu.click();
+  await delay(3000);
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+  if (DEBUG) await page.screenshot({ path: "debug-after-po-click.png" });
+
+  // Paginate through all pages — XHR interceptor captures IDs automatically
+  const LIMIT = 50;
   let pageNum = 0;
+  let lastSize = -1;
   while (true) {
-    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
-    pageNum++;
-    process.stdout.write(`  List page ${pageNum}: ${idMap.size} IDs captured...`);
-
-    // DOM fallback: extract IDs from anchor href attributes
-    const links = await page.locator('a[href*="orderdetail"]').all();
-    for (const link of links) {
-      const href = await link.getAttribute("href").catch(() => "");
-      const idMatch = href?.match(/id=(\d+)/);
-      if (!idMatch) continue;
-      const numId = parseInt(idMatch[1]);
-      // Walk up to find the PO number text in the row
-      const rowText = await link.locator("../..").innerText().catch(
-        () => link.locator("..").innerText().catch(() => "")
-      );
-      const poMatch = rowText.match(/PO\d+/i);
-      if (poMatch) idMap.set(poMatch[0].toUpperCase(), numId);
-    }
-
-    process.stdout.write(` → ${idMap.size} total\n`);
-
-    // Pagination
-    const nextBtn = page.locator(
-      '[aria-label="Next page"], [aria-label="next"], button:has-text("Next"), .pagination-next, [class*="next-page"]'
-    ).first();
-    const count = await nextBtn.count();
-    if (!count) break;
-    const disabled = await nextBtn.isDisabled().catch(() => true);
-    if (disabled) break;
-
-    await nextBtn.click();
+    await page.evaluate(({ p, l }) => {
+      window.location.hash = `/inventory/purchase?page=${p}&limit=${l}`;
+    }, { p: pageNum, l: LIMIT });
     await delay(1500);
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await delay(500);
+
+    const currentSize = idMap.size;
+    process.stdout.write(`  Page ${pageNum}: ${currentSize} IDs total\n`);
+
+    // Stop when no new IDs were captured (end of list)
+    if (currentSize === lastSize) break;
+    // Safety: stop after 40 pages (2000 orders)
+    if (pageNum >= 40) break;
+
+    lastSize = currentSize;
+    pageNum++;
   }
 
   return idMap;
@@ -246,43 +274,42 @@ async function scrapeDetail(page: Page, loyverseId: number, poNumber: string): P
     { waitUntil: "domcontentloaded" }
   );
 
-  // Wait for items table — try several selector patterns
+  // Wait for data rows (skip header row which has class checkbox-table-header-row)
   try {
-    await page.waitForSelector(
-      "table tbody tr, .order-item, [class*='item'][class*='row'], .po-line",
-      { timeout: 20_000 }
-    );
+    await page.waitForSelector("tr.checkbox-table-row", { timeout: 20_000 });
   } catch {
     if (DEBUG) await page.screenshot({ path: `debug-${poNumber}.png` });
-    throw new Error("Items table not found — run with SCRAPER_HEADFUL=1 to inspect selectors");
+    throw new Error("Items table not found");
   }
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
 
-  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-  if (DEBUG) await page.screenshot({ path: `debug-${poNumber}.png` });
-
-  const rows = await page.locator("table tbody tr").all();
-  if (!rows.length) throw new Error("No table rows found");
+  // Loyverse detail table: Item | Quantity | Purchase cost | Amount
+  const rows = await page.locator("tr.checkbox-table-row").all();
+  if (!rows.length) throw new Error("No item rows found");
 
   const items: LineItem[] = [];
   for (const row of rows) {
+    // Product name is in .purchase-order-item-name span
+    const name = await row.locator(".purchase-order-item-name span").first()
+      .innerText().catch(() => "");
+    if (!name.trim()) continue;
+
+    // SKU is in .purchase-order-item-sku (text like "SKU 10510")
+    const skuRaw = await row.locator(".purchase-order-item-sku").first()
+      .innerText().catch(() => "");
+    const sku = skuRaw.replace(/^SKU\s*/i, "").trim() || null;
+
+    // Numeric cells: td[1]=qty, td[2]=cost, td[3]=amount
     const cells = await row.locator("td").all();
-    if (cells.length < 3) continue;
+    const cellTexts = await Promise.all(cells.map(c => c.innerText().catch(() => "")));
 
-    const texts = await Promise.all(cells.map(c => c.innerText().catch(() => "")));
-    const clean = texts.map(t => t.replace(/\s+/g, " ").trim());
-
-    const name = clean[0];
-    if (!name || name.length < 2) continue;
-
-    // Column layout varies — use position heuristics based on cell count
-    const wide = cells.length >= 6;
     items.push({
-      product_name: name,
-      sku:          wide ? (clean[1] || null) : null,
-      qty_ordered:  parseNum(clean[wide ? 2 : 1]),
-      qty_received: parseNum(clean[wide ? 3 : 2]),
-      cost_price:   parseNum(clean[wide ? 4 : 3]),
-      line_total:   parseNum(clean[wide ? 5 : 4]),
+      product_name: name.trim(),
+      sku,
+      qty_ordered:  parseNum(cellTexts[1] ?? ""),
+      qty_received: null, // not shown on detail page
+      cost_price:   parseNum(cellTexts[2] ?? ""),
+      line_total:   parseNum(cellTexts[3] ?? ""),
     });
   }
 
