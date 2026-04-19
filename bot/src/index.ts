@@ -4,7 +4,7 @@ dotenv.config({ path: "../.env.local" });
 import { Bot } from "grammy";
 import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
-import { getSales, getInventory, getLowStock, getInventorySummary } from "./tools.js";
+import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -43,7 +43,7 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 - <i>курсив</i> — оценки и выводы
 - Никаких **, __, ## — только HTML-теги
 
-Если данных нет в инструментах (опт, прогнозы, поставщики) — скажи что не подключено, можно добавить.`;
+Если данных нет в инструментах (опт, прогнозы) — скажи что не подключено, можно добавить.`;
 
 // История сообщений на чат
 interface ChatSession {
@@ -93,6 +93,17 @@ const tools: Anthropic.Tool[] = [
     description: "Получить сводку по остаткам на складе: общее количество бутылок и разбивка по категориям.",
     input_schema: { type: "object" as const, properties: {} },
   },
+  {
+    name: "get_supplier",
+    description: "Найти поставщика по названию вина или товара. Используй для вопросов типа 'у кого берём X', 'какой поставщик у X', 'где заказать X'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Часть названия вина или товара для поиска" },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // Выполнить инструмент по имени
@@ -106,6 +117,8 @@ async function runTool(name: string, input: any): Promise<string> {
       return getLowStock(input.threshold ?? 5);
     case "get_inventory_summary":
       return getInventorySummary();
+    case "get_supplier":
+      return getSupplier(input.query);
     default:
       return `Неизвестный инструмент: ${name}`;
   }

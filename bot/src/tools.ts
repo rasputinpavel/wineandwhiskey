@@ -224,6 +224,35 @@ export async function getInventorySummary(): Promise<string> {
   return lines.join("\n");
 }
 
+// --- Tool: найти поставщика по названию вина ---
+export async function getSupplier(query: string): Promise<string> {
+  const [allItems, allSuppliers] = await Promise.all([
+    loyverseFetch<any>("/items", "items"),
+    loyverseFetch<any>("/suppliers", "suppliers"),
+  ]);
+
+  const supplierMap = new Map(allSuppliers.map((s: any) => [s.id, s]));
+  const q = query.toLowerCase();
+
+  const matches = allItems.filter(
+    (item: any) => !item.deleted_at && item.item_name.toLowerCase().includes(q)
+  );
+
+  if (matches.length === 0) return `Товары по запросу "${query}" не найдены в Loyverse.`;
+
+  const lines = matches.map((item: any) => {
+    const supplier = item.primary_supplier_id
+      ? supplierMap.get(item.primary_supplier_id)
+      : null;
+    const supplierInfo = supplier
+      ? `${supplier.name}${supplier.phone_number ? `, ${supplier.phone_number}` : ""}${supplier.email ? `, ${supplier.email}` : ""}`
+      : "поставщик не указан";
+    return `  • ${item.item_name} → ${supplierInfo}`;
+  });
+
+  return `Найдено ${matches.length} позиций:\n${lines.join("\n")}`;
+}
+
 // --- Tool: товары с низким остатком ---
 export async function getLowStock(threshold = 5): Promise<string> {
   const [items, categories, inventory] = await Promise.all([
