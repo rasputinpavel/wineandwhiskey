@@ -1,6 +1,12 @@
 // Loyverse tools — вызываются Claude'ом через tool use
 
+import { createClient } from "@supabase/supabase-js";
+
 const BASE_URL = "https://api.loyverse.com/v1.0";
+
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+  : null;
 
 function token() {
   return process.env.LOYVERSE_API_TOKEN!;
@@ -251,6 +257,46 @@ export async function getSupplier(query: string): Promise<string> {
   });
 
   return `Найдено ${matches.length} позиций:\n${lines.join("\n")}`;
+}
+
+// --- Tool: purchase orders из Supabase ---
+export async function getPurchaseOrders(params: {
+  supplier?: string;
+  date_from?: string;
+  date_to?: string;
+  include_items?: boolean;
+  limit?: number;
+}): Promise<string> {
+  if (!supabase) return "Supabase не подключён — добавьте SUPABASE_URL и SUPABASE_SERVICE_KEY в окружение бота.";
+
+  const { supplier, date_from, date_to, include_items = false, limit = 10 } = params;
+
+  let query = supabase
+    .from("purchase_orders")
+    .select(include_items ? "*, purchase_order_items(*)" : "*")
+    .order("order_date", { ascending: false })
+    .limit(limit);
+
+  if (supplier) query = query.ilike("supplier", `%${supplier}%`);
+  if (date_from) query = query.gte("order_date", date_from);
+  if (date_to)   query = query.lte("order_date", date_to);
+
+  const { data, error } = await query;
+  if (error) return `Ошибка Supabase: ${error.message}`;
+  if (!data || data.length === 0) return "Purchase orders не найдены по заданным критериям.";
+
+  const f = (n: number | null) => n != null ? Math.round(n).toLocaleString("ru-RU") + " ฿" : "—";
+
+  const lines: string[] = [`Найдено заказов: ${data.length}\n`];
+  for (const po of data) {
+    lines.push(`${po.po_number}  ${po.order_date ?? "—"}  ${po.supplier ?? "—"}  ${po.status ?? "—"}  ${f(po.total_thb)}`);
+    if (include_items && Array.isArray((po as any).purchase_order_items)) {
+      for (const item of (po as any).purchase_order_items) {
+        lines.push(`  • ${item.product_name} — ${item.qty_ordered ?? "?"} шт × ${f(item.cost_price)} = ${f(item.line_total)}`);
+      }
+    }
+  }
+  return lines.join("\n");
 }
 
 // --- Tool: товары с низким остатком ---

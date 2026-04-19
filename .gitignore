@@ -21,3 +21,6 @@ npm-debug.log*
 # Data files with sensitive info (add specific paths as needed)
 data/raw/
 
+# Playwright session
+.loyverse-session.json
+

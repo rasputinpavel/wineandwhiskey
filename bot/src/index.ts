@@ -4,7 +4,7 @@ dotenv.config({ path: "../.env.local" });
 import { Bot } from "grammy";
 import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
-import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier } from "./tools.js";
+import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -104,6 +104,20 @@ const tools: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "get_purchase_orders",
+    description: "Получить историю закупок (purchase orders) по поставщику или периоду. Используй для вопросов: 'что брали у X', 'закупки за апрель', 'топ закупок', 'что заказывали у Vinum Lector'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        supplier:      { type: "string",  description: "Название поставщика (частичное совпадение, например 'Vinum')" },
+        date_from:     { type: "string",  description: "С даты YYYY-MM-DD" },
+        date_to:       { type: "string",  description: "По дату YYYY-MM-DD" },
+        include_items: { type: "boolean", description: "Включить позиции каждого заказа (true для детального просмотра)" },
+        limit:         { type: "number",  description: "Максимум заказов, по умолчанию 10" },
+      },
+    },
+  },
 ];
 
 // Выполнить инструмент по имени
@@ -119,6 +133,8 @@ async function runTool(name: string, input: any): Promise<string> {
       return getInventorySummary();
     case "get_supplier":
       return getSupplier(input.query);
+    case "get_purchase_orders":
+      return getPurchaseOrders(input);
     default:
       return `Неизвестный инструмент: ${name}`;
   }
