@@ -709,21 +709,20 @@ async function writeDashboard(
 
   // ── Summary table (rows 14+) ──
   if (ranges.tableRows && ranges.tableRows.length > 0) {
-    const fK2 = (n: number) => Math.round(n / 1000).toLocaleString("ru-RU");
     const TABLE_START = 14; // row index
-    const colHeaders = ["Период", "Выручка, тыс. ฿", "Чеков", "Gross Profit, тыс.", "GP%", "Ср. чек, тыс.", "Клиентов"];
+    const COL_COUNT = 6; // Период + 5 числовых (без Клиентов)
+    const colHeaders = ["Период", "Выручка, ฿", "Чеков", "Gross Profit, ฿", "GP%", "Ср. чек, ฿"];
     const tableValues: (string|number)[][] = [colHeaders];
     for (const { label, stats } of ranges.tableRows) {
       const gpPct = stats.revenue > 0 ? (stats.gp / stats.revenue * 100) : 0;
       const avgCheck = stats.checks > 0 ? stats.revenue / stats.checks : 0;
       tableValues.push([
         label,
-        +fK2(stats.revenue).replace(/\s/g, ""),
+        Math.round(stats.revenue),
         stats.checks,
-        +fK2(stats.gp).replace(/\s/g, ""),
+        Math.round(stats.gp),
         +gpPct.toFixed(1),
-        +fK2(avgCheck).replace(/\s/g, ""),
-        stats.uniqueCustomers || "—",
+        Math.round(avgCheck),
       ]);
     }
     await writeValues(DASH_TAB, `A${TABLE_START + 1}`, tableValues);
@@ -740,7 +739,7 @@ async function writeDashboard(
       // ── Entire table background: white ──
       {
         repeatCell: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + nRows, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + nRows, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 1, blue: 1 } } },
           fields: "userEnteredFormat.backgroundColor",
         },
@@ -749,7 +748,7 @@ async function writeDashboard(
       // ── Column header row: bold gray text, no fill, bottom thick border ──
       {
         repeatCell: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: {
             textFormat: { bold: true, fontSize: 10, foregroundColor: colGray },
             verticalAlignment: "BOTTOM",
@@ -761,13 +760,13 @@ async function writeDashboard(
       // Numeric headers right-aligned
       {
         repeatCell: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 1, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 1, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: { horizontalAlignment: "RIGHT" } },
           fields: "userEnteredFormat.horizontalAlignment",
         },
       },
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + 1, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thickLine,
       }},
 
@@ -781,7 +780,7 @@ async function writeDashboard(
       },
       {
         repeatCell: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 1, endRowIndex: TABLE_START + nRows, startColumnIndex: 1, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 1, endRowIndex: TABLE_START + nRows, startColumnIndex: 1, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: {
             horizontalAlignment: "RIGHT",
             numberFormat: { type: "NUMBER", pattern: "# ##0" },
@@ -800,32 +799,32 @@ async function writeDashboard(
 
       // ── Section separators (thick lines below Прошлая неделя [row 2] and Прошлый месяц [row 4]) ──
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 2, endRowIndex: TABLE_START + 3, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 2, endRowIndex: TABLE_START + 3, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thickLine,
       }},
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 4, endRowIndex: TABLE_START + 5, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 4, endRowIndex: TABLE_START + 5, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thickLine,
       }},
 
       // ── Thin row dividers within each section ──
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 1, endRowIndex: TABLE_START + 2, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 1, endRowIndex: TABLE_START + 2, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thinLine,
       }},
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 3, endRowIndex: TABLE_START + 4, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 3, endRowIndex: TABLE_START + 4, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thinLine,
       }},
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 5, endRowIndex: TABLE_START + 6, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 5, endRowIndex: TABLE_START + 6, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           bottom: thinLine,
       }},
 
       // ── Last row (Прошлый год) bold ──
       {
         repeatCell: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + nData, endRowIndex: TABLE_START + nData + 1, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START + nData, endRowIndex: TABLE_START + nData + 1, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: { textFormat: { bold: true, italic: false, fontSize: 10 } } },
           fields: "userEnteredFormat.textFormat",
         },
@@ -833,7 +832,7 @@ async function writeDashboard(
 
       // ── Outer border ──
       { updateBorders: {
-          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + nRows, startColumnIndex: 0, endColumnIndex: 7 },
+          range: { sheetId: dashSheetId, startRowIndex: TABLE_START, endRowIndex: TABLE_START + nRows, startColumnIndex: 0, endColumnIndex: COL_COUNT },
           top: thickLine, bottom: thickLine, left: thickLine, right: thickLine,
       }},
     ];
