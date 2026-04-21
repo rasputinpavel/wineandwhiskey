@@ -100,8 +100,8 @@ function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 // ─── Phase 0: Bootstrap headers from Google Sheets ───────────────────────────
 
 async function bootstrapFromSheets() {
-  console.log("[0/4] Reading Google Sheets 'Suppliers' tab...");
-  const rows = await sheetsGet("Suppliers!A2:H");
+  console.log("[0/4] Reading Google Sheets 'Purcahse Orders' tab...");
+  const rows = await sheetsGet("Purcahse Orders!A2:H");
   if (!rows.length) { console.log("  No rows found."); return; }
 
   const records = rows
@@ -322,7 +322,7 @@ async function upsertOrder(poNumber: string, loyverseId: number, items: LineItem
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
     .upsert(
-      { po_number: poNumber, loyverse_id: loyverseId, scraped_at: new Date().toISOString(), scrape_error: null },
+      { po_number: poNumber, loyverse_id: loyverseId, url: `https://r.loyverse.com/dashboard/#/inventory/orderdetail?id=${loyverseId}`, scraped_at: new Date().toISOString(), scrape_error: null },
       { onConflict: "po_number" }
     )
     .select("id")
@@ -346,8 +346,11 @@ async function main() {
   console.log("\nWine & Whiskey — Purchase Orders Scraper");
   console.log(`Mode: ${SINGLE_PO ? `single (${SINGLE_PO})` : ALL_MODE ? "all" : "incremental"}\n`);
 
-  // Phase 0: Sync headers from Sheets
-  await bootstrapFromSheets();
+  // Phase 0: Sync headers from Sheets (skip if running single PO or if Supabase already has data)
+  const { count: existingCount } = await supabase.from("purchase_orders").select("*", { count: "exact", head: true });
+  if (!SINGLE_PO && (existingCount ?? 0) === 0) {
+    await bootstrapFromSheets();
+  }
 
   // Fetch all POs from Supabase
   const { data: allPOs, error: listErr } = await supabase
