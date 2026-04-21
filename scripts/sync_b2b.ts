@@ -178,6 +178,7 @@ interface ClientStats {
 interface OrderLine {
   clientName: string;
   date: string;
+  receiptNumber: string;
   product: string;
   qty: number;
   unitPrice: number;
@@ -250,6 +251,7 @@ async function fetchB2BData(): Promise<B2BData> {
       orderLines.push({
         clientName: name,
         date,
+        receiptNumber: r.receipt_number ?? "—",
         product: li.item_name ?? "—",
         qty: li.quantity ?? 0,
         unitPrice: li.price ?? 0,
@@ -339,6 +341,39 @@ async function fetchSupplierData(): Promise<{ stats: SupplierStats[]; rawOrders:
     stats: [...supplierMap.values()].sort((a, b) => b.totalThb - a.totalThb),
     rawOrders: orders,
   };
+}
+
+// ─── Write B2B Orders flat list tab ───────────────────────────────────────
+
+async function writeB2BOrdersListTab(sheetId: number, orders: OrderLine[]) {
+  await clearTab(sheetId);
+
+  const header = ["Клиент", "Дата", "Номер заказа", "Позиция", "Кол-во", "Сумма, ฿"];
+  const rows: any[][] = [
+    header,
+    ...orders
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(o => [
+        o.clientName,
+        o.date,
+        o.receiptNumber,
+        o.product,
+        o.qty,
+        Math.round(o.total),
+      ]),
+  ];
+
+  await writeValues("B2B Позиции", "A1", rows);
+
+  const dark  = { red: 0.15, green: 0.15, blue: 0.15 };
+  const white = { red: 1, green: 1, blue: 1 };
+  await sheetsReq("POST", ":batchUpdate", {
+    requests: [
+      { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { backgroundColor: dark, textFormat: { bold: true, foregroundColor: white } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
+      { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 6 } } },
+    ],
+  });
 }
 
 // ─── Write hidden data tabs ────────────────────────────────────────────────
@@ -795,13 +830,14 @@ async function main() {
   console.log(`  ${suppliers.length} suppliers found.\n`);
 
   console.log("[3/4] Ensuring tabs...");
-  const [b2bId, dataId, ordersId, clientId, suppliersId, suppItemsId] = await Promise.all([
+  const [b2bId, dataId, ordersId, clientId, suppliersId, suppItemsId, ordersListId] = await Promise.all([
     ensureTab("B2B"),
     ensureTab("B2BData"),
     ensureTab("B2BOrders"),
     ensureTab("B2B Клиент"),
     ensureTab("Поставщики"),
     ensureTab("SuppItems"),
+    ensureTab("B2B Позиции"),
   ]);
 
   // Remove stale tabs
@@ -830,6 +866,9 @@ async function main() {
 
     await writeClientTab(clientId, clients);
     console.log("  ✓ B2B Клиент written.");
+
+    await writeB2BOrdersListTab(ordersListId, orders);
+    console.log("  ✓ B2B Позиции written.");
   } else {
     console.log("  ⚠ No B2B clients found — skipped.");
   }
