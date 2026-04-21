@@ -299,6 +299,59 @@ export async function getPurchaseOrders(params: {
   return lines.join("\n");
 }
 
+// --- Tool: история закупок по товару ---
+export async function getPurchaseHistory(query: string): Promise<string> {
+  if (!supabase) return "Supabase не подключён.";
+
+  const { data, error } = await supabase
+    .from("purchase_order_items")
+    .select("product_name, sku, qty_ordered, cost_price, line_total, purchase_orders(order_date, supplier)")
+    .ilike("product_name", `%${query}%`)
+    .order("product_name");
+
+  if (error) return `Ошибка: ${error.message}`;
+  if (!data || data.length === 0) return `Закупок по запросу "${query}" не найдено.`;
+
+  // Группируем по product_name → supplier
+  const byProduct = new Map<string, Map<string, { qty: number; total: number; prices: number[]; dates: string[] }>>();
+
+  for (const item of data) {
+    const product  = item.product_name ?? "—";
+    const po       = (item.purchase_orders as any) ?? {};
+    const supplier = po.supplier ?? "—";
+    const date     = po.order_date ?? "";
+    const price    = item.cost_price ?? 0;
+    const qty      = item.qty_ordered ?? 0;
+    const total    = item.line_total ?? 0;
+
+    if (!byProduct.has(product)) byProduct.set(product, new Map());
+    const suppMap = byProduct.get(product)!;
+    if (!suppMap.has(supplier)) suppMap.set(supplier, { qty: 0, total: 0, prices: [], dates: [] });
+    const s = suppMap.get(supplier)!;
+    s.qty += qty;
+    s.total += total;
+    if (price > 0) s.prices.push(price);
+    if (date) s.dates.push(date);
+  }
+
+  const lines: string[] = [];
+
+  for (const [product, suppMap] of byProduct) {
+    lines.push(`📦 ${product}`);
+    const sorted = [...suppMap.entries()].sort((a, b) => b[1].total - a[1].total);
+    for (const [supplier, s] of sorted) {
+      const avgPrice  = s.prices.length > 0 ? Math.round(s.prices.reduce((a, b) => a + b) / s.prices.length) : null;
+      const lastDate  = s.dates.sort().at(-1) ?? "—";
+      const totalQty  = Math.round(s.qty);
+      const avgStr    = avgPrice != null ? `, ср. цена ${avgPrice} ฿` : "";
+      lines.push(`  • ${supplier} — ${totalQty} шт${avgStr}, последний заказ: ${lastDate}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
+
 // --- Tool: товары с низким остатком ---
 export async function getLowStock(threshold = 5): Promise<string> {
   const [items, categories, inventory] = await Promise.all([

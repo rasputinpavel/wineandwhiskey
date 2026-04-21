@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSales, getInventorySummary } from "./tools.js";
+import { getPaymentAlerts, formatPaymentAlerts } from "./sheets.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -30,12 +31,13 @@ export async function generateMorningBriefing(): Promise<string> {
   const todayLabel = labelFor(today);
   const yesterdayLabel = labelFor(yesterday);
 
-  const [salesYesterday, salesLastWeek, salesTwoWeeksAgo, salesMonth, inventory] = await Promise.all([
+  const [salesYesterday, salesLastWeek, salesTwoWeeksAgo, salesMonth, inventory, paymentAlerts] = await Promise.all([
     getSales(yesterday, yesterday),
     getSales(sameWeekdayLastWeek, sameWeekdayLastWeek),
     getSales(sameWeekdayTwoWeeksAgo, sameWeekdayTwoWeeksAgo),
     getSales(monthStart, yesterday),
     getInventorySummary(),
+    getPaymentAlerts(3),
   ]);
 
   const prompt = `Ты — дружелюбный помощник команды винного магазина Wine & Whiskey в Таиланде.
@@ -105,5 +107,8 @@ ${inventory}
   });
 
   const text = response.content.find((b) => b.type === "text");
-  return text?.text ?? "Доброе утро! Не удалось загрузить данные.";
+  const briefing = text?.text ?? "Доброе утро! Не удалось загрузить данные.";
+
+  const paymentBlock = formatPaymentAlerts(paymentAlerts);
+  return paymentBlock ? `${briefing}\n\n${paymentBlock}` : briefing;
 }

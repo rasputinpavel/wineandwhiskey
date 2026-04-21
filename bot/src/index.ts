@@ -4,7 +4,7 @@ dotenv.config({ path: "../.env.local" });
 import { Bot } from "grammy";
 import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
-import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders } from "./tools.js";
+import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -35,6 +35,7 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 - "что на складе" / "сколько бутылок" → вызови get_inventory_summary
 - "что заканчивается" → вызови get_low_stock
 - "как дела" / "общая картина" → вызови get_sales за текущий период + get_inventory_summary
+- "у кого берём X" / "цена закупки X" / "когда последний раз заказывали X" → вызови get_purchase_history с названием товара
 - Уточняй ТОЛЬКО если запрос реально неоднозначен и без уточнения невозможно выбрать инструмент
 
 Форматирование — строго HTML для Telegram:
@@ -105,6 +106,17 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_purchase_history",
+    description: "История закупок конкретного товара: у кого покупали, сколько раз, средняя цена закупки, когда последний раз заказывали. Используй для вопросов: 'у кого берём Miravento', 'средняя цена закупки Prosecco', 'когда последний раз брали Whispering Angel', 'кто поставляет Bourgogne'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Часть названия товара для поиска, например 'Miravento' или 'Prosecco'" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "get_purchase_orders",
     description: "Получить историю закупок (purchase orders) по поставщику или периоду. Используй для вопросов: 'что брали у X', 'закупки за апрель', 'топ закупок', 'что заказывали у Vinum Lector'.",
     input_schema: {
@@ -131,6 +143,8 @@ async function runTool(name: string, input: any): Promise<string> {
       return getLowStock(input.threshold ?? 5);
     case "get_inventory_summary":
       return getInventorySummary();
+    case "get_purchase_history":
+      return getPurchaseHistory(input.query);
     case "get_supplier":
       return getSupplier(input.query);
     case "get_purchase_orders":
