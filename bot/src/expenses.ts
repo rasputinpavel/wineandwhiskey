@@ -192,7 +192,7 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
         majorDimension: "ROWS",
         values: [[
           e.date,
-          `฿${e.amount}`,
+          Number(e.amount),
           e.description,
           e.hasDocs   ? "TRUE" : "FALSE",
           "FALSE",
