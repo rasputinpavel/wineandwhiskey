@@ -158,12 +158,12 @@ async function gToken(): Promise<string> {
 export async function addExpenseRow(e: PendingExpense): Promise<void> {
   const token = await gToken();
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A:F")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A:A")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
       method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body:    JSON.stringify({
-        range:          "Расходы!A:F",
+        range:          "Расходы!A:A",
         majorDimension: "ROWS",
         values: [[
           e.date,
