@@ -166,7 +166,7 @@ async function gToken(): Promise<string> {
 export async function addExpenseRow(e: PendingExpense): Promise<void> {
   const token = await gToken();
 
-  // Find the sheet row number of the last filled date in column A
+  // 1. Find last filled row in column A (1-based sheet row)
   const colAResp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A2:A")}`,
     { headers: { Authorization: `Bearer ${token}` } },
@@ -177,17 +177,46 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i]?.[0]?.trim()) lastFilledIdx = i;
   }
-  const lastSheetRow = lastFilledIdx + 2; // 1-based, +1 for header +1 for 1-based
+  const lastSheetRow = lastFilledIdx + 2; // 1-based (header=1, first data=2)
 
-  // Append right after the last data row — inherits checkbox formatting from that row
-  const anchorRange = `Расходы!A2:F${lastSheetRow}`;
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(anchorRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+  // 2. Get sheetId for "Расходы"
+  const metaResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const meta = await metaResp.json();
+  const sheetId: number = meta.sheets.find((s: any) => s.properties.title === "Расходы")?.properties.sheetId;
+  if (sheetId === undefined) throw new Error("Sheet 'Расходы' not found");
+
+  // 3. Insert a new row right after lastSheetRow, inheriting formatting from it
+  // insertDimension uses 0-based indices; insert after row N (1-based) → startIndex = N
+  const insertResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,
     {
       method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body:    JSON.stringify({
-        range:          anchorRange,
+        requests: [{
+          insertDimension: {
+            range: { sheetId, dimension: "ROWS", startIndex: lastSheetRow, endIndex: lastSheetRow + 1 },
+            inheritFromBefore: true,
+          },
+        }],
+      }),
+    }
+  );
+  if (!insertResp.ok) throw new Error(`Insert row failed: ${await insertResp.text()}`);
+
+  // 4. Write values into the newly inserted row
+  const newRow = lastSheetRow + 1; // 1-based
+  const range = `Расходы!A${newRow}:F${newRow}`;
+  const writeResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    {
+      method:  "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        range,
         majorDimension: "ROWS",
         values: [[
           e.date,
@@ -200,5 +229,5 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
       }),
     }
   );
-  if (!res.ok) throw new Error(`Sheets append failed: ${await res.text()}`);
+  if (!writeResp.ok) throw new Error(`Write failed: ${await writeResp.text()}`);
 }
