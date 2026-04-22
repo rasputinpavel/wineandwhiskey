@@ -166,28 +166,28 @@ async function gToken(): Promise<string> {
 export async function addExpenseRow(e: PendingExpense): Promise<void> {
   const token = await gToken();
 
-  // Find last row with a date in column A (skip header row 1)
-  const colA = await fetch(
+  // Find the sheet row number of the last filled date in column A
+  const colAResp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A2:A")}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  const colAData = await colA.json();
+  const colAData = await colAResp.json();
   const rows: string[][] = colAData.values ?? [];
-  // last filled row index (0-based in rows[]) → sheet row = index + 2
   let lastFilledIdx = -1;
   for (let i = 0; i < rows.length; i++) {
     if (rows[i]?.[0]?.trim()) lastFilledIdx = i;
   }
-  const nextSheetRow = lastFilledIdx + 2 + 1; // +2 for header, +1 for next row
+  const lastSheetRow = lastFilledIdx + 2; // 1-based, +1 for header +1 for 1-based
 
-  const range = `Расходы!A${nextSheetRow}:F${nextSheetRow}`;
+  // Append right after the last data row — inherits checkbox formatting from that row
+  const anchorRange = `Расходы!A2:F${lastSheetRow}`;
   const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(anchorRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
-      method:  "PUT",
+      method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body:    JSON.stringify({
-        range,
+        range:          anchorRange,
         majorDimension: "ROWS",
         values: [[
           e.date,
@@ -200,5 +200,5 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
       }),
     }
   );
-  if (!res.ok) throw new Error(`Sheets write failed: ${await res.text()}`);
+  if (!res.ok) throw new Error(`Sheets append failed: ${await res.text()}`);
 }
