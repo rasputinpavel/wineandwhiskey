@@ -6,6 +6,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
+import {
+  PendingExpense, PendingPhoto,
+  bangkokDate, looksLikeExpense,
+  extractExpenseFromText, extractExpenseFromPhoto,
+  downloadTelegramPhoto,
+  buildExpenseMessage, buildExpenseKeyboard,
+  addExpenseRow,
+} from "./expenses.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -45,6 +53,28 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 - Никаких **, __, ## — только HTML-теги
 
 Если данных нет в инструментах (опт, прогнозы) — скажи что не подключено, можно добавить.`;
+
+// Expense flow state
+const pendingPhotos   = new Map<number, PendingPhoto>();
+const pendingExpenses = new Map<number, PendingExpense>();
+
+async function startExpenseFlow(
+  chatId: number,
+  extracted: { amount: string; description: string },
+): Promise<void> {
+  const expense: PendingExpense = {
+    amount:      extracted.amount,
+    description: extracted.description,
+    date:        bangkokDate(),
+    isCompany:   false,
+    hasDocs:     false,
+  };
+  pendingExpenses.set(chatId, expense);
+  await bot.api.sendMessage(chatId, buildExpenseMessage(expense), {
+    parse_mode:   "HTML",
+    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs),
+  });
+}
 
 // История сообщений на чат
 interface ChatSession {
@@ -296,24 +326,145 @@ bot.command("sales", async (ctx) => {
   }
 });
 
-bot.on("message:text", async (ctx) => {
-  const text = ctx.message.text;
-  if (text.startsWith("/")) return;
+bot.on("message:photo", async (ctx) => {
+  const chatId  = ctx.chat.id;
+  const caption = ctx.message.caption?.trim();
+  const photos  = ctx.message.photo;
+  const fileId  = photos[photos.length - 1].file_id; // largest size
 
-  const msg = await ctx.reply("...");
+  const waitMsg = await ctx.reply("Читаю чек...");
   try {
-    const answer = await askClaude(ctx.chat.id, text);
-    try {
-      await ctx.api.editMessageText(ctx.chat.id, msg.message_id, answer, { parse_mode: "HTML" });
-    } catch {
-      // Fallback: если HTML невалиден из-за спецсимволов в названиях — отправить plain text
-      const plain = answer.replace(/<[^>]+>/g, "");
-      await ctx.api.editMessageText(ctx.chat.id, msg.message_id, plain);
+    const photo = await downloadTelegramPhoto(process.env.TELEGRAM_BOT_TOKEN!, fileId);
+
+    if (caption) {
+      const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
+      await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+      if (extracted) {
+        await startExpenseFlow(chatId, extracted);
+      } else {
+        await ctx.reply("Не смог распознать сумму. Напиши расход текстом: «856 интернет»");
+      }
+    } else {
+      // Store photo, wait for caption in next text message
+      pendingPhotos.set(chatId, photo);
+      await ctx.api.editMessageText(chatId, waitMsg.message_id, "📷 Фото получено. Напиши пояснение (на что потратили и сумму, если не видно):");
     }
   } catch (e) {
     console.error(e);
-    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "Что-то пошло не так, попробуй ещё раз.");
+    await ctx.api.editMessageText(chatId, waitMsg.message_id, "Ошибка при обработке фото.");
   }
+});
+
+bot.on("message:text", async (ctx) => {
+  const chatId = ctx.chat.id;
+  const text   = ctx.message.text;
+  if (text.startsWith("/")) return;
+
+  // If there's a pending photo, treat this text as its caption
+  const pendingPhoto = pendingPhotos.get(chatId);
+  if (pendingPhoto) {
+    pendingPhotos.delete(chatId);
+    const msg = await ctx.reply("Читаю чек...");
+    try {
+      const extracted = await extractExpenseFromPhoto(pendingPhoto.base64, pendingPhoto.mimeType, text);
+      await ctx.api.deleteMessage(chatId, msg.message_id);
+      if (extracted) {
+        await startExpenseFlow(chatId, extracted);
+      } else {
+        await ctx.reply("Не смог распознать сумму. Напиши расход текстом: «856 интернет»");
+      }
+    } catch (e) {
+      console.error(e);
+      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при обработке фото.");
+    }
+    return;
+  }
+
+  // Expense text shortcut
+  if (looksLikeExpense(text)) {
+    const msg = await ctx.reply("Распознаю расход...");
+    try {
+      const extracted = await extractExpenseFromText(text);
+      await ctx.api.deleteMessage(chatId, msg.message_id);
+      if (extracted) {
+        await startExpenseFlow(chatId, extracted);
+      } else {
+        await ctx.reply("Не смог распознать расход. Попробуй формат: «856 интернет»");
+      }
+    } catch (e) {
+      console.error(e);
+      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при распознавании.");
+    }
+    return;
+  }
+
+  const msg = await ctx.reply("...");
+  try {
+    const answer = await askClaude(chatId, text);
+    try {
+      await ctx.api.editMessageText(chatId, msg.message_id, answer, { parse_mode: "HTML" });
+    } catch {
+      // Fallback: если HTML невалиден из-за спецсимволов в названиях — отправить plain text
+      const plain = answer.replace(/<[^>]+>/g, "");
+      await ctx.api.editMessageText(chatId, msg.message_id, plain);
+    }
+  } catch (e) {
+    console.error(e);
+    await ctx.api.editMessageText(chatId, msg.message_id, "Что-то пошло не так, попробуй ещё раз.");
+  }
+});
+
+bot.on("callback_query:data", async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (!chatId) { await ctx.answerCallbackQuery(); return; }
+
+  const data    = ctx.callbackQuery.data;
+  const expense = pendingExpenses.get(chatId);
+
+  if (!data.startsWith("exp_")) { await ctx.answerCallbackQuery(); return; }
+
+  if (data === "exp_cancel") {
+    pendingExpenses.delete(chatId);
+    await ctx.answerCallbackQuery("Отменено");
+    await ctx.editMessageText("✖ Расход отменён.");
+    return;
+  }
+
+  if (!expense) {
+    await ctx.answerCallbackQuery("Сессия устарела, отправь расход снова.");
+    return;
+  }
+
+  if (data === "exp_company_yes") expense.isCompany = true;
+  if (data === "exp_company_no")  expense.isCompany = false;
+  if (data === "exp_docs_yes")    expense.hasDocs   = true;
+  if (data === "exp_docs_no")     expense.hasDocs   = false;
+
+  if (data === "exp_confirm") {
+    pendingExpenses.delete(chatId);
+    await ctx.answerCallbackQuery("Записываю...");
+    try {
+      await addExpenseRow(expense);
+      await ctx.editMessageText(
+        `✅ Записано!\n\n` +
+        `📅 ${expense.date} | ฿${expense.amount}\n` +
+        `📝 ${expense.description}\n` +
+        `${expense.isCompany ? "🏢 На компанию" : "👤 Личный"} · ` +
+        `${expense.hasDocs ? "📄 Есть доки" : "📭 Без доков"}`,
+      );
+    } catch (e) {
+      console.error(e);
+      await ctx.editMessageText("❌ Ошибка записи в таблицу. Попробуй ещё раз.");
+    }
+    return;
+  }
+
+  // Toggle — update message
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(buildExpenseMessage(expense), {
+    parse_mode:   "HTML",
+    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs),
+  });
 });
 
 // Утренний брифинг в 9:00 по Бангкоку
