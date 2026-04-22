@@ -42,9 +42,13 @@ export function looksLikeExpense(text: string): boolean {
 
 // ─── Claude extraction ────────────────────────────────────────────────────────
 
-const EXTRACT_PROMPT = (hint: string) =>
-  `${hint}Определи итоговую сумму в THB и краткое описание расхода (на что потрачено, 2–5 слов). ` +
+const EXTRACT_TEXT_PROMPT = (text: string) =>
+  `Текст: "${text}". Определи итоговую сумму в THB и краткое описание расхода (на что потрачено, 2–5 слов). ` +
   `Ответь ТОЛЬКО валидным JSON без markdown и объяснений: {"amount":"856","description":"интернет 3BB"}`;
+
+const EXTRACT_AMOUNT_PROMPT =
+  `На изображении чек или квитанция об оплате. Найди итоговую сумму платежа в THB. ` +
+  `Ответь ТОЛЬКО валидным JSON без markdown и объяснений: {"amount":"856"}`;
 
 export async function extractExpenseFromText(
   text: string
@@ -52,29 +56,30 @@ export async function extractExpenseFromText(
   const response = await anthropic.messages.create({
     model:      "claude-haiku-4-5-20251001",
     max_tokens: 150,
-    messages:   [{ role: "user", content: EXTRACT_PROMPT(`Текст: "${text}". `) }],
+    messages:   [{ role: "user", content: EXTRACT_TEXT_PROMPT(text) }],
   });
   return parseExtractedJSON(response);
 }
 
 export async function extractExpenseFromPhoto(
-  base64:   string,
-  mimeType: "image/jpeg" | "image/png",
-  caption?: string,
+  base64:      string,
+  mimeType:    "image/jpeg" | "image/png",
+  description: string,
 ): Promise<{ amount: string; description: string } | null> {
-  const hint = caption ? `Пояснение пользователя: "${caption}". ` : "";
   const response = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
-    max_tokens: 150,
+    max_tokens: 100,
     messages:   [{
       role:    "user",
       content: [
         { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } },
-        { type: "text",  text: EXTRACT_PROMPT(hint) },
+        { type: "text",  text: EXTRACT_AMOUNT_PROMPT },
       ],
     }],
   });
-  return parseExtractedJSON(response);
+  const parsed = parseExtractedJSON(response);
+  if (!parsed) return null;
+  return { amount: parsed.amount, description };
 }
 
 function parseExtractedJSON(
@@ -85,8 +90,11 @@ function parseExtractedJSON(
     // Strip any markdown fences just in case
     const clean = raw.replace(/```json|```/g, "").trim();
     const json = JSON.parse(clean);
-    if (json.amount && json.description) {
-      return { amount: String(json.amount).replace(/[^\d.]/g, ""), description: String(json.description) };
+    if (json.amount) {
+      return {
+        amount:      String(json.amount).replace(/[^\d.]/g, ""),
+        description: json.description ? String(json.description) : "",
+      };
     }
   } catch {}
   return null;
