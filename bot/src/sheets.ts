@@ -68,8 +68,11 @@ export async function getPaymentAlerts(withinDays = 3): Promise<PaymentAlert[]> 
   const alerts: PaymentAlert[] = [];
 
   // Дебиторка: column A = name, column C = amount, column D = due date
-  const deb = await readSheet(token, "Дебиторка", "A2:D200");
+  // Read up to column G to catch the status column wherever it may be
+  const deb = await readSheet(token, "Дебиторка", "A2:G200");
   for (const row of deb) {
+    const isPaid = row.some(cell => cell?.trim().toLowerCase() === "paid");
+    if (isPaid) continue;
     const name    = row[0]?.trim() ?? "";
     const amount  = row[2]?.trim() ?? "";
     const dateStr = row[3]?.trim() ?? "";
@@ -82,8 +85,11 @@ export async function getPaymentAlerts(withinDays = 3): Promise<PaymentAlert[]> 
   }
 
   // Кредиторка: column A = name, column D = amount, column E = due date
-  const kred = await readSheet(token, "Кредиторка", "A2:E200");
+  // Read up to column G to catch the status column wherever it may be
+  const kred = await readSheet(token, "Кредиторка", "A2:G200");
   for (const row of kred) {
+    const isPaid = row.some(cell => cell?.trim().toLowerCase() === "paid");
+    if (isPaid) continue;
     const name    = row[0]?.trim() ?? "";
     const amount  = row[3]?.trim() ?? "";
     const dateStr = row[4]?.trim() ?? "";
