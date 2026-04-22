@@ -166,51 +166,23 @@ async function gToken(): Promise<string> {
 export async function addExpenseRow(e: PendingExpense): Promise<void> {
   const token = await gToken();
 
-  // 1. Find last filled row in column A (1-based sheet row)
+  // Find the first empty row in column A after the header (= first gap in continuous data block)
   const colAResp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A2:A")}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   const colAData = await colAResp.json();
   const rows: string[][] = colAData.values ?? [];
-  let lastFilledIdx = -1;
+
+  // Walk rows until first empty cell — that's where the continuous block ends
+  let firstEmptyIdx = rows.length; // fallback: right after all returned rows
   for (let i = 0; i < rows.length; i++) {
-    if (rows[i]?.[0]?.trim()) lastFilledIdx = i;
+    if (!rows[i]?.[0]?.trim()) { firstEmptyIdx = i; break; }
   }
-  const lastSheetRow = lastFilledIdx + 2; // 1-based (header=1, first data=2)
+  const targetRow = firstEmptyIdx + 2; // 1-based sheet row (row 1 = header)
 
-  // 2. Get sheetId for "Расходы"
-  const metaResp = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const meta = await metaResp.json();
-  const sheetId: number = meta.sheets.find((s: any) => s.properties.title === "Расходы")?.properties.sheetId;
-  if (sheetId === undefined) throw new Error("Sheet 'Расходы' not found");
-
-  // 3. Insert a new row right after lastSheetRow, inheriting formatting from it
-  // insertDimension uses 0-based indices; insert after row N (1-based) → startIndex = N
-  const insertResp = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,
-    {
-      method:  "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        requests: [{
-          insertDimension: {
-            range: { sheetId, dimension: "ROWS", startIndex: lastSheetRow, endIndex: lastSheetRow + 1 },
-            inheritFromBefore: true,
-          },
-        }],
-      }),
-    }
-  );
-  if (!insertResp.ok) throw new Error(`Insert row failed: ${await insertResp.text()}`);
-
-  // 4. Write values into the newly inserted row
-  const newRow = lastSheetRow + 1; // 1-based
-  const range = `Расходы!A${newRow}:F${newRow}`;
-  const writeResp = await fetch(
+  const range = `Расходы!A${targetRow}:F${targetRow}`;
+  const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {
       method:  "PUT",
@@ -229,5 +201,5 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
       }),
     }
   );
-  if (!writeResp.ok) throw new Error(`Write failed: ${await writeResp.text()}`);
+  if (!res.ok) throw new Error(`Sheets write failed: ${await res.text()}`);
 }
