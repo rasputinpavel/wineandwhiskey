@@ -22,19 +22,22 @@ export type ExtractionResult = {
 
 // ─── Prompts ────────────────────────────────────────────────────────────────
 
-const META_PROMPT = `From this price list, extract ONLY the supplier/company name and date.
+const META_PROMPT = `From this supplier wine/spirits price list (may be CSV, Excel data, or text), extract ONLY the supplier/company name and date.
+The supplier name is usually in the first few rows or in the filename/sheet name context.
 Return ONLY this JSON (no markdown, no other text):
-{"supplier_name":"...","price_list_date":"YYYY-MM-DD or null","currency":"THB or USD or null"}`
+{"supplier_name":"actual company name or Unknown Supplier","price_list_date":"YYYY-MM-DD or null","currency":"THB or USD or null"}`
 
-const ITEMS_PROMPT = `Extract ALL wine and spirits items visible in this price list.
+const ITEMS_PROMPT = `This is a wine/spirits supplier price list in CSV or text format. Extract ALL wine and spirits items.
+Each row typically has: product name, price, possibly country/region/grape/year/volume.
 Return ONLY a compact JSON array (no markdown, no explanation):
 [{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]
-If no items found, return [].`
+Skip header rows, totals, and non-product rows. If no items found, return [].`
 
-const FULL_PROMPT = `Extract all wine and spirits items from this price list.
+const FULL_PROMPT = `This is a wine/spirits supplier price list (may be CSV from Excel, plain text, or an image/PDF).
+Extract the supplier name (usually at top or in sheet name) and ALL wine/spirits product rows.
 Return ONLY this JSON (no markdown):
-{"supplier_name":"...","price_list_date":"YYYY-MM-DD or null","currency":"THB/USD/null","items":[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]}
-Return [] for items if none found.`
+{"supplier_name":"actual company name or Unknown Supplier","price_list_date":"YYYY-MM-DD or null","currency":"THB/USD/null","items":[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]}
+Skip header rows, totals, category headers. Return [] for items if none found.`
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -119,10 +122,12 @@ export async function extractFromImage(
 
 /** Excel/text: send extracted CSV/text */
 export async function extractFromText(text: string): Promise<ExtractionResult> {
+  console.log(`[claude] text length: ${text.length}, first 300:\n${text.slice(0, 300)}`)
   // Split into 18K chunks if large
   const CHUNK = 18_000
   if (text.length <= CHUNK) {
     const raw = await callWithText(FULL_PROMPT, text)
+    console.log(`[claude] text response (200): ${raw.slice(0, 200)}`)
     const result = parseJson<ExtractionResult>(raw)
     if (!result) throw new Error('Failed to parse extraction response')
     result.items = dedup(result.items ?? [])

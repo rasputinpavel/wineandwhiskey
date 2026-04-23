@@ -24,7 +24,7 @@ export async function extractFromFile(
   }
 
   if (type === 'excel') {
-    const text = extractExcelText(buffer)
+    const text = extractExcelText(buffer, filename)
     return extractFromText(text)
   }
 
@@ -34,12 +34,14 @@ export async function extractFromFile(
   return extractFromImage(base64, safeMime)
 }
 
-function extractExcelText(buffer: Buffer): string {
+function extractExcelText(buffer: Buffer, filename: string): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const XLSX = require('xlsx') as typeof import('xlsx')
   const workbook = XLSX.read(buffer, { type: 'buffer' })
-  return workbook.SheetNames.map((name: string) => {
+  const header = `[File: ${filename}]\n`
+  const sheets = workbook.SheetNames.map((name: string) => {
     const sheet = workbook.Sheets[name]
     return `[Sheet: ${name}]\n${XLSX.utils.sheet_to_csv(sheet)}`
   }).join('\n\n')
+  return header + sheets
 }

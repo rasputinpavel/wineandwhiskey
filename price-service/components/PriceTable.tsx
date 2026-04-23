@@ -104,7 +104,7 @@ function TableRow({ item }: { item: WineItem }) {
       </td>
       <td className="px-4 py-3">
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
-          {item.supplier_name ?? '—'}
+          {(item.supplier_name && item.supplier_name !== 'null') ? item.supplier_name : '—'}
         </span>
       </td>
       <td className="px-4 py-3 text-gray-600">{item.country ?? '—'}</td>

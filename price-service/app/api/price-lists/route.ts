@@ -48,10 +48,14 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
     const result = await extractFromFile(buffer, filename, mimeType)
     console.log(`[extraction] items found: ${result.items.length}`)
 
+    const rawName = result.supplier_name
+    const isUnknown = !rawName || rawName === 'null' || rawName === 'Unknown' || rawName === 'Unknown Supplier'
+    result.supplier_name = isUnknown ? 'Unknown Supplier' : rawName
+
     const supplierSlug = result.supplier_name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+      .replace(/^-|-$/g, '') || 'unknown'
 
     let supplierId: string | null = null
     const { data: existing } = await supabase
