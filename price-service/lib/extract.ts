@@ -120,10 +120,14 @@ function parseStructuredExcel(workbook: any, XLSX: any): { items: ExtractedItem[
 
       // Wine row: A is a 4-digit year
       if (/^(19|20)\d{2}$/.test(a) && b) {
-        const priceRaw = d.replace(/[\s,]/g, '')
-        const price = priceRaw && /^\d+(\.\d+)?$/.test(priceRaw) ? parseFloat(priceRaw) : null
         const grape = pendingGrape || null
         pendingGrape = ''
+
+        // Skip unavailable items (price says "soon", "tba", "na" etc.)
+        if (/soon|tba|n\/a|coming/i.test(d)) return
+
+        const priceRaw = d.replace(/[\s,]/g, '')
+        const price = priceRaw && /^\d+(\.\d+)?$/.test(priceRaw) ? parseFloat(priceRaw) : null
 
         const dedup = `${a}|${b.toLowerCase()}|${sheetName}`
         if (seen.has(dedup)) return
