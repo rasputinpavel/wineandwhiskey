@@ -22,7 +22,7 @@ export type ExtractionResult = {
   items: ExtractedItem[]
 }
 
-const EXTRACTION_PROMPT = `You are a wine price list parser. Extract all wine and spirits items from this price list document.
+const EXTRACTION_PROMPT = `You are a wine price list parser. Extract all wine and spirits items from this price list.
 
 Return a valid JSON object with EXACTLY this structure — no markdown, no explanation, just JSON:
 {
@@ -38,44 +38,27 @@ Return a valid JSON object with EXACTLY this structure — no markdown, no expla
       "price": numeric price (number only, no symbols) or null,
       "year": vintage year as integer or null,
       "volume": "750ml" or "1L" etc or null,
-      "description": "product description if present in the document or null"
+      "description": "product description if present or null"
     }
   ]
 }
 
 Rules:
 - Extract ALL items: wines, champagnes, spirits, etc.
-- price must be a number (e.g. 890, 1250.50) or null — no currency symbols
-- year must be a 4-digit integer (e.g. 2019) or null
-- grape_variety: comma-separate for blends (e.g. "Cabernet Sauvignon, Merlot")
-- If multiple price columns exist (retail/wholesale), use the retail/selling price
+- price must be a number (e.g. 890, 1250.50) or null
+- year must be a 4-digit integer or null
+- grape_variety: comma-separate blends (e.g. "Cabernet Sauvignon, Merlot")
+- If multiple price columns (retail/wholesale), use the retail/selling price
 - Return ONLY the JSON object — no other text`
 
-type DocumentBlock = {
-  type: 'document'
-  source: {
-    type: 'base64'
-    media_type: 'application/pdf'
-    data: string
-  }
-}
-
-export async function extractPriceList(pdfBase64: string): Promise<ExtractionResult> {
-  const docBlock: DocumentBlock = {
-    type: 'document',
-    source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
-  }
-
+export async function extractPriceList(pdfText: string): Promise<ExtractionResult> {
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 8192,
     messages: [
       {
         role: 'user',
-        content: [
-          docBlock as unknown as Anthropic.TextBlockParam,
-          { type: 'text', text: EXTRACTION_PROMPT },
-        ],
+        content: `${EXTRACTION_PROMPT}\n\n<price_list>\n${pdfText}\n</price_list>`,
       },
     ],
   })

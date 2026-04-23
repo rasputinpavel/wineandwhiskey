@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { extractPriceList } from '@/lib/claude'
+import { extractTextFromPdf } from '@/lib/pdf'
 
 export async function GET() {
   const { data, error } = await supabase
@@ -44,9 +45,13 @@ async function runExtraction(priceListId: string, storagePath: string) {
     if (dlError || !blob) throw dlError ?? new Error('Download failed')
 
     const buffer = Buffer.from(await blob.arrayBuffer())
-    const pdfBase64 = buffer.toString('base64')
+    const pdfText = await extractTextFromPdf(buffer)
 
-    const result = await extractPriceList(pdfBase64)
+    if (pdfText.trim().length < 100) {
+      throw new Error('Не удалось извлечь текст из PDF. Возможно, это скан без OCR.')
+    }
+
+    const result = await extractPriceList(pdfText)
 
     // Upsert supplier
     const supplierSlug = result.supplier_name
