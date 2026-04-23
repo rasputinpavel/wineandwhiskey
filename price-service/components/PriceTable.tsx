@@ -8,10 +8,18 @@ type Props = {
   total: number
   page: number
   limit: number
+  sortCol: string
+  sortAsc: boolean
   onPageChange: (page: number) => void
+  onSort: (col: string) => void
 }
 
-export default function PriceTable({ items, total, page, limit, onPageChange }: Props) {
+function SortIcon({ col, sortCol, sortAsc }: { col: string; sortCol: string; sortAsc: boolean }) {
+  if (col !== sortCol) return <span className="ml-1 text-gray-300">↕</span>
+  return <span className="ml-1 text-wine-600">{sortAsc ? '↑' : '↓'}</span>
+}
+
+export default function PriceTable({ items, total, page, limit, sortCol, sortAsc, onPageChange, onSort }: Props) {
   const totalPages = Math.ceil(total / limit)
 
   if (items.length === 0) {
@@ -33,14 +41,25 @@ export default function PriceTable({ items, total, page, limit, onPageChange }: 
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 w-8"></th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Название</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Поставщик</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Страна</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Сорт</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Год</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Объём</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Цена</th>
+              <th className="px-4 py-3 w-8"></th>
+              {([
+                { col: 'name', label: 'Название', align: 'left' },
+                { col: 'supplier_name', label: 'Поставщик', align: 'left' },
+                { col: 'country', label: 'Страна', align: 'left' },
+                { col: null, label: 'Сорт', align: 'left' },
+                { col: 'year', label: 'Год', align: 'left' },
+                { col: null, label: 'Объём', align: 'left' },
+                { col: 'price', label: 'Цена', align: 'right' },
+              ] as const).map(({ col, label, align }) => (
+                <th
+                  key={label}
+                  className={`px-4 py-3 text-${align} font-medium text-gray-500 ${col ? 'cursor-pointer hover:text-gray-800 select-none' : ''}`}
+                  onClick={col ? () => onSort(col) : undefined}
+                >
+                  {label}
+                  {col && <SortIcon col={col} sortCol={sortCol} sortAsc={sortAsc} />}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 bg-white">

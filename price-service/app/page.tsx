@@ -10,19 +10,26 @@ type SearchParams = {
   country?: string
   grape?: string
   page?: string
+  sort?: string
+  dir?: string
 }
+
+const SORTABLE = ['name', 'supplier_name', 'country', 'year', 'price'] as const
+type SortCol = typeof SORTABLE[number]
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
   const page = Math.max(1, parseInt(params.page ?? '1'))
   const limit = 50
   const offset = (page - 1) * limit
+  const sortCol: SortCol = (SORTABLE as readonly string[]).includes(params.sort ?? '') ? params.sort as SortCol : 'name'
+  const sortAsc = params.dir !== 'desc'
 
   // Build wine_items query
   let query = supabase
     .from('wine_items')
     .select('*', { count: 'exact' })
-    .order('name', { ascending: true })
+    .order(sortCol, { ascending: sortAsc, nullsFirst: false })
     .range(offset, offset + limit - 1)
 
   if (params.q) query = query.ilike('name', `%${params.q}%`)
@@ -114,7 +121,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {/* Table */}
         <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка...</div>}>
-          <PriceTableClient items={items} total={total} page={page} limit={limit} />
+          <PriceTableClient items={items} total={total} page={page} limit={limit} sortCol={sortCol} sortAsc={sortAsc} />
         </Suspense>
       </main>
     </div>
