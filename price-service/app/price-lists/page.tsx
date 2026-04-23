@@ -87,12 +87,12 @@ export default function PriceListsPage() {
 
   useEffect(() => () => { Object.keys(pollRef.current).forEach(stopPoll) }, [])
 
-  async function handleEnrich(id: string) {
+  async function handleEnrich(id: string, force = false) {
     setStatus(id, { state: 'starting', enriched: 0, total: 0 })
     const res = await fetch('/api/vivino/enrich', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ price_list_id: id, force: es.state === 'done' || es.state === 'error' }),
+      body: JSON.stringify({ price_list_id: id, force }),
     })
     const json = await res.json()
     if (res.ok) {
@@ -179,7 +179,7 @@ export default function PriceListsPage() {
                     {/* Main Vivino / Заново button */}
                     {(es.state === 'idle' || es.state === 'done' || es.state === 'error') && (
                       <button
-                        onClick={() => handleEnrich(pl.id)}
+                        onClick={() => handleEnrich(pl.id, es.state === 'done' || es.state === 'error')}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
                         title={es.state === 'done' ? 'Запустить заново' : 'Обогатить данными Vivino'}
                       >
