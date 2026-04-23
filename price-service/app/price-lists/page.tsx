@@ -92,7 +92,7 @@ export default function PriceListsPage() {
     const res = await fetch('/api/vivino/enrich', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ price_list_id: id }),
+      body: JSON.stringify({ price_list_id: id, force: es.state === 'done' || es.state === 'error' }),
     })
     const json = await res.json()
     if (res.ok) {

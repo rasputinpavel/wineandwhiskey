@@ -13,9 +13,14 @@ type VivinoResult = {
 }
 
 export async function POST(req: NextRequest) {
-  const { price_list_id } = await req.json()
+  const { price_list_id, force } = await req.json()
   if (!price_list_id) return NextResponse.json({ error: 'price_list_id required' }, { status: 400 })
   if (!APIFY_TOKEN) return NextResponse.json({ error: 'APIFY_TOKEN not configured' }, { status: 500 })
+
+  // Reset enrichment status if force re-run requested
+  if (force) {
+    await supabase.from('wine_items').update({ vivino_enriched_at: null }).eq('price_list_id', price_list_id)
+  }
 
   const { data: items, error } = await supabase
     .from('wine_items')
