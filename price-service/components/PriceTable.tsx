@@ -47,6 +47,7 @@ export default function PriceTable({ items, total, page, limit, sortCol, sortAsc
                 { col: 'supplier_name', label: 'Поставщик', align: 'left' },
                 { col: 'country', label: 'Страна', align: 'left' },
                 { col: null, label: 'Сорт', align: 'left' },
+                { col: 'vivino_rating', label: 'Vivino', align: 'left' },
                 { col: 'year', label: 'Год', align: 'left' },
                 { col: null, label: 'Объём', align: 'left' },
                 { col: 'price', label: 'Цена', align: 'right' },
@@ -117,14 +118,9 @@ function TableRow({ item }: { item: WineItem }) {
       </td>
       <td className="px-4 py-3">
         <div className="font-medium text-gray-900">{item.name}</div>
-        <div className="flex items-center gap-2 mt-0.5">
-          {item.vivino_rating && (
-            <span className="text-xs text-purple-600 font-medium">★ {item.vivino_rating}</span>
-          )}
-          {item.description && (
-            <span className="text-xs text-gray-400 line-clamp-1">{item.description}</span>
-          )}
-        </div>
+        {item.description && (
+          <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
+        )}
       </td>
       <td className="px-4 py-3">
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
@@ -133,6 +129,11 @@ function TableRow({ item }: { item: WineItem }) {
       </td>
       <td className="px-4 py-3 text-gray-600">{item.country ?? '—'}</td>
       <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">{item.grape_variety ?? '—'}</td>
+      <td className="px-4 py-3">
+        {item.vivino_rating ? (
+          <span className="text-xs font-medium text-purple-700">★ {item.vivino_rating}</span>
+        ) : '—'}
+      </td>
       <td className="px-4 py-3 text-gray-600">{item.year ?? '—'}</td>
       <td className="px-4 py-3 text-gray-500">{item.volume ?? '—'}</td>
       <td className="px-4 py-3 text-right font-semibold text-gray-900">
