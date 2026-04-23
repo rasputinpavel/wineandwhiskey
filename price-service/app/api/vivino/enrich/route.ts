@@ -7,14 +7,10 @@ const ACTOR_ID = 'mrbridge~vivino-wine-data-scraper'
 type VivinoResult = {
   name?: string
   vintage?: number | string
-  rating?: { average?: number; reviews_count?: number }
-  image?: { location?: string }
-  url?: string
-  // actor may return slightly different shapes
-  wineRating?: number
-  ratingsCount?: number
-  imageUrl?: string
-  wineUrl?: string
+  average_rating?: number
+  ratings_count?: number
+  image_url?: string | string[]
+  vivino_url?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -81,11 +77,13 @@ async function enrichInBackground(items: { id: string; name: string; year: numbe
       for (let j = 0; j < batch.length; j++) {
         const r = results[j]
         if (!r) continue
+        const rawImage = r.image_url
+        const imageUrl = Array.isArray(rawImage) ? rawImage[0] : (rawImage ?? null)
         const data = {
-          vivino_rating: r.rating?.average ?? (r.wineRating as number | undefined) ?? null,
-          vivino_reviews_count: r.rating?.reviews_count ?? (r.ratingsCount as number | undefined) ?? null,
-          vivino_url: r.url ?? r.wineUrl ?? null,
-          vivino_image_url: r.image?.location ?? r.imageUrl ?? null,
+          vivino_rating: r.average_rating ?? null,
+          vivino_reviews_count: r.ratings_count ?? null,
+          vivino_url: r.vivino_url ?? null,
+          vivino_image_url: imageUrl,
           vivino_enriched_at: new Date().toISOString(),
         }
         await supabase.from('wine_items').update(data).eq('id', batch[j].id)
