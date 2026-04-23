@@ -6,7 +6,7 @@ const ACTOR_ID = 'mrbridge~vivino-wine-data-scraper'
 
 type VivinoResult = {
   name?: string
-  vintage?: number | string
+  searchQuery?: string
   average_rating?: number
   ratings_count?: number
   image_url?: string | string[]
@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
   if (!price_list_id) return NextResponse.json({ error: 'price_list_id required' }, { status: 400 })
   if (!APIFY_TOKEN) return NextResponse.json({ error: 'APIFY_TOKEN not configured' }, { status: 500 })
 
-  // Fetch wine items for this price list that haven't been enriched yet
   const { data: items, error } = await supabase
     .from('wine_items')
     .select('id, name, year, country')
@@ -31,73 +30,94 @@ export async function POST(req: NextRequest) {
 
   console.log(`[vivino] enriching ${items.length} items for price_list ${price_list_id}`)
 
-  // Run enrichment in background — respond immediately
   enrichInBackground(items).catch(console.error)
 
   return NextResponse.json({ enriching: items.length, message: 'Enrichment started' })
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 async function enrichInBackground(items: { id: string; name: string; year: number | null; country: string | null }[]) {
-  const BATCH = 50
+  // Build name→id map for matching results back
+  const nameToId = new Map<string, string>()
+  const wineNames: string[] = []
+  for (const w of items) {
+    if (!w.name) continue
+    nameToId.set(w.name, w.id)
+    wineNames.push(w.name)
+  }
+
+  console.log(`[vivino] submitting ${wineNames.length} wines in one run`)
+
+  // Submit single run without waitForFinish — poll manually
+  const runRes = await fetch(
+    `https://api.apify.com/v2/acts/${ACTOR_ID}/runs`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wineNames, maxResultsPerSearch: 1, includeTasteProfile: false }),
+    }
+  )
+
+  if (!runRes.ok) {
+    console.error('[vivino] failed to start run:', await runRes.text())
+    return
+  }
+
+  const run = await runRes.json() as { data: { id: string; defaultDatasetId: string; status: string } }
+  const runId = run.data?.id
+  const datasetId = run.data?.defaultDatasetId
+  console.log(`[vivino] run started: ${runId}, status: ${run.data?.status}`)
+
+  // Poll until SUCCEEDED or FAILED (max 60 min)
+  const MAX_POLLS = 120
+  for (let poll = 0; poll < MAX_POLLS; poll++) {
+    await sleep(30_000)
+    const statusRes = await fetch(
+      `https://api.apify.com/v2/actor-runs/${runId}`,
+      { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } }
+    )
+    const statusData = await statusRes.json() as { data: { status: string } }
+    const status = statusData.data?.status
+    console.log(`[vivino] poll ${poll + 1}: ${status}`)
+    if (status === 'SUCCEEDED' || status === 'FAILED') break
+  }
+
+  // Fetch all results
+  const dataRes = await fetch(
+    `https://api.apify.com/v2/datasets/${datasetId}/items?clean=true&limit=10000`,
+    { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } }
+  )
+  const results: VivinoResult[] = await dataRes.json()
+  console.log(`[vivino] got ${results.length} results`)
+
+  // Match by searchQuery → wine id
   let enriched = 0
+  for (const r of results) {
+    const id = r.searchQuery ? nameToId.get(r.searchQuery) : undefined
+    if (!id) continue
+    const rawImage = r.image_url
+    const imageUrl = Array.isArray(rawImage) ? rawImage[0] : (rawImage ?? null)
+    await supabase.from('wine_items').update({
+      vivino_rating: r.average_rating ?? null,
+      vivino_reviews_count: r.ratings_count ?? null,
+      vivino_url: r.vivino_url ?? null,
+      vivino_image_url: imageUrl,
+      vivino_enriched_at: new Date().toISOString(),
+    }).eq('id', id)
+    enriched++
+  }
 
-  for (let i = 0; i < items.length; i += BATCH) {
-    const batch = items.slice(i, i + BATCH)
-    const wineNames = batch.map(w => w.name) // name only — year causes mismatches
-    if (i === 0) console.log('[vivino] first 5 names:', wineNames.slice(0, 5))
-
-    try {
-      // Run actor synchronously (wait up to 5 min for batch)
-      const runRes = await fetch(
-        `https://api.apify.com/v2/acts/${ACTOR_ID}/runs?waitForFinish=300`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wineNames, maxResultsPerSearch: 1, includeTasteProfile: false }),
-        }
-      )
-
-      if (!runRes.ok) {
-        console.error('[vivino] run failed:', await runRes.text())
-        continue
-      }
-
-      const run = await runRes.json() as { data: { defaultDatasetId: string; status: string } }
-      console.log(`[vivino] run status: ${run.data?.status}, datasetId: ${run.data?.defaultDatasetId}`)
-      const datasetId = run.data?.defaultDatasetId
-      if (!datasetId) { console.error('[vivino] no dataset'); continue }
-
-      // Fetch results
-      const dataRes = await fetch(
-        `https://api.apify.com/v2/datasets/${datasetId}/items?clean=true`,
-        { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } }
-      )
-      const raw = await dataRes.text()
-      console.log(`[vivino] batch ${i / BATCH + 1} raw (first 500): ${raw.slice(0, 500)}`)
-      const results: VivinoResult[] = JSON.parse(raw)
-
-      // Match results back to items by index (Apify returns in same order)
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j]
-        if (!r) continue
-        const rawImage = r.image_url
-        const imageUrl = Array.isArray(rawImage) ? rawImage[0] : (rawImage ?? null)
-        const data = {
-          vivino_rating: r.average_rating ?? null,
-          vivino_reviews_count: r.ratings_count ?? null,
-          vivino_url: r.vivino_url ?? null,
-          vivino_image_url: imageUrl,
-          vivino_enriched_at: new Date().toISOString(),
-        }
-        await supabase.from('wine_items').update(data).eq('id', batch[j].id)
-      }
-
-      enriched += results.length
-      console.log(`[vivino] enriched so far: ${enriched}`)
-    } catch (err) {
-      console.error('[vivino] batch error:', err)
+  // Mark unmatched items as processed so they don't block future runs
+  const matchedNames = new Set(results.map(r => r.searchQuery).filter(Boolean))
+  const unmatched = wineNames.filter(n => !matchedNames.has(n))
+  if (unmatched.length > 0) {
+    console.log(`[vivino] ${unmatched.length} wines not found on Vivino, marking as processed`)
+    for (const name of unmatched) {
+      const id = nameToId.get(name)
+      if (id) await supabase.from('wine_items').update({ vivino_enriched_at: new Date().toISOString() }).eq('id', id)
     }
   }
 
-  console.log(`[vivino] done. Total enriched: ${enriched}`)
+  console.log(`[vivino] done. Enriched: ${enriched}, not found: ${unmatched.length}`)
 }
