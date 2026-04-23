@@ -73,6 +73,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               </span>
             )}
             <Link
+              href="/price-lists"
+              className="text-sm text-gray-500 hover:text-gray-700 px-2 py-2 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block"
+              title="Управление прайсами"
+            >
+              Прайсы
+            </Link>
+            <Link
               href="/upload"
               className="flex items-center gap-1.5 bg-wine-600 hover:bg-wine-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition-colors"
             >
