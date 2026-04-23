@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { extractPriceList } from '@/lib/claude'
-import { extractTextFromPdf } from '@/lib/pdf'
+import { extractFromChunks } from '@/lib/claude'
+import { splitPdfIntoChunks } from '@/lib/pdf'
 
 export async function GET() {
   const { data, error } = await supabase
@@ -35,9 +35,10 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ id: priceList.id, status: 'processing' })
 }
 
+const PAGES_PER_CHUNK = 8
+
 async function runExtraction(priceListId: string, storagePath: string) {
   try {
-    // Download PDF from Supabase Storage
     const { data: blob, error: dlError } = await supabase.storage
       .from('price-pdfs')
       .download(storagePath)
@@ -45,13 +46,9 @@ async function runExtraction(priceListId: string, storagePath: string) {
     if (dlError || !blob) throw dlError ?? new Error('Download failed')
 
     const buffer = Buffer.from(await blob.arrayBuffer())
-    const pdfText = await extractTextFromPdf(buffer)
+    const chunks = await splitPdfIntoChunks(buffer, PAGES_PER_CHUNK)
 
-    if (pdfText.trim().length < 100) {
-      throw new Error('Не удалось извлечь текст из PDF. Возможно, это скан без OCR.')
-    }
-
-    const result = await extractPriceList(pdfText)
+    const result = await extractFromChunks(chunks)
 
     // Upsert supplier
     const supplierSlug = result.supplier_name
@@ -99,6 +96,7 @@ async function runExtraction(priceListId: string, storagePath: string) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    console.error('[extraction] failed:', message)
     await supabase.from('price_lists')
       .update({ status: 'error', error_message: message })
       .eq('id', priceListId)
