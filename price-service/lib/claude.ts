@@ -107,6 +107,32 @@ export async function extractFromChunks(pdfChunks: string[]): Promise<Extraction
   return { supplier_name: meta.supplier_name || 'Unknown', price_list_date: meta.price_list_date ?? null, currency: meta.currency ?? null, items: unique }
 }
 
+/** Batch of page images rendered from PDF — extract all items across pages */
+export async function extractFromImageBatch(pageImages: string[]): Promise<ExtractionResult> {
+  // Get meta from first page
+  const metaRaw = await callWithImage(META_PROMPT, pageImages[0], 'image/jpeg')
+  const meta = parseJson<Pick<ExtractionResult, 'supplier_name' | 'price_list_date' | 'currency'>>(metaRaw)
+    ?? { supplier_name: 'Unknown Supplier', price_list_date: null, currency: null }
+  console.log(`[claude] image batch meta: ${meta.supplier_name}`)
+
+  const allItems: ExtractedItem[] = []
+  for (let i = 0; i < pageImages.length; i += 5) {
+    const batch = pageImages.slice(i, i + 5)
+    const results = await Promise.all(
+      batch.map(async (img, j) => {
+        const raw = await callWithImage(ITEMS_PROMPT, img, 'image/jpeg')
+        console.log(`[claude] page ${i + j + 1}/${pageImages.length} → ${raw.slice(0, 60)}`)
+        return parseJson<ExtractedItem[]>(raw) ?? []
+      })
+    )
+    results.forEach(items => allItems.push(...items))
+  }
+
+  const unique = dedup(allItems)
+  console.log(`[claude] image batch total items: ${unique.length}`)
+  return { supplier_name: meta.supplier_name || 'Unknown Supplier', price_list_date: meta.price_list_date ?? null, currency: meta.currency ?? null, items: unique }
+}
+
 /** Image (JPG/PNG): single Claude vision call */
 export async function extractFromImage(
   imageBase64: string,

@@ -1,6 +1,7 @@
 import { splitPdfIntoChunks, extractPdfText } from './pdf'
-import { extractFromChunks, extractFromImage, extractFromText } from './claude'
+import { extractFromChunks, extractFromImage, extractFromText, extractFromImageBatch } from './claude'
 import type { ExtractionResult, ExtractedItem } from './claude'
+import { renderPdfToImages, isPdftoppmAvailable } from './pdf-render'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -40,9 +41,16 @@ export async function extractFromFile(
   const type = detectFileType(filename, mimeType)
 
   if (type === 'pdf') {
-    // Try text extraction first — works for PDFs with embedded selectable text.
-    // Some designed/graphical PDFs lose content when pdf-lib splits pages,
-    // but pdf-parse can still extract embedded text directly from the full file.
+    // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
+    if (await isPdftoppmAvailable()) {
+      console.log('[extract] using pdftoppm renderer')
+      const images = await renderPdfToImages(buffer, 150)
+      if (images.length > 0) {
+        return extractFromImageBatch(images)
+      }
+    }
+
+    // Strategy 2: text extraction (works for PDFs with embedded selectable text)
     const pdfText = await extractPdfText(buffer)
     const meaningfulChars = pdfText.replace(/\s+/g, ' ').trim().length
     console.log(`[extract] pdf text chars: ${meaningfulChars}`)
@@ -50,7 +58,7 @@ export async function extractFromFile(
       return extractFromText(pdfText)
     }
 
-    // Fall back to visual chunks (Claude Vision) for truly image-only PDFs
+    // Strategy 3: visual PDF chunks (Claude Vision via pdf-lib page splitting)
     const totalMb = buffer.length / 1024 / 1024
     const pagesPerChunk = totalMb > 15 ? 2 : totalMb > 5 ? 4 : 8
     const chunks = await splitPdfIntoChunks(buffer, pagesPerChunk)
