@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 type PriceList = {
@@ -13,31 +13,109 @@ type PriceList = {
   error_message: string | null
 }
 
+type EnrichState = 'idle' | 'starting' | 'running' | 'paused' | 'done' | 'error'
+
+type EnrichStatus = {
+  state: EnrichState
+  enriched: number
+  total: number
+  msg?: string
+}
+
 export default function PriceListsPage() {
   const [lists, setLists] = useState<PriceList[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [enriching, setEnriching] = useState<string | null>(null)
-  const [enrichMsg, setEnrichMsg] = useState<Record<string, string>>({})
+  const [enrichStatus, setEnrichStatus] = useState<Record<string, EnrichStatus>>({})
+  const pollRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
-  async function load() {
-    const res = await fetch('/api/price-lists')
-    if (res.ok) setLists(await res.json())
-    setLoading(false)
+  function setStatus(id: string, patch: Partial<EnrichStatus>) {
+    setEnrichStatus(prev => ({ ...prev, [id]: { ...({ state: 'idle', enriched: 0, total: 0 }), ...prev[id], ...patch } }))
   }
 
-  useEffect(() => { load() }, [])
+  function stopPoll(id: string) {
+    if (pollRef.current[id]) {
+      clearInterval(pollRef.current[id])
+      delete pollRef.current[id]
+    }
+  }
+
+  function startPoll(id: string) {
+    stopPoll(id)
+    pollRef.current[id] = setInterval(async () => {
+      const res = await fetch(`/api/vivino/status?price_list_id=${id}`)
+      if (!res.ok) return
+      const { total, enriched } = await res.json() as { total: number; enriched: number }
+      if (total === 0) return
+      if (enriched >= total) {
+        setStatus(id, { state: 'done', enriched, total })
+        stopPoll(id)
+      } else {
+        setStatus(id, { state: 'running', enriched, total })
+      }
+    }, 4000)
+  }
+
+  async function load(): Promise<PriceList[]> {
+    const res = await fetch('/api/price-lists')
+    const data: PriceList[] = res.ok ? await res.json() : []
+    setLists(data)
+    setLoading(false)
+    return data
+  }
+
+  useEffect(() => {
+    load().then(async all => {
+      // After loading, check vivino status for all done lists and auto-poll partially enriched ones
+      await Promise.all(
+        all.filter(pl => pl.status === 'done' && pl.item_count > 0).map(async pl => {
+          const sr = await fetch(`/api/vivino/status?price_list_id=${pl.id}`)
+          if (!sr.ok) return
+          const { total, enriched } = await sr.json() as { total: number; enriched: number }
+          if (total === 0) return
+          if (enriched >= total) {
+            setStatus(pl.id, { state: 'done', enriched, total })
+          } else if (enriched > 0) {
+            setStatus(pl.id, { state: 'running', enriched, total })
+            startPoll(pl.id)
+          }
+        })
+      )
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => () => { Object.keys(pollRef.current).forEach(stopPoll) }, [])
 
   async function handleEnrich(id: string) {
-    setEnriching(id)
+    setStatus(id, { state: 'starting', enriched: 0, total: 0 })
     const res = await fetch('/api/vivino/enrich', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ price_list_id: id }),
     })
     const json = await res.json()
-    setEnrichMsg(prev => ({ ...prev, [id]: json.message ?? (res.ok ? 'Запущено' : 'Ошибка') }))
-    setEnriching(null)
+    if (res.ok) {
+      setStatus(id, { state: 'running' })
+      startPoll(id)
+    } else {
+      setStatus(id, { state: 'error', msg: json.message ?? 'Ошибка' })
+    }
+  }
+
+  function handlePause(id: string) {
+    stopPoll(id)
+    setStatus(id, { state: 'paused' })
+  }
+
+  function handleResume(id: string) {
+    setStatus(id, { state: 'running' })
+    startPoll(id)
+  }
+
+  function handleStop(id: string) {
+    stopPoll(id)
+    setStatus(id, { state: 'idle' })
   }
 
   async function handleDelete(id: string, name: string) {
@@ -72,6 +150,7 @@ export default function PriceListsPage() {
           const name = (pl.supplier_name && pl.supplier_name !== 'null') ? pl.supplier_name : 'Без поставщика'
           const date = pl.date ? new Date(pl.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : null
           const uploadedAt = new Date(pl.uploaded_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+          const es = enrichStatus[pl.id] ?? { state: 'idle', enriched: 0, total: 0 }
 
           return (
             <div key={pl.id} className="bg-white rounded-2xl border border-gray-100 px-5 py-4 flex items-center gap-4">
@@ -95,23 +174,99 @@ export default function PriceListsPage() {
               </div>
 
               {pl.status === 'done' && pl.item_count > 0 && (
-                <div className="flex-shrink-0 flex flex-col items-center gap-1">
-                  <button
-                    onClick={() => handleEnrich(pl.id)}
-                    disabled={enriching === pl.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-40"
-                    title="Обогатить данными Vivino"
-                  >
-                    {enriching === pl.id ? (
-                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
+                  <div className="flex items-center gap-1">
+                    {/* Main Vivino / Заново button */}
+                    {(es.state === 'idle' || es.state === 'done' || es.state === 'error') && (
+                      <button
+                        onClick={() => handleEnrich(pl.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                        title={es.state === 'done' ? 'Запустить заново' : 'Обогатить данными Vivino'}
+                      >
+                        🍇 {es.state === 'done' ? 'Заново' : es.state === 'error' ? 'Повторить' : 'Vivino'}
+                      </button>
+                    )}
+
+                    {/* Starting spinner */}
+                    {es.state === 'starting' && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-400">
+                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Запуск...
+                      </div>
+                    )}
+
+                    {/* Running controls: Pause + Stop */}
+                    {es.state === 'running' && (
+                      <>
+                        <button
+                          onClick={() => handlePause(pl.id)}
+                          className="p-1.5 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                          title="Пауза"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleStop(pl.id)}
+                          className="p-1.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                          title="Стоп"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="5" y="5" width="14" height="14" rx="1"/>
+                          </svg>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Paused controls: Resume + Stop */}
+                    {es.state === 'paused' && (
+                      <>
+                        <button
+                          onClick={() => handleResume(pl.id)}
+                          className="p-1.5 text-xs text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                          title="Продолжить"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleStop(pl.id)}
+                          className="p-1.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                          title="Стоп"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="5" y="5" width="14" height="14" rx="1"/>
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Status text */}
+                  {es.state === 'running' && (
+                    <span className="flex items-center gap-1 text-xs text-purple-500 tabular-nums">
+                      <svg className="w-3 h-3 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                       </svg>
-                    ) : '🍇'}
-                    Vivino
-                  </button>
-                  {enrichMsg[pl.id] && (
-                    <span className="text-xs text-gray-400">{enrichMsg[pl.id]}</span>
+                      {es.total > 0 ? `${es.enriched} из ${es.total}` : 'Ждём...'}
+                    </span>
+                  )}
+                  {es.state === 'paused' && (
+                    <span className="text-xs text-amber-500 tabular-nums">
+                      Пауза {es.total > 0 ? `· ${es.enriched} из ${es.total}` : ''}
+                    </span>
+                  )}
+                  {es.state === 'done' && (
+                    <span className="text-xs text-green-600 tabular-nums">Готово: {es.enriched} из {es.total}</span>
+                  )}
+                  {es.state === 'error' && (
+                    <span className="text-xs text-red-500">{es.msg}</span>
                   )}
                 </div>
               )}
