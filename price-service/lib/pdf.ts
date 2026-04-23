@@ -8,9 +8,18 @@ export async function getPageCount(buffer: Buffer): Promise<number> {
     const data = await pdfParse(buffer)
     return data.numpages
   } catch {
-    // Fallback: load with pdf-lib
     const doc = await PDFDocument.load(buffer, { ignoreEncryption: true })
     return doc.getPageCount()
+  }
+}
+
+/** Extract text from PDF. Returns empty string if PDF is image-only. */
+export async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    const data = await pdfParse(buffer)
+    return data.text ?? ''
+  } catch {
+    return ''
   }
 }
 

@@ -1,4 +1,4 @@
-import { splitPdfIntoChunks } from './pdf'
+import { splitPdfIntoChunks, extractPdfText } from './pdf'
 import { extractFromChunks, extractFromImage, extractFromText } from './claude'
 import type { ExtractionResult, ExtractedItem } from './claude'
 
@@ -40,10 +40,18 @@ export async function extractFromFile(
   const type = detectFileType(filename, mimeType)
 
   if (type === 'pdf') {
-    // Aim for ≤2MB raw per chunk. Estimate KB per page from total size.
+    // Try text extraction first — works for PDFs with embedded selectable text.
+    // Some designed/graphical PDFs lose content when pdf-lib splits pages,
+    // but pdf-parse can still extract embedded text directly from the full file.
+    const pdfText = await extractPdfText(buffer)
+    const meaningfulChars = pdfText.replace(/\s+/g, ' ').trim().length
+    console.log(`[extract] pdf text chars: ${meaningfulChars}`)
+    if (meaningfulChars > 300) {
+      return extractFromText(pdfText)
+    }
+
+    // Fall back to visual chunks (Claude Vision) for truly image-only PDFs
     const totalMb = buffer.length / 1024 / 1024
-    // Need page count to estimate — load once via splitPdfIntoChunks with 1 page is expensive,
-    // so use file size heuristic: large files = high-res scans = fewer pages per chunk.
     const pagesPerChunk = totalMb > 15 ? 2 : totalMb > 5 ? 4 : 8
     const chunks = await splitPdfIntoChunks(buffer, pagesPerChunk)
     return extractFromChunks(chunks)
