@@ -39,17 +39,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const [itemsRes, suppliersRes, countriesRes, grapesRes, priceListsRes] = await Promise.all([
     query,
-    supabase.from('wine_items').select('supplier_name').not('supplier_name', 'is', null),
-    supabase.from('wine_items').select('country').not('country', 'is', null),
-    supabase.from('wine_items').select('grape_variety').not('grape_variety', 'is', null),
+    // Query suppliers table directly — always complete, one row per supplier
+    supabase.from('suppliers').select('name').order('name'),
+    // For countries/grapes use high limit to get all distinct values
+    supabase.from('wine_items').select('country').not('country', 'is', null).limit(10000),
+    supabase.from('wine_items').select('grape_variety').not('grape_variety', 'is', null).limit(10000),
     supabase.from('price_lists').select('id, status').eq('status', 'processing'),
   ])
 
   const unique = <T,>(arr: T[]): T[] => [...new Set(arr)].sort() as T[]
 
-  const suppliers = unique(
-    (suppliersRes.data ?? []).map(r => r.supplier_name as string).filter(Boolean)
-  )
+  const suppliers = (suppliersRes.data ?? []).map(r => r.name as string).filter(Boolean)
   const countries = unique(
     (countriesRes.data ?? []).map(r => r.country as string).filter(Boolean)
   )
