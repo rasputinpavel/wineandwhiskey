@@ -43,7 +43,8 @@ async function enrichInBackground(items: { id: string; name: string; year: numbe
 
   for (let i = 0; i < items.length; i += BATCH) {
     const batch = items.slice(i, i + BATCH)
-    const wineNames = batch.map(w => w.year ? `${w.name} ${w.year}` : w.name)
+    const wineNames = batch.map(w => w.name) // name only — year causes mismatches
+    if (i === 0) console.log('[vivino] first 5 names:', wineNames.slice(0, 5))
 
     try {
       // Run actor synchronously (wait up to 5 min for batch)
