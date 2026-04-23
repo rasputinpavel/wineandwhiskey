@@ -20,6 +20,8 @@ export type ExtractionResult = {
   items: ExtractedItem[]
 }
 
+// ─── Prompts ────────────────────────────────────────────────────────────────
+
 const META_PROMPT = `From this price list, extract ONLY the supplier/company name and date.
 Return ONLY this JSON (no markdown, no other text):
 {"supplier_name":"...","price_list_date":"YYYY-MM-DD or null","currency":"THB or USD or null"}`
@@ -29,68 +31,129 @@ Return ONLY a compact JSON array (no markdown, no explanation):
 [{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]
 If no items found, return [].`
 
-type DocBlock = { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
+const FULL_PROMPT = `Extract all wine and spirits items from this price list.
+Return ONLY this JSON (no markdown):
+{"supplier_name":"...","price_list_date":"YYYY-MM-DD or null","currency":"THB/USD/null","items":[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]}
+Return [] for items if none found.`
 
-async function callClaude(prompt: string, pdfBase64: string): Promise<string> {
-  const doc: DocBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } }
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8192,
-    messages: [{
-      role: 'user',
-      content: [
-        doc as unknown as Anthropic.TextBlockParam,
-        { type: 'text', text: prompt },
-      ],
-    }],
-  })
-  const raw = response.content[0].type === 'text' ? response.content[0].text : ''
-  return raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type DocBlock = { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
+type ImgBlock = { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
+function parseJson<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()) as T
+  } catch {
+    return null
+  }
 }
 
+async function callWithPdf(prompt: string, pdfBase64: string): Promise<string> {
+  const doc: DocBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } }
+  const res = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8192,
+    messages: [{ role: 'user', content: [doc as unknown as Anthropic.TextBlockParam, { type: 'text', text: prompt }] }],
+  })
+  return res.content[0].type === 'text' ? res.content[0].text : ''
+}
+
+async function callWithImage(prompt: string, imageBase64: string, mimeType: string): Promise<string> {
+  const img: ImgBlock = { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } }
+  const res = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8192,
+    messages: [{ role: 'user', content: [img as unknown as Anthropic.TextBlockParam, { type: 'text', text: prompt }] }],
+  })
+  return res.content[0].type === 'text' ? res.content[0].text : ''
+}
+
+async function callWithText(prompt: string, text: string): Promise<string> {
+  const res = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8192,
+    messages: [{ role: 'user', content: `${prompt}\n\n<price_list>\n${text}\n</price_list>` }],
+  })
+  return res.content[0].type === 'text' ? res.content[0].text : ''
+}
+
+// ─── Extractors ──────────────────────────────────────────────────────────────
+
+/** PDF: split into page-chunks and extract */
 export async function extractFromChunks(pdfChunks: string[]): Promise<ExtractionResult> {
-  // Extract metadata from the first chunk
-  const metaJson = await callClaude(META_PROMPT, pdfChunks[0])
-  let meta: Pick<ExtractionResult, 'supplier_name' | 'price_list_date' | 'currency'>
-  try {
-    meta = JSON.parse(metaJson)
-  } catch {
-    meta = { supplier_name: 'Unknown Supplier', price_list_date: null, currency: null }
-  }
+  const metaRaw = await callWithPdf(META_PROMPT, pdfChunks[0])
+  const meta = parseJson<Pick<ExtractionResult, 'supplier_name' | 'price_list_date' | 'currency'>>(metaRaw)
+    ?? { supplier_name: 'Unknown Supplier', price_list_date: null, currency: null }
 
-  // Extract items from all chunks (batches of 5 concurrent)
   const allItems: ExtractedItem[] = []
-
   for (let i = 0; i < pdfChunks.length; i += 5) {
     const batch = pdfChunks.slice(i, i + 5)
     const results = await Promise.all(
-      batch.map(async (chunk, batchIdx) => {
-        const json = await callClaude(ITEMS_PROMPT, chunk)
-        console.log(`[claude] chunk ${i + batchIdx + 1}/${pdfChunks.length} → ${json.slice(0, 80)}`)
-        try {
-          return JSON.parse(json) as ExtractedItem[]
-        } catch {
-          return []
-        }
+      batch.map(async (chunk, j) => {
+        const raw = await callWithPdf(ITEMS_PROMPT, chunk)
+        console.log(`[claude] chunk ${i + j + 1}/${pdfChunks.length} → ${raw.slice(0, 60)}`)
+        return parseJson<ExtractedItem[]>(raw) ?? []
       })
     )
     results.forEach(items => allItems.push(...items))
   }
 
-  // Deduplicate by name
+  const unique = dedup(allItems)
+  console.log(`[claude] total items: ${unique.length}`)
+  return { supplier_name: meta.supplier_name || 'Unknown', price_list_date: meta.price_list_date ?? null, currency: meta.currency ?? null, items: unique }
+}
+
+/** Image (JPG/PNG): single Claude vision call */
+export async function extractFromImage(
+  imageBase64: string,
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+): Promise<ExtractionResult> {
+  const raw = await callWithImage(FULL_PROMPT, imageBase64, mimeType)
+  const result = parseJson<ExtractionResult>(raw)
+  if (!result) throw new Error('Failed to parse extraction response')
+  result.items = dedup(result.items ?? [])
+  console.log(`[claude] image items: ${result.items.length}`)
+  return result
+}
+
+/** Excel/text: send extracted CSV/text */
+export async function extractFromText(text: string): Promise<ExtractionResult> {
+  // Split into 18K chunks if large
+  const CHUNK = 18_000
+  if (text.length <= CHUNK) {
+    const raw = await callWithText(FULL_PROMPT, text)
+    const result = parseJson<ExtractionResult>(raw)
+    if (!result) throw new Error('Failed to parse extraction response')
+    result.items = dedup(result.items ?? [])
+    return result
+  }
+
+  const chunks = []
+  for (let i = 0; i < text.length; i += CHUNK) chunks.push(text.slice(i, i + CHUNK))
+
+  const metaRaw = await callWithText(META_PROMPT, chunks[0])
+  const meta = parseJson<Pick<ExtractionResult, 'supplier_name' | 'price_list_date' | 'currency'>>(metaRaw)
+    ?? { supplier_name: 'Unknown Supplier', price_list_date: null, currency: null }
+
+  const allItems: ExtractedItem[] = []
+  for (let i = 0; i < chunks.length; i += 5) {
+    const batch = chunks.slice(i, i + 5)
+    const results = await Promise.all(
+      batch.map(async chunk => parseJson<ExtractedItem[]>(await callWithText(ITEMS_PROMPT, chunk)) ?? [])
+    )
+    results.forEach(items => allItems.push(...items))
+  }
+
+  return { ...meta, items: dedup(allItems) }
+}
+
+function dedup(items: ExtractedItem[]): ExtractedItem[] {
   const seen = new Set<string>()
-  const unique = allItems.filter(item => {
+  return items.filter(item => {
     const key = item.name.toLowerCase().trim()
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
-
-  console.log(`[claude] total items extracted: ${unique.length}`)
-  return {
-    supplier_name: meta.supplier_name || 'Unknown Supplier',
-    price_list_date: meta.price_list_date ?? null,
-    currency: meta.currency ?? null,
-    items: unique,
-  }
 }

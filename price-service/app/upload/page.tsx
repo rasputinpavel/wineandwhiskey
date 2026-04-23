@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { ACCEPTED_EXTENSIONS, ACCEPTED_TYPES } from '@/lib/file-types'
 
 type UploadState = 'idle' | 'uploading' | 'processing' | 'done' | 'error'
 
@@ -42,8 +43,8 @@ export default function UploadPage() {
   }, [])
 
   const upload = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Загружайте только PDF файлы')
+    if (!ACCEPTED_TYPES.includes(file.type) && !ACCEPTED_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {
+      setError('Поддерживаются: PDF, XLS, XLSX, JPG, PNG')
       setState('error')
       return
     }
@@ -57,7 +58,7 @@ export default function UploadPage() {
     const signRes = await fetch('/api/price-lists/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name }),
+      body: JSON.stringify({ filename: file.name, mimeType: file.type }),
     })
 
     if (!signRes.ok) {
@@ -92,7 +93,7 @@ export default function UploadPage() {
     const res = await fetch('/api/price-lists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, filename: file.name, mimeType: file.type }),
     })
 
     if (!res.ok) {
@@ -146,14 +147,14 @@ export default function UploadPage() {
             className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all
               ${dragging ? 'border-wine-500 bg-wine-50' : 'border-gray-200 bg-white hover:border-wine-300 hover:bg-gray-50'}`}
           >
-            <input ref={fileRef} type="file" accept=".pdf,application/pdf" onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} className="hidden" />
+            <input ref={fileRef} type="file" accept={ACCEPTED_EXTENSIONS} onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} className="hidden" />
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 mb-4">
               <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 0 1-.88-7.903A5 5 0 1 1 15.9 6L16 6a5 5 0 0 1 1 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
             </div>
             <p className="text-gray-700 font-medium">Перетащите PDF или нажмите для выбора</p>
-            <p className="text-sm text-gray-400 mt-1">Любой размер файла</p>
+            <p className="text-sm text-gray-400 mt-1">PDF, XLS, XLSX, JPG, PNG — любой размер</p>
           </div>
         )}
 
@@ -236,7 +237,7 @@ export default function UploadPage() {
             <h3 className="text-sm font-medium text-gray-700 mb-3">Как это работает</h3>
             <ol className="space-y-2 text-sm text-gray-500">
               {[
-                'Загрузите PDF прайс-листа от любого поставщика',
+                'Загрузите прайс в любом формате: PDF, Excel (XLS/XLSX) или картинка (JPG, PNG)',
                 'Claude AI автоматически распознаёт поставщика, дату и все позиции',
                 'Позиции появляются в общей таблице — с фильтрами по стране, сорту, цене',
               ].map((text, i) => (

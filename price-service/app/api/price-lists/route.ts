@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { extractFromChunks } from '@/lib/claude'
-import { splitPdfIntoChunks } from '@/lib/pdf'
+import { extractFromFile } from '@/lib/extract'
 
 export async function GET() {
   const { data, error } = await supabase
@@ -13,9 +12,9 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
-// Accepts { path } — PDF already uploaded directly to Supabase Storage
+// Accepts { path, filename, mimeType } — file already uploaded to Supabase Storage
 export async function POST(req: NextRequest) {
-  const { path } = await req.json()
+  const { path, filename, mimeType } = await req.json()
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
 
   const { data: { publicUrl } } = supabase.storage.from('price-pdfs').getPublicUrl(path)
@@ -30,14 +29,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertError?.message }, { status: 500 })
   }
 
-  runExtraction(priceList.id, path).catch(console.error)
+  runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf').catch(console.error)
 
   return NextResponse.json({ id: priceList.id, status: 'processing' })
 }
 
-const PAGES_PER_CHUNK = 8
-
-async function runExtraction(priceListId: string, storagePath: string) {
+async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string) {
   try {
     const { data: blob, error: dlError } = await supabase.storage
       .from('price-pdfs')
@@ -46,11 +43,11 @@ async function runExtraction(priceListId: string, storagePath: string) {
     if (dlError || !blob) throw dlError ?? new Error('Download failed')
 
     const buffer = Buffer.from(await blob.arrayBuffer())
-    const chunks = await splitPdfIntoChunks(buffer, PAGES_PER_CHUNK)
+    console.log(`[extraction] file: ${filename} (${mimeType}), size: ${buffer.length} bytes`)
 
-    const result = await extractFromChunks(chunks)
+    const result = await extractFromFile(buffer, filename, mimeType)
+    console.log(`[extraction] items found: ${result.items.length}`)
 
-    // Upsert supplier
     const supplierSlug = result.supplier_name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
