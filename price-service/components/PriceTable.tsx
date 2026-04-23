@@ -105,9 +105,9 @@ function TableRow({ item }: { item: WineItem }) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3">
-        {item.image_url ? (
+        {(item.image_url || item.vivino_image_url) ? (
           <div className="w-8 h-10 relative rounded overflow-hidden">
-            <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+            <Image src={item.image_url ?? item.vivino_image_url!} alt={item.name} fill className="object-cover" />
           </div>
         ) : (
           <div className="w-8 h-10 rounded bg-gray-100 flex items-center justify-center">
@@ -117,9 +117,14 @@ function TableRow({ item }: { item: WineItem }) {
       </td>
       <td className="px-4 py-3">
         <div className="font-medium text-gray-900">{item.name}</div>
-        {item.description && (
-          <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
-        )}
+        <div className="flex items-center gap-2 mt-0.5">
+          {item.vivino_rating && (
+            <span className="text-xs text-purple-600 font-medium">★ {item.vivino_rating}</span>
+          )}
+          {item.description && (
+            <span className="text-xs text-gray-400 line-clamp-1">{item.description}</span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
@@ -141,9 +146,9 @@ function MobileCard({ item }: { item: WineItem }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4">
       <div className="flex gap-3">
-        {item.image_url ? (
+        {(item.image_url || item.vivino_image_url) ? (
           <div className="w-10 h-14 relative rounded-lg overflow-hidden flex-shrink-0">
-            <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+            <Image src={item.image_url ?? item.vivino_image_url!} alt={item.name} fill className="object-cover" />
           </div>
         ) : (
           <div className="w-10 h-14 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-lg">🍷</div>
