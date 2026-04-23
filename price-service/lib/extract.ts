@@ -40,7 +40,12 @@ export async function extractFromFile(
   const type = detectFileType(filename, mimeType)
 
   if (type === 'pdf') {
-    const chunks = await splitPdfIntoChunks(buffer, 8)
+    // Aim for ≤2MB raw per chunk. Estimate KB per page from total size.
+    const totalMb = buffer.length / 1024 / 1024
+    // Need page count to estimate — load once via splitPdfIntoChunks with 1 page is expensive,
+    // so use file size heuristic: large files = high-res scans = fewer pages per chunk.
+    const pagesPerChunk = totalMb > 15 ? 2 : totalMb > 5 ? 4 : 8
+    const chunks = await splitPdfIntoChunks(buffer, pagesPerChunk)
     return extractFromChunks(chunks)
   }
 
