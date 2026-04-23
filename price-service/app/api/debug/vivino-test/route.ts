@@ -4,8 +4,12 @@ const APIFY_TOKEN = process.env.APIFY_TOKEN!
 const ACTOR_ID = 'mrbridge~vivino-wine-data-scraper'
 
 export async function GET() {
-  // Test batch of 2 known wines to verify batch mode works
-  const input = { wineNames: ['Chateau Margaux 2015', 'Opus One 2018'], maxResultsPerSearch: 1 }
+  const wineNames = [
+    'Malbicho Chardonnay',
+    'Santa Julia La Oveja Torrontés Natural',
+    '1924 Double Black Cabernet Sauvignon',
+  ]
+  const input = { wineNames, maxResultsPerSearch: 1 }
 
   const runRes = await fetch(
     `https://api.apify.com/v2/acts/${ACTOR_ID}/runs?waitForFinish=180`,
@@ -26,5 +30,12 @@ export async function GET() {
     items = await dataRes.json()
   }
 
-  return NextResponse.json({ input, status: run?.data?.status, itemCount: Array.isArray(items) ? items.length : -1, names: Array.isArray(items) ? items.map((r: unknown) => (r as Record<string, unknown>).name) : [] })
+  return NextResponse.json({
+    status: run?.data?.status,
+    itemCount: Array.isArray(items) ? items.length : -1,
+    results: Array.isArray(items) ? items.map((r: unknown) => {
+      const w = r as Record<string, unknown>
+      return { name: w.name, searchQuery: w.searchQuery, rating: w.average_rating }
+    }) : items
+  })
 }
