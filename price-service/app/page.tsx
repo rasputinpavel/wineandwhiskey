@@ -37,28 +37,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   if (params.country) query = query.eq('country', params.country)
   if (params.grape) query = query.ilike('grape_variety', `%${params.grape}%`)
 
-  const [itemsRes, suppliersRes, countriesRes, grapesRes, priceListsRes] = await Promise.all([
+  const [itemsRes, filterRes, priceListsRes] = await Promise.all([
     query,
-    supabase.from('wine_items').select('supplier_name').not('supplier_name', 'is', null).limit(10000),
-    // For countries/grapes use high limit to get all distinct values
-    supabase.from('wine_items').select('country').not('country', 'is', null).limit(10000),
-    supabase.from('wine_items').select('grape_variety').not('grape_variety', 'is', null).limit(10000),
+    supabase.rpc('get_filter_options'),
     supabase.from('price_lists').select('id, status').eq('status', 'processing'),
   ])
 
-  const unique = <T,>(arr: T[]): T[] => [...new Set(arr)].sort() as T[]
-
-  const suppliers = unique(
-    (suppliersRes.data ?? []).map(r => r.supplier_name as string).filter(Boolean)
-  )
-  const countries = unique(
-    (countriesRes.data ?? []).map(r => r.country as string).filter(Boolean)
-  )
-  const grapes = unique(
-    (grapesRes.data ?? [])
-      .flatMap(r => (r.grape_variety as string ?? '').split(',').map((g: string) => g.trim()))
-      .filter(Boolean)
-  )
+  const filterOptions = (filterRes.data ?? {}) as { suppliers?: string[]; countries?: string[]; grapes?: string[] }
+  const suppliers = filterOptions.suppliers ?? []
+  const countries = filterOptions.countries ?? []
+  const grapes = filterOptions.grapes ?? []
 
   const items = itemsRes.data ?? []
   const total = itemsRes.count ?? 0
