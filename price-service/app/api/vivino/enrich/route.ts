@@ -62,6 +62,7 @@ async function enrichInBackground(items: { id: string; name: string; year: numbe
       }
 
       const run = await runRes.json() as { data: { defaultDatasetId: string; status: string } }
+      console.log(`[vivino] run status: ${run.data?.status}, datasetId: ${run.data?.defaultDatasetId}`)
       const datasetId = run.data?.defaultDatasetId
       if (!datasetId) { console.error('[vivino] no dataset'); continue }
 
@@ -70,8 +71,9 @@ async function enrichInBackground(items: { id: string; name: string; year: numbe
         `https://api.apify.com/v2/datasets/${datasetId}/items?clean=true`,
         { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } }
       )
-      const results: VivinoResult[] = await dataRes.json()
-      console.log(`[vivino] batch ${i / BATCH + 1}: got ${results.length} results`)
+      const raw = await dataRes.text()
+      console.log(`[vivino] batch ${i / BATCH + 1} raw (first 500): ${raw.slice(0, 500)}`)
+      const results: VivinoResult[] = JSON.parse(raw)
 
       // Match results back to items by index (Apify returns in same order)
       for (let j = 0; j < batch.length; j++) {
