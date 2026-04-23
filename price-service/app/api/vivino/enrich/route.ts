@@ -42,8 +42,9 @@ export async function POST(req: NextRequest) {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 async function runBatch(wineNames: string[]): Promise<VivinoResult[]> {
+  // Submit without waitForFinish, then poll
   const runRes = await fetch(
-    `https://api.apify.com/v2/acts/${ACTOR_ID}/runs?waitForFinish=300`,
+    `https://api.apify.com/v2/acts/${ACTOR_ID}/runs`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
@@ -52,12 +53,19 @@ async function runBatch(wineNames: string[]): Promise<VivinoResult[]> {
   )
   if (!runRes.ok) { console.error('[vivino] run failed:', await runRes.text()); return [] }
 
-  const run = await runRes.json() as { data: { defaultDatasetId: string; status: string } }
-  console.log(`[vivino] batch status: ${run.data?.status}`)
-  if (run.data?.status === 'FAILED') return []
-
+  const run = await runRes.json() as { data: { id: string; defaultDatasetId: string; status: string } }
+  const runId = run.data?.id
   const datasetId = run.data?.defaultDatasetId
-  if (!datasetId) return []
+  if (!runId || !datasetId) return []
+
+  // Poll until done (max 10 min)
+  for (let i = 0; i < 20; i++) {
+    await sleep(30_000)
+    const s = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } })
+    const { data } = await s.json() as { data: { status: string } }
+    if (data.status === 'SUCCEEDED') break
+    if (data.status === 'FAILED' || data.status === 'ABORTED') { console.error(`[vivino] run ${runId} ${data.status}`); return [] }
+  }
 
   const dataRes = await fetch(
     `https://api.apify.com/v2/datasets/${datasetId}/items?clean=true`,
