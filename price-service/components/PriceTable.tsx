@@ -46,7 +46,7 @@ export default function PriceTable({ items, total, page, limit, sortCol, sortAsc
                 { col: 'name', label: 'Название', align: 'left' },
                 { col: 'supplier_name', label: 'Поставщик', align: 'left' },
                 { col: 'country', label: 'Страна', align: 'left' },
-                { col: null, label: 'Производитель', align: 'left' },
+                { col: 'winery', label: 'Производитель', align: 'left' },
                 { col: null, label: 'Сорт', align: 'left' },
                 { col: 'vivino_rating', label: 'Vivino', align: 'left' },
                 { col: 'year', label: 'Год', align: 'left' },

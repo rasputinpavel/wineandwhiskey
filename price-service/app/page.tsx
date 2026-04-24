@@ -14,7 +14,7 @@ type SearchParams = {
   dir?: string
 }
 
-const SORTABLE = ['name', 'supplier_name', 'country', 'year', 'price', 'vivino_rating'] as const
+const SORTABLE = ['name', 'supplier_name', 'country', 'winery', 'year', 'price', 'vivino_rating'] as const
 type SortCol = typeof SORTABLE[number]
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
