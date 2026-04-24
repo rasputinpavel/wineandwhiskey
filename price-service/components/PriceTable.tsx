@@ -46,6 +46,7 @@ export default function PriceTable({ items, total, page, limit, sortCol, sortAsc
                 { col: 'name', label: 'Название', align: 'left' },
                 { col: 'supplier_name', label: 'Поставщик', align: 'left' },
                 { col: 'country', label: 'Страна', align: 'left' },
+                { col: null, label: 'Производитель', align: 'left' },
                 { col: null, label: 'Сорт', align: 'left' },
                 { col: 'vivino_rating', label: 'Vivino', align: 'left' },
                 { col: 'year', label: 'Год', align: 'left' },
@@ -128,6 +129,7 @@ function TableRow({ item }: { item: WineItem }) {
         </span>
       </td>
       <td className="px-4 py-3 text-gray-600">{item.country ?? '—'}</td>
+      <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px] truncate">{item.winery ?? '—'}</td>
       <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">{item.grape_variety ?? '—'}</td>
       <td className="px-4 py-3">
         {item.vivino_rating ? (
@@ -169,8 +171,11 @@ function MobileCard({ item }: { item: WineItem }) {
               <span className="text-xs text-gray-500">{item.year}</span>
             )}
           </div>
+          {item.winery && (
+            <div className="text-xs text-gray-500 mt-1 truncate">{item.winery}</div>
+          )}
           {item.grape_variety && (
-            <div className="text-xs text-gray-400 mt-1 truncate">{item.grape_variety}</div>
+            <div className="text-xs text-gray-400 mt-0.5 truncate">{item.grape_variety}</div>
           )}
         </div>
         <div className="text-right flex-shrink-0">

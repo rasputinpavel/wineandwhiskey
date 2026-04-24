@@ -43,5 +43,6 @@ export type WineItem = {
   vivino_url: string | null
   vivino_image_url: string | null
   vivino_enriched_at: string | null
+  winery: string | null
   created_at: string
 }
