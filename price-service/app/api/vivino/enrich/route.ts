@@ -13,6 +13,7 @@ type VivinoResult = {
   image_url?: string | string[]
   vivino_url?: string
   grapes?: VivinoGrape[]
+  winery?: string | { name: string }
 }
 
 function parseGrapes(grapes?: VivinoGrape[]): string | null {
@@ -105,6 +106,7 @@ async function enrichInBackground(items: { id: string; name: string }[]) {
         matched.add(r.searchQuery)
         const rawImage = r.image_url
         const grapes = parseGrapes(r.grapes)
+        const winery = r.winery ? (typeof r.winery === 'string' ? r.winery : r.winery.name) : null
         const update: Record<string, unknown> = {
           vivino_rating: r.average_rating ?? null,
           vivino_reviews_count: r.ratings_count ?? null,
@@ -113,6 +115,7 @@ async function enrichInBackground(items: { id: string; name: string }[]) {
           vivino_enriched_at: new Date().toISOString(),
         }
         if (grapes) update.grape_variety = grapes
+        if (winery) update.winery = winery
         await supabase.from('wine_items').update(update).eq('id', id)
         enriched++
       }

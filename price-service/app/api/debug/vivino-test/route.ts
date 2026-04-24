@@ -35,7 +35,7 @@ export async function GET() {
     itemCount: Array.isArray(items) ? items.length : -1,
     results: Array.isArray(items) ? items.map((r: unknown) => {
       const w = r as Record<string, unknown>
-      return { name: w.name, searchQuery: w.searchQuery, rating: w.average_rating, grapes: w.grapes }
+      return { name: w.name, searchQuery: w.searchQuery, rating: w.average_rating, grapes: w.grapes, winery: w.winery }
     }) : items
   })
 }
