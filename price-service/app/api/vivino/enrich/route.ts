@@ -4,12 +4,20 @@ import { supabase } from '@/lib/supabase'
 const APIFY_TOKEN = process.env.APIFY_TOKEN!
 const ACTOR_ID = 'mrbridge~vivino-wine-data-scraper'
 
+type VivinoGrape = string | { name: string }
+
 type VivinoResult = {
   searchQuery?: string
   average_rating?: number
   ratings_count?: number
   image_url?: string | string[]
   vivino_url?: string
+  grapes?: VivinoGrape[]
+}
+
+function parseGrapes(grapes?: VivinoGrape[]): string | null {
+  if (!grapes || grapes.length === 0) return null
+  return grapes.map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean).join(', ')
 }
 
 export async function POST(req: NextRequest) {
@@ -96,13 +104,16 @@ async function enrichInBackground(items: { id: string; name: string }[]) {
         if (!id) continue
         matched.add(r.searchQuery)
         const rawImage = r.image_url
-        await supabase.from('wine_items').update({
+        const grapes = parseGrapes(r.grapes)
+        const update: Record<string, unknown> = {
           vivino_rating: r.average_rating ?? null,
           vivino_reviews_count: r.ratings_count ?? null,
           vivino_url: r.vivino_url ?? null,
           vivino_image_url: Array.isArray(rawImage) ? rawImage[0] : (rawImage ?? null),
           vivino_enriched_at: new Date().toISOString(),
-        }).eq('id', id)
+        }
+        if (grapes) update.grape_variety = grapes
+        await supabase.from('wine_items').update(update).eq('id', id)
         enriched++
       }
 
