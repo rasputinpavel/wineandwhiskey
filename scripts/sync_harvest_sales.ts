@@ -123,25 +123,34 @@ interface LoyItem {
   variants: { variant_id: string; sku: string }[];
 }
 interface LoyReceipt {
+  payments: { name: string; money_amount: number }[];
   line_items: {
     variant_id: string; item_name: string; sku: string;
     quantity: number; total_money: number; cost_total: number;
   }[];
 }
 
+function isBankTransfer(receipt: LoyReceipt): boolean {
+  return (receipt.payments ?? []).some(p => /bank.?transfer/i.test(p.name ?? ""));
+}
+
+interface PeriodSales { ours: SaleRow[]; bankTransfer: SaleRow[]; }
+
 async function fetchSalesForPeriod(
   periodStart: string,
   periodEnd: string,
   variantMap: Map<string, { name: string; sku: string }>,
-): Promise<SaleRow[]> {
+): Promise<PeriodSales> {
   const minUtc = new Date(`${periodStart}T00:00:00+07:00`).toISOString();
   const maxUtc = new Date(`${periodEnd}T23:59:59+07:00`).toISOString();
   const receipts = await loyFetch<LoyReceipt>(
     `/receipts?receipt_type=SALE&created_at_min=${minUtc}&created_at_max=${maxUtc}`,
     "receipts",
   );
-  const agg = new Map<string, SaleRow>();
+  const aggOurs = new Map<string, SaleRow>();
+  const aggBank = new Map<string, SaleRow>();
   for (const receipt of receipts) {
+    const agg = isBankTransfer(receipt) ? aggBank : aggOurs;
     for (const li of receipt.line_items ?? []) {
       if (!variantMap.has(li.variant_id)) continue;
       const info = variantMap.get(li.variant_id)!;
@@ -154,7 +163,9 @@ async function fetchSalesForPeriod(
       });
     }
   }
-  return [...agg.values()].filter(r => r.qty > 0).sort((a, b) => b.revenue - a.revenue);
+  const sort = (m: Map<string, SaleRow>) =>
+    [...m.values()].filter(r => r.qty > 0).sort((a, b) => b.revenue - a.revenue);
+  return { ours: sort(aggOurs), bankTransfer: sort(aggBank) };
 }
 
 // ─── Colors ────────────────────────────────────────────────────────────────────
@@ -187,7 +198,8 @@ function cEmpty(f: any) { return { userEnteredFormat: f }; }
 
 // ─── Build sheet ───────────────────────────────────────────────────────────────
 
-function buildSheet(tabId: number, state: State, currentRows: SaleRow[], today: string) {
+function buildSheet(tabId: number, state: State, currentSales: PeriodSales, today: string) {
+  const { ours: currentRows, bankTransfer: bankRows } = currentSales;
   const data:    any[] = [];
   const merges:  any[] = [];
   const heights: { ri: number; h: number }[] = [];
@@ -316,6 +328,27 @@ function buildSheet(tabId: number, state: State, currentRows: SaleRow[], today: 
   const curCost    = currentRows.reduce((s, r) => s + r.cost,    0);
   totalRow(curRevenue, curCost, C.black, C.gold);
 
+  // ── BANK TRANSFER (previous owner's sales, not our debt) ──────────────────
+  if (bankRows.length > 0) {
+    const gapRi2 = row(Array(COLS).fill(cEmpty(fmt(C.white, C.white))), 12);
+    merge(gapRi2, 0, COLS);
+
+    const bankBg = rgb("#1A1A2E");
+    const bankLabelRi = row([
+      cStr("  BANK TRANSFER  ·  НЕ НАШИ  —  продажи предыдущего владельца, в итог не включены",
+        fmt(bankBg, rgb("#7B8FA1"), 8, true, "LEFT")),
+      ...Array(COLS-1).fill(cEmpty(fmt(bankBg, rgb("#7B8FA1")))),
+    ], 24);
+    merge(bankLabelRi, 0, COLS);
+
+    colHeaders(rgb("#22223A"));
+    dataRows(bankRows, true);
+    divider(rgb("#2E2E40"));
+    const bankRevenue = bankRows.reduce((s, r) => s + r.revenue, 0);
+    const bankCost    = bankRows.reduce((s, r) => s + r.cost,    0);
+    totalRow(bankRevenue, bankCost, rgb("#1E1E30"), rgb("#7B8FA1"));
+  }
+
   // ── CLOSED PERIODS (history) ──────────────────────────────────────────────
   if (state.closedPeriods.length > 0) {
     // Gap before history
@@ -383,7 +416,7 @@ async function main() {
     console.log("   Загружаю данные текущего периода для архива...");
     const harvestSkus = await getHarvestSkus();
     const variantMap  = await buildVariantMap(harvestSkus);
-    const rowsToArchive = await fetchSalesForPeriod(state.currentStart, today, variantMap);
+    const { ours: rowsToArchive } = await fetchSalesForPeriod(state.currentStart, today, variantMap);
 
     state.closedPeriods.push({
       start: state.currentStart,
@@ -408,14 +441,19 @@ async function main() {
 
   // 5. Fetch current period sales
   console.log(`📊 Загружаю продажи ${fmtDate(state.currentStart)} — ${fmtDate(today)}...`);
-  const currentRows = await fetchSalesForPeriod(state.currentStart, today, variantMap);
-  console.log(`   ${currentRows.length} позиций`);
-  currentRows.forEach(r => console.log(`   ${r.name} (${r.sku}): ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
+  const currentSales = await fetchSalesForPeriod(state.currentStart, today, variantMap);
+  console.log(`   ${currentSales.ours.length} позиций (наши) + ${currentSales.bankTransfer.length} bank transfer`);
+  currentSales.ours.forEach(r => console.log(`   ${r.name} (${r.sku}): ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
+  if (currentSales.bankTransfer.length) {
+    console.log("   Bank Transfer (не наши):");
+    currentSales.bankTransfer.forEach(r => console.log(`     ${r.name} (${r.sku}): ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
+  }
 
   // 6. Build sheet
   console.log("📝 Пишу лист...");
-  const totalRows = 50 + currentRows.length + state.closedPeriods.reduce((s, p) => s + p.rows.length + 6, 0);
-  const built = buildSheet(tabId, state, currentRows, today);
+  const totalRows = 50 + currentSales.ours.length + currentSales.bankTransfer.length +
+    state.closedPeriods.reduce((s, p) => s + p.rows.length + 6, 0);
+  const built = buildSheet(tabId, state, currentSales, today);
 
   // Resize grid if needed
   const neededRows = Math.max(300, totalRows + 20);
@@ -469,11 +507,11 @@ async function main() {
 
   await gApi("POST", ":batchUpdate", { requests });
 
-  const totalCost = currentRows.reduce((s, r) => s + r.cost, 0);
+  const totalCost = currentSales.ours.reduce((s, r) => s + r.cost, 0);
   console.log("");
   console.log("✅  Готово!");
   console.log(`   Текущий период: ${fmtDate(state.currentStart)} — ${fmtDate(today)}`);
-  console.log(`   Позиций: ${currentRows.length}`);
+  console.log(`   Позиций: ${currentSales.ours.length} (наши) + ${currentSales.bankTransfer.length} bank transfer`);
   console.log(`   К оплате: ${totalCost.toFixed(0)} ฿`);
   if (state.closedPeriods.length > 0) {
     console.log(`   Архивных периодов: ${state.closedPeriods.length}`);
