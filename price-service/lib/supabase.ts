@@ -44,5 +44,7 @@ export type WineItem = {
   vivino_image_url: string | null
   vivino_enriched_at: string | null
   winery: string | null
+  category: 'wine' | 'spirits' | 'beer' | 'other' | null
+  wine_type: 'red' | 'white' | 'rose' | 'sparkling' | null
   created_at: string
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { extractFromFile } from '@/lib/extract'
+import { classifyItem } from '@/lib/classify'
 
 export async function GET() {
   const { data, error } = await supabase
@@ -78,19 +79,24 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       item_count: result.items.length,
     }).eq('id', priceListId)
 
-    const items = result.items.map(item => ({
-      price_list_id: priceListId,
-      supplier_id: supplierId,
-      supplier_name: result.supplier_name,
-      name: item.name,
-      country: item.country,
-      region: item.region,
-      grape_variety: item.grape_variety,
-      price: item.price,
-      year: item.year,
-      volume: item.volume,
-      description: item.description,
-    }))
+    const items = result.items.map(item => {
+      const fallback = (!item.category) ? classifyItem(item.name, item.description) : null
+      return {
+        price_list_id: priceListId,
+        supplier_id: supplierId,
+        supplier_name: result.supplier_name,
+        name: item.name,
+        country: item.country,
+        region: item.region,
+        grape_variety: item.grape_variety,
+        price: item.price,
+        year: item.year,
+        volume: item.volume,
+        description: item.description,
+        category: item.category ?? fallback?.category ?? null,
+        wine_type: item.wine_type ?? fallback?.wine_type ?? null,
+      }
+    })
 
     for (let i = 0; i < items.length; i += 100) {
       await supabase.from('wine_items').insert(items.slice(i, i + 100))

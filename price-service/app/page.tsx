@@ -9,6 +9,8 @@ type SearchParams = {
   supplier?: string
   country?: string
   grape?: string
+  category?: string
+  wine_type?: string
   page?: string
   sort?: string
   dir?: string
@@ -36,6 +38,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   if (params.supplier) query = query.eq('supplier_name', params.supplier)
   if (params.country) query = query.eq('country', params.country)
   if (params.grape) query = query.ilike('grape_variety', `%${params.grape}%`)
+  if (params.category) query = query.eq('category', params.category)
+  if (params.wine_type) query = query.eq('wine_type', params.wine_type)
 
   const [itemsRes, filterRes, priceListsRes] = await Promise.all([
     query,
@@ -105,7 +109,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {/* Filters */}
         <Suspense>
-          <FilterBar suppliers={suppliers} countries={countries} grapes={grapes} />
+          <FilterBar suppliers={suppliers} countries={countries} grapes={grapes} category={params.category ?? ''} wineType={params.wine_type ?? ''} />
         </Suspense>
 
         {/* Table */}

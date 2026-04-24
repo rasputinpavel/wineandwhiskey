@@ -11,6 +11,8 @@ export type ExtractedItem = {
   year: number | null
   volume: string | null
   description: string | null
+  category: 'wine' | 'spirits' | 'beer' | 'other' | null
+  wine_type: 'red' | 'white' | 'rose' | 'sparkling' | null
 }
 
 export type ExtractionResult = {
@@ -30,13 +32,17 @@ Return ONLY this JSON (no markdown, no other text):
 const ITEMS_PROMPT = `This is a wine/spirits supplier price list in CSV or text format. Extract ALL wine and spirits items.
 Each row typically has: product name, price, possibly country/region/grape/year/volume.
 Return ONLY a compact JSON array (no markdown, no explanation):
-[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]
+[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null","category":"wine|spirits|beer|other","wine_type":"red|white|rose|sparkling|null"}]
+category: "wine" for all wines, "spirits" for whisky/vodka/gin/rum/cognac/etc, "beer" for beer/ale/lager, "other" if unclear.
+wine_type: only for wines — "red", "white", "rose", or "sparkling". null for spirits/beer.
 Skip header rows, totals, and non-product rows. If no items found, return [].`
 
 const FULL_PROMPT = `This is a wine/spirits supplier price list (may be CSV from Excel, plain text, or an image/PDF).
 Extract the supplier name (usually at top or in sheet name) and ALL wine/spirits product rows.
 Return ONLY this JSON (no markdown):
-{"supplier_name":"actual company name or Unknown Supplier","price_list_date":"YYYY-MM-DD or null","currency":"THB/USD/null","items":[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null"}]}
+{"supplier_name":"actual company name or Unknown Supplier","price_list_date":"YYYY-MM-DD or null","currency":"THB/USD/null","items":[{"name":"...","country":"...or null","region":"...or null","grape_variety":"...or null","price":number or null,"year":integer or null,"volume":"...or null","description":"...or null","category":"wine|spirits|beer|other","wine_type":"red|white|rose|sparkling|null"}]}
+category: "wine" for all wines, "spirits" for whisky/vodka/gin/rum/cognac/etc, "beer" for beer/ale/lager.
+wine_type: only for wines — "red", "white", "rose", or "sparkling". null for spirits/beer.
 Skip header rows, totals, category headers. Return [] for items if none found.`
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
