@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const { data: items, error } = await supabase
     .from('wine_items')
-    .select('id, name')
+    .select('id, name, grape_variety, winery')
     .eq('price_list_id', price_list_id)
     .is('vivino_enriched_at', null)
     .not('name', 'is', null)
@@ -83,9 +83,9 @@ async function runBatch(wineNames: string[]): Promise<VivinoResult[]> {
   return dataRes.json()
 }
 
-async function enrichInBackground(items: { id: string; name: string }[]) {
+async function enrichInBackground(items: { id: string; name: string; grape_variety: string | null; winery: string | null }[]) {
   const BATCH = 20
-  const nameToId = new Map(items.map(w => [w.name, w.id]))
+  const nameToItem = new Map(items.map(w => [w.name, w]))
   let enriched = 0
   let notFound = 0
 
@@ -101,8 +101,8 @@ async function enrichInBackground(items: { id: string; name: string }[]) {
       const matched = new Set<string>()
       for (const r of results) {
         if (!r.searchQuery) continue
-        const id = nameToId.get(r.searchQuery)
-        if (!id) continue
+        const item = nameToItem.get(r.searchQuery)
+        if (!item) continue
         matched.add(r.searchQuery)
         const rawImage = r.image_url
         const grapes = parseGrapes(r.grapes)
@@ -114,17 +114,17 @@ async function enrichInBackground(items: { id: string; name: string }[]) {
           vivino_image_url: Array.isArray(rawImage) ? rawImage[0] : (rawImage ?? null),
           vivino_enriched_at: new Date().toISOString(),
         }
-        if (grapes) update.grape_variety = grapes
-        if (winery) update.winery = winery
-        await supabase.from('wine_items').update(update).eq('id', id)
+        if (grapes && !item.grape_variety) update.grape_variety = grapes
+        if (winery && !item.winery) update.winery = winery
+        await supabase.from('wine_items').update(update).eq('id', item.id)
         enriched++
       }
 
       // Mark unmatched as processed
       for (const name of wineNames) {
         if (!matched.has(name)) {
-          const id = nameToId.get(name)
-          if (id) await supabase.from('wine_items').update({ vivino_enriched_at: new Date().toISOString() }).eq('id', id)
+          const item = nameToItem.get(name)
+          if (item) await supabase.from('wine_items').update({ vivino_enriched_at: new Date().toISOString() }).eq('id', item.id)
           notFound++
         }
       }
