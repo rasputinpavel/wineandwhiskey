@@ -149,7 +149,7 @@ async function main() {
     const row = FIRST_WEEK_ROW + i;
 
     const fOpen = i === 0
-      ? `=MAX('Income structure '!I2:I100)+MAX('Income structure '!N2:N100)`
+      ? 117_656  // actual balance on 2026-04-20 (company + personal accounts)
       : `=H${row - 1}`;
 
     // Revenue: daily avg × 7 days
