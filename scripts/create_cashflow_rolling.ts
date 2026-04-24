@@ -293,15 +293,15 @@ async function main() {
       range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 1, endColumnIndex: NUM_COLS },
       cell: { userEnteredFormat: thb }, fields: "userEnteredFormat(numberFormat)" } },
 
-    // Revenue col C (idx 2): blue bold
+    // Revenue C (idx 2) + Receivables D (idx 3): blue bold
     { repeatCell: {
-      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 2, endColumnIndex: 3 },
+      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 2, endColumnIndex: 4 },
       cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: col.revFg } } },
       fields: "userEnteredFormat(textFormat)" } },
 
-    // Expenses col F (idx 5): red bold
+    // Payables E (idx 4) + Expenses F (idx 5): red bold
     { repeatCell: {
-      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 5, endColumnIndex: 6 },
+      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 4, endColumnIndex: 6 },
       cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: col.expFg } } },
       fields: "userEnteredFormat(textFormat)" } },
 
