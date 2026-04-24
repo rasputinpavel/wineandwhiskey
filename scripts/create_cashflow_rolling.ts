@@ -132,11 +132,11 @@ async function main() {
   //  Row 3  (idx 2): Column headers
   //  Rows 4+ (idx 3+): week rows
   //
-  //  Cols: A=Неделя  B=Остаток нач.  C=Выручка  D=Дебиторка  E=Кредиторка
-  //        F=Расходы (операционные + бухгалтерия)  G=Остаток кон.
+  //  Cols: A=Неделя  B=Остаток нач.  C=Прогноз  D=Факт (←Закрытие)
+  //        E=Дебиторка  F=Кредиторка  G=Расходы  H=Остаток кон.
 
   const FIRST_WEEK_ROW = 4; // 1-based
-  const NUM_COLS = 7;       // A:G
+  const NUM_COLS = 8;       // A:H
 
   // Daily avg retail revenue formula (auto-updates as Данные sheet is filled)
   const fDailyAvg =
@@ -150,7 +150,7 @@ async function main() {
 
     const fOpen = i === 0
       ? `=MAX('Income structure '!I2:I100)+MAX('Income structure '!N2:N100)`
-      : `=G${row - 1}`;
+      : `=H${row - 1}`;
 
     // Revenue: daily avg × 7 days
     const fRev = `=$B$2*7`;
@@ -179,11 +179,19 @@ async function main() {
       `IFERROR(1*'Расходы'!B2:B500${S}0))` +
       (fixed + acctg > 0 ? `+${fixed + acctg}` : ``);
 
-    const fClose = `=B${row}+C${row}+D${row}-E${row}-F${row}`;
+    // Факт: VLOOKUP from Закрытие sheet by ISO week-start date (hardcoded per row)
+    const isoStart = start.toISOString().slice(0, 10);
+    const fFact = `=IFERROR(VLOOKUP("${isoStart}"${S}Закрытие!A:B${S}2${S}0)${S}"")`;
+
+    // Closing balance: use Факт if filled, otherwise Прогноз
+    const fClose =
+      `=IF(D${row}<>""` +
+      `${S}B${row}+D${row}+E${row}-F${row}-G${row}` +
+      `${S}B${row}+C${row}+E${row}-F${row}-G${row})`;
 
     return [
       weekLabel(start, end),
-      fOpen, fRev, fDeb, fKred,
+      fOpen, fRev, fFact, fDeb, fKred,
       fExp,
       fClose,
     ];
@@ -193,7 +201,7 @@ async function main() {
   const values = [
     [`ROLLING CASHFLOW — до конца ${nowBkk.getUTCFullYear()} г.`, ...blankCols],
     ["Ср. выручка/день (розница, факт)", fDailyAvg, ...Array(NUM_COLS - 2).fill("")],
-    ["Неделя","Остаток нач.","Выручка","Дебиторка","Кредиторка","Расходы","Остаток кон."],
+    ["Неделя","Остаток нач.","Прогноз","Факт","Дебиторка","Кредиторка","Расходы","Остаток кон."],
     ...weekRows,
   ];
 
@@ -202,10 +210,10 @@ async function main() {
     { range: "Rolling Cashflow!A1", majorDimension: "ROWS", values },
   );
 
-  // ── Annual payments table (cols I:L = idx 8:12) ──────────────────────────
+  // ── Annual payments table (cols K:N = idx 10:14) ─────────────────────────
   await sheetsReq(token, "PUT",
-    `/values/${encodeURIComponent("Rolling Cashflow!I1")}?valueInputOption=USER_ENTERED`,
-    { range: "Rolling Cashflow!I1", majorDimension: "ROWS", values: [
+    `/values/${encodeURIComponent("Rolling Cashflow!K1")}?valueInputOption=USER_ENTERED`,
+    { range: "Rolling Cashflow!K1", majorDimension: "ROWS", values: [
       ["КРУПНЫЕ ГОДОВЫЕ ПЛАТЕЖИ", "", "", ""],
       ["Платёж", "Сумма", "Дата", "Статус"],
       ["Лицензия на алкоголь", 10_000, "", ""],
@@ -250,10 +258,10 @@ async function main() {
       top: { style: "SOLID_MEDIUM", color: { red: 0.2, green: 0.2, blue: 0.2 } } } }];
   });
 
-  // Conditional formatting for closing balance (col G = idx 6)
+  // Conditional formatting for closing balance (col H = idx 7)
   const cfRules = weeks.flatMap((_, i) => {
     const rowIdx = FIRST_WEEK_ROW - 1 + i;
-    const range = { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 6, endColumnIndex: 7 };
+    const range = { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 7, endColumnIndex: 8 };
     return [
       { addConditionalFormatRule: { rule: { ranges: [range], booleanRule: {
         condition: { type: "NUMBER_LESS", values: [{ userEnteredValue: "0" }] },
@@ -285,7 +293,7 @@ async function main() {
       cell: { userEnteredFormat: { backgroundColor: col.hdr, textFormat: { bold: true, foregroundColor: col.white } } },
       fields: "userEnteredFormat(backgroundColor,textFormat)" } },
 
-    // THB: daily avg cell (B2) + all numeric cols B:G in week rows
+    // THB: daily avg + all numeric cols B:H in week rows
     { repeatCell: {
       range: { sheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 2 },
       cell: { userEnteredFormat: thb }, fields: "userEnteredFormat(numberFormat)" } },
@@ -293,15 +301,21 @@ async function main() {
       range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 1, endColumnIndex: NUM_COLS },
       cell: { userEnteredFormat: thb }, fields: "userEnteredFormat(numberFormat)" } },
 
-    // Revenue C (idx 2) + Receivables D (idx 3): blue bold
+    // Прогноз C (idx 2) + Факт D (idx 3) + Дебиторка E (idx 4): blue bold
     { repeatCell: {
-      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 2, endColumnIndex: 4 },
+      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 2, endColumnIndex: 5 },
       cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: col.revFg } } },
       fields: "userEnteredFormat(textFormat)" } },
 
-    // Payables E (idx 4) + Expenses F (idx 5): red bold
+    // Факт D (idx 3): white bg to visually mark as "live" input area
     { repeatCell: {
-      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 4, endColumnIndex: 6 },
+      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 3, endColumnIndex: 4 },
+      cell: { userEnteredFormat: { backgroundColor: col.white } },
+      fields: "userEnteredFormat(backgroundColor)" } },
+
+    // Кредиторка F (idx 5) + Расходы G (idx 6): red bold
+    { repeatCell: {
+      range: { sheetId, startRowIndex: 3, endRowIndex: lastWeekIdx, startColumnIndex: 5, endColumnIndex: 7 },
       cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: col.expFg } } },
       fields: "userEnteredFormat(textFormat)" } },
 
@@ -311,17 +325,21 @@ async function main() {
       properties: { pixelSize: 175 }, fields: "pixelSize" } },
     { updateDimensionProperties: {
       range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: NUM_COLS },
-      properties: { pixelSize: 120 }, fields: "pixelSize" } },
-    // Gap column H (idx 7)
-    { updateDimensionProperties: {
-      range: { sheetId, dimension: "COLUMNS", startIndex: 7, endIndex: 8 },
-      properties: { pixelSize: 30 }, fields: "pixelSize" } },
-    // Annual table I:L (idx 8:12)
+      properties: { pixelSize: 115 }, fields: "pixelSize" } },
+    // Gap column I (idx 8)
     { updateDimensionProperties: {
       range: { sheetId, dimension: "COLUMNS", startIndex: 8, endIndex: 9 },
+      properties: { pixelSize: 20 }, fields: "pixelSize" } },
+    // Gap column J (idx 9)
+    { updateDimensionProperties: {
+      range: { sheetId, dimension: "COLUMNS", startIndex: 9, endIndex: 10 },
+      properties: { pixelSize: 20 }, fields: "pixelSize" } },
+    // Annual table K:N (idx 10:14)
+    { updateDimensionProperties: {
+      range: { sheetId, dimension: "COLUMNS", startIndex: 10, endIndex: 11 },
       properties: { pixelSize: 220 }, fields: "pixelSize" } },
     { updateDimensionProperties: {
-      range: { sheetId, dimension: "COLUMNS", startIndex: 9, endIndex: 12 },
+      range: { sheetId, dimension: "COLUMNS", startIndex: 11, endIndex: 14 },
       properties: { pixelSize: 110 }, fields: "pixelSize" } },
 
     // Freeze first 3 rows
@@ -329,17 +347,17 @@ async function main() {
       properties: { sheetId, gridProperties: { frozenRowCount: 3 } },
       fields: "gridProperties.frozenRowCount" } },
 
-    // ── Annual payments table (I:L = idx 8:12) ──
+    // ── Annual payments table (K:N = idx 10:14) ──
     { repeatCell: {
-      range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 8, endColumnIndex: 12 },
+      range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 10, endColumnIndex: 14 },
       cell: { userEnteredFormat: { backgroundColor: col.dark, textFormat: { bold: true, fontSize: 12, foregroundColor: col.white } } },
       fields: "userEnteredFormat(backgroundColor,textFormat)" } },
     { repeatCell: {
-      range: { sheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 8, endColumnIndex: 12 },
+      range: { sheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 10, endColumnIndex: 14 },
       cell: { userEnteredFormat: { backgroundColor: col.hdr, textFormat: { bold: true, foregroundColor: col.white } } },
       fields: "userEnteredFormat(backgroundColor,textFormat)" } },
     { repeatCell: {
-      range: { sheetId, startRowIndex: 2, endRowIndex: 6, startColumnIndex: 9, endColumnIndex: 10 },
+      range: { sheetId, startRowIndex: 2, endRowIndex: 6, startColumnIndex: 11, endColumnIndex: 12 },
       cell: { userEnteredFormat: thb }, fields: "userEnteredFormat(numberFormat)" } },
 
     // Month styles + borders
