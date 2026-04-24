@@ -27,3 +27,24 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ items: data, total: count ?? 0, page, limit })
 }
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+  if (!body.name) return NextResponse.json({ error: 'name required' }, { status: 400 })
+  const { data, error } = await supabase.from('wine_items').insert({
+    name: body.name,
+    country: body.country ?? null,
+    region: body.region ?? null,
+    grape_variety: body.grape_variety ?? null,
+    price: body.price ?? null,
+    year: body.year ?? null,
+    volume: body.volume ?? null,
+    description: body.description ?? null,
+    winery: body.winery ?? null,
+    category: body.category ?? null,
+    wine_type: body.wine_type ?? null,
+    supplier_name: body.supplier_name ?? null,
+  }).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data, { status: 201 })
+}
