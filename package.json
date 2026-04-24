@@ -9,6 +9,7 @@
     "b2b":       "tsx scripts/sync_b2b.ts",
     "suppliers": "tsx scripts/sync_suppliers.ts",
     "receipts":  "tsx scripts/sync_receipts.ts",
+    "harvest":   "tsx scripts/sync_harvest_sales.ts",
     "sync:all":  "tsx scripts/sync_dashboard.ts && tsx scripts/wine_matrix.ts"
   },
   "dependencies": {
