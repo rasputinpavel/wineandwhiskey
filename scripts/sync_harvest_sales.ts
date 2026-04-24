@@ -50,6 +50,7 @@ function tomorrow(iso: string) {
 // ─── State ────────────────────────────────────────────────────────────────────
 
 interface SaleRow { name: string; sku: string; qty: number; revenue: number; cost: number; }
+interface BankRow  { customer: string; name: string; sku: string; qty: number; revenue: number; }
 
 interface ClosedPeriod {
   start: string; end: string; paidDate: string;
@@ -123,6 +124,7 @@ interface LoyItem {
   variants: { variant_id: string; sku: string }[];
 }
 interface LoyReceipt {
+  customer_id: string | null;
   payments: { name: string; money_amount: number }[];
   line_items: {
     variant_id: string; item_name: string; sku: string;
@@ -134,7 +136,23 @@ function isBankTransfer(receipt: LoyReceipt): boolean {
   return (receipt.payments ?? []).some(p => /bank.?transfer/i.test(p.name ?? ""));
 }
 
-interface PeriodSales { ours: SaleRow[]; bankTransfer: SaleRow[]; }
+async function fetchCustomerNames(ids: Set<string>): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  await Promise.all([...ids].map(async id => {
+    try {
+      const r = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
+        headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` },
+      });
+      if (!r.ok) return;
+      const c = await r.json();
+      const name = (c.name ?? "").trim() || c.email || id.slice(0, 8);
+      map.set(id, name);
+    } catch { /* skip */ }
+  }));
+  return map;
+}
+
+interface PeriodSales { ours: SaleRow[]; bankTransfer: BankRow[]; }
 
 async function fetchSalesForPeriod(
   periodStart: string,
@@ -147,25 +165,51 @@ async function fetchSalesForPeriod(
     `/receipts?receipt_type=SALE&created_at_min=${minUtc}&created_at_max=${maxUtc}`,
     "receipts",
   );
+
   const aggOurs = new Map<string, SaleRow>();
-  const aggBank = new Map<string, SaleRow>();
+  // bank_transfer: keyed by "customerId:variantId" to show per-customer breakdown
+  const aggBank = new Map<string, BankRow>();
+  const bankCustomerIds = new Set<string>();
+
   for (const receipt of receipts) {
-    const agg = isBankTransfer(receipt) ? aggBank : aggOurs;
-    for (const li of receipt.line_items ?? []) {
-      if (!variantMap.has(li.variant_id)) continue;
-      const info = variantMap.get(li.variant_id)!;
-      const cur  = agg.get(li.variant_id) ?? { name: info.name, sku: info.sku, qty: 0, revenue: 0, cost: 0 };
-      agg.set(li.variant_id, {
-        ...cur,
-        qty:     cur.qty     + (li.quantity    ?? 0),
-        revenue: cur.revenue + (li.total_money ?? 0),
-        cost:    cur.cost    + (li.cost_total  ?? 0),
-      });
+    if (isBankTransfer(receipt)) {
+      const cid = receipt.customer_id ?? "unknown";
+      if (receipt.customer_id) bankCustomerIds.add(cid);
+      for (const li of receipt.line_items ?? []) {
+        if (!variantMap.has(li.variant_id)) continue;
+        const info = variantMap.get(li.variant_id)!;
+        const key  = `${cid}:${li.variant_id}`;
+        const cur  = aggBank.get(key) ?? { customer: cid, name: info.name, sku: info.sku, qty: 0, revenue: 0 };
+        aggBank.set(key, {
+          ...cur,
+          qty:     cur.qty     + (li.quantity    ?? 0),
+          revenue: cur.revenue + (li.total_money ?? 0),
+        });
+      }
+    } else {
+      for (const li of receipt.line_items ?? []) {
+        if (!variantMap.has(li.variant_id)) continue;
+        const info = variantMap.get(li.variant_id)!;
+        const cur  = aggOurs.get(li.variant_id) ?? { name: info.name, sku: info.sku, qty: 0, revenue: 0, cost: 0 };
+        aggOurs.set(li.variant_id, {
+          ...cur,
+          qty:     cur.qty     + (li.quantity    ?? 0),
+          revenue: cur.revenue + (li.total_money ?? 0),
+          cost:    cur.cost    + (li.cost_total  ?? 0),
+        });
+      }
     }
   }
-  const sort = (m: Map<string, SaleRow>) =>
-    [...m.values()].filter(r => r.qty > 0).sort((a, b) => b.revenue - a.revenue);
-  return { ours: sort(aggOurs), bankTransfer: sort(aggBank) };
+
+  // Resolve customer names
+  const customerNames = await fetchCustomerNames(bankCustomerIds);
+  const bankRows: BankRow[] = [...aggBank.values()]
+    .filter(r => r.qty > 0)
+    .map(r => ({ ...r, customer: customerNames.get(r.customer) ?? r.customer }))
+    .sort((a, b) => a.customer.localeCompare(b.customer) || b.revenue - a.revenue);
+
+  const oursRows = [...aggOurs.values()].filter(r => r.qty > 0).sort((a, b) => b.revenue - a.revenue);
+  return { ours: oursRows, bankTransfer: bankRows };
 }
 
 // ─── Colors ────────────────────────────────────────────────────────────────────
@@ -341,12 +385,41 @@ function buildSheet(tabId: number, state: State, currentSales: PeriodSales, toda
     ], 24);
     merge(bankLabelRi, 0, COLS);
 
-    colHeaders(rgb("#22223A"));
-    dataRows(bankRows, true);
+    // bank transfer col headers: replace SKU with КЛИЕНТ
+    const bBg = rgb("#22223A");
+    row([
+      cStr("#",        fmt(bBg, C.graphite, 8, true, "CENTER")),
+      cStr("КЛИЕНТ",   fmt(bBg, C.graphite, 8, true, "LEFT")),
+      cStr("ТОВАР",    fmt(bBg, C.graphite, 8, true, "LEFT")),
+      cStr("КОЛ-ВО",  fmt(bBg, C.graphite, 8, true, "CENTER")),
+      cStr("ВЫРУЧКА",  fmt(bBg, C.graphite, 8, true, "RIGHT")),
+      cEmpty(fmt(bBg, C.graphite)),
+      cEmpty(fmt(bBg, C.graphite)),
+    ], 26);
+    for (let i = 0; i < bankRows.length; i++) {
+      const br  = bankRows[i];
+      const bg  = i % 2 === 0 ? rgb("#1E1E32") : rgb("#21213A");
+      row([
+        cNum(i + 1,      fmt(bg, C.stone,       8, false, "CENTER")),
+        cStr(br.customer,fmt(bg, rgb("#7B8FA1"), 8, false, "LEFT", false, true)),
+        cStr(br.name,    fmt(bg, C.muted,        8, false, "LEFT", false, true)),
+        cNum(br.qty,     fmt(bg, C.graphite,     9, false, "CENTER"), "0"),
+        cNum(br.revenue, fmt(bg, C.graphite,     9, false, "RIGHT"),  "#,##0"),
+        cEmpty(fmt(bg, C.graphite)),
+        cEmpty(fmt(bg, C.graphite)),
+      ], 34);
+    }
     divider(rgb("#2E2E40"));
     const bankRevenue = bankRows.reduce((s, r) => s + r.revenue, 0);
-    const bankCost    = bankRows.reduce((s, r) => s + r.cost,    0);
-    totalRow(bankRevenue, bankCost, rgb("#1E1E30"), rgb("#7B8FA1"));
+    const bankTotalRi = row([
+      cStr("ИТОГО BANK TRANSFER", fmt(rgb("#1A1A2E"), rgb("#7B8FA1"), 9, true, "RIGHT")),
+      cEmpty(fmt(rgb("#1A1A2E"), C.muted)), cEmpty(fmt(rgb("#1A1A2E"), C.muted)),
+      cEmpty(fmt(rgb("#1A1A2E"), C.muted)),
+      cNum(bankRevenue, fmt(rgb("#1A1A2E"), rgb("#7B8FA1"), 10, true, "RIGHT"), "#,##0 \"฿\""),
+      cEmpty(fmt(rgb("#1A1A2E"), C.muted)),
+      cEmpty(fmt(rgb("#1A1A2E"), C.muted)),
+    ], 36);
+    merge(bankTotalRi, 0, 4);
   }
 
   // ── CLOSED PERIODS (history) ──────────────────────────────────────────────
@@ -446,7 +519,7 @@ async function main() {
   currentSales.ours.forEach(r => console.log(`   ${r.name} (${r.sku}): ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
   if (currentSales.bankTransfer.length) {
     console.log("   Bank Transfer (не наши):");
-    currentSales.bankTransfer.forEach(r => console.log(`     ${r.name} (${r.sku}): ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
+    currentSales.bankTransfer.forEach(r => console.log(`     [${r.customer}] ${r.name}: ${r.qty} шт. / ${r.revenue.toFixed(0)} ฿`));
   }
 
   // 6. Build sheet
