@@ -163,6 +163,7 @@ function buildSheet(
   today: string,
   isPaid: boolean,
   rows: SaleRow[],
+  lastPaidDate?: string,
 ) {
   const data: any[]  = [];
   const merges: any[] = [];
@@ -184,15 +185,15 @@ function buildSheet(
 
   const totalCols = 7;
 
-  // ── STATE ROW (row 0, index 0) — hidden, machine-readable ─────────────────
-  // A=periodStart B=today(updated) C=isPaid D=paidDate(set when paid)
+  // ── STATE ROW (row 0) — hidden, machine-readable ─────────────────────────
+  // A=periodStart  B=today  C=isPaid  D=lastPaidDate
   addRow([
-    cStr(periodStart, fmt(C.white, C.white, 7)),
-    cStr(today,       fmt(C.white, C.white, 7)),
+    cStr(periodStart,          fmt(C.white, C.white, 7)),
+    cStr(today,                fmt(C.white, C.white, 7)),
     cStr(isPaid ? "TRUE" : "FALSE", fmt(C.white, C.white, 7)),
-    cStr("",          fmt(C.white, C.white, 7)),
+    cStr(lastPaidDate ?? "",   fmt(C.white, C.white, 7)),
     ...Array(3).fill(cEmpty(fmt(C.white, C.white))),
-  ], 3);  // very short row — effectively hidden
+  ], 3);
 
   // ── TITLE BAR ─────────────────────────────────────────────────────────────
   let ri = addRow([
@@ -216,26 +217,30 @@ function buildSheet(
   // ── STATUS ROW ────────────────────────────────────────────────────────────
   const nextPay    = nextPaymentDate(today);
   const statusBg   = isPaid ? C.green : C.navy;
-  const statusText = isPaid ? `✓  ОПЛАЧЕНО` : `К ОПЛАТЕ  ·  ${fmtDate(nextPay)}`;
+  const statusText = isPaid ? `✓  ОПЛАЧЕНО` : `К ОПЛАТЕ  ·  срок ${fmtDate(nextPay)}`;
+  const lastPaidInfo = lastPaidDate ? `  Последняя оплата: ${fmtDate(lastPaidDate)}` : "";
   ri = addRow([
     cStr("  СТАТУС:", fmt(statusBg, C.stone, 8, false, "LEFT")),
     cStr(statusText,  fmt(statusBg, isPaid ? C.cream : C.gold, 9, true, "LEFT")),
     cEmpty(fmt(statusBg, C.gold)), cEmpty(fmt(statusBg, C.gold)),
-    cEmpty(fmt(statusBg, C.gold)), cEmpty(fmt(statusBg, C.gold)),
-    cStr(isPaid ? "" : "← установить TRUE = оплачено",
-      fmt(statusBg, C.muted, 7, false, "RIGHT", true)),
+    cEmpty(fmt(statusBg, C.gold)),
+    cStr(lastPaidInfo, fmt(statusBg, C.muted, 7, false, "RIGHT")),
+    cEmpty(fmt(statusBg, C.muted)),
   ], 28);
+  merge(ri, 5, 7);
 
   // ── PAID CHECKBOX ROW ─────────────────────────────────────────────────────
+  // G6: поставь ✓ → скрипт в 22:15 закроет период и начнёт новый с завтрашнего дня
   ri = addRow([
-    cStr("  Отметить как оплачено:", fmt(C.cream2, C.graphite, 8, false, "LEFT")),
+    cStr("  Оплачено? Поставь ✓ — период закроется в 22:15, новый начнётся завтра",
+      fmt(C.cream2, C.graphite, 8, false, "LEFT", true)),
     cEmpty(fmt(C.cream2, C.graphite)), cEmpty(fmt(C.cream2, C.graphite)),
     cEmpty(fmt(C.cream2, C.graphite)), cEmpty(fmt(C.cream2, C.graphite)),
     cEmpty(fmt(C.cream2, C.graphite)),
-    // G6 = checkbox cell (script reads this on next run)
-    { userEnteredValue: { boolValue: isPaid }, userEnteredFormat: fmt(C.cream2, C.graphite, 11, true, "CENTER") },
+    { userEnteredValue: { boolValue: false },
+      userEnteredFormat: fmt(C.cream2, C.graphite, 11, true, "CENTER") },
   ], 28);
-  // checkbox row index for reference in batchUpdate
+  merge(ri, 0, 6);
   const checkboxRowIdx = ri;
 
   // ── BLANK ─────────────────────────────────────────────────────────────────
@@ -311,32 +316,28 @@ async function main() {
   let periodStart = DEFAULT_PERIOD_START;
   let isPaid      = false;
 
+  let lastPaidDate: string | undefined;
   if (stateData.length > 0 && stateData[0][0]) {
-    periodStart = stateData[0][0];
-    // Column C = isPaid flag (G6 checkbox value, synced back to A1:D1 on each run)
-    isPaid = stateData[0][2] === "TRUE";
+    periodStart  = stateData[0][0];
+    isPaid       = stateData[0][2] === "TRUE";
+    lastPaidDate = stateData[0][3] || undefined;
   }
 
   // 3. Read checkbox (G6 = row index 5, col index 6)
   const checkboxData = await readRange(`${TAB_NAME}!G6`);
   const checkboxValue = checkboxData?.[0]?.[0]?.toUpperCase();
   if (checkboxValue === "TRUE" || checkboxValue === "ИСТИНА") {
-    // User marked as paid on this run
+    // User marked as paid — close current period, start new one from tomorrow
     if (!isPaid) {
-      console.log("✅ Период отмечен как ОПЛАЧЕНО — обновляем и начинаем новый период");
-      // Record payment date, shift period start to tomorrow
+      console.log("✅ Период отмечен как ОПЛАЧЕНО — начинаем новый период");
       const paidDate = today;
-      // New period starts from 1st of next month
-      const [y, m] = today.split("-").map(Number);
-      const newStart = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+      // New period: tomorrow (so today's sales go to the period being paid)
+      const [y, m, d] = today.split("-").map(Number);
+      const newStart  = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
       periodStart = newStart;
-      isPaid = false;
-      // Write new period start back to state row
-      await gApi("PUT", `/values/${encodeURIComponent(`${TAB_NAME}!A1`)}?valueInputOption=RAW`, {
-        range: `${TAB_NAME}!A1`, majorDimension: "ROWS",
-        values: [[newStart, today, "FALSE", paidDate]],
-      });
-      console.log(`   Новый период: с ${newStart}`);
+      isPaid      = false;
+      lastPaidDate = paidDate;
+      console.log(`   Оплачено: ${fmtDate(paidDate)} · Новый период с: ${fmtDate(newStart)}`);
     }
   }
 
@@ -406,7 +407,7 @@ async function main() {
   // 7. Build + write sheet
   console.log("📝 Обновляю лист...");
   const { data, merges, heights, checkboxRowIdx } = buildSheet(
-    tabId, periodStart, today, isPaid, saleRows
+    tabId, periodStart, today, isPaid, saleRows, lastPaidDate
   );
 
   // Delete + recreate tab for clean state
@@ -423,7 +424,7 @@ async function main() {
   const newTabId = addRes.replies[0].addSheet.properties.sheetId;
 
   // Rebuild with correct tabId
-  const built = buildSheet(newTabId, periodStart, today, isPaid, saleRows);
+  const built = buildSheet(newTabId, periodStart, today, isPaid, saleRows, lastPaidDate);
 
   const requests: any[] = [
     { updateCells: {
