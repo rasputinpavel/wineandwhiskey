@@ -163,6 +163,8 @@ function parseStructuredExcel(workbook: any, XLSX: any): { items: ExtractedItem[
           year: parseInt(a),
           volume: '750ml',
           description: currentWinery && currentWinery !== b ? currentWinery : null,
+          category: null,
+          wine_type: null,
         })
       }
     })
