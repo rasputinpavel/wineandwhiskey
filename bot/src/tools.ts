@@ -288,7 +288,7 @@ export async function getPurchaseOrders(params: {
   const f = (n: number | null) => n != null ? Math.round(n).toLocaleString("ru-RU") + " ฿" : "—";
 
   const lines: string[] = [`Найдено заказов: ${data.length}\n`];
-  for (const po of data) {
+  for (const po of (data as any[])) {
     lines.push(`${po.po_number}  ${po.order_date ?? "—"}  ${po.supplier ?? "—"}  ${po.status ?? "—"}  ${f(po.total_thb)}`);
     if (include_items && Array.isArray((po as any).purchase_order_items)) {
       for (const item of (po as any).purchase_order_items) {
