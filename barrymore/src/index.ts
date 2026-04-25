@@ -50,8 +50,13 @@ function identifyUser(username?: string): string {
   return userMap.get(username.toLowerCase()) ?? username;
 }
 
-function isAllowedChat(chatId: number | string): boolean {
-  if (!ALLOWED_CHAT) return true; // если не настроено — отвечаем везде
+function isPrivate(chatType: string): boolean {
+  return chatType === "private";
+}
+
+function isAllowedChat(chatId: number | string, chatType: string): boolean {
+  if (isPrivate(chatType)) return true; // личка всегда разрешена
+  if (!ALLOWED_CHAT) return true;
   return String(chatId) === ALLOWED_CHAT;
 }
 
@@ -100,7 +105,7 @@ bot.command("new", (ctx) => {
 });
 
 bot.command("tasks", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
   const msg = await ctx.reply("Листаю реестр...");
   try {
     const answer = await askBarrymore(ctx.chat.id, "система", "Покажи все активные задачи в реестре.");
@@ -112,7 +117,7 @@ bot.command("tasks", async (ctx) => {
 });
 
 bot.command("backlog", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
   const msg = await ctx.reply("Просматриваю бэклог...");
   try {
     const answer = await askBarrymore(ctx.chat.id, "система", "Покажи все задачи в бэклоге — и активные, и завершённые за последнее время.");
@@ -124,7 +129,7 @@ bot.command("backlog", async (ctx) => {
 });
 
 bot.command("overdue", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
   const msg = await ctx.reply("Проверяю просрочки...");
   try {
     const answer = await askBarrymore(ctx.chat.id, "система", "Покажи список просроченных задач.");
@@ -136,7 +141,7 @@ bot.command("overdue", async (ctx) => {
 });
 
 bot.command("chronicle", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
   const msg = await ctx.reply("Открываю летопись...");
   try {
     const answer = await askBarrymore(ctx.chat.id, "система", "Покажи летопись проекта за последние 2 недели.");
@@ -149,7 +154,7 @@ bot.command("chronicle", async (ctx) => {
 
 // Ручной тригер для тестирования брифинга
 bot.command("morning", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
   const today      = db.bangkokDate();
   const todayTasks = await db.getTodayTasks();
   const overdue    = await db.getOverdueTasks();
@@ -169,7 +174,7 @@ bot.command("morning", async (ctx) => {
 // --- Голосовые сообщения ---
 
 bot.on("message:voice", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
 
   const username   = ctx.from?.username;
   const senderName = identifyUser(username);
@@ -199,16 +204,18 @@ bot.on("message:voice", async (ctx) => {
 // --- Текстовые сообщения ---
 
 bot.on("message:text", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id)) return;
+  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
 
   const rawText = ctx.message.text;
   if (rawText.startsWith("/")) return;
 
-  // В групповом чате отвечаем только когда к нам обращаются напрямую
-  const me = ctx.me.username ?? "barrymorebot";
-  if (!isAddressedToBarrymore(rawText, me)) return;
+  const me      = ctx.me.username ?? "barrymorebot";
+  const private_ = isPrivate(ctx.chat.type);
 
-  const text       = stripAddressTrigger(rawText, me);
+  // В группе — только если обратились к Бэрримору; в личке — всегда
+  if (!private_ && !isAddressedToBarrymore(rawText, me)) return;
+
+  const text = private_ ? rawText : stripAddressTrigger(rawText, me);
   const username   = ctx.from?.username;
   const senderName = identifyUser(username);
 
