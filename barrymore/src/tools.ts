@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import * as db from "./db.js";
-import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseHistory, getPurchaseOrders } from "../../bot/src/tools.js";
+import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseHistory, getPurchaseOrders } from "./store.js";
 
 export const tools: Anthropic.Tool[] = [
   {
