@@ -425,7 +425,8 @@ async function handleAddCalendarEvent(input: Record<string, unknown>): Promise<s
     description:      input.description ? String(input.description) : undefined,
     location:         input.location ? String(input.location) : undefined,
   });
-  const { link } = JSON.parse(result);
+  const parsed = JSON.parse(result);
+  if (!parsed.ok) return `Ошибка Google Calendar: ${parsed.error}`;
   const who = ((input.attendees as string[]) ?? []).join(", ");
-  return `Событие добавлено в календарь${who ? ` (приглашения: ${who})` : ""}. ${link}`;
+  return `Событие добавлено в календарь${who ? ` (приглашения: ${who})` : ""}. ${parsed.link}`;
 }

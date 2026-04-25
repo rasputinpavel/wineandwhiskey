@@ -48,19 +48,28 @@ export async function addCalendarEvent(params: CalendarEventParams): Promise<str
     end   = { date };
   }
 
-  const event = await calendar.events.insert({
-    calendarId: CALENDAR_ID,
-    sendUpdates: attendeeList.length > 0 ? "all" : "none",
-    requestBody: {
-      summary:     title,
-      description: description ?? undefined,
-      location:    location ?? undefined,
-      start,
-      end,
-      attendees:   attendeeList.length > 0 ? attendeeList : undefined,
-    },
-  });
+  try {
+    const event = await calendar.events.insert({
+      calendarId: CALENDAR_ID,
+      sendUpdates: attendeeList.length > 0 ? "all" : "none",
+      requestBody: {
+        summary:     title,
+        description: description ?? undefined,
+        location:    location ?? undefined,
+        start,
+        end,
+        attendees:   attendeeList.length > 0 ? attendeeList : undefined,
+      },
+    });
 
-  const link = event.data.htmlLink ?? "";
-  return JSON.stringify({ ok: true, event_id: event.data.id, link });
+    const link = event.data.htmlLink ?? "";
+    return JSON.stringify({ ok: true, event_id: event.data.id, link });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message
+      ?? err?.response?.data?.error?.errors?.[0]?.message
+      ?? err?.message
+      ?? String(err);
+    console.error("Google Calendar API error:", JSON.stringify(err?.response?.data ?? err));
+    return JSON.stringify({ ok: false, error: msg });
+  }
 }
