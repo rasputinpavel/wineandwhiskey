@@ -37,12 +37,12 @@ export async function addCalendarEvent(params: CalendarEventParams): Promise<str
   let end: object;
 
   if (time) {
-    const startDt = `${date}T${time}:00`;
-    const startMs = new Date(`${date}T${time}:00+07:00`).getTime();
-    const endMs   = startMs + duration_minutes * 60_000;
-    const endDt   = new Date(endMs).toISOString().replace("Z", "+07:00").slice(0, 19) + "+07:00";
-    start = { dateTime: startDt, timeZone: TIMEZONE };
-    end   = { dateTime: endDt,   timeZone: TIMEZONE };
+    const toLocalISO = (d: Date) =>
+      new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 19);
+    const startDate = new Date(`${date}T${time}:00+07:00`);
+    const endDate   = new Date(startDate.getTime() + duration_minutes * 60_000);
+    start = { dateTime: toLocalISO(startDate), timeZone: TIMEZONE };
+    end   = { dateTime: toLocalISO(endDate),   timeZone: TIMEZONE };
   } else {
     start = { date };
     end   = { date };
