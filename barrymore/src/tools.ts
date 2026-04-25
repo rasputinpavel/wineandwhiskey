@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import * as db from "./db.js";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseHistory, getPurchaseOrders } from "./store.js";
 import { pushCompleted } from "./pinned.js";
+import { addCalendarEvent } from "./calendar.js";
 
 export const tools: Anthropic.Tool[] = [
   {
@@ -179,6 +180,23 @@ export const tools: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: "add_calendar_event",
+    description: "Добавить встречу или событие в Google Календарь. Используй при любом упоминании встречи, звонка, дедлайна, напоминания с датой и временем.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:            { type: "string",  description: "Название события" },
+        date:             { type: "string",  description: "Дата в формате YYYY-MM-DD" },
+        time:             { type: "string",  description: "Время начала HH:MM (если не указано — событие на весь день)" },
+        duration_minutes: { type: "number",  description: "Длительность в минутах, по умолчанию 60" },
+        attendees:        { type: "array",   items: { type: "string", enum: ["pavel", "irina"] }, description: "Кому отправить приглашение" },
+        description:      { type: "string",  description: "Описание / повестка встречи" },
+        location:         { type: "string",  description: "Место проведения" },
+      },
+      required: ["title", "date"],
+    },
+  },
 ];
 
 export async function runTool(name: string, input: Record<string, unknown>): Promise<string> {
@@ -200,6 +218,7 @@ export async function runTool(name: string, input: Record<string, unknown>): Pro
       case "get_supplier":         return getSupplier(String(input.query));
       case "get_purchase_history": return getPurchaseHistory(String(input.query));
       case "get_purchase_orders":  return getPurchaseOrders(input as Parameters<typeof getPurchaseOrders>[0]);
+      case "add_calendar_event":   return handleAddCalendarEvent(input);
       default: return `Неизвестный инструмент: ${name}`;
     }
   } catch (err) {
@@ -394,4 +413,19 @@ async function handleGetChronicle(input: Record<string, unknown>): Promise<strin
   });
 
   return `Летопись (${entries.length} записей):\n\n${lines.join("\n\n")}`;
+}
+
+async function handleAddCalendarEvent(input: Record<string, unknown>): Promise<string> {
+  const result = await addCalendarEvent({
+    title:            String(input.title),
+    date:             String(input.date),
+    time:             input.time ? String(input.time) : undefined,
+    duration_minutes: input.duration_minutes ? Number(input.duration_minutes) : 60,
+    attendees:        (input.attendees as ("pavel" | "irina")[]) ?? [],
+    description:      input.description ? String(input.description) : undefined,
+    location:         input.location ? String(input.location) : undefined,
+  });
+  const { link } = JSON.parse(result);
+  const who = ((input.attendees as string[]) ?? []).join(", ");
+  return `Событие добавлено в календарь${who ? ` (приглашения: ${who})` : ""}. ${link}`;
 }
