@@ -202,23 +202,23 @@ export const tools: Anthropic.Tool[] = [
 export async function runTool(name: string, input: Record<string, unknown>): Promise<string> {
   try {
     switch (name) {
-      case "add_task":         return handleAddTask(input);
-      case "list_tasks":       return handleListTasks(input);
-      case "update_task":      return handleUpdateTask(input);
-      case "complete_task":    return handleCompleteTask(input);
-      case "get_overdue_tasks": return handleGetOverdueTasks();
-      case "log_morning_plan": return handleLogMorningPlan(input);
-      case "log_evening_review": return handleLogEveningReview(input);
-      case "get_chronicle":    return handleGetChronicle(input);
+      case "add_task":         return await handleAddTask(input);
+      case "list_tasks":       return await handleListTasks(input);
+      case "update_task":      return await handleUpdateTask(input);
+      case "complete_task":    return await handleCompleteTask(input);
+      case "get_overdue_tasks": return await handleGetOverdueTasks();
+      case "log_morning_plan": return await handleLogMorningPlan(input);
+      case "log_evening_review": return await handleLogEveningReview(input);
+      case "get_chronicle":    return await handleGetChronicle(input);
       // Инструменты магазина — прямой вызов ops-данных
-      case "get_sales":            return getSales(String(input.date_from), String(input.date_to));
-      case "get_inventory":        return getInventory(input.filter as string | undefined);
-      case "get_low_stock":        return getLowStock((input.threshold as number) ?? 5);
-      case "get_inventory_summary": return getInventorySummary();
-      case "get_supplier":         return getSupplier(String(input.query));
-      case "get_purchase_history": return getPurchaseHistory(String(input.query));
-      case "get_purchase_orders":  return getPurchaseOrders(input as Parameters<typeof getPurchaseOrders>[0]);
-      case "add_calendar_event":   return handleAddCalendarEvent(input);
+      case "get_sales":            return await getSales(String(input.date_from), String(input.date_to));
+      case "get_inventory":        return await getInventory(input.filter as string | undefined);
+      case "get_low_stock":        return await getLowStock((input.threshold as number) ?? 5);
+      case "get_inventory_summary": return await getInventorySummary();
+      case "get_supplier":         return await getSupplier(String(input.query));
+      case "get_purchase_history": return await getPurchaseHistory(String(input.query));
+      case "get_purchase_orders":  return await getPurchaseOrders(input as Parameters<typeof getPurchaseOrders>[0]);
+      case "add_calendar_event":   return await handleAddCalendarEvent(input);
       default: return `Неизвестный инструмент: ${name}`;
     }
   } catch (err) {

@@ -136,8 +136,12 @@ export async function askBarrymore(
       const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
         toolUseBlocks.map(async (block) => {
           if (block.type !== "tool_use") throw new Error("unexpected block type");
-          const result = await runTool(block.name, block.input as Record<string, unknown>);
-          return { type: "tool_result" as const, tool_use_id: block.id, content: result };
+          try {
+            const result = await runTool(block.name, block.input as Record<string, unknown>);
+            return { type: "tool_result" as const, tool_use_id: block.id, content: result };
+          } catch (err) {
+            return { type: "tool_result" as const, tool_use_id: block.id, content: `Ошибка инструмента: ${String(err)}` };
+          }
         })
       );
 

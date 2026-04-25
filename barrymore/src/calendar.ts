@@ -24,6 +24,9 @@ export interface CalendarEventParams {
 }
 
 export async function addCalendarEvent(params: CalendarEventParams): Promise<string> {
+  if (!process.env.GOOGLE_CALENDAR_REFRESH_TOKEN) {
+    return JSON.stringify({ ok: false, error: "GOOGLE_CALENDAR_REFRESH_TOKEN не задан" });
+  }
   const { title, date, time, duration_minutes = 60, attendees = [], description, location } = params;
 
   const attendeeList: { email: string }[] = [];
