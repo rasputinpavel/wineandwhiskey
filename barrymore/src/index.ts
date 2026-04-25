@@ -5,6 +5,7 @@ import { Bot } from "grammy";
 import { askBarrymore, generateScheduledMessage, resetSession } from "./agent.js";
 import { transcribeVoice } from "./voice.js";
 import { initSchedules } from "./schedules.js";
+import { drainCompleted, createOrUpdatePin } from "./pinned.js";
 import * as db from "./db.js";
 
 const bot = new Bot(process.env.BARRYMORE_BOT_TOKEN!);
@@ -74,6 +75,20 @@ async function sendReply(
     } catch {
       await bot.api.sendMessage(chatId, plain);
     }
+  }
+}
+
+// После каждого ответа: обновить закреп + поздравить если задача выполнена
+async function handleCompletions(chatId: number): Promise<void> {
+  const completed = drainCompleted();
+  if (completed.length === 0) return;
+  const groupId = ALLOWED_CHAT ? Number(ALLOWED_CHAT) : chatId;
+  try { await createOrUpdatePin(bot, String(groupId)); } catch {}
+  for (const task of completed) {
+    const congrats = `✅ Выполнено: <b>${task.title}</b>`;
+    try {
+      await bot.api.sendMessage(groupId, congrats, { parse_mode: "HTML" });
+    } catch {}
   }
 }
 
@@ -195,6 +210,7 @@ bot.on("message:voice", async (ctx) => {
   try {
     const answer = await askBarrymore(ctx.chat.id, senderName, `[голосовое] ${transcript}`);
     await sendReply(ctx.chat.id, waitMsg.message_id, answer);
+    await handleCompletions(ctx.chat.id);
   } catch (e) {
     console.error(e);
     await sendReply(ctx.chat.id, waitMsg.message_id, "Что-то пошло не так. Попробуйте ещё раз, сэр.");
@@ -223,6 +239,7 @@ bot.on("message:text", async (ctx) => {
   try {
     const answer = await askBarrymore(ctx.chat.id, senderName, text);
     await sendReply(ctx.chat.id, waitMsg.message_id, answer);
+    await handleCompletions(ctx.chat.id);
   } catch (e) {
     console.error(e);
     await sendReply(ctx.chat.id, waitMsg.message_id, "Что-то пошло не так. Мои извинения, сэр.");

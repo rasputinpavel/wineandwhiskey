@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { Bot } from "grammy";
 import * as db from "./db.js";
 import { generateScheduledMessage } from "./agent.js";
+import { createOrUpdatePin } from "./pinned.js";
 
 async function sendSafe(bot: Bot, chatId: string, text: string): Promise<void> {
   try {
@@ -12,7 +13,7 @@ async function sendSafe(bot: Bot, chatId: string, text: string): Promise<void> {
   }
 }
 
-// 09:00 — утренний брифинг: задачи на день + просроченные + запрос плана
+// 10:00 — утренний брифинг: задачи на день + просроченные + запрос плана
 async function morningBriefing(bot: Bot, chatId: string): Promise<void> {
   const today   = db.bangkokDate();
   const todayTasks   = await db.getTodayTasks();
@@ -37,10 +38,13 @@ ${overdueLines}
 Формат: поприветствуйте утром, кратко доложите обстановку, задайте вопрос о планах на день. Telegram HTML. Длина — не более 250 слов. Не перечисляйте задачи дважды — только ключевые.`;
 
   const message = await generateScheduledMessage(prompt);
-  if (message) await sendSafe(bot, chatId, message);
+  if (message) {
+    await sendSafe(bot, chatId, message);
+    await createOrUpdatePin(bot, chatId);
+  }
 }
 
-// 13:00 — тихая проверка дедлайнов (без Claude, простое форматирование)
+// 14:00 — тихая проверка дедлайнов (без Claude, простое форматирование)
 async function noonDeadlineCheck(bot: Bot, chatId: string): Promise<void> {
   const todayTasks = await db.getTodayTasks();
   if (todayTasks.length === 0) return; // не беспокоим если нет дедлайнов
@@ -81,13 +85,13 @@ export function initSchedules(bot: Bot): void {
     return;
   }
 
-  cron.schedule("0 9 * * *", async () => {
+  cron.schedule("0 10 * * *", async () => {
     console.log("Баррим: утренний брифинг...");
     try { await morningBriefing(bot, chatId); }
     catch (e) { console.error("Ошибка утреннего брифинга:", e); }
   }, { timezone: "Asia/Bangkok" });
 
-  cron.schedule("0 13 * * *", async () => {
+  cron.schedule("0 14 * * *", async () => {
     console.log("Бэрримор: полуденная проверка дедлайнов...");
     try { await noonDeadlineCheck(bot, chatId); }
     catch (e) { console.error("Ошибка полуденной проверки:", e); }

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import * as db from "./db.js";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseHistory, getPurchaseOrders } from "./store.js";
+import { pushCompleted } from "./pinned.js";
 
 export const tools: Anthropic.Tool[] = [
   {
@@ -308,7 +309,14 @@ async function handleCompleteTask(input: Record<string, unknown>): Promise<strin
     task_id: task.id,
   });
 
-  return `Задача #${task.id.slice(0, 8)} «${task.title}» отмечена выполненной и внесена в летопись.`;
+  pushCompleted({
+    id:          task.id,
+    title:       task.title,
+    assignee:    task.assignee,
+    completedBy: String(input.completed_by ?? ""),
+  });
+
+  return `Задача «${task.title}» отмечена выполненной и внесена в летопись.`;
 }
 
 async function handleGetOverdueTasks(): Promise<string> {
