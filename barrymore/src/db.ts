@@ -175,16 +175,15 @@ export async function getRegularTasks(): Promise<Task[]> {
   return data ?? [];
 }
 
-export async function getCompletedTodayRegularTasks(): Promise<Task[]> {
+export async function getCompletedToday(): Promise<Task[]> {
   const today = bangkokDate();
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
     .eq("status", "done")
-    .contains("tags", ["regular"])
     .gte("completed_at", `${today}T00:00:00`)
     .lt("completed_at",  `${today}T23:59:59`);
-  if (error) throw new Error(`getCompletedTodayRegularTasks: ${error.message}`);
+  if (error) throw new Error(`getCompletedToday: ${error.message}`);
   return data ?? [];
 }
 
