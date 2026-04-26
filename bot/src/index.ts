@@ -340,7 +340,6 @@ function isGroupChat(type: string): boolean {
 
 bot.on("message:photo", async (ctx) => {
   const chatId  = ctx.chat.id;
-  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(ctx.message.caption ?? "", ctx.me.username ?? "")) return;
   const caption = ctx.message.caption?.trim();
   const photos  = ctx.message.photo;
   const fileId  = photos[photos.length - 1].file_id; // largest size
