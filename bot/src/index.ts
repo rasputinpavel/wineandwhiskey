@@ -326,8 +326,21 @@ bot.command("sales", async (ctx) => {
   }
 });
 
+const CHIP_TRIGGERS = ["чип", "chip", "dale", "дейл"];
+
+function isAddressedToChipDale(text: string, botUsername: string): boolean {
+  const lower = text.toLowerCase();
+  if (lower.includes(`@${botUsername.toLowerCase()}`)) return true;
+  return CHIP_TRIGGERS.some((t) => lower.startsWith(t));
+}
+
+function isGroupChat(type: string): boolean {
+  return type === "group" || type === "supergroup";
+}
+
 bot.on("message:photo", async (ctx) => {
   const chatId  = ctx.chat.id;
+  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(ctx.message.caption ?? "", ctx.me.username ?? "")) return;
   const caption = ctx.message.caption?.trim();
   const photos  = ctx.message.photo;
   const fileId  = photos[photos.length - 1].file_id; // largest size
@@ -359,6 +372,7 @@ bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text   = ctx.message.text;
   if (text.startsWith("/")) return;
+  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(text, ctx.me.username ?? "")) return;
 
   // If there's a pending photo, treat this text as its caption
   const pendingPhoto = pendingPhotos.get(chatId);

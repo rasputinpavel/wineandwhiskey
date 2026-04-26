@@ -228,10 +228,7 @@ bot.on("message:text", async (ctx) => {
   const me      = ctx.me.username ?? "barrymorebot";
   const private_ = isPrivate(ctx.chat.type);
 
-  // В группе — только если обратились к Бэрримору; в личке — всегда
-  if (!private_ && !isAddressedToBarrymore(rawText, me)) return;
-
-  const text = private_ ? rawText : stripAddressTrigger(rawText, me);
+  const text = stripAddressTrigger(rawText, me);
   const username   = ctx.from?.username;
   const senderName = identifyUser(username);
 
