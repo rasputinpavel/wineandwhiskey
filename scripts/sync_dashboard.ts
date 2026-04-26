@@ -819,7 +819,7 @@ async function writeDashboard(
           range: { sheetId: dashSheetId, startRowIndex: TABLE_START + 1, endRowIndex: TABLE_START + nRows, startColumnIndex: 1, endColumnIndex: COL_COUNT },
           cell: { userEnteredFormat: {
             horizontalAlignment: "RIGHT",
-            numberFormat: { type: "NUMBER", pattern: "# ##0" },
+            numberFormat: { type: "NUMBER", pattern: "#,##0" },
             textFormat: { fontSize: 10, italic: false },
             verticalAlignment: "MIDDLE",
           }},
