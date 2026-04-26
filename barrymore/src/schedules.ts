@@ -72,27 +72,32 @@ async function noonDeadlineCheck(bot: Bot, chatId: string): Promise<void> {
 
 // 20:00 — вечерний итог: что выполнено, что переносить
 async function eveningCheckIn(bot: Bot, chatId: string): Promise<void> {
-  const today        = db.bangkokDate();
-  const activeTasks  = await db.getActiveTasks();
-  const todayTasks   = await db.getTodayTasks();
-  const regularTasks = await db.getRegularTasks();
-  const dailyLog     = await db.getDailyLog(today);
+  const today                = db.bangkokDate();
+  const activeTasks          = await db.getActiveTasks();
+  const todayTasks           = await db.getTodayTasks();
+  const regularRemaining     = await db.getRegularTasks();
+  const regularDoneToday     = await db.getCompletedTodayRegularTasks();
+  const dailyLog             = await db.getDailyLog(today);
 
-  const planNote      = dailyLog?.morning_plan ? `\nУтренний план: ${dailyLog.morning_plan.slice(0, 120)}` : "";
-  const todayLines    = todayTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет";
-  const regularLines  = regularTasks.map((t) => `  🔄 ${t.title}`).join("\n") || "  — нет";
-  const pendingCount  = activeTasks.length;
+  const planNote             = dailyLog?.morning_plan ? `\nУтренний план: ${dailyLog.morning_plan.slice(0, 120)}` : "";
+  const todayLines           = todayTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет";
+  const regularRemainingLines = regularRemaining.map((t) => `  🔄 ${t.title}`).join("\n") || "  — нет";
+  const regularDoneLines     = regularDoneToday.map((t) => `  ✅ ${t.title}`).join("\n") || "  — нет";
+  const pendingCount         = activeTasks.length;
 
   const prompt = `Составьте вечернее сообщение в стиле Бэрримора для подведения итогов дня ${today}.
 
 Данные:
 - Задач с дедлайном сегодня (не завершены): ${todayTasks.length}
 ${todayLines}
-- Регулярные задачи (выполнены сегодня?): ${regularTasks.length}
-${regularLines}
+- Регулярные задачи выполнены сегодня: ${regularDoneToday.length}
+${regularDoneLines}
+- Регулярные задачи НЕ выполнены сегодня (ещё в работе): ${regularRemaining.length}
+${regularRemainingLines}
 - Всего в реестре активных задач: ${pendingCount}${planNote}
 
-Формат: поздоровайтесь вечером, обозначьте незавершённое включая регулярные задачи, попросите сообщить что удалось сделать и что перенести. Telegram HTML. До 200 слов.`;
+Важно: не говорите что регулярные задачи не выполнялись, если они уже отмечены выполненными выше.
+Формат: поздоровайтесь вечером, обозначьте незавершённое, попросите сообщить что удалось сделать и что перенести. Telegram HTML. До 200 слов.`;
 
   const message = await generateScheduledMessage(prompt);
   if (message) await sendSafe(bot, chatId, message);
