@@ -166,6 +166,12 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
 
   await page.locator('input[type="password"]').first().fill(LOYVERSE_PASSWORD);
   await delay(300);
+  // Dismiss CybotCookiebot dialog if it's blocking the submit button
+  try {
+    await page.locator('#CybotCookiebotDialogBodyButtonAccept, #CybotCookiebotDialogBodyLevelButtonAccept, button[id*="CybotCookiebot"][id*="Accept"]').first().click({ timeout: 3000 });
+    await delay(500);
+  } catch { /* dialog not present */ }
+
   await page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first().click();
 
   // Wait for navigation (hash routing may not trigger waitForURL)
@@ -181,83 +187,7 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
 
 // ─── Phase 2: ID Discovery ────────────────────────────────────────────────────
 
-async function discoverIds(page: Page): Promise<Map<string, number>> {
-  const idMap = new Map<string, number>(); // "PO2890" → 1594655
-
-  // Intercept XHR responses — Loyverse SPA makes internal API calls
-  page.on("response", async response => {
-    if (!response.url().includes("loyverse.com")) return;
-    if (response.status() !== 200) return;
-    const ct = response.headers()["content-type"] ?? "";
-    if (!ct.includes("json")) return;
-    try {
-      const body = await response.json();
-      if (DEBUG) console.log(`  [xhr] ${response.url().slice(0, 80)} → keys: ${Object.keys(body).join(", ")}`);
-      const orders: any[] = body.purchase_orders ?? body.orders ?? body.data ?? body.items ?? [];
-      if (!Array.isArray(orders)) return;
-      for (const o of orders) {
-        if (DEBUG) console.log(`  [xhr-item] keys: ${Object.keys(o).join(", ")}, sample: ${JSON.stringify(o).slice(0, 100)}`);
-        const numId = o.id ?? o.loyverse_id ?? o.order_id;
-        const poNum = o.order ?? o.order_number ?? o.po_number ?? o.number ?? o.name;
-        if (numId && poNum && /^PO\d+$/i.test(String(poNum))) {
-          idMap.set(String(poNum).toUpperCase(), Number(numId));
-        }
-      }
-    } catch { /* non-JSON, skip */ }
-  });
-
-  // Navigate to dashboard, then click Items (goods) → Purchase Orders
-  await page.goto("https://r.loyverse.com/dashboard/", { waitUntil: "networkidle" });
-  await delay(3000);
-
-  if (DEBUG) await page.screenshot({ path: "debug-sidebar.png" });
-
-  // Loyverse Angular sidebar: menu items are div.nav-parent with class = section name
-  // "goods" = Items section (contains Purchase Orders per user guidance)
-  // Try "goods" first, fallback to "inventory"
-  const menuItem = page.locator(".nav-parent.inventory, #lv_menu_item_inventory_small").first();
-  await menuItem.waitFor({ timeout: 10_000 });
-  await menuItem.click();
-  await delay(2000);
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
-  if (DEBUG) await page.screenshot({ path: "debug-after-goods.png" });
-
-  // Click "Purchase orders" in the submenu (exact text from DOM)
-  const poSubMenu = page.locator('text="Purchase orders"').first();
-  await poSubMenu.waitFor({ timeout: 10_000 });
-  await poSubMenu.click();
-  await delay(3000);
-  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
-  if (DEBUG) await page.screenshot({ path: "debug-after-po-click.png" });
-
-  // Paginate through all pages — XHR interceptor captures IDs automatically
-  const LIMIT = 50;
-  let pageNum = 0;
-  let lastSize = -1;
-  while (true) {
-    await page.evaluate(({ p, l }) => {
-      window.location.hash = `/inventory/purchase?page=${p}&limit=${l}`;
-    }, { p: pageNum, l: LIMIT });
-    await delay(1500);
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-    await delay(500);
-
-    const currentSize = idMap.size;
-    process.stdout.write(`  Page ${pageNum}: ${currentSize} IDs total\n`);
-
-    // Stop when no new IDs were captured (end of list)
-    if (currentSize === lastSize) break;
-    // Safety: stop after 40 pages (2000 orders)
-    if (pageNum >= 40) break;
-
-    lastSize = currentSize;
-    pageNum++;
-  }
-
-  return idMap;
-}
-
-// ─── Phase 3: Scrape order detail ────────────────────────────────────────────
+// ─── Phase 2+3: Click-based scraping (replaces XHR id-discovery + DOM scraping) ─
 
 interface LineItem {
   product_name: string;
@@ -268,52 +198,159 @@ interface LineItem {
   line_total: number | null;
 }
 
-async function scrapeDetail(page: Page, loyverseId: number, poNumber: string): Promise<LineItem[]> {
-  await page.goto(
-    `https://r.loyverse.com/dashboard/#/inventory/orderdetail?id=${loyverseId}`,
-    { waitUntil: "domcontentloaded" }
-  );
+// Parse items from getPurchaseOrderDetail XHR response.
+// Loyverse stores qty in milliunits (×1000) and prices in centimes (×100).
+function parseXHRItems(rawItems: any[]): LineItem[] {
+  return (rawItems ?? [])
+    .filter(i => i.name?.trim() && !i.deleted)
+    .map(i => ({
+      product_name: i.name.trim(),
+      sku:          i.article?.trim() || null,
+      qty_ordered:  i.quantity  != null ? Math.round(i.quantity)  / 1000 : null,
+      qty_received: i.received  != null ? Math.round(i.received)  / 1000 : null,
+      cost_price:   i.supplyCost != null ? Math.round(i.supplyCost) / 100 : null,
+      line_total:   i.amount    != null ? Math.round(i.amount)    / 100  : null,
+    }));
+}
 
-  // Wait for data rows (skip header row which has class checkbox-table-header-row)
-  try {
-    await page.waitForSelector("tr.checkbox-table-row", { timeout: 20_000 });
-  } catch {
-    if (DEBUG) await page.screenshot({ path: `debug-${poNumber}.png` });
-    throw new Error("Items table not found");
-  }
+// Navigate to the PO list via the sidebar.
+async function navigateToPOList(page: Page) {
+  await page.goto("https://r.loyverse.com/dashboard/", { waitUntil: "networkidle" });
+  await delay(3000);
+
+  if (DEBUG) await page.screenshot({ path: "debug-sidebar.png" });
+
+  const menuItem = page.locator(".nav-parent.inventory, #lv_menu_item_inventory_small").first();
+  await menuItem.waitFor({ timeout: 10_000 });
+  await menuItem.click();
+  await delay(2000);
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
 
-  // Loyverse detail table: Item | Quantity | Purchase cost | Amount
-  const rows = await page.locator("tr.checkbox-table-row").all();
-  if (!rows.length) throw new Error("No item rows found");
+  const poSubMenu = page.locator('text="Purchase orders"').first();
+  await poSubMenu.waitFor({ timeout: 10_000 });
+  await poSubMenu.click();
+  await delay(3000);
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
 
-  const items: LineItem[] = [];
-  for (const row of rows) {
-    // Product name is in .purchase-order-item-name span
-    const name = await row.locator(".purchase-order-item-name span").first()
-      .innerText().catch(() => "");
-    if (!name.trim()) continue;
+  if (DEBUG) await page.screenshot({ path: "debug-po-list.png" });
+}
 
-    // SKU is in .purchase-order-item-sku (text like "SKU 10510")
-    const skuRaw = await row.locator(".purchase-order-item-sku").first()
-      .innerText().catch(() => "");
-    const sku = skuRaw.replace(/^SKU\s*/i, "").trim() || null;
+// Single-pass click-based scraper.
+// - Paginates through the PO list.
+// - For each row matching a target PO: clicks the row, intercepts getPurchaseOrderDetail
+//   XHR response (which contains correct loyverse_id + items), upserts to Supabase.
+// - Uses page.goBack() to return to the list after each order.
+//
+// Why click-based instead of XHR interception on the list view:
+//   The Loyverse list API returns a different numeric id than the orderdetail URL
+//   parameter, so XHR-captured IDs were pointing to the wrong detail pages.
+//   Clicking a row and reading the resulting URL id is always correct.
+async function scrapeViaListClick(
+  page: Page,
+  targetPOs: Set<string>,
+): Promise<{ success: number; failed: number }> {
+  let success = 0, failed = 0;
 
-    // Numeric cells: td[1]=qty, td[2]=cost, td[3]=amount
-    const cells = await row.locator("td").all();
-    const cellTexts = await Promise.all(cells.map(c => c.innerText().catch(() => "")));
+  await navigateToPOList(page);
 
-    items.push({
-      product_name: name.trim(),
-      sku,
-      qty_ordered:  parseNum(cellTexts[1] ?? ""),
-      qty_received: null, // not shown on detail page
-      cost_price:   parseNum(cellTexts[2] ?? ""),
-      line_total:   parseNum(cellTexts[3] ?? ""),
-    });
+  const LIMIT = 50;
+  let pageNum = 0;
+
+  while (targetPOs.size > 0 && pageNum <= 40) {
+    await page.evaluate(({ p, l }) => {
+      window.location.hash = `/inventory/purchase?page=${p}&limit=${l}`;
+    }, { p: pageNum, l: LIMIT });
+    await delay(2000);
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await delay(800);
+
+    const rows = page.locator("tr.tableBodyBody.list");
+    const rowCount = await rows.count();
+    if (rowCount === 0) break;
+
+    // Read all PO numbers on this page
+    const pagePoNums: string[] = [];
+    for (let i = 0; i < rowCount; i++) {
+      const text = await rows.nth(i).locator("td.item").first().innerText().catch(() => "");
+      const m = text.trim().match(/\b(PO\d+)\b/i);
+      if (m) pagePoNums.push(m[1].toUpperCase());
+    }
+
+    const onThisPage = pagePoNums.filter(p => targetPOs.has(p));
+    process.stdout.write(`  Page ${pageNum}: ${rowCount} rows, ${onThisPage.length} to scrape\n`);
+
+    if (onThisPage.length === 0) {
+      if (rowCount < LIMIT) break;
+      pageNum++;
+      continue;
+    }
+
+    for (const poNum of onThisPage) {
+      // Ensure we're on the right list page
+      if (!page.url().includes(`page=${pageNum}`)) {
+        await page.evaluate(({ p, l }) => {
+          window.location.hash = `/inventory/purchase?page=${p}&limit=${l}`;
+        }, { p: pageNum, l: LIMIT });
+        await delay(1500);
+        await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+        await delay(500);
+      }
+
+      const row = page.locator("tr.tableBodyBody.list").filter({ hasText: poNum }).first();
+      if (!(await row.count())) {
+        console.warn(`  ⚠ Row for ${poNum} not found on page ${pageNum}`);
+        targetPOs.delete(poNum);
+        failed++;
+        continue;
+      }
+
+      // Arm XHR interceptor before clicking
+      const detailPromise = page.waitForResponse(
+        r => r.url().includes("getPurchaseOrderDetail"),
+        { timeout: 25_000 }
+      );
+
+      await row.click();
+
+      try {
+        const detailResp = await detailPromise;
+        const body = await detailResp.json();
+
+        // loyverse_id: prefer URL param, fallback to orderData.id (they match)
+        const urlNow = page.url();
+        const idMatch = urlNow.match(/[?&]id=(\d+)/);
+        const loyverseId: number = idMatch ? parseInt(idMatch[1]) : (body.orderData?.id ?? 0);
+
+        const items = parseXHRItems(body.items ?? []);
+        await upsertOrder(poNum, loyverseId, items);
+        console.log(`  ✓ ${poNum} — ${items.length} items`);
+        targetPOs.delete(poNum);
+        success++;
+      } catch (err) {
+        console.error(`  ✗ ${poNum}: ${err}`);
+        await supabase.from("purchase_orders")
+          .update({ scrape_error: String(err) })
+          .eq("po_number", poNum);
+        targetPOs.delete(poNum);
+        failed++;
+      }
+
+      // Return to list
+      await page.goBack();
+      await delay(1000);
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+      await delay(500);
+    }
+
+    if (rowCount < LIMIT) break;
+    pageNum++;
   }
 
-  return items;
+  if (targetPOs.size > 0) {
+    console.warn(`  ⚠ ${targetPOs.size} POs not found in list: ${[...targetPOs].slice(0, 10).join(", ")}`);
+  }
+
+  return { success, failed };
 }
 
 // ─── Phase 4: Supabase upsert ─────────────────────────────────────────────────
@@ -359,28 +396,27 @@ async function main() {
     .order("order_date", { ascending: false });
   if (listErr) throw new Error(`Fetch POs: ${listErr.message}`);
 
-  // Find which POs already have items
+  // Find which POs need scraping
   const { data: poWithItems } = await supabase
     .from("purchase_order_items")
     .select("po_number");
   const hasItems = new Set((poWithItems ?? []).map((r: any) => r.po_number as string));
 
-  let targetPOs = allPOs ?? [];
-  if (SINGLE_PO) targetPOs = targetPOs.filter(po => po.po_number === SINGLE_PO);
+  let allPOList = allPOs ?? [];
+  if (SINGLE_PO) allPOList = allPOList.filter(po => po.po_number === SINGLE_PO);
 
-  const needsId = targetPOs.filter(po => !po.loyverse_id);
-  const needsScrape: Array<{ po_number: string; loyverse_id: number }> = ALL_MODE
-    ? targetPOs.filter(po => po.loyverse_id).map(po => ({ po_number: po.po_number, loyverse_id: po.loyverse_id! }))
-    : targetPOs
-        .filter(po => po.loyverse_id && (!hasItems.has(po.po_number) || po.scrape_error))
-        .map(po => ({ po_number: po.po_number, loyverse_id: po.loyverse_id! }));
+  const targetSet: Set<string> = ALL_MODE
+    ? new Set(allPOList.map(po => po.po_number))
+    : new Set(allPOList
+        .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
+        .map(po => po.po_number));
 
-  if (needsId.length === 0 && needsScrape.length === 0) {
+  if (targetSet.size === 0) {
     console.log("Nothing to do — all orders are up to date.\n");
     return;
   }
 
-  console.log(`[1/4] Starting browser (headless: ${HEADLESS})...`);
+  console.log(`[2/3] Starting browser (headless: ${HEADLESS})...`);
   const browser = await chromium.launch({ headless: HEADLESS });
   const context = fs.existsSync(AUTH_STATE_PATH)
     ? await browser.newContext({ storageState: AUTH_STATE_PATH })
@@ -388,49 +424,11 @@ async function main() {
   const page = await context.newPage();
 
   try {
-    console.log("[2/4] Authenticating...");
+    console.log("[2/3] Authenticating...");
     await ensureLoggedIn(context, page);
 
-    // ID Discovery
-    if (needsId.length > 0) {
-      console.log(`\n[2.5/4] Discovering IDs for ${needsId.length} orders without loyverse_id...`);
-      const idMap = await discoverIds(page);
-      console.log(`  Found ${idMap.size} IDs total.`);
-
-      // Upsert discovered IDs and queue for scraping
-      for (const po of needsId) {
-        const id = idMap.get(po.po_number.toUpperCase());
-        if (!id) { console.log(`  ⚠ No ID found for ${po.po_number}`); continue; }
-        await supabase.from("purchase_orders")
-          .update({ loyverse_id: id })
-          .eq("po_number", po.po_number)
-          .is("loyverse_id", null);
-        if (!hasItems.has(po.po_number)) {
-          needsScrape.push({ po_number: po.po_number, loyverse_id: id });
-        }
-      }
-    }
-
-    // Detail scraping
-    const toScrape = [...new Map(needsScrape.map(po => [po.po_number, po])).values()];
-    console.log(`\n[3/4] Scraping ${toScrape.length} order detail pages...`);
-
-    let success = 0, failed = 0;
-    for (const po of toScrape) {
-      try {
-        const items = await scrapeDetail(page, po.loyverse_id, po.po_number);
-        await upsertOrder(po.po_number, po.loyverse_id, items);
-        console.log(`  ✓ ${po.po_number} — ${items.length} items`);
-        success++;
-        await delay(1500);
-      } catch (err) {
-        console.error(`  ✗ ${po.po_number}: ${err}`);
-        await supabase.from("purchase_orders")
-          .update({ scrape_error: String(err) })
-          .eq("po_number", po.po_number);
-        failed++;
-      }
-    }
+    console.log(`\n[3/3] Scraping ${targetSet.size} orders via list clicks...`);
+    const { success, failed } = await scrapeViaListClick(page, targetSet);
 
     console.log(`\n✓ Done. ${success} succeeded, ${failed} failed.\n`);
 

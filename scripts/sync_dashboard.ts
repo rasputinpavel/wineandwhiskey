@@ -77,7 +77,10 @@ async function ensureTab(title: string): Promise<number> {
 
 async function clearTab(sheetId: number) {
   await sheets("POST", ":batchUpdate", {
-    requests: [{ updateCells: { range: { sheetId }, fields: "userEnteredValue,userEnteredFormat,dataValidation" } }],
+    requests: [
+      { unmergeCells: { range: { sheetId } } },
+      { updateCells: { range: { sheetId }, fields: "userEnteredValue,userEnteredFormat,dataValidation" } },
+    ],
   });
 }
 
@@ -98,6 +101,10 @@ async function deleteCharts(sheetId: number) {
 }
 
 // ─── Loyverse ──────────────────────────────────────────────────────────────
+
+function isBankTransfer(receipt: any): boolean {
+  return (receipt.payments ?? []).some((p: any) => /bank.?transfer/i.test(p.name ?? ""));
+}
 
 async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
   const out: T[] = [];
@@ -121,6 +128,7 @@ interface DayData { revenue: number; gp: number; checks: number; }
 
 interface PeriodStats {
   revenue: number; gp: number; checks: number; uniqueCustomers: number;
+  retailRevenue: number; b2bRevenue: number;
 }
 
 async function fetchPeriod(from: string, to: string): Promise<PeriodStats> {
@@ -128,20 +136,23 @@ async function fetchPeriod(from: string, to: string): Promise<PeriodStats> {
     `/receipts?receipt_type=SALE&created_at_min=${new Date(from).toISOString()}&created_at_max=${new Date(to + "T23:59:59").toISOString()}`,
     "receipts"
   );
-  let revenue = 0, gp = 0, checks = 0;
+  let revenue = 0, gp = 0, checks = 0, retailRevenue = 0, b2bRevenue = 0;
   const customers = new Set<string>();
   for (const r of receipts) {
     let cost = 0;
     for (const li of r.line_items ?? []) cost += li.cost_total ?? 0;
-    revenue += r.total_money ?? 0;
-    gp += (r.total_money ?? 0) - cost;
+    const rev = r.total_money ?? 0;
+    revenue += rev;
+    gp += rev - cost;
     checks++;
     if (r.customer_id) customers.add(r.customer_id);
+    if (isBankTransfer(r)) b2bRevenue += rev;
+    else retailRevenue += rev;
   }
-  return { revenue, gp, checks, uniqueCustomers: customers.size };
+  return { revenue, gp, checks, uniqueCustomers: customers.size, retailRevenue, b2bRevenue };
 }
 
-async function fetchMonth(ym: string): Promise<{ byDay: Map<number,DayData>; total: number; totalGP: number; checks: number; uniqueCustomers: number }> {
+async function fetchMonth(ym: string): Promise<{ byDay: Map<number,DayData>; total: number; totalGP: number; checks: number; uniqueCustomers: number; retailTotal: number; b2bTotal: number }> {
   const { from, to } = monthBounds(ym);
   const receipts: any[] = await loyverseFetch(
     `/receipts?receipt_type=SALE&created_at_min=${new Date(from).toISOString()}&created_at_max=${new Date(to+"T23:59:59").toISOString()}`,
@@ -149,7 +160,7 @@ async function fetchMonth(ym: string): Promise<{ byDay: Map<number,DayData>; tot
   );
   const byDay = new Map<number, DayData>();
   const customers = new Set<string>();
-  let total = 0, totalGP = 0, checks = 0;
+  let total = 0, totalGP = 0, checks = 0, retailTotal = 0, b2bTotal = 0;
   for (const r of receipts) {
     const d = new Date(new Date(r.receipt_date).getTime() + 7 * 3600_000).getUTCDate();
     let cost = 0;
@@ -160,8 +171,10 @@ async function fetchMonth(ym: string): Promise<{ byDay: Map<number,DayData>; tot
     byDay.set(d, { revenue: cur.revenue + rev, gp: cur.gp + gp, checks: cur.checks + 1 });
     total += rev; totalGP += gp; checks++;
     if (r.customer_id) customers.add(r.customer_id);
+    if (isBankTransfer(r)) b2bTotal += rev;
+    else retailTotal += rev;
   }
-  return { byDay, total, totalGP, checks, uniqueCustomers: customers.size };
+  return { byDay, total, totalGP, checks, uniqueCustomers: customers.size, retailTotal, b2bTotal };
 }
 
 // ─── Bangkok week bounds ───────────────────────────────────────────────────
@@ -193,31 +206,44 @@ async function fetchSummaryTable(
   const [cy] = currentYM.split("-").map(Number);
 
   // YTD: sum of all 2026 months in summary
-  const ytdStats: PeriodStats = { revenue: 0, gp: 0, checks: 0, uniqueCustomers: 0 };
+  const ytdStats: PeriodStats = { revenue: 0, gp: 0, checks: 0, uniqueCustomers: 0, retailRevenue: 0, b2bRevenue: 0 };
   for (const { ym, cur } of summary) {
     if (ym.startsWith(String(cy))) {
       ytdStats.revenue += cur.total;
       ytdStats.gp += cur.totalGP;
       ytdStats.checks += cur.checks;
       ytdStats.uniqueCustomers += cur.uniqueCustomers;
+      ytdStats.retailRevenue += cur.retailTotal;
+      ytdStats.b2bRevenue += cur.b2bTotal;
     }
   }
 
-  // Last year: sum of all 2025 months in summary
-  const lyStats: PeriodStats = { revenue: 0, gp: 0, checks: 0, uniqueCustomers: 0 };
+  // Last year: reconstruct full prev-year, works for any summary length
+  const lyStats: PeriodStats = { revenue: 0, gp: 0, checks: 0, uniqueCustomers: 0, retailRevenue: 0, b2bRevenue: 0 };
+  const prevYr = cy - 1;
+  const summaryYMSet = new Set(summary.map(s => s.ym));
   for (const { ym, cur, last } of summary) {
-    if (ym.startsWith(String(cy))) {
-      // last = same month last year (e.g. Jan-Apr 2025)
-      lyStats.revenue += last.total;
-      lyStats.gp += last.totalGP;
-      lyStats.checks += last.checks;
-      lyStats.uniqueCustomers += last.uniqueCustomers;
-    } else {
-      // cur = a 2025 month (May-Dec 2025)
-      lyStats.revenue += cur.total;
-      lyStats.gp += cur.totalGP;
-      lyStats.checks += cur.checks;
+    const entryYear = +ym.slice(0, 4);
+    const entryMo   = +ym.slice(5, 7);
+    if (entryYear === prevYr) {
+      // Direct prev-year month in summary (present when n > 12)
+      lyStats.revenue         += cur.total;
+      lyStats.gp              += cur.totalGP;
+      lyStats.checks          += cur.checks;
       lyStats.uniqueCustomers += cur.uniqueCustomers;
+      lyStats.retailRevenue   += cur.retailTotal;
+      lyStats.b2bRevenue      += cur.b2bTotal;
+    } else if (entryYear === cy) {
+      // Current-year entry: only use its "last" if that prev-year month isn't already above
+      const lyYM = `${prevYr}-${String(entryMo).padStart(2, "0")}`;
+      if (!summaryYMSet.has(lyYM)) {
+        lyStats.revenue         += last.total;
+        lyStats.gp              += last.totalGP;
+        lyStats.checks          += last.checks;
+        lyStats.uniqueCustomers += last.uniqueCustomers;
+        lyStats.retailRevenue   += last.retailTotal;
+        lyStats.b2bRevenue      += last.b2bTotal;
+      }
     }
   }
 
@@ -240,10 +266,12 @@ async function fetchSummaryTable(
   const curMonthStats: PeriodStats = {
     revenue: curData.total, gp: curData.totalGP,
     checks: curData.checks, uniqueCustomers: curData.uniqueCustomers,
+    retailRevenue: curData.retailTotal, b2bRevenue: curData.b2bTotal,
   };
   const lastMonthStats: PeriodStats = {
     revenue: lastMonthData.total, gp: lastMonthData.totalGP,
     checks: lastMonthData.checks, uniqueCustomers: lastMonthData.uniqueCustomers,
+    retailRevenue: lastMonthData.retailTotal, b2bRevenue: lastMonthData.b2bTotal,
   };
 
   return [
@@ -280,13 +308,17 @@ interface Annuals {
 
 function computeAnnuals(summary: Awaited<ReturnType<typeof fetchSummary>>): Annuals {
   let ytd = 0, full2025 = 0;
+  const summaryYMSet = new Set(summary.map(s => s.ym));
   for (const { ym, cur, last } of summary) {
     const [y] = ym.split("-").map(Number);
+    const mo  = +ym.slice(5, 7);
     if (y === 2026) {
-      ytd      += cur.total;    // 2026 fact
-      full2025 += last.total;   // corresponding 2025 month
+      ytd += cur.total;
+      // Only use last.total if that 2025 month isn't already in summary directly
+      const lyYM = `2025-${String(mo).padStart(2, "0")}`;
+      if (!summaryYMSet.has(lyYM)) full2025 += last.total;
     } else {
-      full2025 += cur.total;    // 2025 months that appear as "cur"
+      full2025 += cur.total;
     }
   }
   const plan      = full2025 * 1.25;
@@ -350,7 +382,7 @@ async function writeDataSheet(
   // rows 0..dim  →  Sheet rows 1..dim+1  (0-indexed: 0..dim)
 
   // ── Section 2: Monthly summary (starts at row dim+2) ──
-  const monthlyHeader = ["Месяц", "Факт 2026 (тыс.)", "Факт 2025 (тыс.)", "Прирост +25% (тыс.)", "% плана", "Чеков", "GP%"];
+  const monthlyHeader = ["Месяц", "Факт 2026 (тыс.)", "Факт 2025 (тыс.)", "Прирост +25% (тыс.)", "% плана", "Чеков", "GP%", "Розница (тыс.)", "B2B (тыс.)"];
   const monthlyRows: any[][] = [monthlyHeader];
   for (const { ym, cur, last, plan, pct } of summary) {
     const gp = cur.total > 0 ? (cur.totalGP / cur.total) * 100 : 0;
@@ -362,6 +394,8 @@ async function writeDataSheet(
       +pct.toFixed(1),
       cur.checks,
       +gp.toFixed(1),
+      Math.round(cur.retailTotal / 1000),
+      Math.round(cur.b2bTotal / 1000),
     ]);
   }
 
@@ -415,7 +449,7 @@ async function writeDataSheet(
     // Daily header
     headerFmt(dataSheetId, 0, 1, 0, 4, dark, white),
     // Monthly header
-    headerFmt(dataSheetId, monthlyStartRow - 1, monthlyStartRow, 0, 7, dark, white),
+    headerFmt(dataSheetId, monthlyStartRow - 1, monthlyStartRow, 0, 9, dark, white),
     // Monthly numeric columns B/C/D — format as "# ##0" (thousands with space separator)
     {
       repeatCell: {
@@ -429,7 +463,7 @@ async function writeDataSheet(
     // Annual header
     headerFmt(dataSheetId, annualStartRow - 1, annualStartRow, 0, 5, dark, white),
     // Auto-resize
-    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 7 } } },
+    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 9 } } },
   ];
 
   await sheets("POST", ":batchUpdate", { requests: fmtRequests });
@@ -710,14 +744,16 @@ async function writeDashboard(
   // ── Summary table (rows 14+) ──
   if (ranges.tableRows && ranges.tableRows.length > 0) {
     const TABLE_START = 14; // row index
-    const COL_COUNT = 6; // Период + 5 числовых (без Клиентов)
-    const colHeaders = ["Период", "Выручка, ฿", "Чеков", "Gross Profit, ฿", "GP%", "Ср. чек, ฿"];
+    const COL_COUNT = 8; // Период + Розница + B2B + Итого + Чеков + GP + GP% + Ср.чек
+    const colHeaders = ["Период", "Розница, ฿", "B2B, ฿", "Итого, ฿", "Чеков", "Gross Profit, ฿", "GP%", "Ср. чек, ฿"];
     const tableValues: (string|number)[][] = [colHeaders];
     for (const { label, stats } of ranges.tableRows) {
       const gpPct = stats.revenue > 0 ? (stats.gp / stats.revenue * 100) : 0;
       const avgCheck = stats.checks > 0 ? stats.revenue / stats.checks : 0;
       tableValues.push([
         label,
+        Math.round(stats.retailRevenue),
+        Math.round(stats.b2bRevenue),
         Math.round(stats.revenue),
         stats.checks,
         Math.round(stats.gp),
@@ -960,6 +996,51 @@ async function writeDashboard(
     },
   ];
 
+  // ── Chart 3: Розница vs B2B stacked by month ──
+  const steelBlue = { red: 0.20, green: 0.47, blue: 0.71, alpha: 1 };
+  chartRequests.push({
+    addChart: {
+      chart: {
+        spec: {
+          title: "Розница vs B2B — помесячно",
+          titleTextFormat: { bold: true, fontSize: 13 },
+          basicChart: {
+            chartType: "COLUMN",
+            stackedType: "STACKED",
+            legendPosition: "RIGHT_LEGEND",
+            axis: [
+              { position: "BOTTOM_AXIS" },
+              { position: "LEFT_AXIS", title: "тыс. THB" },
+            ],
+            domains: [{ domain: { sourceRange: { sources: [dataRange(0, 1, monthlyRange.start, monthlyRange.end)] } } }],
+            series: [
+              {
+                series: { sourceRange: { sources: [dataRange(7, 8, monthlyRange.start, monthlyRange.end)] } },
+                targetAxis: "LEFT_AXIS",
+                color: steelBlue,
+                dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } },
+              },
+              {
+                series: { sourceRange: { sources: [dataRange(8, 9, monthlyRange.start, monthlyRange.end)] } },
+                targetAxis: "LEFT_AXIS",
+                color: orange,
+                dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
+              },
+            ],
+          },
+          backgroundColorStyle: { rgbColor: { red: 1, green: 1, blue: 1 } },
+        },
+        position: {
+          overlayPosition: {
+            anchorCell: { sheetId: dashSheetId, rowIndex: 83, columnIndex: 0 },
+            widthPixels: 1400,
+            heightPixels: 500,
+          },
+        },
+      },
+    },
+  });
+
   await sheets("POST", ":batchUpdate", { requests: chartRequests });
   console.log("  ✓ Charts created.");
 }
@@ -986,8 +1067,8 @@ async function main() {
   const lyData  = await fetchMonth(prevYear(currentYM));
   console.log(`      ${lyData.checks} receipts · ${Math.round(lyData.total).toLocaleString()} THB\n`);
 
-  console.log(`[3/4] Fetching 12-month summary...`);
-  const summary = await fetchSummary(currentYM, 12);
+  console.log(`[3/4] Fetching 16-month summary (Jan 2025–now)...`);
+  const summary = await fetchSummary(currentYM, 16);
 
   console.log(`\n[3.5/4] Fetching summary table data...`);
   const tableRows = await fetchSummaryTable(currentYM, curData, summary);
