@@ -165,6 +165,16 @@ export async function getActiveTasks(): Promise<Task[]> {
   return listTasks({ status: ["todo", "in_progress"] });
 }
 
+export async function getRegularTasks(): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .in("status", ["todo", "in_progress"])
+    .contains("tags", ["regular"]);
+  if (error) throw new Error(`getRegularTasks: ${error.message}`);
+  return data ?? [];
+}
+
 export async function getTaskById(id: string): Promise<Task | null> {
   const { data, error } = await supabase
     .from("tasks")

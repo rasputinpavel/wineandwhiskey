@@ -15,27 +15,32 @@ async function sendSafe(bot: Bot, chatId: string, text: string): Promise<void> {
 
 // 10:00 — утренний брифинг: задачи на день + просроченные + запрос плана
 async function morningBriefing(bot: Bot, chatId: string): Promise<void> {
-  const today   = db.bangkokDate();
+  const today        = db.bangkokDate();
   const todayTasks   = await db.getTodayTasks();
   const overdueTasks = await db.getOverdueTasks();
   const activeTasks  = await db.getActiveTasks();
+  const regularTasks = await db.getRegularTasks();
 
-  const todayLines   = todayTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет задач на сегодня";
-  const overdueLines = overdueTasks.map((t) => db.formatTask(t)).join("\n") || "  — просроченных нет";
+  const todayLines   = todayTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет";
+  const overdueLines = overdueTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет";
+  const regularLines = regularTasks.map((t) => `  🔄 ${t.title}`).join("\n") || "  — нет";
   const activeCount  = activeTasks.length;
 
   const prompt = `Составьте утренний брифинг для рабочего дня ${today} в стиле Бэрримора.
 
 Данные:
-- Задач на сегодня (дедлайн сегодня): ${todayTasks.length}
+- Задач с дедлайном сегодня: ${todayTasks.length}
 ${todayLines}
+
+- Регулярные задачи на каждый день (нужно выполнить сегодня): ${regularTasks.length}
+${regularLines}
 
 - Просроченные задачи: ${overdueTasks.length}
 ${overdueLines}
 
 - Всего активных задач в реестре: ${activeCount}
 
-Формат: поприветствуйте утром, кратко доложите обстановку, задайте вопрос о планах на день. Telegram HTML. Длина — не более 250 слов. Не перечисляйте задачи дважды — только ключевые.`;
+Формат: поприветствуйте утром, кратко доложите обстановку включая регулярные задачи, задайте вопрос о планах на день. Telegram HTML. Длина — не более 250 слов.`;
 
   const message = await generateScheduledMessage(prompt);
   if (message) {
@@ -44,25 +49,38 @@ ${overdueLines}
   }
 }
 
-// 14:00 — тихая проверка дедлайнов (без Claude, простое форматирование)
+// 14:00 — тихая проверка дедлайнов + регулярные задачи
 async function noonDeadlineCheck(bot: Bot, chatId: string): Promise<void> {
-  const todayTasks = await db.getTodayTasks();
-  if (todayTasks.length === 0) return; // не беспокоим если нет дедлайнов
+  const todayTasks   = await db.getTodayTasks();
+  const regularTasks = await db.getRegularTasks();
 
-  const lines = todayTasks.map((t) => db.formatTask(t)).join("\n");
-  const text  = `<i>Позвольте напомнить, господа:</i> к концу дня ожидается выполнение следующих задач:\n\n${lines}`;
+  if (todayTasks.length === 0 && regularTasks.length === 0) return;
+
+  const lines: string[] = [];
+  if (todayTasks.length > 0) {
+    lines.push(...todayTasks.map((t) => db.formatTask(t)));
+  }
+  if (regularTasks.length > 0) {
+    if (lines.length > 0) lines.push("");
+    lines.push("<i>Регулярные (каждый день):</i>");
+    lines.push(...regularTasks.map((t) => `🔄 ${t.title}`));
+  }
+
+  const text = `<i>Позвольте напомнить, господа:</i> к концу дня ожидается выполнение следующих задач:\n\n${lines.join("\n")}`;
   await sendSafe(bot, chatId, text);
 }
 
 // 20:00 — вечерний итог: что выполнено, что переносить
 async function eveningCheckIn(bot: Bot, chatId: string): Promise<void> {
-  const today      = db.bangkokDate();
-  const activeTasks = await db.getActiveTasks();
-  const todayTasks  = await db.getTodayTasks();
-  const dailyLog    = await db.getDailyLog(today);
+  const today        = db.bangkokDate();
+  const activeTasks  = await db.getActiveTasks();
+  const todayTasks   = await db.getTodayTasks();
+  const regularTasks = await db.getRegularTasks();
+  const dailyLog     = await db.getDailyLog(today);
 
   const planNote      = dailyLog?.morning_plan ? `\nУтренний план: ${dailyLog.morning_plan.slice(0, 120)}` : "";
   const todayLines    = todayTasks.map((t) => db.formatTask(t)).join("\n") || "  — нет";
+  const regularLines  = regularTasks.map((t) => `  🔄 ${t.title}`).join("\n") || "  — нет";
   const pendingCount  = activeTasks.length;
 
   const prompt = `Составьте вечернее сообщение в стиле Бэрримора для подведения итогов дня ${today}.
@@ -70,9 +88,11 @@ async function eveningCheckIn(bot: Bot, chatId: string): Promise<void> {
 Данные:
 - Задач с дедлайном сегодня (не завершены): ${todayTasks.length}
 ${todayLines}
+- Регулярные задачи (выполнены сегодня?): ${regularTasks.length}
+${regularLines}
 - Всего в реестре активных задач: ${pendingCount}${planNote}
 
-Формат: поздоровайтесь вечером, кратко обозначьте незавершённое, попросите сообщить что удалось сделать сегодня и что перенести на завтра. Telegram HTML. До 200 слов.`;
+Формат: поздоровайтесь вечером, обозначьте незавершённое включая регулярные задачи, попросите сообщить что удалось сделать и что перенести. Telegram HTML. До 200 слов.`;
 
   const message = await generateScheduledMessage(prompt);
   if (message) await sendSafe(bot, chatId, message);
