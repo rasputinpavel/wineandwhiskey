@@ -1,8 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI, { toFile } from "openai";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-// Скачать голосовое сообщение от Telegram как Buffer
 async function downloadVoice(botToken: string, fileId: string): Promise<Buffer> {
   const infoRes = await fetch(
     `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
@@ -16,42 +15,22 @@ async function downloadVoice(botToken: string, fileId: string): Promise<Buffer> 
   return Buffer.from(await fileRes.arrayBuffer());
 }
 
-// Транскрибировать голосовое через Claude (поддерживает OGG/OPUS нативно)
 export async function transcribeVoice(
   botToken: string,
   fileId: string
 ): Promise<string | null> {
   try {
     const audioBuffer = await downloadVoice(botToken, fileId);
-    const base64Audio = audioBuffer.toString("base64");
+    const file = await toFile(audioBuffer, "voice.ogg", { type: "audio/ogg" });
 
-    const response = await anthropic.messages.create({
-      model:      "claude-sonnet-4-6",
-      max_tokens: 500,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: {
-                type:       "base64",
-                media_type: "audio/ogg" as "application/pdf", // type cast — API поддерживает audio
-                data:       base64Audio,
-              },
-            } as Anthropic.DocumentBlockParam,
-            {
-              type: "text",
-              text: "Transcribe this voice message verbatim. Return only the transcription text, nothing else. If you cannot process it, return empty string.",
-            },
-          ],
-        },
-      ],
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model:    "whisper-1",
+      language: "ru",
     });
 
-    const text = response.content.find((b) => b.type === "text");
-    const transcript = text?.text?.trim() ?? "";
-    return transcript.length > 0 ? transcript : null;
+    const text = transcription.text?.trim() ?? "";
+    return text.length > 0 ? text : null;
   } catch (err) {
     console.error("Voice transcription failed:", err);
     return null;
