@@ -95,7 +95,8 @@ export default async function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             {recent.map(reel => {
-              const account = (reel.trend_accounts as { username: string } | null)?.username
+              const acct = reel.trend_accounts
+              const account = Array.isArray(acct) ? (acct[0] as { username: string } | undefined)?.username : (acct as { username: string } | null)?.username
               return (
                 <Link
                   key={reel.id}

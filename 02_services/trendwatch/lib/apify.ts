@@ -71,7 +71,7 @@ async function getDataset<T>(datasetId: string): Promise<T[]> {
 }
 
 export async function scrapeAccountReels(username: string, maxPosts = 50): Promise<InstagramPost[]> {
-  const { runId, datasetId } = await startActor('apify/instagram-scraper', {
+  const { runId, datasetId } = await startActor('apify~instagram-scraper', {
     usernames: [username],
     resultsType: 'posts',
     resultsLimit: maxPosts,
@@ -83,7 +83,7 @@ export async function scrapeAccountReels(username: string, maxPosts = 50): Promi
 }
 
 export async function scrapeHashtagReels(hashtag: string, maxPosts = 100): Promise<InstagramPost[]> {
-  const { runId, datasetId } = await startActor('apify/instagram-hashtag-scraper', {
+  const { runId, datasetId } = await startActor('apify~instagram-hashtag-scraper', {
     hashtags: [hashtag],
     resultsLimit: maxPosts,
   })
@@ -93,7 +93,7 @@ export async function scrapeHashtagReels(hashtag: string, maxPosts = 100): Promi
 }
 
 export async function scrapeProfile(username: string): Promise<InstagramProfile | null> {
-  const { runId, datasetId } = await startActor('apify/instagram-profile-scraper', {
+  const { runId, datasetId } = await startActor('apify~instagram-profile-scraper', {
     usernames: [username],
   })
   await pollRun(runId, 60_000)

@@ -74,7 +74,7 @@ async function getDataset<T>(datasetId: string): Promise<T[]> {
 
 async function scrapeHashtag(hashtag: string): Promise<Post[]> {
   console.log(`  Scraping #${hashtag}…`)
-  const { runId, datasetId } = await runApify('apify/instagram-hashtag-scraper', {
+  const { runId, datasetId } = await runApify('apify~instagram-hashtag-scraper', {
     hashtags: [hashtag],
     resultsLimit: 60,
   })
@@ -84,7 +84,7 @@ async function scrapeHashtag(hashtag: string): Promise<Post[]> {
 }
 
 async function getProfile(username: string): Promise<Profile | null> {
-  const { runId, datasetId } = await runApify('apify/instagram-profile-scraper', {
+  const { runId, datasetId } = await runApify('apify~instagram-profile-scraper', {
     usernames: [username],
   })
   await pollApify(runId, 60_000)
