@@ -1,0 +1,380 @@
+{
+  "_meta": {
+    "brand": "Wine & Whiskey",
+    "version": "1.0.0",
+    "description": "Universal design tokens for all brand materials: website, dashboard, Instagram, ads, print",
+    "modes": ["light", "dark"],
+    "defaultMode": "light"
+  },
+
+  "palette": {
+    "background": "#F5F0EB",
+    "primary": "#8C1C1C",
+    "accent": "#8C1C1C",
+    "text": "#1A1A1A",
+    "textSecondary": "#3D3D3D",
+    "border": "#D4C9BC",
+
+    "extended": {
+      "wineRed": "#8C1C1C",
+      "burgundyDeep": "#5C1010",
+      "deepBlack": "#1A1A1A",
+      "warmWhite": "#F5F0EB",
+      "cream": "#EDE0D0",
+      "amberGold": "#C9A84C",
+      "graphite": "#3D3D3D",
+      "paleStone": "#D4C9BC"
+    },
+
+    "dark": {
+      "background": "#1A1A1A",
+      "primary": "#8C1C1C",
+      "accent": "#C9A84C",
+      "text": "#F5F0EB",
+      "textSecondary": "#D4C9BC",
+      "border": "#3D3D3D"
+    },
+
+    "rules": [
+      "Wine Red (#8C1C1C) is accent only — never fill full background",
+      "Amber Gold (#C9A84C) only for glass highlights, premium labels, prices",
+      "Maximum 3 colors per layout",
+      "Dark mode default for hero product visuals; light mode for lifestyle and multi-glass scenes"
+    ]
+  },
+
+  "typography": {
+    "headingStyle": "Bebas Neue Regular UPPERCASE — brand voice, power, confidence. Display sizes only (≥48px). Max 4-5 words.",
+    "bodyStyle": "Inter Regular — neutral, readable. All body copy, captions, labels, data.",
+    "accentStyle": "DM Sans Bold/SemiBold — human voice, warm, urban. Post headlines, subheadings, card titles.",
+
+    "fonts": {
+      "display": "Bebas Neue",
+      "headline": "DM Sans",
+      "body": "Inter"
+    },
+
+    "estimatedSizes": {
+      "heading": "96–120px (display-xl/lg, Bebas Neue)",
+      "subheading": "48–72px (display-md/sm, Bebas Neue) or 28–36px (headline-lg/md, DM Sans)",
+      "body": "17–20px (Inter Regular)",
+      "caption": "11–14px (Inter Regular/SemiBold)"
+    },
+
+    "tokens": {
+      "display-xl":  { "font": "Bebas Neue", "size": "120px", "weight": 400, "tracking": 80,  "case": "upper" },
+      "display-lg":  { "font": "Bebas Neue", "size": "96px",  "weight": 400, "tracking": 60,  "case": "upper" },
+      "display-md":  { "font": "Bebas Neue", "size": "72px",  "weight": 400, "tracking": 40,  "case": "upper" },
+      "display-sm":  { "font": "Bebas Neue", "size": "48px",  "weight": 400, "tracking": 20,  "case": "upper" },
+      "headline-lg": { "font": "DM Sans",    "size": "36px",  "weight": 700, "lineHeight": 1.15 },
+      "headline-md": { "font": "DM Sans",    "size": "28px",  "weight": 600, "lineHeight": 1.2  },
+      "headline-sm": { "font": "DM Sans",    "size": "22px",  "weight": 500, "lineHeight": 1.25 },
+      "body-lg":     { "font": "Inter",      "size": "20px",  "weight": 400, "lineHeight": 1.5  },
+      "body-md":     { "font": "Inter",      "size": "17px",  "weight": 400, "lineHeight": 1.55 },
+      "body-sm":     { "font": "Inter",      "size": "14px",  "weight": 400, "lineHeight": 1.6  },
+      "label":       { "font": "Inter",      "size": "13px",  "weight": 500, "lineHeight": 1.0  },
+      "overline":    { "font": "Inter",      "size": "11px",  "weight": 600, "tracking": 150, "case": "upper" }
+    },
+
+    "combinations": [
+      { "pair": ["Bebas Neue", "Inter"],    "useCase": "Product card, price, new arrival" },
+      { "pair": ["DM Sans", "Inter"],       "useCase": "Text post, announcement, story" },
+      { "pair": ["Bebas Neue", "DM Sans"],  "useCase": "Reels cover, strong headline" }
+    ],
+
+    "rules": [
+      "Never combine all 3 fonts in one layout",
+      "Bebas Neue: UPPERCASE only, max 4-5 words, never for sentences",
+      "No italic in headlines",
+      "No center-align for text longer than 2 lines",
+      "Minimum 16px for light text on dark background"
+    ]
+  },
+
+  "spacing": {
+    "base": 8,
+    "margins": "60–64px from frame edges (1080px canvas)",
+    "padding": "40px inside cards",
+    "gaps": "24–32px between blocks",
+    "gridColumns": 12,
+
+    "scale": {
+      "space-1": "8px",
+      "space-2": "16px",
+      "space-3": "24px",
+      "space-4": "32px",
+      "space-5": "48px",
+      "space-6": "64px",
+      "space-7": "96px"
+    },
+
+    "safezones": {
+      "instagram_post":   { "width": 1080, "height": 1080, "margin": 64 },
+      "instagram_stories":{ "width": 1080, "height": 1920, "marginX": 64, "marginY": 96 },
+      "instagram_reels":  { "width": 1080, "height": 1350, "marginX": 64, "marginY": 96 },
+      "web_card":         { "padding": 24, "borderRadius": 8 },
+      "web_hero":         { "paddingX": 48, "paddingY": 80 }
+    }
+  },
+
+  "iconStyle": {
+    "lineWeight": "medium (1.5–2px stroke)",
+    "fillStyle": "outline",
+    "color": "#8C1C1C",
+    "shape": "rounded",
+    "size": { "sm": 16, "md": 24, "lg": 32 }
+  },
+
+  "layout": {
+    "alignment": "left",
+    "contentPosition": "text left or top, visual right or background",
+    "headerStyle": "logo left (Wine & Whiskey), minimal nav right, no heavy chrome",
+    "footerStyle": "multi-column links, brand name bottom-left, muted text",
+
+    "grid": {
+      "web": { "columns": 12, "gutter": 24, "maxWidth": 1280 },
+      "instagram": { "columns": 6, "gutter": 16 }
+    }
+  },
+
+  "atmosphere": {
+    "mood": "editorial wine bar — cinematic dark or alive light, never sterile, never loud",
+    "effects": [
+      "hard directional light casting geometric shadows (light mode)",
+      "single warm key light 45° for product isolation (dark mode)",
+      "shallow depth of field on hero objects",
+      "amber/gold glass highlights",
+      "condensation on glass in detail shots"
+    ],
+    "gradients": [
+      "none in dark mode — pure matte black",
+      "none in light mode — clean stone/marble texture carries the mood"
+    ],
+
+    "modes": {
+      "dark": {
+        "when": "hero product, new arrival, price, action moment",
+        "background": "#1A1A1A or dark wood/anthracite marble",
+        "light": "single warm source, lateral or 3/4",
+        "highlights": "#C9A84C amber gold on glass",
+        "liquid": "rich ruby, garnet, burgundy, amber",
+        "mood": "intimate, cinematic, focused",
+        "forbidden": ["cold blue light", "bright overexposure", "light backgrounds"]
+      },
+      "light": {
+        "when": "bar atmosphere, multi-glass, hands, lifestyle scenes",
+        "background": "light stone/travertine, white/grey marble, light linen",
+        "light": "hard directional daylight at 30–45°, long geometric shadows",
+        "shadows": "sharp, geometric from glass stems — SIGNATURE visual element",
+        "liquid": "red, rosé, white, orange — contrast on light surface",
+        "mood": "alive, casual, warm afternoon",
+        "forbidden": ["dark backgrounds", "soft studio light", "cold blue tones"]
+      }
+    }
+  },
+
+  "graphics": {
+    "chartStyle": "flat 2D, minimal axis lines, accent color fills, dark or light background to match mode",
+    "chartColors": ["#8C1C1C", "#C9A84C", "#1A1A1A", "#D4C9BC", "#3D3D3D"],
+    "diagramTypes": ["bar chart", "line chart", "donut chart", "data table"],
+    "illustrationStyle": "photorealistic only — no flat vector, no isometric, no cartoon",
+    "decorativeElements": [
+      "product cards with subtle border and 8px corner radius",
+      "overline label above headline",
+      "Wine Red CTA button",
+      "logo as sole mark in full-bleed photo compositions",
+      "W&W monogram for placeholder/watermark"
+    ],
+    "dataLabelStyle": "Inter SemiBold, accent color for key numbers, Graphite for secondary",
+    "cardStyle": "background #F5F0EB or #EDE0D0 (light) / #1A1A1A (dark), border 1px #D4C9BC, 8px corner radius, 24–40px padding",
+    "imageComposition": "split layout (text left 40% / visual right 60%) or full-bleed with minimal text overlay"
+  },
+
+  "visual": {
+    "subjects": {
+      "priority3": [
+        "Multiple glasses in one frame — standing, with shadows, at angle",
+        "Bottle + glass(es) together — bar worktop, casual arrangement",
+        "Light and shadow play through glass — geometric shadow patterns on surface",
+        "Hands / forearms holding glass or bottle — no face",
+        "Pour — wine flowing into glass, frozen motion",
+        "Champagne opening — cork, foam, splash"
+      ],
+      "priority2": [
+        "Single bottle hero close-up",
+        "Torso / shoulder / silhouette with glass — no face, from behind or below"
+      ],
+      "priority1": [
+        "Details: cork, label, neck, condensation, drop on glass"
+      ]
+    },
+
+    "composition": {
+      "principles": [
+        "Odd number of objects (3 glasses, 5 bottles)",
+        "Varying heights and distances — depth of scene",
+        "Allowed 'live disorder': bottle on side, corks on table, glass slightly shifted",
+        "No object perfectly symmetrical to another"
+      ],
+      "forbidden": [
+        "Faces or eye contact with camera",
+        "Full human figures",
+        "Staged toasts with smiles",
+        "Illustrative / cartoon / vector style",
+        "Restaurant table setting — cutlery, napkin folds, place settings"
+      ]
+    },
+
+    "bodyParts": {
+      "hand": { "allowed": "wrist and palm, neutral or no manicure", "forbidden": "rings, bracelets" },
+      "forearm": { "allowed": "cropped above elbow, shirt sleeve or bare", "forbidden": "business jacket with cufflinks" },
+      "shoulder": { "allowed": "from behind or side, no face visible", "forbidden": "any hint of face" },
+      "multipleHands": { "allowed": "different hands holding glasses — top or side view", "forbidden": "staged toast pose" }
+    },
+
+    "surfaces": {
+      "lightMode": ["light stone / travertine", "white/light grey marble", "light grey concrete", "linen tablecloth, natural light textile"],
+      "darkMode": ["matte black / anthracite", "dark wood (oak, wenge)", "black marble with gold vein"]
+    },
+
+    "language": "English only — Phuket is international resort. Wine/whiskey names in original language."
+  },
+
+  "components": {
+    "button": {
+      "primary":   { "bg": "#8C1C1C", "text": "#F5F0EB", "radius": 4, "paddingX": 24, "paddingY": 12, "font": "Inter Medium 14px" },
+      "secondary": { "bg": "transparent", "text": "#1A1A1A", "border": "1px solid #1A1A1A", "radius": 4 },
+      "ghost":     { "bg": "transparent", "text": "#8C1C1C", "border": "none" }
+    },
+    "productCard": {
+      "bg": "#F5F0EB",
+      "border": "1px solid #D4C9BC",
+      "radius": 8,
+      "padding": 16,
+      "imageAspect": "1:1",
+      "placeholder": "W&W monogram on #EDE0D0"
+    },
+    "badge": {
+      "new":     { "bg": "#8C1C1C", "text": "#F5F0EB", "font": "overline token" },
+      "sale":    { "bg": "#C9A84C", "text": "#1A1A1A", "font": "overline token" },
+      "inStock": { "bg": "#EDE0D0", "text": "#3D3D3D", "font": "overline token" }
+    },
+    "nav": {
+      "bg": "#F5F0EB",
+      "borderBottom": "1px solid #D4C9BC",
+      "logoColor": "#1A1A1A",
+      "linkColor": "#3D3D3D",
+      "activeLinkColor": "#8C1C1C"
+    }
+  },
+
+  "layouts": {
+    "product_hero": {
+      "compositionHint": "80% visual (bottle/glass/pour), 20% text strip at bottom",
+      "contentZone": "bottom 20%, x: 64-1016px, y: 864-1016px",
+      "visualZone": "full frame, top 80%",
+      "contentRect": { "x": 64, "y": 864, "width": 952, "height": 152 },
+      "visualRect": { "x": 0, "y": 0, "width": 1080, "height": 864 },
+      "cleanPercent": "0% — visual fills frame",
+      "visualBehavior": "dominant",
+      "allowedVisualElements": ["bottle hero", "glass hero", "pour frozen", "dark background"],
+      "framing": "full_bleed_product",
+      "focusPoint": "product_object",
+      "typicalSubjects": ["single bottle hero", "glass with liquid", "pour moment"]
+    },
+    "statement": {
+      "compositionHint": "Text dominant left/center, photo cropped bottom-right corner only",
+      "contentZone": "left-center, x: 64-800px, y: 64-800px",
+      "visualZone": "bottom-right 30%, decorative crop only",
+      "contentRect": { "x": 64, "y": 64, "width": 736, "height": 736 },
+      "visualRect": { "x": 750, "y": 700, "width": 330, "height": 380 },
+      "cleanPercent": "60-70%",
+      "visualBehavior": "background_only",
+      "allowedVisualElements": ["cropped bottle edge", "partial glass", "dark or mid-tone bg"],
+      "framing": "text_dominant",
+      "focusPoint": "display_headline",
+      "typicalSubjects": ["partial bottle", "texture background"]
+    },
+    "moment": {
+      "compositionHint": "100% full-bleed action photo, logo only in bottom-right corner",
+      "contentZone": "logo: x: 960-1016px, y: 960-1016px (60px from corner)",
+      "visualZone": "full 1080×1080",
+      "contentRect": { "x": 960, "y": 960, "width": 56, "height": 56 },
+      "visualRect": { "x": 0, "y": 0, "width": 1080, "height": 1080 },
+      "cleanPercent": "0%",
+      "visualBehavior": "dominant",
+      "allowedVisualElements": ["pour", "champagne open", "hand with glass", "close detail"],
+      "framing": "full_bleed",
+      "focusPoint": "action_moment",
+      "typicalSubjects": ["wine pour", "champagne foam", "glass detail", "condensation"]
+    },
+    "info_card": {
+      "compositionHint": "2-column: photo left 50%, text right 50%, CTA strip bottom",
+      "contentZone": "right 50%, x: 540-1016px, y: 64-900px",
+      "visualZone": "left 50%, x: 64-476px, y: 64-900px",
+      "contentRect": { "x": 540, "y": 64, "width": 476, "height": 836 },
+      "visualRect": { "x": 64, "y": 64, "width": 412, "height": 836 },
+      "cleanPercent": "15-20%",
+      "visualBehavior": "supporting",
+      "allowedVisualElements": ["product photo", "bottle", "light or dark bg"],
+      "framing": "split_layout",
+      "focusPoint": "card_content",
+      "typicalSubjects": ["bottle portrait", "glass portrait"]
+    },
+    "price_arrival": {
+      "compositionHint": "Large price/number center-top (Bebas Neue), bottle center, name+origin bottom",
+      "contentZone": "top 25% (price) + bottom 20% (name/origin)",
+      "visualZone": "center 55%",
+      "contentRect": { "x": 64, "y": 64, "width": 952, "height": 270 },
+      "visualRect": { "x": 270, "y": 330, "width": 540, "height": 594 },
+      "cleanPercent": "20-25%",
+      "visualBehavior": "supporting",
+      "allowedVisualElements": ["bottle center", "dark background", "overline badge"],
+      "framing": "centered_product",
+      "focusPoint": "price_number",
+      "typicalSubjects": ["single bottle centered"]
+    },
+    "web_hero": {
+      "compositionHint": "Text left 45%, lifestyle photo right 55%, light background, bold headline",
+      "contentZone": "left 45%, x: 48-580px, y: 80-520px",
+      "visualZone": "right 55%, x: 600-1280px, full height",
+      "contentRect": { "x": 48, "y": 80, "width": 532, "height": 440 },
+      "visualRect": { "x": 600, "y": 0, "width": 680, "height": 600 },
+      "cleanPercent": "30-40%",
+      "visualBehavior": "supporting",
+      "allowedVisualElements": ["glasses lifestyle", "hands with glasses", "light mode scene"],
+      "framing": "split_layout",
+      "focusPoint": "headline_text",
+      "typicalSubjects": ["multiple glasses on stone surface", "hands with wine", "lifestyle scene"]
+    },
+    "web_product_grid": {
+      "compositionHint": "3-column product card grid, cream cards, W&W placeholder, clean labels below",
+      "contentZone": "full grid area",
+      "visualZone": "inside each card — product image 1:1 aspect",
+      "contentRect": { "x": 48, "y": 0, "width": 1184, "height": 999 },
+      "visualRect": { "x": 48, "y": 0, "width": 1184, "height": 999 },
+      "cleanPercent": "25-35%",
+      "visualBehavior": "supporting",
+      "allowedVisualElements": ["product card", "W&W placeholder", "Red badge", "price label"],
+      "framing": "grid",
+      "focusPoint": "product_cards",
+      "typicalSubjects": ["bottle product shots", "wine labels"]
+    }
+  },
+
+  "brand": {
+    "name": "Wine & Whiskey",
+    "location": "Phuket, Thailand",
+    "concept": "Urban wine bar and store. Neighborhood. Comes in a suit after work and jeans on Saturday.",
+    "voiceOneLiner": "A friend with good taste who doesn't lecture.",
+    "registers": {
+      "direct":  "New arrival, product fact — 'Rioja Reserva. Dark cherry, some oak. In stock now.'",
+      "calm":    "Story, recommendation — 'Malbec from Mendoza — a wine that doesn't try to prove anything.'",
+      "light":   "Friday, occasion, mood — 'A good Friday starts with choosing the bottle.'",
+      "expert":  "Region, producer, vintage — '2019 — one of the best years for Barolo in the last decade.'"
+    },
+    "forbiddenPhrases": ["Treat yourself", "For true connoisseurs", "Legendary", "Exclusive collection", "Perfect for a romantic evening", "hashtag spam", "excessive emoji"],
+    "hours": "Open daily 10:00 am – 10:00 pm",
+    "geotag": "Wine & Whiskey · Phuket"
+  }
+}

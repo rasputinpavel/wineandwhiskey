@@ -49,13 +49,18 @@ async function main() {
   console.log(`Fetched ${allItems.length} items`);
 
   // Build rows
-  const header = ["PO №", "Дата", "Поставщик", "Статус", "Товар", "SKU", "Кол-во", "Цена закупки", "Сумма строки"];
+  const header = ["PO №", "Дата", "Месяц", "Год", "Поставщик", "Статус", "Товар", "SKU", "Кол-во", "Цена закупки", "Сумма строки"];
   const rows: any[][] = [header];
   for (const item of allItems) {
     const po = (item.purchase_orders as any) ?? {};
+    const date: string = po.order_date ?? "";
+    const month = date.length >= 7 ? `${date.slice(5, 7)}.${date.slice(0, 4)}` : "";
+    const year  = date.length >= 4 ? date.slice(0, 4) : "";
     rows.push([
       item.po_number,
-      po.order_date ?? "",
+      date,
+      month,
+      year,
       po.supplier   ?? "",
       po.status     ?? "",
       item.product_name ?? "",
@@ -94,7 +99,7 @@ async function main() {
     requests: [
       { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { backgroundColor: dark, textFormat: { bold: true, foregroundColor: white } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
       { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
-      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 9 } } },
+      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 11 } } },
     ],
   });
 
