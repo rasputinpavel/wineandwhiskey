@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dashboard": "tsx automation/sync_dashboard.ts",
-    "matrix":    "tsx automation/wine_matrix.ts",
-    "orders":    "tsx automation/scrape_purchase_orders.ts",
-    "b2b":       "tsx automation/sync_b2b.ts",
-    "suppliers": "tsx automation/sync_suppliers.ts",
-    "receipts":  "tsx automation/sync_receipts.ts",
-    "harvest":   "tsx automation/sync_harvest_sales.ts",
-    "actuals":   "tsx automation/sync_cashflow_actuals.ts",
-    "sync:all":  "tsx automation/sync_dashboard.ts && tsx automation/wine_matrix.ts"
+    "dashboard": "tsx 03_automation/sync_dashboard.ts",
+    "matrix":    "tsx 03_automation/wine_matrix.ts",
+    "orders":    "tsx 03_automation/scrape_purchase_orders.ts",
+    "b2b":       "tsx 03_automation/sync_b2b.ts",
+    "suppliers": "tsx 03_automation/sync_suppliers.ts",
+    "receipts":  "tsx 03_automation/sync_receipts.ts",
+    "harvest":   "tsx 03_automation/sync_harvest_sales.ts",
+    "actuals":   "tsx 03_automation/sync_cashflow_actuals.ts",
+    "sync:all":  "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
