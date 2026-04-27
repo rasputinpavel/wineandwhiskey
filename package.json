@@ -11,9 +11,12 @@
     "receipts":  "tsx 03_automation/sync_receipts.ts",
     "harvest":   "tsx 03_automation/sync_harvest_sales.ts",
     "actuals":   "tsx 03_automation/sync_cashflow_actuals.ts",
-    "sync:all":  "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts"
+    "sync:all":          "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts",
+    "trends":            "tsx 03_automation/sync_trends.ts",
+    "discover-accounts": "tsx 03_automation/discover_trend_accounts.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.0",
     "playwright": "^1.45.0",

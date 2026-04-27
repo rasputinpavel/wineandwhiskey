@@ -5,8 +5,15 @@
  * Writes the previous week's actual retail revenue into the "Закрытие" sheet.
  * Rolling Cashflow reads from it via VLOOKUP — survives cashflow recreation.
  *
- * Retail = Loyverse total for the week  −  Дебиторка invoiced that week.
- * (Dashboard weekly revenue includes B2B invoiced; Дебиторка.A = invoice date.)
+ * Revenue source (automated run):
+ *   Reads "Текущая неделя" → Розница from the Dashboard table.
+ *   On Sunday the dashboard's "current week" = the Mon–Sun week that just ended.
+ *   dashboard sync always runs before actuals sync, so data is fresh.
+ *
+ * Manual rerun:
+ *   npm run actuals -- --week 2026-04-20 --retail 67083
+ *   --week   : ISO Mon of the target week
+ *   --retail : actual retail revenue (required for manual runs)
  */
 
 import dotenv from "dotenv";
@@ -14,7 +21,6 @@ dotenv.config({ path: ".env.local" });
 
 const SHEET_ID             = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 const CLOSINGS_TAB         = "Закрытие";
-const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN!;
@@ -31,13 +37,6 @@ function weekBounds(offsetWeeks = 0): { from: string; to: string } {
   const sunMs = monMs + 6 * 86_400_000;
   const fmt = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   return { from: fmt(monMs), to: fmt(sunMs) };
-}
-
-/** Parse "DD.MM.YYYY" → Date (UTC) */
-function parseRuDate(s: string): Date | null {
-  const m = s?.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!m) return null;
-  return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
 }
 
 // ─── Google Sheets ────────────────────────────────────────────────────────────
@@ -85,7 +84,6 @@ async function ensureClosingsTab(): Promise<void> {
       gridProperties: { rowCount: 100, columnCount: 3 },
     }}}],
   });
-  // Write headers
   await gApi("PUT",
     `/values/${encodeURIComponent(`${CLOSINGS_TAB}!A1:C1`)}?valueInputOption=RAW`,
     { range: `${CLOSINGS_TAB}!A1:C1`, majorDimension: "ROWS",
@@ -97,7 +95,6 @@ async function ensureClosingsTab(): Promise<void> {
 async function upsertClosing(isoWeekStart: string, revenue: number, note: string) {
   const rows = await readRange(`${CLOSINGS_TAB}!A2:C100`);
   const idx = rows.findIndex(r => r[0] === isoWeekStart);
-
   const rowData = [isoWeekStart, revenue, note];
 
   if (idx >= 0) {
@@ -116,22 +113,40 @@ async function upsertClosing(isoWeekStart: string, revenue: number, note: string
   }
 }
 
-// ─── Loyverse ──────────────────────────────────────────────────────────────────
+// ─── Dashboard reader ──────────────────────────────────────────────────────────
+// Dashboard summary table: header at A15, data rows at A16+
+//   Cols: Период | Розница, ฿ | B2B, ฿ | Итого, ฿ | Чеков | GP, ฿ | GP% | Ср.чек
+// On Sundays "Текущая неделя" = the Mon–Sun week that just ended.
 
-async function fetchWeekRevenue(from: string, to: string): Promise<number> {
-  const minUtc = new Date(`${from}T00:00:00+07:00`).toISOString();
-  const maxUtc = new Date(`${to}T23:59:59+07:00`).toISOString();
-  let out: any[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `https://api.loyverse.com/v1.0/receipts?receipt_type=SALE&created_at_min=${minUtc}&created_at_max=${maxUtc}&limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
-    if (!r.ok) throw new Error(`Loyverse ${r.status}`);
-    const d = await r.json();
-    out = out.concat(d.receipts ?? []);
-    cursor = d.cursor;
-  } while (cursor);
-  return out.reduce((s, r) => s + (r.total_money ?? 0), 0);
+async function fetchRetailFromDashboard(): Promise<{ retail: number; b2b: number; total: number }> {
+  const rows = await readRange("Dashboard!A15:H22");
+  for (const row of rows) {
+    if ((row[0] ?? "").trim() === "Текущая неделя") {
+      const parse = (v: string) => parseFloat((v ?? "").toString().replace(/[^\d.-]/g, "")) || 0;
+      return { retail: parse(row[1]), b2b: parse(row[2]), total: parse(row[3]) };
+    }
+  }
+  throw new Error("«Текущая неделя» row not found in Dashboard — did sync_dashboard.ts run first?");
+}
+
+// ─── Fix ฿ format on Rolling Cashflow D column ────────────────────────────────
+
+async function fixFactFormat() {
+  const meta = await gApi("GET", "");
+  const rcSheet = (meta.sheets ?? []).find((s: any) => s.properties.title === "Rolling Cashflow");
+  if (!rcSheet) { console.log("   Rolling Cashflow not found, skipping format"); return; }
+  const sid = rcSheet.properties.sheetId;
+  const rows = rcSheet.properties.gridProperties?.rowCount ?? 100;
+  await gApi("POST", ":batchUpdate", {
+    requests: [{
+      repeatCell: {
+        range: { sheetId: sid, startRowIndex: 3, endRowIndex: rows, startColumnIndex: 3, endColumnIndex: 4 },
+        cell: { userEnteredFormat: { numberFormat: { type: "CURRENCY", pattern: '"฿"#,##0' } } },
+        fields: "userEnteredFormat(numberFormat)",
+      },
+    }],
+  });
+  console.log("   ✓ ฿ format applied to Факт (D) column");
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -140,13 +155,50 @@ async function main() {
   const bkk = bangkokNow();
   const dayOfWeek = bkk.getUTCDay(); // 0=Sun
 
-  // Allow running any day (for testing), but log a warning if not Sunday
-  if (dayOfWeek !== 0) {
-    console.log(`⚠️  Сегодня не воскресенье (день ${dayOfWeek}). Запуск принудительно.`);
+  const weekArg = (() => {
+    const idx = process.argv.indexOf("--week");
+    return idx !== -1 ? process.argv[idx + 1] : null;
+  })();
+
+  const retailArg = (() => {
+    const idx = process.argv.indexOf("--retail");
+    if (idx === -1) return null;
+    const v = parseFloat(process.argv[idx + 1]);
+    if (isNaN(v)) throw new Error("--retail must be a number");
+    return v;
+  })();
+
+  let lastWeek: { from: string; to: string };
+  let retail: number;
+  let note: string;
+
+  if (weekArg) {
+    // ── Manual rerun ────────────────────────────────────────────────────────
+    if (retailArg === null) {
+      throw new Error("--week requires --retail AMOUNT (e.g. --retail 67083)");
+    }
+    const to = new Date(new Date(weekArg + "T00:00:00Z").getTime() + 6 * 86_400_000).toISOString().slice(0, 10);
+    lastWeek = { from: weekArg, to };
+    retail = retailArg;
+    note = `manual retail=${retail}`;
+    console.log(`⚙️  Ручной запуск: неделя ${weekArg}, розница ${retail} ฿`);
+  } else {
+    // ── Automated Sunday run ─────────────────────────────────────────────────
+    if (dayOfWeek !== 0) {
+      console.log(`⚠️  Сегодня не воскресенье (день ${dayOfWeek}). Запуск принудительно.`);
+    }
+    lastWeek = weekBounds(0); // Mon–Sun of the just-ended week
+    console.log(`📅 Закрытие недели: ${lastWeek.from} — ${lastWeek.to}`);
+
+    console.log("📊 Читаю Розницу из Dashboard (Текущая неделя)...");
+    const { retail: dashRetail, b2b, total } = await fetchRetailFromDashboard();
+    retail = dashRetail;
+    note = `dashboard total=${total} b2b=${b2b}`;
+    console.log(`   Итого: ${total} ฿  |  B2B: ${b2b} ฿  |  Розница: ${retail} ฿`);
   }
 
-  const lastWeek = weekBounds(-1);
-  console.log(`📅 Закрытие недели: ${lastWeek.from} — ${lastWeek.to}`);
+  console.log(`📅 Неделя: ${lastWeek.from} — ${lastWeek.to}`);
+  console.log(`💰 Факт розница: ${retail.toFixed(0)} ฿`);
 
   // 1. Auth
   console.log("🔑 Авторизация...");
@@ -155,37 +207,12 @@ async function main() {
   // 2. Ensure Закрытие sheet exists
   await ensureClosingsTab();
 
-  // 3. Fetch total Loyverse revenue for last week
-  console.log("💰 Загружаю выручку из Loyverse...");
-  const totalRevenue = await fetchWeekRevenue(lastWeek.from, lastWeek.to);
-  console.log(`   Выручка (все): ${totalRevenue.toFixed(0)} ฿`);
-
-  // 4. Sum Дебиторка invoiced last week (col A = Дата счета, col E = Сумма)
-  console.log("📋 Читаю Дебиторку...");
-  const debRows = await readRange("Дебиторка!A2:E200");
-  const fromDate = new Date(lastWeek.from + "T00:00:00Z");
-  const toDate   = new Date(lastWeek.to   + "T23:59:59Z");
-
-  let debTotal = 0;
-  for (const row of debRows) {
-    const invoiceDate = parseRuDate(row[0]);
-    if (!invoiceDate) continue;
-    if (invoiceDate < fromDate || invoiceDate > toDate) continue;
-    // Parse amount: "฿3 852,00" or plain number
-    const raw = (row[4] ?? "").replace(/[฿\s]/g, "").replace(",", ".");
-    const amt = parseFloat(raw);
-    if (!isNaN(amt)) debTotal += amt;
-  }
-  console.log(`   Дебиторка за неделю: ${debTotal.toFixed(0)} ฿`);
-
-  // 5. Retail = total − дебиторка
-  const retail = totalRevenue - debTotal;
-  console.log(`   Розничная выручка (факт): ${retail.toFixed(0)} ฿`);
-
-  // 6. Upsert into Закрытие sheet
+  // 3. Upsert into Закрытие
   console.log("📝 Записываю в Закрытие...");
-  const note = `total=${totalRevenue.toFixed(0)} deb=${debTotal.toFixed(0)}`;
   await upsertClosing(lastWeek.from, Math.round(retail), note);
+
+  // 4. Fix ฿ format on Rolling Cashflow D column
+  await fixFactFormat();
 
   console.log(`\n✅  Готово! Неделя ${lastWeek.from}: факт выручка ${Math.round(retail).toLocaleString()} ฿`);
 }

@@ -95,6 +95,17 @@ async function clearTab(sheetId: number) {
   });
 }
 
+async function ensureColumns(sheetId: number, minCols: number) {
+  const meta = await sheetsReq("GET", "");
+  const sheet = (meta.sheets ?? []).find((s: any) => s.properties.sheetId === sheetId);
+  const current = sheet?.properties?.gridProperties?.columnCount ?? 26;
+  if (current < minCols) {
+    await sheetsReq("POST", ":batchUpdate", {
+      requests: [{ appendDimension: { sheetId, dimension: "COLUMNS", length: minCols - current } }],
+    });
+  }
+}
+
 async function writeValues(tab: string, range: string, values: any[][], inputOption = "RAW") {
   if (!values.length) return;
   await sheetsReq("PUT",
@@ -347,6 +358,8 @@ async function writeSuppliersTab(sheetId: number, stats: Map<string, SupplierSta
 
 async function writeSupplierTab(sheetId: number, stats: Map<string, SupplierStats>, loyverseSuppliers: LoyverseSupplier[]) {
   await clearTab(sheetId);
+  // QUERY PIVOT needs 1 product col + ~50 month cols; default sheet has only 26.
+  await ensureColumns(sheetId, 100);
 
   const dark  = { red: 0.15, green: 0.15, blue: 0.15 };
   const white = { red: 1, green: 1, blue: 1 };

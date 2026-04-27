@@ -1,0 +1,33 @@
+name: Sync Trends
+
+on:
+  schedule:
+    # 09:00 Bangkok time = 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Sync trend reels
+        env:
+          APIFY_TOKEN:          ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BARRYMORE_BOT_TOKEN:  ${{ secrets.BARRYMORE_BOT_TOKEN }}
+          BARRYMORE_CHAT_ID:    ${{ secrets.BARRYMORE_CHAT_ID }}
+          TRENDWATCH_URL:       ${{ secrets.TRENDWATCH_URL }}
+        run: npm run trends
