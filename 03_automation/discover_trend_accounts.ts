@@ -74,13 +74,14 @@ async function getDataset<T>(datasetId: string): Promise<T[]> {
 
 async function scrapeHashtag(hashtag: string): Promise<Post[]> {
   console.log(`  Scraping #${hashtag}…`)
-  const { runId, datasetId } = await runApify('apify~instagram-hashtag-scraper', {
-    hashtags: [hashtag],
+  const { runId, datasetId } = await runApify('apify~instagram-scraper', {
+    directUrls: [`https://www.instagram.com/explore/tags/${hashtag}/`],
+    resultsType: 'reels',
     resultsLimit: 60,
   })
   await pollApify(runId)
   const items = await getDataset<Post>(datasetId)
-  return items.filter(p => p.type === 'Video')
+  return items.filter(p => p.videoPlayCount != null)
 }
 
 async function getProfile(username: string): Promise<Profile | null> {
@@ -96,6 +97,7 @@ async function scoreRelevance(
   username: string,
   followers: number,
   avgViews: number,
+  viralityRatio: number,
   captions: string[]
 ): Promise<number> {
   const res = await claude.messages.create({
@@ -103,10 +105,13 @@ async function scoreRelevance(
     max_tokens: 10,
     messages: [{
       role: 'user',
-      content: `Rate this Instagram account 1-10 for relevance as a wine/spirits content source.
-@${username} | Followers: ${followers.toLocaleString()} | Avg Reel views: ${avgViews.toLocaleString()}
+      content: `Rate this Instagram account 1-10 for relevance as a wine/spirits content source to study and adapt.
+@${username} | Followers: ${followers.toLocaleString()} | Avg Reel views: ${avgViews.toLocaleString()} | Views/Followers ratio: ${viralityRatio.toFixed(2)}x
 Captions: ${captions.slice(0, 2).join(' | ')}
-Criteria: wine/spirits focused, posts Reels regularly, good engagement.
+Criteria (in order of importance):
+1. Virality: views/followers ratio > 1 means content spreads beyond their audience — weight this heavily
+2. Wine/spirits focused content
+3. Posts Reels regularly
 Reply with ONLY an integer 1-10.`,
     }],
   })
@@ -174,10 +179,13 @@ async function main() {
         ? Math.round(views.reduce((a, b) => a + b, 0) / views.length)
         : 0
 
-      const captions = posts.map(p => p.caption ?? '').filter(Boolean)
-      const score = await scoreRelevance(username, followers, avgViews, captions)
+      // Virality ratio: avg reel views / followers — key signal for breakout content
+      const viralityRatio = followers > 0 ? avgViews / followers : 0
 
-      console.log(`followers=${followers.toLocaleString()} avgViews=${avgViews.toLocaleString()} score=${score}/10`)
+      const captions = posts.map(p => p.caption ?? '').filter(Boolean)
+      const score = await scoreRelevance(username, followers, avgViews, viralityRatio, captions)
+
+      console.log(`followers=${followers.toLocaleString()} avgViews=${avgViews.toLocaleString()} ratio=${viralityRatio.toFixed(1)}x score=${score}/10`)
 
       candidates.push({
         username,
