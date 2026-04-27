@@ -4,15 +4,23 @@ This is the operating system for managing the Wine & Whiskey retail store.
 
 ## What lives here
 
-- **dashboard/** — Internal operations dashboard (Railway). Sales, inventory, marketing metrics.
-- **store/** — Customer-facing wine reservation shop (Railway + custom domain).
-- **bot/** — Telegram bot for staff operations (Railway webhook).
-- **agents/** — Claude AI agents (inventory turnover analysis, etc.).
+- **agents/** — Виртуальные сотрудники (Telegram bots on Railway).
+  - `bot/` — Staff operations bot (Chip & Dale).
+  - `barrymore/` — Secretary bot (Бэрримор).
+- **services/** — Web services on Railway.
+  - `price-service/` — Next.js price list manager.
+- **automation/** — Data sync scripts (run via `npm run <name>` from root).
+- **brand/** — Design system, tokens, logo, visual references.
+- **creative/** — All creative output, organized by type.
+  - `social/` — Instagram/Facebook campaigns and posts.
+  - `catalog/` — Product photography.
+  - `output/` — Generated exports (HTML, CSV) with date in filename.
+- **knowledge/** — Store knowledge base.
+  - `wine/` — Wine concepts, regions, styles.
+  - `inbox/` — Unprocessed materials and references.
 - **skills/** — Claude Code custom slash commands.
-- **data/** — Local data store: inventory, sales, products, suppliers.
-- **integrations/** — Connectors: Google Sheets, POS, Instagram/Facebook.
-- **reports/** — Generated reports (daily, weekly, monthly).
 - **config/** — Store settings and thresholds.
+- **data/** — Local data store: inventory, sales, products, suppliers.
 
 ## Key context
 
