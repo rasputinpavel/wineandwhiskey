@@ -107,9 +107,10 @@ ${regularRemainingLines}
 }
 
 export function initSchedules(bot: Bot): void {
-  const chatId = process.env.BARRYMORE_CHAT_ID;
+  // Scheduled messages always go to private chat (owner), not the group
+  const chatId = process.env.BARRYMORE_OWNER_CHAT_ID ?? process.env.BARRYMORE_CHAT_ID;
   if (!chatId) {
-    console.log("BARRYMORE_CHAT_ID не задан — расписание отключено.");
+    console.log("BARRYMORE_OWNER_CHAT_ID не задан — расписание отключено.");
     return;
   }
 

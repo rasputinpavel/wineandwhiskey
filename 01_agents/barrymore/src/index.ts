@@ -82,12 +82,12 @@ async function sendReply(
 async function handleCompletions(chatId: number): Promise<void> {
   const completed = drainCompleted();
   if (completed.length === 0) return;
-  const groupId = ALLOWED_CHAT ? Number(ALLOWED_CHAT) : chatId;
-  try { await createOrUpdatePin(bot, String(groupId)); } catch {}
+  // Completion messages go to the private chat where the command was issued
+  try { await createOrUpdatePin(bot, String(chatId)); } catch {}
   for (const task of completed) {
     const congrats = `✅ Выполнено: <b>${task.title}</b>`;
     try {
-      await bot.api.sendMessage(groupId, congrats, { parse_mode: "HTML" });
+      await bot.api.sendMessage(chatId, congrats, { parse_mode: "HTML" });
     } catch {}
   }
 }
