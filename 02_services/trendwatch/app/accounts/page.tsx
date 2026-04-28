@@ -26,14 +26,21 @@ function fmt(n: number | null) {
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [addUsername, setAddUsername] = useState('')
   const [adding, setAdding] = useState(false)
 
   useEffect(() => { load() }, [])
 
   async function load() {
+    setError(null)
     const res = await fetch('/api/accounts')
-    if (res.ok) setAccounts(await res.json())
+    if (res.ok) {
+      setAccounts(await res.json())
+    } else {
+      const body = await res.json().catch(() => ({}))
+      setError(body.error ?? `HTTP ${res.status}`)
+    }
     setLoading(false)
   }
 
@@ -98,6 +105,8 @@ export default function AccountsPage() {
 
         {loading ? (
           <div className="text-gray-500">Loading…</div>
+        ) : error ? (
+          <div className="text-red-400 bg-red-950 border border-red-800 rounded-xl p-4 text-sm font-mono">{error}</div>
         ) : (
           <div className="space-y-6">
             {/* Active */}

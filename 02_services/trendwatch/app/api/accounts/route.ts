@@ -7,7 +7,10 @@ export async function GET() {
     .select('*')
     .order('is_active', { ascending: false })
     .order('relevance_score', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[accounts GET] SUPABASE_URL:', process.env.SUPABASE_URL?.slice(0, 30), 'error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
