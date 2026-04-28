@@ -118,6 +118,22 @@ export async function downloadTelegramPhoto(
   };
 }
 
+// ─── Message parser (stateless recovery after redeploy) ──────────────────────
+
+export function parseExpenseFromMessage(text: string): PendingExpense | null {
+  const dateMatch   = text.match(/Дата:\s*(\d{2}\.\d{2}\.\d{4})/)
+  const amountMatch = text.match(/Сумма:\s*฿(\d+(?:[.,]\d+)?)/)
+  const descMatch   = text.match(/На что:\s*(.+)/)
+  if (!dateMatch || !amountMatch || !descMatch) return null
+  return {
+    date:        dateMatch[1],
+    amount:      amountMatch[1].replace(",", "."),
+    description: descMatch[1].trim(),
+    isCompany:   text.includes("✅ На компанию"),
+    hasDocs:     text.includes("✅ Есть"),
+  }
+}
+
 // ─── UI builders ─────────────────────────────────────────────────────────────
 
 export function buildExpenseMessage(e: PendingExpense): string {

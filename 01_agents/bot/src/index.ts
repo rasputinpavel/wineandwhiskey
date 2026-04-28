@@ -12,7 +12,7 @@ import {
   extractExpenseFromText, extractExpenseFromPhoto,
   downloadTelegramPhoto,
   buildExpenseMessage, buildExpenseKeyboard,
-  addExpenseRow,
+  addExpenseRow, parseExpenseFromMessage,
 } from "./expenses.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -431,8 +431,7 @@ bot.on("callback_query:data", async (ctx) => {
   const chatId = ctx.chat?.id;
   if (!chatId) { await ctx.answerCallbackQuery(); return; }
 
-  const data    = ctx.callbackQuery.data;
-  const expense = pendingExpenses.get(chatId);
+  const data = ctx.callbackQuery.data;
 
   if (!data.startsWith("exp_")) { await ctx.answerCallbackQuery(); return; }
 
@@ -442,6 +441,10 @@ bot.on("callback_query:data", async (ctx) => {
     await ctx.editMessageText("✖ Расход отменён.");
     return;
   }
+
+  // Parse state from the message itself first — survives Railway redeploys
+  const msgText = ctx.callbackQuery.message?.text ?? "";
+  const expense = parseExpenseFromMessage(msgText) ?? pendingExpenses.get(chatId);
 
   if (!expense) {
     await ctx.answerCallbackQuery("Сессия устарела, отправь расход снова.");

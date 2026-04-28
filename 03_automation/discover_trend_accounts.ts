@@ -168,7 +168,7 @@ async function main() {
       const profile = await getProfile(username)
       if (!profile) { console.log('no profile'); continue }
 
-      const followers = profile.followersCount
+      const followers = profile.followersCount ?? 0
       if (followers < 2_000 || followers > 3_000_000) {
         console.log(`skip (${followers.toLocaleString()} followers)`)
         continue
