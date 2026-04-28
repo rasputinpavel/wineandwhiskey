@@ -1,20 +1,20 @@
 /**
- * discover_trend_accounts.ts — v2
+ * discover_trend_accounts.ts — v3
  *
- * Improvements over v1:
- * - Hashtag clusters (retail / venue / style / authority / adjacent) with source tracking
- * - Robust metrics: median, p75, top-3, hit_rate instead of avg alone
- * - Size buckets (micro/small/mid/large) so small accounts compete fairly
- * - Claude returns structured JSON — debuggable, not a black-box score
- * - Minimum 3-reel sample guard before enriching a profile
- * - Composite score formula: median virality weighted most heavily
+ * v2 → v3 additions:
+ * - Stability metric: top1/median ratio (good <5x, watch 5–10x, low >10x)
+ * - Confidence score: sample_size + cluster coverage + bio + Claude verdict
+ * - Freshness score: how many strong reels posted in last 30 days
+ * - Decomposed copyability: format / production / retail (3 separate Claude fields)
+ * - Tier assignment: a (daily sync) / b (watchlist) / c (archive)
+ * - matched_clusters_count saved for filtering in UI
  *
  * Usage:
  *   npm run discover-accounts
  *   npm run discover-accounts -- --clusters=retail,venue
  *   npm run discover-accounts -- --hashtags=winestore,wineshop
  *
- * Requires migration 002_trend_accounts_v2.sql to be applied first.
+ * Requires migrations 002 + 003 applied in Supabase.
  */
 
 import dotenv from 'dotenv'
@@ -43,31 +43,33 @@ const HASHTAG_CLUSTERS: Record<string, string[]> = {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Post = {
-  type: string
-  shortCode: string
-  ownerUsername: string
-  ownerFullName: string | null
+  type:           string
+  shortCode:      string
+  ownerUsername:  string
+  ownerFullName:  string | null
   videoPlayCount: number | null
-  caption: string | null
-  url: string
-  timestamp: string
+  caption:        string | null
+  url:            string
+  timestamp:      string
 }
 
 type Profile = {
-  username: string
-  fullName: string | null
+  username:      string
+  fullName:      string | null
   followersCount: number
-  biography?: string
+  biography?:    string
 }
 
 type AccountAnalysis = {
-  business_model_fit: string
+  business_model_fit:      string
   content_format_strength: number
-  retail_idea_density: number
-  copyability_for_local_business: number
-  red_flags: string[]
-  why_matters: string
-  verdict: 'keep' | 'maybe' | 'reject'
+  retail_idea_density:     number
+  format_copyability:      number   // can you replicate the mechanic easily?
+  production_copyability:  number   // does it require a team/studio/budget?
+  retail_copyability:      number   // works specifically for a wine shop?
+  red_flags:               string[]
+  why_matters:             string
+  verdict:                 'keep' | 'maybe' | 'reject'
 }
 
 // ─── Stats helpers ────────────────────────────────────────────────────────────
@@ -89,15 +91,55 @@ function top3Avg(arr: number[]): number {
 }
 
 function sizeBucket(followers: number): string {
-  if (followers < 10_000)  return 'micro'   // 2K–10K
-  if (followers < 50_000)  return 'small'   // 10K–50K
-  if (followers < 250_000) return 'mid'     // 50K–250K
-  return 'large'                             // 250K–3M
+  if (followers < 10_000)  return 'micro'
+  if (followers < 50_000)  return 'small'
+  if (followers < 250_000) return 'mid'
+  return 'large'
 }
 
-// log-scale normaliser: ratio 200x → 1.0, 0x → 0
 function logNorm(ratio: number): number {
   return Math.min(Math.log2(ratio + 1) / Math.log2(201), 1)
+}
+
+function computeStability(views: number[]): { ratio: number; label: string } {
+  const med  = median(views)
+  if (med === 0) return { ratio: 0, label: 'unknown' }
+  const top1 = Math.max(...views)
+  const ratio = top1 / med
+  return {
+    ratio: parseFloat(ratio.toFixed(1)),
+    label: ratio < 5 ? 'good' : ratio < 10 ? 'watch' : 'low',
+  }
+}
+
+function computeFreshness(posts: Post[]): number {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+  const recent = posts.filter(p => new Date(p.timestamp).getTime() >= cutoff)
+  const recentViews = recent.map(p => p.videoPlayCount ?? 0).filter(v => v > 0)
+  // 0–1: saturates at 4+ recent reels with views
+  return parseFloat(Math.min(recentViews.length / 4, 1).toFixed(2))
+}
+
+function computeConfidence(
+  sampleSize:      number,
+  matchedClusters: number,
+  hasBio:          boolean,
+  verdict:         string,
+  stabilityLabel:  string,
+): number {
+  let score = 0
+  score += sampleSize >= 12 ? 0.30 : sampleSize >= 6 ? 0.20 : 0.10
+  score += matchedClusters >= 3 ? 0.25 : matchedClusters >= 2 ? 0.15 : 0.05
+  score += hasBio ? 0.15 : 0
+  score += verdict === 'keep' ? 0.20 : verdict === 'maybe' ? 0.10 : 0
+  score += stabilityLabel === 'good' ? 0.10 : stabilityLabel === 'watch' ? 0.05 : 0
+  return parseFloat(Math.min(score, 1).toFixed(2))
+}
+
+function assignTier(score: number, confidence: number): string {
+  if (score >= 8 && confidence >= 0.5) return 'a'   // daily sync
+  if (score >= 5 || confidence >= 0.35) return 'b'  // watchlist
+  return 'c'                                          // archive
 }
 
 // ─── Apify helpers ────────────────────────────────────────────────────────────
@@ -117,7 +159,7 @@ async function pollApify(runId: string, maxMs = 300_000): Promise<void> {
   const deadline = Date.now() + maxMs
   while (Date.now() < deadline) {
     await sleep(10_000)
-    const res  = await fetch(`${BASE}/actor-runs/${runId}`, { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } })
+    const res    = await fetch(`${BASE}/actor-runs/${runId}`, { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } })
     const { data } = await res.json() as { data: { status: string } }
     if (data.status === 'SUCCEEDED') return
     if (data.status === 'FAILED' || data.status === 'ABORTED') throw new Error(`Apify run ${data.status}`)
@@ -156,40 +198,48 @@ async function getProfile(username: string): Promise<Profile | null> {
 // ─── Claude structured analysis ───────────────────────────────────────────────
 
 async function analyzeAccount(
-  username:       string,
-  followers:      number,
-  medianViews:    number,
-  top3Views:      number,
-  hitRate:        number,
-  medianRatio:    number,
-  sourceClusters: string[],
-  bio:            string,
-  captions:       string[],
+  username:        string,
+  followers:       number,
+  medianViews:     number,
+  top3Views:       number,
+  hitRate:         number,
+  medianRatio:     number,
+  stabilityLabel:  string,
+  sourceClusters:  string[],
+  bio:             string,
+  captions:        string[],
 ): Promise<AccountAnalysis> {
   const prompt =
-    `You are scoring Instagram accounts as content inspiration sources for Wine & Whiskey — ` +
-    `a wine & spirits retail store in Phuket targeting Russian-speaking customers.\n\n` +
+    `You are scoring Instagram accounts as content inspiration for Wine & Whiskey — ` +
+    `a wine & spirits retail store in Phuket (Russian-speaking audience, casual luxury tone).\n\n` +
     `Account: @${username}\n` +
     `Followers: ${followers.toLocaleString()}\n` +
     `Median Reel views: ${medianViews.toLocaleString()}\n` +
     `Top-3 avg views: ${top3Views.toLocaleString()}\n` +
-    `Median views/followers ratio: ${medianRatio.toFixed(1)}x\n` +
+    `Views/followers (median): ${medianRatio.toFixed(1)}x\n` +
     `Hit rate (reels >50K views): ${(hitRate * 100).toFixed(0)}%\n` +
+    `Virality stability: ${stabilityLabel} (top1/median ratio)\n` +
     `Found via clusters: ${sourceClusters.join(', ')}\n` +
     `Bio: ${bio || '(none)'}\n` +
-    `Sample captions: ${captions.slice(0, 2).join(' | ') || '(none)'}\n\n` +
+    `Sample captions: ${captions.slice(0, 3).join(' | ') || '(none)'}\n\n` +
     `Return ONLY valid JSON, no markdown:\n` +
     `{"business_model_fit":"wine_shop|wine_bar|media|creator|other",` +
     `"content_format_strength":1-5,` +
     `"retail_idea_density":1-5,` +
-    `"copyability_for_local_business":1-5,` +
+    `"format_copyability":1-5,` +
+    `"production_copyability":1-5,` +
+    `"retail_copyability":1-5,` +
     `"red_flags":["..."],` +
     `"why_matters":"one specific sentence",` +
-    `"verdict":"keep|maybe|reject"}`
+    `"verdict":"keep|maybe|reject"}\n\n` +
+    `Copyability guide:\n` +
+    `- format_copyability: can you replicate the reel mechanic without a team?\n` +
+    `- production_copyability: 5=shot on phone, 1=requires studio/pro crew\n` +
+    `- retail_copyability: 5=perfect for a wine shop, 1=only works for creator/media`
 
   const res = await claude.messages.create({
     model:      'claude-haiku-4-5-20251001',
-    max_tokens: 250,
+    max_tokens: 300,
     messages:   [{ role: 'user', content: prompt }],
   })
 
@@ -198,31 +248,42 @@ async function analyzeAccount(
     return JSON.parse(text.replace(/```json|```/g, '').trim()) as AccountAnalysis
   } catch {
     return {
-      business_model_fit:          'other',
-      content_format_strength:     3,
-      retail_idea_density:         3,
-      copyability_for_local_business: 3,
-      red_flags:                   [],
-      why_matters:                 '',
-      verdict:                     'maybe',
+      business_model_fit:      'other',
+      content_format_strength: 3,
+      retail_idea_density:     3,
+      format_copyability:      3,
+      production_copyability:  3,
+      retail_copyability:      3,
+      red_flags:               [],
+      why_matters:             '',
+      verdict:                 'maybe',
     }
   }
 }
 
 function computeScore(
-  medianRatio: number,
-  p75Ratio:    number,
-  top1Ratio:   number,
-  hitRate:     number,
-  analysis:    AccountAnalysis,
+  medianRatio:    number,
+  p75Ratio:       number,
+  top1Ratio:      number,
+  hitRate:        number,
+  analysis:       AccountAnalysis,
+  confidence:     number,
 ): number {
+  const copyability = (
+    analysis.format_copyability * 0.25 +
+    analysis.production_copyability * 0.25 +
+    analysis.retail_copyability * 0.50   // retail fit weighted double
+  ) / 5
+
   const raw =
     0.25 * logNorm(medianRatio) +
-    0.20 * logNorm(p75Ratio) +
-    0.15 * logNorm(top1Ratio) +
+    0.18 * logNorm(p75Ratio) +
+    0.12 * logNorm(top1Ratio) +
     0.15 * hitRate +
-    0.15 * (analysis.copyability_for_local_business / 5) +
-    0.10 * (analysis.retail_idea_density / 5)
+    0.15 * copyability +
+    0.08 * (analysis.retail_idea_density / 5) +
+    0.07 * confidence
+
   return Math.round(raw * 9 + 1) // 0–1 → 1–10
 }
 
@@ -231,11 +292,10 @@ function computeScore(
 async function main() {
   const args = process.argv.slice(2)
 
-  const clusterArg  = args.find(a => a.startsWith('--clusters='))?.split('=')[1]
-  const hashtagArg  = args.find(a => a.startsWith('--hashtags='))?.split('=')[1]
+  const clusterArg = args.find(a => a.startsWith('--clusters='))?.split('=')[1]
+  const hashtagArg = args.find(a => a.startsWith('--hashtags='))?.split('=')[1]
 
-  // Build hashtag list + cluster map
-  let clusterMap: Map<string, string>   // hashtag → cluster name
+  let clusterMap: Map<string, string>
   let hashtags: string[]
 
   if (hashtagArg) {
@@ -254,7 +314,7 @@ async function main() {
   const clusterNames = [...new Set(clusterMap.values())]
   console.log(`\n🔍 Discovering from ${hashtags.length} hashtags across ${clusterNames.length} clusters: ${clusterNames.join(', ')}\n`)
 
-  // ── Collect posts by account ──────────────────────────────────────────────
+  // ── Collect posts ─────────────────────────────────────────────────────────
   const postsByAccount    = new Map<string, Post[]>()
   const clustersByAccount = new Map<string, Set<string>>()
 
@@ -281,20 +341,26 @@ async function main() {
   console.log(`\n📊 Found ${postsByAccount.size} unique accounts. Enriching profiles…\n`)
 
   type Candidate = {
-    username:       string
-    displayName:    string | null
-    followers:      number
-    bucket:         string
-    sourceClusters: string[]
-    sampleSize:     number
-    avgViews:       number
-    medianViews:    number
-    top3Views:      number
-    hitRate:        number
-    viralityRatio:  number
-    score:          number
-    analysis:       AccountAnalysis
-    sampleUrl:      string
+    username:             string
+    displayName:          string | null
+    followers:            number
+    bucket:               string
+    tier:                 string
+    sourceClusters:       string[]
+    matchedClustersCount: number
+    sampleSize:           number
+    avgViews:             number
+    medianViews:          number
+    top3Views:            number
+    hitRate:              number
+    viralityRatio:        number
+    stabilityRatio:       number
+    stabilityLabel:       string
+    freshnessScore:       number
+    confidenceScore:      number
+    score:                number
+    analysis:             AccountAnalysis
+    sampleUrl:            string
   }
 
   const candidates: Candidate[] = []
@@ -303,10 +369,9 @@ async function main() {
     try {
       process.stdout.write(`  @${username}… `)
 
-      // Minimum sample guard
       const views = posts.map(p => p.videoPlayCount ?? 0).filter(v => v > 0)
       if (views.length < 3) {
-        console.log(`skip (only ${views.length} reels sampled — need ≥3)`)
+        console.log(`skip (only ${views.length} reels — need ≥3)`)
         continue
       }
 
@@ -319,7 +384,7 @@ async function main() {
         continue
       }
 
-      // Robust metrics
+      // Metrics
       const avgViews    = Math.round(views.reduce((a, b) => a + b, 0) / views.length)
       const medianViews = Math.round(median(views))
       const p75Views    = Math.round(p75(views))
@@ -329,14 +394,18 @@ async function main() {
       const p75Ratio    = followers > 0 ? p75Views    / followers : 0
       const top1Ratio   = followers > 0 ? Math.max(...views) / followers : 0
 
-      const sourceClusters = [...(clustersByAccount.get(username) ?? [])]
-      const captions       = posts.map(p => p.caption ?? '').filter(Boolean)
-      const bio            = profile.biography ?? ''
-      const bucket         = sizeBucket(followers)
+      const stability      = computeStability(views)
+      const freshnessScore = computeFreshness(posts)
+
+      const sourceClusters       = [...(clustersByAccount.get(username) ?? [])]
+      const matchedClustersCount = sourceClusters.length
+      const bio                  = profile.biography ?? ''
+      const captions             = posts.map(p => p.caption ?? '').filter(Boolean)
+      const bucket               = sizeBucket(followers)
 
       const analysis = await analyzeAccount(
         username, followers, medianViews, top3Views, hitRate,
-        medianRatio, sourceClusters, bio, captions,
+        medianRatio, stability.label, sourceClusters, bio, captions,
       )
 
       if (analysis.verdict === 'reject') {
@@ -344,18 +413,24 @@ async function main() {
         continue
       }
 
-      const score = computeScore(medianRatio, p75Ratio, top1Ratio, hitRate, analysis)
+      const confidenceScore = computeConfidence(
+        views.length, matchedClustersCount, !!bio, analysis.verdict, stability.label,
+      )
+      const score = computeScore(medianRatio, p75Ratio, top1Ratio, hitRate, analysis, confidenceScore)
+      const tier  = assignTier(score, confidenceScore)
 
       console.log(
-        `${bucket.padEnd(6)} | med=${medianViews.toLocaleString()} ratio=${medianRatio.toFixed(1)}x ` +
-        `hit=${(hitRate * 100).toFixed(0)}% ${analysis.verdict} ${score}/10` +
-        (analysis.why_matters ? ` | ${analysis.why_matters.slice(0, 55)}` : '')
+        `${bucket.padEnd(6)} | tier=${tier} med=${medianViews.toLocaleString()} ratio=${medianRatio.toFixed(1)}x ` +
+        `stab=${stability.label} hit=${(hitRate * 100).toFixed(0)}% conf=${confidenceScore} ${score}/10` +
+        (analysis.why_matters ? ` | ${analysis.why_matters.slice(0, 50)}` : '')
       )
 
       candidates.push({
-        username, displayName: profile.fullName, followers, bucket, sourceClusters,
-        sampleSize: views.length, avgViews, medianViews, top3Views, hitRate,
-        viralityRatio: medianRatio, score, analysis, sampleUrl: posts[0]?.url ?? '',
+        username, displayName: profile.fullName, followers, bucket, tier,
+        sourceClusters, matchedClustersCount, sampleSize: views.length,
+        avgViews, medianViews, top3Views, hitRate, viralityRatio: medianRatio,
+        stabilityRatio: stability.ratio, stabilityLabel: stability.label,
+        freshnessScore, confidenceScore, score, analysis, sampleUrl: posts[0]?.url ?? '',
       })
     } catch (err) {
       console.error(`  ✗ @${username}:`, err)
@@ -363,24 +438,30 @@ async function main() {
     await sleep(1000)
   }
 
-  // ── Rank within size buckets, then blend top 30 ───────────────────────────
-  const PER_BUCKET = 8
+  // ── Rank within size buckets → blend top 30 ───────────────────────────────
   const ranked: Candidate[] = []
   for (const b of ['micro', 'small', 'mid', 'large']) {
     const inBucket = candidates.filter(c => c.bucket === b).sort((a, z) => z.score - a.score)
-    ranked.push(...inBucket.slice(0, PER_BUCKET))
+    ranked.push(...inBucket.slice(0, 8))
   }
   ranked.sort((a, z) => z.score - a.score)
   const top30 = ranked.slice(0, 30)
 
   console.log(`\n✅ Top ${top30.length} candidates:\n`)
+  const tierLabel: Record<string, string> = { a: '🔴 A', b: '🟡 B', c: '⚪ C' }
   for (const c of top30) {
     console.log(
-      `  [${c.score}/10] ${c.bucket.padEnd(6)} @${c.username.padEnd(32)} ` +
-      `${String(c.followers).padStart(7)} flw · med ${String(c.medianViews).padStart(7)} · ` +
-      `hit ${(c.hitRate * 100).toFixed(0).padStart(3)}% · ${(c.analysis.why_matters ?? '').slice(0, 50)}`
+      `  [${c.score}/10] ${tierLabel[c.tier] ?? c.tier} ${c.bucket.padEnd(6)} @${c.username.padEnd(30)} ` +
+      `flw=${String(c.followers).padStart(7)} med=${String(c.medianViews).padStart(7)} ` +
+      `stab=${c.stabilityLabel} conf=${c.confidenceScore} fresh=${c.freshnessScore}`
     )
+    if (c.analysis.why_matters) console.log(`         → ${c.analysis.why_matters}`)
   }
+
+  // ── Summary by tier ───────────────────────────────────────────────────────
+  const tierCounts = { a: 0, b: 0, c: 0 }
+  for (const c of top30) tierCounts[c.tier as 'a' | 'b' | 'c']++
+  console.log(`\nTier breakdown: 🔴 A=${tierCounts.a}  🟡 B=${tierCounts.b}  ⚪ C=${tierCounts.c}`)
 
   // ── Save to Supabase ──────────────────────────────────────────────────────
   let inserted = 0
@@ -388,30 +469,40 @@ async function main() {
     const { error } = await supabase
       .from('trend_accounts')
       .upsert({
-        username:          c.username,
-        display_name:      c.displayName,
-        followers_count:   c.followers,
-        avg_reel_views:    c.avgViews,
-        relevance_score:   c.score,
-        is_active:         false,
-        // v2 fields (migration 002)
-        median_reel_views: c.medianViews,
-        top3_avg_views:    c.top3Views,
-        hit_rate_50k:      parseFloat(c.hitRate.toFixed(3)),
-        virality_ratio:    parseFloat(c.viralityRatio.toFixed(2)),
-        size_bucket:       c.bucket,
-        source_clusters:   c.sourceClusters,
-        sample_size:       c.sampleSize,
-        business_model:    c.analysis.business_model_fit,
-        why_matters:       c.analysis.why_matters,
+        username:               c.username,
+        display_name:           c.displayName,
+        followers_count:        c.followers,
+        avg_reel_views:         c.avgViews,
+        relevance_score:        c.score,
+        is_active:              false,
+        // v2
+        median_reel_views:      c.medianViews,
+        top3_avg_views:         c.top3Views,
+        hit_rate_50k:           parseFloat(c.hitRate.toFixed(3)),
+        virality_ratio:         parseFloat(c.viralityRatio.toFixed(2)),
+        size_bucket:            c.bucket,
+        source_clusters:        c.sourceClusters,
+        sample_size:            c.sampleSize,
+        business_model:         c.analysis.business_model_fit,
+        why_matters:            c.analysis.why_matters,
+        // v3
+        top1_median_ratio:      c.stabilityRatio,
+        stability_label:        c.stabilityLabel,
+        confidence_score:       c.confidenceScore,
+        freshness_score:        c.freshnessScore,
+        matched_clusters_count: c.matchedClustersCount,
+        format_copyability:     c.analysis.format_copyability,
+        production_copyability: c.analysis.production_copyability,
+        retail_copyability:     c.analysis.retail_copyability,
+        tier:                   c.tier,
       }, { onConflict: 'username' })
 
     if (!error) inserted++
     else console.error(`  ✗ save @${c.username}:`, error.message)
   }
 
-  console.log(`\n💾 Saved ${inserted} accounts to Supabase (is_active=false).`)
-  console.log('   Review and activate them at: /accounts\n')
+  console.log(`\n💾 Saved ${inserted} accounts to Supabase (is_active=false, tier assigned).`)
+  console.log('   Tier A accounts are suggested for daily sync — activate at /accounts\n')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

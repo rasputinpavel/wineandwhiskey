@@ -152,23 +152,31 @@ async function main() {
 
         if (existing) continue
 
-        const reelUrl = post.url || `https://www.instagram.com/reel/${instagramId}/`
+        const reelUrl     = post.url || `https://www.instagram.com/reel/${instagramId}/`
+        const views       = post.videoPlayCount ?? 0
+        const absoluteHit = views >= VIEWS_ABSOLUTE
+        const relativeHit = followers > 0 && views / followers >= VIEWS_RELATIVE
+        const triggerType = absoluteHit && relativeHit ? 'both' : absoluteHit ? 'absolute' : 'relative'
 
         if (!isDryRun) {
           await supabase.from('trend_reels').insert({
-            account_id: account.id,
-            instagram_id: instagramId,
-            url: reelUrl,
-            views_count: post.videoPlayCount ?? 0,
-            likes_count: post.likesCount,
-            comments_count: post.commentsCount,
-            caption: post.caption,
-            hashtags: post.hashtags,
-            thumbnail_url: post.displayUrl,
-            video_url: post.videoUrl,
-            duration_s: post.videoDuration,
-            published_at: post.timestamp,
-            status: 'new',
+            account_id:           account.id,
+            instagram_id:         instagramId,
+            url:                  reelUrl,
+            views_count:          views,
+            likes_count:          post.likesCount,
+            comments_count:       post.commentsCount,
+            caption:              post.caption,
+            hashtags:             post.hashtags,
+            thumbnail_url:        post.displayUrl,
+            video_url:            post.videoUrl,
+            duration_s:           post.videoDuration,
+            published_at:         post.timestamp,
+            status:               'new',
+            trigger_type:         triggerType,
+            views_at_capture:     views,
+            followers_at_capture: followers,
+            ratio_at_capture:     followers > 0 ? parseFloat((views / followers).toFixed(2)) : null,
           })
         }
 
