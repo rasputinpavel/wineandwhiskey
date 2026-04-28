@@ -189,7 +189,7 @@ bot.command("morning", async (ctx) => {
 // --- Голосовые сообщения ---
 
 bot.on("message:voice", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
+  if (!isPrivate(ctx.chat.type)) return;
 
   const username   = ctx.from?.username;
   const senderName = identifyUser(username);
@@ -220,13 +220,12 @@ bot.on("message:voice", async (ctx) => {
 // --- Текстовые сообщения ---
 
 bot.on("message:text", async (ctx) => {
-  if (!isAllowedChat(ctx.chat.id, ctx.chat.type)) return;
+  if (!isPrivate(ctx.chat.type)) return;
 
   const rawText = ctx.message.text;
   if (rawText.startsWith("/")) return;
 
-  const me      = ctx.me.username ?? "barrymorebot";
-  const private_ = isPrivate(ctx.chat.type);
+  const me = ctx.me.username ?? "barrymorebot";
 
   const text = stripAddressTrigger(rawText, me);
   const username   = ctx.from?.username;
