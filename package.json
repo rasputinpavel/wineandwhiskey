@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "dashboard": "tsx 03_automation/sync_dashboard.ts",
-    "matrix":    "tsx 03_automation/wine_matrix.ts",
-    "orders":    "tsx 03_automation/scrape_purchase_orders.ts",
-    "b2b":       "tsx 03_automation/sync_b2b.ts",
+    "matrix": "tsx 03_automation/wine_matrix.ts",
+    "orders": "tsx 03_automation/scrape_purchase_orders.ts",
+    "b2b": "tsx 03_automation/sync_b2b.ts",
     "suppliers": "tsx 03_automation/sync_suppliers.ts",
-    "receipts":  "tsx 03_automation/sync_receipts.ts",
-    "harvest":   "tsx 03_automation/sync_harvest_sales.ts",
-    "actuals":   "tsx 03_automation/sync_cashflow_actuals.ts",
-    "sync:all":          "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts",
-    "trends":            "tsx 03_automation/sync_trends.ts",
+    "receipts": "tsx 03_automation/sync_receipts.ts",
+    "harvest": "tsx 03_automation/sync_harvest_sales.ts",
+    "actuals": "tsx 03_automation/sync_cashflow_actuals.ts",
+    "sync:all": "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts",
+    "trends": "tsx 03_automation/sync_trends.ts",
     "discover-accounts": "tsx 03_automation/discover_trend_accounts.ts"
   },
   "dependencies": {
