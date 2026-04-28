@@ -16,7 +16,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!)
 const APIFY_TOKEN = process.env.APIFY_TOKEN!
 const BASE = 'https://api.apify.com/v2'
-const VIEWS_THRESHOLD = 50_000
+const VIEWS_ABSOLUTE  = 15_000  // catch niche accounts
+const VIEWS_RELATIVE  = 1.5     // views/followers ratio
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -64,7 +65,7 @@ async function scrapeAccount(username: string, maxPosts = 30): Promise<Post[]> {
 
 async function notifyBarrymore(newReels: Array<{ username: string; views: number; url: string }>) {
   const token = process.env.BARRYMORE_BOT_TOKEN
-  const chatId = process.env.BARRYMORE_CHAT_ID
+  const chatId = process.env.BARRYMORE_OWNER_CHAT_ID ?? process.env.BARRYMORE_CHAT_ID
   const serviceUrl = process.env.TRENDWATCH_URL || 'https://trendwatch.railway.app'
 
   if (!token || !chatId || !newReels.length) return
@@ -101,14 +102,14 @@ async function main() {
 
   console.log(`\n📡 Trend sync ${isDryRun ? '[DRY RUN] ' : ''}started at ${new Date().toISOString()}\n`)
 
-  let accounts: Array<{ id: string; username: string }>
+  let accounts: Array<{ id: string; username: string; followers_count: number | null }>
 
   if (forceAccount) {
-    accounts = [{ id: 'test', username: forceAccount }]
+    accounts = [{ id: 'test', username: forceAccount, followers_count: null }]
   } else {
     const { data, error } = await supabase
       .from('trend_accounts')
-      .select('id, username')
+      .select('id, username, followers_count')
       .eq('is_active', true)
 
     if (error) throw new Error(`Accounts fetch failed: ${error.message}`)
@@ -130,9 +131,15 @@ async function main() {
 
     try {
       const posts = await scrapeAccount(account.username)
-      const highReach = posts.filter(p => (p.videoPlayCount ?? 0) >= VIEWS_THRESHOLD)
+      const followers = account.followers_count ?? 0
+      const highReach = posts.filter(p => {
+        const v = p.videoPlayCount ?? 0
+        const absoluteHit  = v >= VIEWS_ABSOLUTE
+        const relativeHit  = followers > 0 && v / followers >= VIEWS_RELATIVE
+        return absoluteHit || relativeHit
+      })
 
-      console.log(`  ${posts.length} Reels found, ${highReach.length} above ${(VIEWS_THRESHOLD / 1000).toFixed(0)}K views`)
+      console.log(`  ${posts.length} Reels found, ${highReach.length} above threshold (≥${(VIEWS_ABSOLUTE/1000).toFixed(0)}K or ≥${VIEWS_RELATIVE}x ratio)`)
 
       for (const post of highReach) {
         const instagramId = post.shortCode
