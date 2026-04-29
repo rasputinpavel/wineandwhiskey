@@ -11,6 +11,7 @@ type SearchParams = {
   grape?: string
   category?: string
   wine_type?: string
+  spirit_type?: string
   page?: string
   sort?: string
   dir?: string
@@ -40,6 +41,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   if (params.grape) query = query.ilike('grape_variety', `%${params.grape}%`)
   if (params.category) query = query.eq('category', params.category)
   if (params.wine_type) query = query.eq('wine_type', params.wine_type)
+  if (params.spirit_type) query = query.eq('spirit_type', params.spirit_type)
 
   const [itemsRes, filterRes, priceListsRes] = await Promise.all([
     query,
@@ -47,10 +49,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     supabase.from('price_lists').select('id, status').eq('status', 'processing'),
   ])
 
-  const filterOptions = (filterRes.data ?? {}) as { suppliers?: string[]; countries?: string[]; grapes?: string[] }
+  const filterOptions = (filterRes.data ?? {}) as { suppliers?: string[]; countries?: string[]; grapes?: string[]; spirit_types?: string[] }
   const suppliers = filterOptions.suppliers ?? []
   const countries = filterOptions.countries ?? []
   const grapes = filterOptions.grapes ?? []
+  const spiritTypes = filterOptions.spirit_types ?? []
 
   const items = itemsRes.data ?? []
   const total = itemsRes.count ?? 0
@@ -109,7 +112,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {/* Filters */}
         <Suspense>
-          <FilterBar suppliers={suppliers} countries={countries} grapes={grapes} category={params.category ?? ''} wineType={params.wine_type ?? ''} />
+          <FilterBar
+            suppliers={suppliers}
+            countries={countries}
+            grapes={grapes}
+            spiritTypes={spiritTypes}
+            category={params.category ?? ''}
+            wineType={params.wine_type ?? ''}
+            spiritType={params.spirit_type ?? ''}
+          />
         </Suspense>
 
         {/* Table */}

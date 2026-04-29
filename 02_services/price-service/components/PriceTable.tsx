@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { WineItem } from '@/lib/supabase'
 import Image from 'next/image'
 import WineItemPanel from './WineItemPanel'
+import { wineTypeLabel, spiritTypeLabel } from '@/lib/types-display'
 
 type Props = {
   items: WineItem[]
@@ -102,6 +103,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                     { col: 'country', label: 'Страна', align: 'left' },
                     { col: 'winery', label: 'Производитель', align: 'left' },
                     { col: null, label: 'Сорт', align: 'left' },
+                    { col: null, label: 'Тип', align: 'left' },
                     { col: 'vivino_rating', label: 'Vivino', align: 'left' },
                     { col: 'year', label: 'Год', align: 'left' },
                     { col: null, label: 'Объём', align: 'left' },
@@ -193,6 +195,13 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
       <td className="px-4 py-3 text-gray-600">{item.country ?? '—'}</td>
       <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px] truncate">{item.winery ?? '—'}</td>
       <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">{item.grape_variety ?? '—'}</td>
+      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+        {item.wine_type
+          ? wineTypeLabel(item.wine_type)
+          : item.spirit_type
+          ? spiritTypeLabel(item.spirit_type)
+          : '—'}
+      </td>
       <td className="px-4 py-3">
         {item.vivino_rating ? (
           <span className="text-xs font-medium text-purple-700">★ {item.vivino_rating}</span>
@@ -228,6 +237,8 @@ function MobileCard({ item, onClick }: { item: WineItem; onClick: () => void }) 
             )}
             {item.country && <span className="text-xs text-gray-500">{item.country}</span>}
             {item.year && <span className="text-xs text-gray-500">{item.year}</span>}
+            {item.wine_type && <span className="text-xs text-gray-500">{wineTypeLabel(item.wine_type)}</span>}
+            {!item.wine_type && item.spirit_type && <span className="text-xs text-gray-500">{spiritTypeLabel(item.spirit_type)}</span>}
           </div>
           {item.winery && <div className="text-xs text-gray-500 mt-1 truncate">{item.winery}</div>}
           {item.grape_variety && <div className="text-xs text-gray-400 mt-0.5 truncate">{item.grape_variety}</div>}

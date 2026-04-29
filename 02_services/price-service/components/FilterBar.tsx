@@ -2,13 +2,16 @@
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useCallback, useTransition } from 'react'
+import { WINE_TYPE_LABELS, SPIRIT_TYPE_LABELS } from '@/lib/types-display'
 
 type Props = {
   suppliers: string[]
   countries: string[]
   grapes: string[]
+  spiritTypes: string[]
   category: string
   wineType: string
+  spiritType: string
 }
 
 const CATEGORIES = [
@@ -18,15 +21,11 @@ const CATEGORIES = [
   { value: 'beer', label: '🍺 Пиво' },
 ]
 
-const WINE_TYPES = [
-  { value: '', label: 'Все' },
-  { value: 'red', label: '🔴 Красное' },
-  { value: 'white', label: '⚪ Белое' },
-  { value: 'rose', label: '🌸 Розовое' },
-  { value: 'sparkling', label: '✨ Игристое' },
-]
+// Stable order for wine type chips. 'orange' may be empty in DB; we still
+// render the chip so the UI taxonomy is fixed and predictable.
+const WINE_TYPE_CHIPS = ['', 'red', 'white', 'rose', 'orange', 'sparkling']
 
-export default function FilterBar({ suppliers, countries, grapes, category, wineType }: Props) {
+export default function FilterBar({ suppliers, countries, grapes, spiritTypes, category, wineType, spiritType }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -49,7 +48,7 @@ export default function FilterBar({ suppliers, countries, grapes, category, wine
   const supplier = searchParams.get('supplier') ?? ''
   const country = searchParams.get('country') ?? ''
   const grape = searchParams.get('grape') ?? ''
-  const hasFilters = q || supplier || country || grape || category || wineType
+  const hasFilters = q || supplier || country || grape || category || wineType || spiritType
 
   return (
     <div className="flex flex-col gap-3">
@@ -58,7 +57,7 @@ export default function FilterBar({ suppliers, countries, grapes, category, wine
         {CATEGORIES.map(c => (
           <button
             key={c.value}
-            onClick={() => update({ category: c.value, wine_type: '' })}
+            onClick={() => update({ category: c.value, wine_type: '', spirit_type: '' })}
             className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
               category === c.value
                 ? 'bg-wine-600 text-white'
@@ -70,22 +69,60 @@ export default function FilterBar({ suppliers, countries, grapes, category, wine
         ))}
       </div>
 
-      {/* Wine type tabs — only when category is wine */}
+      {/* Wine type chips — only when category is wine */}
       {category === 'wine' && (
         <div className="flex items-center gap-1 flex-wrap">
-          {WINE_TYPES.map(t => (
-            <button
-              key={t.value}
-              onClick={() => update({ wine_type: t.value })}
-              className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
-                wineType === t.value
-                  ? 'bg-gray-800 text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          {WINE_TYPE_CHIPS.map(t => {
+            const meta = t ? WINE_TYPE_LABELS[t] : null
+            const label = t ? `${meta?.emoji} ${meta?.label}` : 'Все'
+            return (
+              <button
+                key={t || 'all'}
+                onClick={() => update({ wine_type: t })}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
+                  wineType === t
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Spirit type chips — only when category is spirits. Driven by what's
+          actually in the DB so we don't show empty buckets. */}
+      {category === 'spirits' && spiritTypes.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <button
+            onClick={() => update({ spirit_type: '' })}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
+              spiritType === ''
+                ? 'bg-gray-800 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Все
+          </button>
+          {spiritTypes.map(t => {
+            const meta = SPIRIT_TYPE_LABELS[t]
+            const label = meta ? `${meta.emoji} ${meta.label}` : t
+            return (
+              <button
+                key={t}
+                onClick={() => update({ spirit_type: t })}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
+                  spiritType === t
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       )}
 
