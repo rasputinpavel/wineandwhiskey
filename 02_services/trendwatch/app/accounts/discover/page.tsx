@@ -139,6 +139,12 @@ export default function AccountDiscoverPage() {
     })
   }
 
+  async function handleStop() {
+    if (!jobId) return
+    await fetch(`/api/accounts/discover/${jobId}`, { method: 'DELETE' })
+    // The next poll will pick up the failed state
+  }
+
   async function handleSave() {
     if (!job) return
     const picked = job.candidates.filter(c => selected.has(c.username))
@@ -188,14 +194,24 @@ export default function AccountDiscoverPage() {
           />
           <p className="text-gray-500 text-xs mt-2">Comma-separated. No # needed. Each hashtag takes ~30–90 sec on Apify.</p>
 
-          <button
-            onClick={handleStart}
-            disabled={running}
-            className="mt-4 px-5 py-2.5 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {running && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            {running ? 'Running…' : 'Find accounts'}
-          </button>
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={handleStart}
+              disabled={running}
+              className="px-5 py-2.5 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {running && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {running ? 'Running…' : 'Find accounts'}
+            </button>
+            {running && (
+              <button
+                onClick={handleStop}
+                className="px-5 py-2.5 bg-gray-800 hover:bg-red-900 text-gray-300 hover:text-red-200 text-sm font-medium rounded-lg transition-colors"
+              >
+                Stop
+              </button>
+            )}
+          </div>
 
           {startError && (
             <div className="mt-3 text-red-400 bg-red-950 border border-red-800 rounded-lg p-3 text-xs font-mono whitespace-pre-wrap">

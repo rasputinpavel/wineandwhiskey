@@ -103,12 +103,19 @@ async function appendCandidate(jobId: string, candidate: Candidate) {
     .eq('id', jobId)
 }
 
+const MAX_ACCOUNTS_TO_ENRICH = 100
+const MIN_REELS_PER_ACCOUNT  = 2
+
 async function runDiscovery(jobId: string, tags: string[]) {
   await appendLog(jobId, `🔍 Запускаю поиск по ${tags.length} хэштегам — каждый занимает 30–90 сек, всего ~${Math.round(tags.length * 0.7)} мин.`)
 
   const postsByAccount = new Map<string, InstagramPost[]>()
 
   for (let i = 0; i < tags.length; i++) {
+    // Check if cancelled
+    const { data: jobCheck } = await supabase.from('discover_jobs').select('state').eq('id', jobId).single()
+    if (jobCheck?.state !== 'running') { await appendLog(jobId, `⏹ Остановлено пользователем`); return }
+
     const tag = tags[i]
     await setPhase(jobId, 'hashtag', i + 1, tags.length, `#${tag}`)
     await appendLog(jobId, `  → Сканирую #${tag}...`)
@@ -124,10 +131,28 @@ async function runDiscovery(jobId: string, tags: string[]) {
     }
   }
 
-  const accounts = [...postsByAccount.entries()]
-  await appendLog(jobId, `📊 Уникальных аккаунтов: ${accounts.length}. Обогащаю профили...`)
+  // Filter: need at least MIN_REELS_PER_ACCOUNT reels with views, then take top by total views
+  const allAccounts = [...postsByAccount.entries()]
+  const filtered = allAccounts
+    .filter(([, posts]) => posts.filter(p => (p.videoPlayCount ?? 0) > 0).length >= MIN_REELS_PER_ACCOUNT)
+    .map(([username, posts]) => {
+      const totalViews = posts.reduce((sum, p) => sum + (p.videoPlayCount ?? 0), 0)
+      return { username, posts, totalViews }
+    })
+    .sort((a, b) => b.totalViews - a.totalViews)
+    .slice(0, MAX_ACCOUNTS_TO_ENRICH)
+
+  const skipped = allAccounts.length - filtered.length
+  await appendLog(jobId, `📊 Найдено ${allAccounts.length} аккаунтов, фильтр: ≥${MIN_REELS_PER_ACCOUNT} Reels + топ-${MAX_ACCOUNTS_TO_ENRICH} по просмотрам.`)
+  await appendLog(jobId, `   Пропущено ${skipped} (мало роликов в выборке). К обогащению: ${filtered.length}.`)
+
+  const accounts = filtered.map(f => [f.username, f.posts] as [string, InstagramPost[]])
 
   for (let i = 0; i < accounts.length; i++) {
+    // Check if cancelled
+    const { data: jobCheck } = await supabase.from('discover_jobs').select('state').eq('id', jobId).single()
+    if (jobCheck?.state !== 'running') { await appendLog(jobId, `⏹ Остановлено пользователем`); return }
+
     const [username, posts] = accounts[i]
     await setPhase(jobId, 'account', i + 1, accounts.length, `@${username}`)
 
