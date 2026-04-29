@@ -6,6 +6,7 @@ import { isBBB, parseBBB } from './parsers/bbb'
 import { isMagMag, parseMagMag } from './parsers/magmag'
 import { isItalasia, parseItalasia } from './parsers/italasia'
 import { isIWS, parseIWS } from './parsers/iws'
+import { isJanhom, parseJanhom } from './parsers/janhom'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -71,6 +72,10 @@ export async function extractFromFile(
       const r = await parseIWS(buffer, filename, report)
       await report(95, 'inserting')
       return r
+    }
+    if (await isJanhom(buffer, filename)) {
+      console.log('[extract] using Janhom parser (Claude with supplier-specific prompts)')
+      return parseJanhom(buffer, filename, report)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
