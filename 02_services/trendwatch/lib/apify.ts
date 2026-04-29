@@ -82,14 +82,15 @@ export async function scrapeAccountReels(username: string, maxPosts = 50): Promi
   return items.filter(p => p.type === 'Video')
 }
 
-export async function scrapeHashtagReels(hashtag: string, maxPosts = 100): Promise<InstagramPost[]> {
-  const { runId, datasetId } = await startActor('apify~instagram-hashtag-scraper', {
-    hashtags: [hashtag],
+export async function scrapeHashtagReels(hashtag: string, maxPosts = 60): Promise<InstagramPost[]> {
+  const { runId, datasetId } = await startActor('apify~instagram-scraper', {
+    directUrls:   [`https://www.instagram.com/explore/tags/${hashtag}/`],
+    resultsType:  'reels',
     resultsLimit: maxPosts,
   })
   await pollRun(runId)
   const items = await getDataset<InstagramPost>(datasetId)
-  return items.filter(p => p.type === 'Video')
+  return items.filter(p => p.videoPlayCount != null)
 }
 
 export async function scrapeProfile(username: string): Promise<InstagramProfile | null> {
