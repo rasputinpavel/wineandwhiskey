@@ -36,9 +36,24 @@ export default function AccountDiscoverPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
+  const [startedAt, setStartedAt]   = useState<number | null>(null)
+  const [elapsed, setElapsed]       = useState(0)
+  const [lastBeat, setLastBeat]     = useState<number>(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
+
+  useEffect(() => {
+    if (!running || !startedAt) return
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [running, startedAt])
+
+  function fmtTime(s: number) {
+    const m = Math.floor(s / 60)
+    const r = s % 60
+    return `${m}:${String(r).padStart(2, '0')}`
+  }
 
   async function handleDiscover() {
     setRunning(true)
@@ -46,6 +61,9 @@ export default function AccountDiscoverPage() {
     setLogs([])
     setPhase(null)
     setSaved(false)
+    setStartedAt(Date.now())
+    setElapsed(0)
+    setLastBeat(Date.now())
     const tags = hashtags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
 
     const res = await fetch('/api/accounts/discover', {
@@ -77,8 +95,12 @@ export default function AccountDiscoverPage() {
           const event = JSON.parse(line)
           if (event.type === 'log') {
             setLogs(prev => [...prev, event.message])
+            setLastBeat(Date.now())
+          } else if (event.type === 'heartbeat') {
+            setLastBeat(Date.now())
           } else if (event.type === 'phase') {
             setPhase({ phase: event.phase, current: event.current, total: event.total, label: event.label })
+            setLastBeat(Date.now())
           } else if (event.type === 'candidate') {
             setCandidates(prev => [...prev, { ...event.candidate, selected: event.candidate.relevance_score >= 7 }])
           } else if (event.type === 'done') {
@@ -152,27 +174,45 @@ export default function AccountDiscoverPage() {
         {/* Progress + log */}
         {(running || logs.length > 0) && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-            {phase && (
-              <>
-                <div className="flex items-center justify-between mb-2 text-sm">
-                  <span className="text-gray-300 font-medium">
-                    {phase.phase === 'hashtag' ? 'Сканирование хэштегов' : 'Проверка профилей'} · {phase.label}
+            {/* Always-visible status row while running */}
+            {running && (
+              <div className="flex items-center justify-between mb-3 text-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-white font-medium">
+                    {phase
+                      ? `${phase.phase === 'hashtag' ? 'Сканирование хэштегов' : 'Проверка профилей'} · ${phase.label}`
+                      : 'Подключаюсь к Apify…'}
                   </span>
-                  <span className="text-gray-500 font-mono">{phase.current} / {phase.total}</span>
                 </div>
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-4">
-                  <div
-                    className="h-full bg-wine-700 transition-all duration-300"
-                    style={{ width: `${progressPct}%` }}
-                  />
+                <div className="flex items-center gap-4 text-xs text-gray-400 font-mono">
+                  {phase && <span>{phase.current} / {phase.total}</span>}
+                  <span>elapsed {fmtTime(elapsed)}</span>
+                  <span title={`Last activity ${Math.round((Date.now() - lastBeat) / 1000)}s ago`}>
+                    {Date.now() - lastBeat < 8000 ? '🟢 alive' : '🟡 waiting…'}
+                  </span>
                 </div>
-              </>
+              </div>
+            )}
+
+            {phase && (
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-4">
+                <div
+                  className="h-full bg-wine-700 transition-all duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
             )}
 
             <div className="bg-black/40 rounded-lg p-3 max-h-72 overflow-y-auto font-mono text-xs leading-relaxed">
               {logs.map((line, i) => (
                 <div key={i} className="text-gray-300 whitespace-pre-wrap">{line}</div>
               ))}
+              {running && (
+                <div className="text-gray-600 italic mt-1">
+                  Apify сейчас крутит actor — обычно 30–90 сек на хэштег. Жди живой статус.
+                </div>
+              )}
               <div ref={logsEndRef} />
             </div>
           </div>

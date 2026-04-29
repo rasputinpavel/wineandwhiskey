@@ -26,8 +26,12 @@ export async function POST(req: NextRequest) {
       const enc = new TextEncoder()
       const emit = (obj: object) => controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
 
+      // Heartbeat keeps the stream alive through Apify's long polls (Railway/proxy
+      // can drop idle connections). Emits every 3s while work is in progress.
+      const heartbeat = setInterval(() => emit({ type: 'heartbeat', t: Date.now() }), 3000)
+
       const tags = hashtags.slice(0, 20)
-      emit({ type: 'log', message: `🔍 Запускаю поиск по ${tags.length} хэштегам — Apify прогрев займёт ~10 сек на каждый...` })
+      emit({ type: 'log', message: `🔍 Запускаю поиск по ${tags.length} хэштегам — каждый занимает ~30–90 сек на Apify, всего ~${Math.round(tags.length * 0.7)} мин...` })
 
       const postsByAccount = new Map<string, InstagramPost[]>()
 
@@ -101,6 +105,7 @@ export async function POST(req: NextRequest) {
       const sorted = candidates.sort((a, b) => b.relevance_score - a.relevance_score).slice(0, 40)
       emit({ type: 'log', message: `✅ Готово — ${sorted.length} кандидатов` })
       emit({ type: 'done', candidates: sorted })
+      clearInterval(heartbeat)
       controller.close()
     },
   })
