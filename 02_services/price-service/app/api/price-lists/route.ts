@@ -110,8 +110,28 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       progress_phase: 'inserting',
     }).eq('id', priceListId)
 
+    const VALID_CATEGORY = new Set(['wine', 'spirits', 'beer', 'other'])
+    const VALID_WINE_TYPE = new Set(['red', 'white', 'rose', 'orange', 'sparkling'])
+
     const items = result.items.map(item => {
-      const fallback = (!item.category) ? classifyItem(item.name, item.description) : null
+      // Coerce categories the DB CHECK won't accept (e.g. 'liqueur',
+      // 'fortified', 'aperitif') into the closest legal value, and route
+      // the original term into spirit_type so we don't lose the signal.
+      let category = item.category as string | null | undefined
+      let spiritType = item.spirit_type ?? null
+      if (category && !VALID_CATEGORY.has(category)) {
+        if (!spiritType) spiritType = category
+        category = 'spirits'
+      }
+      if (!category) {
+        const fallback = classifyItem(item.name, item.description)
+        category = fallback.category
+        if (!spiritType) spiritType = fallback.spirit_type
+      }
+
+      let wineType = item.wine_type as string | null | undefined
+      if (wineType && !VALID_WINE_TYPE.has(wineType)) wineType = null
+
       return {
         price_list_id: priceListId,
         supplier_id: supplierId,
@@ -124,9 +144,9 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
         year: item.year,
         volume: item.volume,
         description: item.description,
-        category: item.category ?? fallback?.category ?? null,
-        wine_type: item.wine_type ?? fallback?.wine_type ?? null,
-        spirit_type: item.spirit_type ?? fallback?.spirit_type ?? null,
+        category,
+        wine_type: wineType,
+        spirit_type: spiritType,
         supplier_sku: item.supplier_sku ?? null,
       }
     })
