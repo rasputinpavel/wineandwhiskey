@@ -1,18 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Shell from '@/components/Shell'
 import Link from 'next/link'
 
 type Candidate = {
-  username: string
-  display_name: string | null
+  username:        string
+  display_name:    string | null
   followers_count: number
-  avg_reel_views: number
+  avg_reel_views:  number
   relevance_score: number
-  category: string
+  category:        string
   sample_reel_url: string | null
-  selected: boolean
+  selected:        boolean
 }
 
 const SEED_HASHTAGS = [
@@ -26,29 +26,70 @@ function fmt(n: number) {
   return String(n)
 }
 
+type Phase = { phase: 'hashtag' | 'account'; current: number; total: number; label: string } | null
+
 export default function AccountDiscoverPage() {
-  const [hashtags, setHashtags] = useState(SEED_HASHTAGS.join(', '))
-  const [running, setRunning] = useState(false)
+  const [hashtags, setHashtags]     = useState(SEED_HASHTAGS.join(', '))
+  const [running, setRunning]       = useState(false)
+  const [logs, setLogs]             = useState<string[]>([])
+  const [phase, setPhase]           = useState<Phase>(null)
   const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const logsEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
 
   async function handleDiscover() {
     setRunning(true)
     setCandidates([])
+    setLogs([])
+    setPhase(null)
+    setSaved(false)
     const tags = hashtags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
 
     const res = await fetch('/api/accounts/discover', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hashtags: tags }),
+      body:    JSON.stringify({ hashtags: tags }),
     })
 
-    if (res.ok) {
-      const data = await res.json()
-      setCandidates(data.map((c: Omit<Candidate, 'selected'>) => ({ ...c, selected: c.relevance_score >= 7 })))
+    if (!res.ok || !res.body) {
+      setLogs(prev => [...prev, `✗ HTTP ${res.status}`])
+      setRunning(false)
+      return
     }
+
+    const reader  = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const event = JSON.parse(line)
+          if (event.type === 'log') {
+            setLogs(prev => [...prev, event.message])
+          } else if (event.type === 'phase') {
+            setPhase({ phase: event.phase, current: event.current, total: event.total, label: event.label })
+          } else if (event.type === 'candidate') {
+            setCandidates(prev => [...prev, { ...event.candidate, selected: event.candidate.relevance_score >= 7 }])
+          } else if (event.type === 'done') {
+            setCandidates(event.candidates.map((c: Omit<Candidate, 'selected'>) => ({ ...c, selected: c.relevance_score >= 7 })))
+          }
+        } catch {}
+      }
+    }
+
     setRunning(false)
+    setPhase(null)
   }
 
   function toggle(username: string) {
@@ -59,24 +100,19 @@ export default function AccountDiscoverPage() {
     const selected = candidates.filter(c => c.selected)
     if (!selected.length) return
     setSaving(true)
-
     for (const c of selected) {
       await fetch('/api/accounts', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: c.username,
-          display_name: c.display_name,
-          category: c.category,
-        }),
+        body:    JSON.stringify({ username: c.username, display_name: c.display_name, category: c.category }),
       })
     }
-
     setSaving(false)
     setSaved(true)
   }
 
   const selectedCount = candidates.filter(c => c.selected).length
+  const progressPct   = phase ? Math.round((phase.current / phase.total) * 100) : 0
 
   return (
     <Shell>
@@ -97,10 +133,11 @@ export default function AccountDiscoverPage() {
             value={hashtags}
             onChange={e => setHashtags(e.target.value)}
             rows={2}
-            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-gray-500 resize-none"
+            disabled={running}
+            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-gray-500 resize-none disabled:opacity-50"
             placeholder="winestore, wineshop, sommelier…"
           />
-          <p className="text-gray-500 text-xs mt-2">Comma-separated. No # needed. This runs Apify — takes ~5 min.</p>
+          <p className="text-gray-500 text-xs mt-2">Comma-separated. No # needed. Each hashtag takes ~10–30 sec on Apify.</p>
 
           <button
             onClick={handleDiscover}
@@ -111,6 +148,35 @@ export default function AccountDiscoverPage() {
             {running ? 'Searching…' : 'Find accounts'}
           </button>
         </div>
+
+        {/* Progress + log */}
+        {(running || logs.length > 0) && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+            {phase && (
+              <>
+                <div className="flex items-center justify-between mb-2 text-sm">
+                  <span className="text-gray-300 font-medium">
+                    {phase.phase === 'hashtag' ? 'Сканирование хэштегов' : 'Проверка профилей'} · {phase.label}
+                  </span>
+                  <span className="text-gray-500 font-mono">{phase.current} / {phase.total}</span>
+                </div>
+                <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-4">
+                  <div
+                    className="h-full bg-wine-700 transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="bg-black/40 rounded-lg p-3 max-h-72 overflow-y-auto font-mono text-xs leading-relaxed">
+              {logs.map((line, i) => (
+                <div key={i} className="text-gray-300 whitespace-pre-wrap">{line}</div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
+          </div>
+        )}
 
         {candidates.length > 0 && (
           <div>
@@ -126,7 +192,7 @@ export default function AccountDiscoverPage() {
               ) : (
                 <button
                   onClick={handleSave}
-                  disabled={saving || !selectedCount}
+                  disabled={saving || !selectedCount || running}
                   className="px-4 py-2 bg-green-800 hover:bg-green-700 text-green-100 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : `Save ${selectedCount} accounts`}
