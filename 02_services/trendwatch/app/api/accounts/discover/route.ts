@@ -17,24 +17,28 @@ type Candidate = {
   sample_reel_url: string | null
 }
 
-// ─── GET — return latest active job (for reload resume) ──────────────────────
+// ─── GET — return latest job from last 2 hours (running, done, or failed) ───
 export async function GET() {
+  const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
   const { data, error } = await supabase
     .from('discover_jobs')
     .select('*')
-    .eq('state', 'running')
-    .order('updated_at', { ascending: false })
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false })
     .limit(1)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Stale job (no update >5 min) → mark failed and report no active
   const job = data?.[0]
-  if (job) {
+  // Auto-fail jobs that look stuck (running but no update >5 min)
+  if (job && job.state === 'running') {
     const ageSec = (Date.now() - new Date(job.updated_at).getTime()) / 1000
     if (ageSec > 300) {
-      await supabase.from('discover_jobs').update({ state: 'failed', error: 'stale (no heartbeat)' }).eq('id', job.id)
-      return NextResponse.json({ job: null })
+      await supabase.from('discover_jobs')
+        .update({ state: 'failed', error: 'stale (no heartbeat)' })
+        .eq('id', job.id)
+      job.state = 'failed'
+      job.error = 'stale (no heartbeat)'
     }
   }
   return NextResponse.json({ job: job ?? null })
@@ -56,12 +60,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !job) {
+    console.error('[discover POST] insert failed:', error)
     return NextResponse.json({ error: error?.message ?? 'failed to create job' }, { status: 500 })
   }
 
-  // Fire and forget — runs after response is sent
+  // Fire and forget — runs after response is sent. On Railway (long-running Node)
+  // this continues independently of the HTTP response.
   void runDiscovery(job.id, tags).catch(async err => {
     console.error('[discover] job failed:', err)
+    try {
+      await appendLog(job.id, `✗ Фатальная ошибка: ${err?.message ?? err}`)
+    } catch {}
     await supabase.from('discover_jobs')
       .update({ state: 'failed', error: String(err?.message ?? err), updated_at: new Date().toISOString() })
       .eq('id', job.id)

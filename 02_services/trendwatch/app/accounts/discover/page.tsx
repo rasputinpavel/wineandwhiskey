@@ -57,6 +57,7 @@ export default function AccountDiscoverPage() {
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
   const [now, setNow]               = useState(Date.now())
   const logsEndRef = useRef<HTMLDivElement>(null)
 
@@ -108,17 +109,26 @@ export default function AccountDiscoverPage() {
   async function handleStart() {
     setSaved(false)
     setSelected(new Set())
+    setStartError(null)
     const tags = hashtags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
 
-    const res = await fetch('/api/accounts/discover', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ hashtags: tags }),
-    })
-    if (!res.ok) return
-    const { job_id } = await res.json()
-    setJobId(job_id)
-    setJob(null)
+    try {
+      const res = await fetch('/api/accounts/discover', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ hashtags: tags }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setStartError(body.error ?? `HTTP ${res.status} — возможно миграция 004 не применена`)
+        return
+      }
+      const { job_id } = await res.json()
+      setJobId(job_id)
+      setJob(null)
+    } catch (err) {
+      setStartError(`Network error: ${(err as Error).message}`)
+    }
   }
 
   function toggle(username: string) {
@@ -186,6 +196,12 @@ export default function AccountDiscoverPage() {
             {running && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {running ? 'Running…' : 'Find accounts'}
           </button>
+
+          {startError && (
+            <div className="mt-3 text-red-400 bg-red-950 border border-red-800 rounded-lg p-3 text-xs font-mono whitespace-pre-wrap">
+              {startError}
+            </div>
+          )}
         </div>
 
         {/* Status + log — survives reload */}
