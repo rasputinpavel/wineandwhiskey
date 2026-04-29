@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       const enc = new TextEncoder()
       const emit = (obj: object) => controller.enqueue(enc.encode(JSON.stringify(obj) + '\n'))
 
-      const tags = hashtags.slice(0, 9)
+      const tags = hashtags.slice(0, 20)
       emit({ type: 'log', message: `🔍 Запускаю поиск по ${tags.length} хэштегам — Apify прогрев займёт ~10 сек на каждый...` })
 
       const postsByAccount = new Map<string, InstagramPost[]>()
