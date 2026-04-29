@@ -8,5 +8,5 @@ import { supabase } from '@/lib/supabase'
 export async function GET() {
   const { data, error } = await supabase.rpc('get_filter_options')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? { suppliers: [], countries: [], grapes: [] })
+  return NextResponse.json(data ?? { suppliers: [], countries: [], grapes: [], wine_types: [], spirit_types: [], kinds: [] })
 }

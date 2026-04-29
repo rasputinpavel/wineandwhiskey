@@ -26,6 +26,7 @@ import { writeFileSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+import { normalizeSpiritType } from '../classify'
 
 const exec = promisify(execFile)
 
@@ -514,6 +515,9 @@ function parseRow(line: string, grid: ColumnGrid, ctx: ParseContext): ExtractedI
   const wineType: ExtractedItem['wine_type'] =
     ctx.section === 'wine' ? mapWineType((typeRaw || '') + ' ' + (ctx.category || '')) : null
   const category: ExtractedItem['category'] = ctx.section === 'spirits' ? 'spirits' : 'wine'
+  const spiritType = ctx.section === 'spirits' && ctx.category
+    ? normalizeSpiritType(ctx.category)
+    : null
 
   const descParts: string[] = []
   if (ratingRaw) descParts.push(ratingRaw)
@@ -535,6 +539,7 @@ function parseRow(line: string, grid: ColumnGrid, ctx: ParseContext): ExtractedI
     description: descParts.length ? descParts.join(' • ') : null,
     category,
     wine_type: wineType,
+    spirit_type: spiritType,
     supplier_sku: sku,
   } as ExtractedItem & { supplier_sku: string }
 }
@@ -693,6 +698,7 @@ function parseVolume(sizeCol: string, varieties: string, sku: string): string | 
 
 function mapWineType(s: string): ExtractedItem['wine_type'] {
   const t = s.toLowerCase()
+  if (/orange|skin[\s-]?contact|qvevri|kvevri|amphora|ramato/.test(t)) return 'orange'
   if (/red/.test(t)) return 'red'
   if (/white/.test(t)) return 'white'
   if (/ros[ée]/.test(t)) return 'rose'

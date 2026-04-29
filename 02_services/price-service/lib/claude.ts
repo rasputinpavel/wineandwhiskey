@@ -12,7 +12,8 @@ export type ExtractedItem = {
   volume: string | null
   description: string | null
   category: 'wine' | 'spirits' | 'beer' | 'other' | null
-  wine_type: 'red' | 'white' | 'rose' | 'sparkling' | null
+  wine_type: 'red' | 'white' | 'rose' | 'orange' | 'sparkling' | null
+  spirit_type?: string | null
   supplier_sku?: string | null
 }
 

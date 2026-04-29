@@ -13,16 +13,19 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
-// Accepts { path, filename, mimeType } — file already uploaded to Supabase Storage
+// Accepts { path, filename, mimeType, kind } — file already uploaded to Supabase Storage
 export async function POST(req: NextRequest) {
-  const { path, filename, mimeType } = await req.json()
+  const { path, filename, mimeType, kind } = await req.json()
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
+
+  const validKinds = ['regular', 'promo', 'wholesale', 'closeout', 'vip']
+  const resolvedKind = validKinds.includes(kind) ? kind : detectKindFromFilename(filename ?? path)
 
   const { data: { publicUrl } } = supabase.storage.from('price-pdfs').getPublicUrl(path)
 
   const { data: priceList, error: insertError } = await supabase
     .from('price_lists')
-    .insert({ pdf_url: publicUrl, status: 'processing' })
+    .insert({ pdf_url: publicUrl, status: 'processing', kind: resolvedKind })
     .select()
     .single()
 
@@ -32,7 +35,16 @@ export async function POST(req: NextRequest) {
 
   runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf').catch(console.error)
 
-  return NextResponse.json({ id: priceList.id, status: 'processing' })
+  return NextResponse.json({ id: priceList.id, status: 'processing', kind: resolvedKind })
+}
+
+function detectKindFromFilename(name: string): string {
+  const n = name.toLowerCase()
+  if (/promo/.test(n)) return 'promo'
+  if (/wholesale|trade/.test(n)) return 'wholesale'
+  if (/closeout|clearance/.test(n)) return 'closeout'
+  if (/vip/.test(n)) return 'vip'
+  return 'regular'
 }
 
 async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string) {
@@ -95,6 +107,7 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
         description: item.description,
         category: item.category ?? fallback?.category ?? null,
         wine_type: item.wine_type ?? fallback?.wine_type ?? null,
+        spirit_type: item.spirit_type ?? fallback?.spirit_type ?? null,
         supplier_sku: item.supplier_sku ?? null,
       }
     })
