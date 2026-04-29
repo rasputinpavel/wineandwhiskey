@@ -5,6 +5,7 @@ import { renderPdfToImages, isPdftoppmAvailable } from './pdf-render'
 import { isBBB, parseBBB } from './parsers/bbb'
 import { isMagMag, parseMagMag } from './parsers/magmag'
 import { isItalasia, parseItalasia } from './parsers/italasia'
+import { isIWS, parseIWS } from './parsers/iws'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -64,6 +65,12 @@ export async function extractFromFile(
     if (await isItalasia(buffer, filename)) {
       console.log('[extract] using Italasia parser (Claude with supplier-specific prompt)')
       return parseItalasia(buffer, filename, report)
+    }
+    if (await isIWS(buffer, filename)) {
+      console.log('[extract] using IWS deterministic parser')
+      const r = await parseIWS(buffer, filename, report)
+      await report(95, 'inserting')
+      return r
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
