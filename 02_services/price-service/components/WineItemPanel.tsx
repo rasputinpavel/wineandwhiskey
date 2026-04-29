@@ -116,7 +116,26 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
   }
 
   const isEditing = mode === 'edit' || mode === 'create'
-  const img = item?.vivino_image_url ?? item?.image_url
+  // Build a unique image gallery: local image_url first, then all Vivino images.
+  const galleryImages = (() => {
+    const out: string[] = []
+    if (item?.image_url) out.push(item.image_url)
+    if (item?.vivino_images?.length) {
+      for (const u of item.vivino_images) if (!out.includes(u)) out.push(u)
+    } else if (item?.vivino_image_url && !out.includes(item.vivino_image_url)) {
+      out.push(item.vivino_image_url)
+    }
+    return out
+  })()
+  const img = galleryImages[0] ?? null
+  const regionPath = item?.vivino_region_hierarchy
+    ? [
+        item.vivino_region_hierarchy.country,
+        item.vivino_region_hierarchy.region,
+        item.vivino_region_hierarchy.subregion,
+        item.vivino_region_hierarchy.appellation,
+      ].filter(Boolean).join(' › ')
+    : null
 
   return (
     <>
@@ -184,6 +203,68 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
                   </a>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Image gallery — extra Vivino images beyond the cover */}
+          {mode === 'view' && galleryImages.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {galleryImages.slice(1).map(src => (
+                <a key={src} href={src} target="_blank" rel="noreferrer" className="relative w-14 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100 hover:border-purple-300 transition-colors">
+                  <Image src={src} alt="" fill className="object-contain" />
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Vivino enrichment block */}
+          {mode === 'view' && item && (item.vivino_alcohol != null || item.vivino_body || item.vivino_year || item.vivino_style || regionPath || item.vivino_flavors?.length || item.vivino_food_pairings?.length) && (
+            <div className="space-y-3 pb-1 border-b border-gray-100">
+              {(item.vivino_alcohol != null || item.vivino_body || item.vivino_year) && (
+                <div className="flex flex-wrap gap-2">
+                  {item.vivino_year && (
+                    <Pill label="Винтаж" value={String(item.vivino_year)} />
+                  )}
+                  {item.vivino_alcohol != null && (
+                    <Pill label="ABV" value={`${item.vivino_alcohol}%`} />
+                  )}
+                  {item.vivino_body && (
+                    <Pill label="Body" value={ruBody(item.vivino_body)} />
+                  )}
+                </div>
+              )}
+              {item.vivino_style && (
+                <div className="text-xs">
+                  <span className="text-gray-400 uppercase tracking-wide font-medium">Стиль</span>
+                  <span className="ml-2 text-gray-700">{item.vivino_style}</span>
+                </div>
+              )}
+              {regionPath && (
+                <div className="text-xs">
+                  <span className="text-gray-400 uppercase tracking-wide font-medium">Регион</span>
+                  <span className="ml-2 text-gray-700">{regionPath}</span>
+                </div>
+              )}
+              {item.vivino_flavors && item.vivino_flavors.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Вкусовой профиль</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.vivino_flavors.map(f => (
+                      <span key={f} className="px-2 py-0.5 text-xs rounded-full bg-purple-50 text-purple-700">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {item.vivino_food_pairings && item.vivino_food_pairings.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">К столу</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.vivino_food_pairings.map(f => (
+                      <span key={f} className="px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -255,6 +336,24 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
 }
 
 const INPUT = 'w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-wine-500 focus:border-transparent bg-white'
+
+function Pill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-100">
+      <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</span>
+      <span className="text-xs font-medium text-gray-800">{value}</span>
+    </div>
+  )
+}
+
+function ruBody(body: string): string {
+  switch (body.toLowerCase()) {
+    case 'light': return 'Лёгкое'
+    case 'medium': return 'Среднее'
+    case 'full': return 'Плотное'
+    default: return body
+  }
+}
 
 function Field({ label, editing, value, input }: {
   label: string

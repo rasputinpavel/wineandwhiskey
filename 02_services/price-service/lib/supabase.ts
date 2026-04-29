@@ -42,6 +42,14 @@ export type WineItem = {
   vivino_reviews_count: number | null
   vivino_url: string | null
   vivino_image_url: string | null
+  vivino_images: string[] | null
+  vivino_alcohol: number | null
+  vivino_body: string | null
+  vivino_flavors: string[] | null
+  vivino_food_pairings: string[] | null
+  vivino_region_hierarchy: { country: string | null; region: string | null; subregion: string | null; appellation: string | null } | null
+  vivino_style: string | null
+  vivino_year: number | null
   vivino_enriched_at: string | null
   winery: string | null
   category: 'wine' | 'spirits' | 'beer' | 'other' | null

@@ -1,0 +1,236 @@
+import type { VivinoResult, VivinoGrape, WineItemRow } from './types'
+import { VIVINO_WINE_TYPES, VIVINO_BODY_BUCKETS } from './types'
+import { normalizeName } from './normalize'
+
+type NamedRef = string | { name?: string } | null | undefined
+
+export function parseWineType(r: VivinoResult): 'red' | 'white' | 'rose' | 'sparkling' | null {
+  if (r.wine_type_id && VIVINO_WINE_TYPES[r.wine_type_id]) return VIVINO_WINE_TYPES[r.wine_type_id]
+  const t = (r.type ?? '').toLowerCase()
+  if (t.includes('red')) return 'red'
+  if (t.includes('white')) return 'white'
+  if (t.includes('ros')) return 'rose'
+  if (t.includes('spark') || t.includes('champagne') || t.includes('prosecco')) return 'sparkling'
+  return null
+}
+
+export function parseGrapes(grapes?: VivinoGrape[]): string | null {
+  if (!grapes || grapes.length === 0) return null
+  const names = grapes.map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean)
+  return names.length ? names.join(', ') : null
+}
+
+function flatten(v: NamedRef): string | null {
+  if (!v) return null
+  if (typeof v === 'string') return v.trim() || null
+  return v.name?.trim() || null
+}
+
+function flattenList(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  const out: string[] = []
+  for (const x of v) {
+    const s = flatten(x as NamedRef)
+    if (s) out.push(s)
+  }
+  return out
+}
+
+// Vivino sometimes wraps flavors in { flavors: [...] } and sometimes returns
+// the array directly. Handle both.
+function extractFlavors(r: VivinoResult): string[] {
+  const candidates: unknown[] = []
+  if (r.flavors) candidates.push(r.flavors)
+  if (r.flavor_profile) {
+    if (Array.isArray(r.flavor_profile)) candidates.push(r.flavor_profile)
+    else if (Array.isArray((r.flavor_profile as { flavors?: unknown[] }).flavors)) {
+      candidates.push((r.flavor_profile as { flavors: unknown[] }).flavors)
+    }
+  }
+  // Some actor versions put flavors inside taste_profile.flavors[]
+  const tp = r.taste_profile as Record<string, unknown> | undefined
+  if (tp && Array.isArray(tp.flavors)) candidates.push(tp.flavors)
+  for (const c of candidates) {
+    const list = flattenList(c)
+    if (list.length) return list
+  }
+  return []
+}
+
+function extractFoodPairings(r: VivinoResult): string[] {
+  if (Array.isArray(r.food_pairings)) {
+    const list = flattenList(r.food_pairings)
+    if (list.length) return list
+  }
+  if (Array.isArray(r.food_pairing)) {
+    const list = flattenList(r.food_pairing)
+    if (list.length) return list
+  }
+  return []
+}
+
+function extractBody(r: VivinoResult): string | null {
+  // Numeric bucket from Vivino (1..5) → 'light' | 'medium' | 'full'.
+  if (typeof r.body === 'number') return VIVINO_BODY_BUCKETS[Math.round(r.body)] ?? null
+  if (typeof r.body === 'string') return r.body.toLowerCase().trim() || null
+  // Fallback: taste_profile.body sometimes carries it.
+  const tp = r.taste_profile as Record<string, unknown> | undefined
+  if (tp) {
+    if (typeof tp.body === 'number') return VIVINO_BODY_BUCKETS[Math.round(tp.body as number)] ?? null
+    if (typeof tp.body === 'string') return (tp.body as string).toLowerCase().trim() || null
+  }
+  return null
+}
+
+function extractAlcohol(r: VivinoResult): number | null {
+  const raw = r.alcohol ?? r.abv
+  if (raw == null) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw * 100) / 100 : null
+  // Strings like "13.5%", "13,5", "13.5 %"
+  const num = parseFloat(String(raw).replace(',', '.').replace('%', '').trim())
+  return Number.isFinite(num) ? Math.round(num * 100) / 100 : null
+}
+
+function extractYear(r: VivinoResult): number | null {
+  const raw = r.vintage ?? r.year
+  if (raw == null) return null
+  const num = typeof raw === 'number' ? raw : parseInt(String(raw), 10)
+  if (!Number.isFinite(num)) return null
+  if (num < 1800 || num > 2100) return null
+  return num
+}
+
+function extractImages(r: VivinoResult): string[] {
+  const out = new Set<string>()
+  const push = (v: unknown) => {
+    if (typeof v === 'string' && v.trim()) out.add(v.trim())
+    else if (Array.isArray(v)) for (const x of v) push(x)
+  }
+  push(r.image_url)
+  push(r.images)
+  return [...out]
+}
+
+function extractRegionHierarchy(r: VivinoResult): {
+  country: string | null
+  region: string | null
+  subregion: string | null
+  appellation: string | null
+} {
+  return {
+    country: flatten(r.country as NamedRef),
+    region: flatten(r.region as NamedRef),
+    subregion: flatten(r.subregion as NamedRef),
+    appellation: flatten(r.appellation as NamedRef),
+  }
+}
+
+// Token-overlap match confidence between the wine name we have locally and
+// the result Vivino returned. We use this to decide whether we trust Vivino
+// enough to overwrite local fields.
+export function matchConfidence(item: WineItemRow, result: VivinoResult): number {
+  const localName = normalizeName(item.name)
+  const vivinoName = normalizeName(result.name ?? '')
+  if (!localName || !vivinoName) return 0
+
+  const local = new Set(localName.split(' ').filter(t => t.length > 1))
+  const vivino = new Set(vivinoName.split(' ').filter(t => t.length > 1))
+  if (local.size === 0 || vivino.size === 0) return 0
+
+  let overlap = 0
+  for (const t of local) if (vivino.has(t)) overlap++
+  const jaccard = overlap / new Set([...local, ...vivino]).size
+
+  let bonus = 0
+  const localWinery = item.winery ? normalizeName(item.winery) : null
+  const vivinoWinery = flatten(result.winery as NamedRef)
+  if (localWinery && vivinoWinery && normalizeName(vivinoWinery).includes(localWinery)) {
+    bonus += 0.15
+  }
+
+  return Math.min(1, jaccard + bonus)
+}
+
+export type EnrichmentUpdate = {
+  vivino_rating: number | null
+  vivino_reviews_count: number | null
+  vivino_url: string | null
+  vivino_image_url: string | null
+  vivino_images: string[] | null
+  vivino_alcohol: number | null
+  vivino_body: string | null
+  vivino_flavors: string[] | null
+  vivino_food_pairings: string[] | null
+  vivino_region_hierarchy: { country: string | null; region: string | null; subregion: string | null; appellation: string | null } | null
+  vivino_style: string | null
+  vivino_year: number | null
+  vivino_enriched_at: string
+  vivino_failed_at: null
+  vivino_match_confidence: number
+  vivino_query: string
+  category: 'wine'
+  // Conditionally filled (high confidence OR locally empty):
+  grape_variety?: string
+  winery?: string
+  wine_type?: 'red' | 'white' | 'rose' | 'sparkling'
+  year?: number
+  country?: string
+  region?: string
+}
+
+const HIGH_CONFIDENCE = 0.7
+
+export function buildEnrichmentUpdate(
+  item: WineItemRow,
+  result: VivinoResult,
+  query: string,
+  now: string
+): EnrichmentUpdate {
+  const grapes = parseGrapes(result.grapes)
+  const winery = flatten(result.winery as NamedRef)
+  const wineType = parseWineType(result)
+  const confidence = matchConfidence(item, result)
+  const trust = confidence >= HIGH_CONFIDENCE
+
+  const images = extractImages(result)
+  const flavors = extractFlavors(result)
+  const foods = extractFoodPairings(result)
+  const body = extractBody(result)
+  const alcohol = extractAlcohol(result)
+  const year = extractYear(result)
+  const region = extractRegionHierarchy(result)
+  const style = flatten(result.style as NamedRef)
+
+  const update: EnrichmentUpdate = {
+    vivino_rating: result.average_rating ?? null,
+    vivino_reviews_count: result.ratings_count ?? null,
+    vivino_url: result.vivino_url ?? null,
+    vivino_image_url: images[0] ?? null,
+    vivino_images: images.length ? images : null,
+    vivino_alcohol: alcohol,
+    vivino_body: body,
+    vivino_flavors: flavors.length ? flavors : null,
+    vivino_food_pairings: foods.length ? foods : null,
+    vivino_region_hierarchy: (region.country || region.region || region.subregion || region.appellation) ? region : null,
+    vivino_style: style,
+    vivino_year: year,
+    vivino_enriched_at: now,
+    vivino_failed_at: null,
+    vivino_match_confidence: Math.round(confidence * 100) / 100,
+    vivino_query: query,
+    category: 'wine',
+  }
+
+  if (grapes && (trust || !item.grape_variety)) update.grape_variety = grapes
+  if (winery && (trust || !item.winery)) update.winery = winery
+  if (wineType && (trust || !item.wine_type)) update.wine_type = wineType
+
+  // Promote year/country/region into core wine_items columns when local is empty.
+  // We're stricter here: only fill, never overwrite — vintage/region from local
+  // price lists is usually correct, and overwriting changes filter behavior.
+  if (year && !item.year) update.year = year
+  if (region.country && !item.country) update.country = region.country
+  if (region.region && !item.region) update.region = region.region
+
+  return update
+}

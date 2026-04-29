@@ -19,7 +19,49 @@ type EnrichStatus = {
   state: EnrichState
   enriched: number
   total: number
+  failed: number
+  cacheHits: number
+  apifyRuns: number
+  jobId: string | null
   msg?: string
+}
+
+type StatusRes = {
+  total: number
+  enriched: number
+  failed: number
+  job: null | {
+    id: string
+    state: 'queued' | 'running' | 'paused' | 'done' | 'failed'
+    mode: 'missing' | 'failed' | 'all'
+    total: number
+    processed: number
+    enriched: number
+    not_found: number
+    cache_hits: number
+    apify_runs: number
+    last_error: string | null
+  }
+}
+
+const EMPTY_STATUS: EnrichStatus = { state: 'idle', enriched: 0, total: 0, failed: 0, cacheHits: 0, apifyRuns: 0, jobId: null }
+
+function applyStatusRes(s: StatusRes): EnrichStatus {
+  const total = s.total
+  const enriched = s.enriched
+  const failed = s.failed
+  const job = s.job
+
+  // Decide UI state. wine_items counters drive "done" when enriched >= total
+  // unless there's an active job in another state.
+  if (job && job.state === 'running')  return { state: 'running', enriched, total, failed, cacheHits: job.cache_hits, apifyRuns: job.apify_runs, jobId: job.id }
+  if (job && job.state === 'queued')   return { state: 'starting', enriched, total, failed, cacheHits: job.cache_hits, apifyRuns: job.apify_runs, jobId: job.id }
+  if (job && job.state === 'paused')   return { state: 'paused', enriched, total, failed, cacheHits: job.cache_hits, apifyRuns: job.apify_runs, jobId: job.id }
+  if (job && job.state === 'failed')   return { state: 'error', enriched, total, failed, cacheHits: job.cache_hits, apifyRuns: job.apify_runs, jobId: job.id, msg: job.last_error ?? 'Ошибка' }
+
+  if (total > 0 && enriched >= total) return { state: 'done', enriched, total, failed, cacheHits: job?.cache_hits ?? 0, apifyRuns: job?.apify_runs ?? 0, jobId: job?.id ?? null }
+  if (enriched > 0)                   return { state: 'paused', enriched, total, failed, cacheHits: job?.cache_hits ?? 0, apifyRuns: job?.apify_runs ?? 0, jobId: job?.id ?? null }
+  return { ...EMPTY_STATUS, total, enriched, failed }
 }
 
 export default function PriceListsPage() {
@@ -30,7 +72,7 @@ export default function PriceListsPage() {
   const pollRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
   function setStatus(id: string, patch: Partial<EnrichStatus>) {
-    setEnrichStatus(prev => ({ ...prev, [id]: { ...({ state: 'idle', enriched: 0, total: 0 }), ...prev[id], ...patch } }))
+    setEnrichStatus(prev => ({ ...prev, [id]: { ...EMPTY_STATUS, ...prev[id], ...patch } }))
   }
 
   function stopPoll(id: string) {
@@ -45,13 +87,11 @@ export default function PriceListsPage() {
     pollRef.current[id] = setInterval(async () => {
       const res = await fetch(`/api/vivino/status?price_list_id=${id}`)
       if (!res.ok) return
-      const { total, enriched } = await res.json() as { total: number; enriched: number }
-      if (total === 0) return
-      if (enriched >= total) {
-        setStatus(id, { state: 'done', enriched, total })
+      const data = await res.json() as StatusRes
+      const next = applyStatusRes(data)
+      setEnrichStatus(prev => ({ ...prev, [id]: next }))
+      if (next.state === 'done' || next.state === 'error' || next.state === 'paused') {
         stopPoll(id)
-      } else {
-        setStatus(id, { state: 'running', enriched, total })
       }
     }, 4000)
   }
@@ -66,19 +106,14 @@ export default function PriceListsPage() {
 
   useEffect(() => {
     load().then(async all => {
-      // After loading, check vivino status for all done lists and auto-poll partially enriched ones
       await Promise.all(
         all.filter(pl => pl.status === 'done' && pl.item_count > 0).map(async pl => {
           const sr = await fetch(`/api/vivino/status?price_list_id=${pl.id}`)
           if (!sr.ok) return
-          const { total, enriched } = await sr.json() as { total: number; enriched: number }
-          if (total === 0) return
-          if (enriched >= total) {
-            setStatus(pl.id, { state: 'done', enriched, total })
-          } else if (enriched > 0) {
-            setStatus(pl.id, { state: 'running', enriched, total })
-            startPoll(pl.id)
-          }
+          const data = await sr.json() as StatusRes
+          const next = applyStatusRes(data)
+          setEnrichStatus(prev => ({ ...prev, [pl.id]: next }))
+          if (next.state === 'running' || next.state === 'starting') startPoll(pl.id)
         })
       )
     })
@@ -87,35 +122,56 @@ export default function PriceListsPage() {
 
   useEffect(() => () => { Object.keys(pollRef.current).forEach(stopPoll) }, [])
 
-  async function handleEnrich(id: string, force = false) {
-    setStatus(id, { state: 'starting', enriched: 0, total: 0 })
+  async function handleEnrich(id: string, mode: 'missing' | 'failed' | 'all' = 'missing') {
+    setStatus(id, { state: 'starting' })
     const res = await fetch('/api/vivino/enrich', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ price_list_id: id, force }),
+      body: JSON.stringify({ price_list_id: id, mode }),
     })
     const json = await res.json()
     if (res.ok) {
-      setStatus(id, { state: 'running' })
+      setStatus(id, { state: 'running', jobId: json.job_id ?? null })
       startPoll(id)
     } else {
-      setStatus(id, { state: 'error', msg: json.message ?? 'Ошибка' })
+      setStatus(id, { state: 'error', msg: json.error ?? json.message ?? 'Ошибка' })
     }
   }
 
-  function handlePause(id: string) {
+  async function handlePause(id: string) {
+    const jobId = enrichStatus[id]?.jobId
+    if (!jobId) return
     stopPoll(id)
     setStatus(id, { state: 'paused' })
+    await fetch(`/api/vivino/jobs/${jobId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'pause' }),
+    })
   }
 
-  function handleResume(id: string) {
-    setStatus(id, { state: 'running' })
-    startPoll(id)
+  async function handleResume(id: string) {
+    const jobId = enrichStatus[id]?.jobId
+    if (!jobId) return
+    const res = await fetch(`/api/vivino/jobs/${jobId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resume' }),
+    })
+    if (res.ok) {
+      setStatus(id, { state: 'running' })
+      startPoll(id)
+    }
   }
 
-  function handleStop(id: string) {
+  async function handleStop(id: string) {
+    const jobId = enrichStatus[id]?.jobId
     stopPoll(id)
     setStatus(id, { state: 'idle' })
+    if (jobId) {
+      await fetch(`/api/vivino/jobs/${jobId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+    }
   }
 
   async function handleDelete(id: string, name: string) {
@@ -176,15 +232,30 @@ export default function PriceListsPage() {
               {pl.status === 'done' && pl.item_count > 0 && (
                 <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
                   <div className="flex items-center gap-1">
-                    {/* Main Vivino / Заново button */}
+                    {/* Main Vivino / Заново / Повторить ошибки */}
                     {(es.state === 'idle' || es.state === 'done' || es.state === 'error') && (
-                      <button
-                        onClick={() => handleEnrich(pl.id, es.state === 'done' || es.state === 'error')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-                        title={es.state === 'done' ? 'Запустить заново' : 'Обогатить данными Vivino'}
-                      >
-                        🍇 {es.state === 'done' ? 'Заново' : es.state === 'error' ? 'Повторить' : 'Vivino'}
-                      </button>
+                      <>
+                        {es.failed > 0 && (
+                          <button
+                            onClick={() => handleEnrich(pl.id, 'failed')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                            title={`Повторить только не загруженные (${es.failed})`}
+                          >
+                            🔁 Ошибки ({es.failed})
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleEnrich(pl.id, es.state === 'idle' ? 'missing' : 'all')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                          title={
+                            es.state === 'done'  ? 'Запустить заново (все позиции)' :
+                            es.state === 'error' ? 'Запустить заново' :
+                            'Обогатить недостающие'
+                          }
+                        >
+                          🍇 {es.state === 'done' ? 'Заново' : es.state === 'error' ? 'Повторить' : 'Vivino'}
+                        </button>
+                      </>
                     )}
 
                     {/* Starting spinner */}
@@ -263,7 +334,10 @@ export default function PriceListsPage() {
                     </span>
                   )}
                   {es.state === 'done' && (
-                    <span className="text-xs text-green-600 tabular-nums">Готово: {es.enriched} из {es.total}</span>
+                    <span className="text-xs text-green-600 tabular-nums">
+                      Готово: {es.enriched} из {es.total}
+                      {es.cacheHits > 0 && <span className="text-gray-400"> · кэш: {es.cacheHits}</span>}
+                    </span>
                   )}
                   {es.state === 'error' && (
                     <span className="text-xs text-red-500">{es.msg}</span>
