@@ -7,6 +7,7 @@ import { isMagMag, parseMagMag } from './parsers/magmag'
 import { isItalasia, parseItalasia } from './parsers/italasia'
 import { isIWS, parseIWS } from './parsers/iws'
 import { isJanhom, parseJanhom } from './parsers/janhom'
+import { isPhop, parsePhop } from './parsers/phop'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -76,6 +77,10 @@ export async function extractFromFile(
     if (await isJanhom(buffer, filename)) {
       console.log('[extract] using Janhom parser (Claude with supplier-specific prompts)')
       return parseJanhom(buffer, filename, report)
+    }
+    if (await isPhop(buffer, filename)) {
+      console.log('[extract] using P-HOPS parser (Claude Vision per chunk)')
+      return parsePhop(buffer, filename, report)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
