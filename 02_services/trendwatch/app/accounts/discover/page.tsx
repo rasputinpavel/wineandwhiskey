@@ -12,12 +12,30 @@ type Candidate = {
   relevance_score: number
   category:        string
   sample_reel_url: string | null
-  selected:        boolean
+  selected?:       boolean
+}
+
+type Job = {
+  id:            string
+  state:         'running' | 'done' | 'failed'
+  hashtags:      string[]
+  phase:         string | null
+  phase_label:   string | null
+  phase_current: number | null
+  phase_total:   number | null
+  logs:          string[]
+  candidates:    Candidate[]
+  error:         string | null
+  created_at:    string
+  updated_at:    string
 }
 
 const SEED_HASHTAGS = [
-  'winestore', 'wineshop', 'winebar', 'sommelier',
-  'naturalwine', 'wineretail', 'finewine', 'winelover', 'whiskybar',
+  'winestore', 'wineshop', 'wineretail', 'finewine', 'bottleshop',
+  'winebar', 'winelounge', 'enoteca',
+  'naturalwine', 'orangewine',
+  'sommelier', 'wineeducator',
+  'whiskybar', 'winelovers',
 ]
 
 function fmt(n: number) {
@@ -26,44 +44,70 @@ function fmt(n: number) {
   return String(n)
 }
 
-type Phase = { phase: 'hashtag' | 'account'; current: number; total: number; label: string } | null
+function fmtTime(s: number) {
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${String(r).padStart(2, '0')}`
+}
 
 export default function AccountDiscoverPage() {
   const [hashtags, setHashtags]     = useState(SEED_HASHTAGS.join(', '))
-  const [running, setRunning]       = useState(false)
-  const [logs, setLogs]             = useState<string[]>([])
-  const [phase, setPhase]           = useState<Phase>(null)
-  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [jobId, setJobId]           = useState<string | null>(null)
+  const [job, setJob]               = useState<Job | null>(null)
+  const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
-  const [startedAt, setStartedAt]   = useState<number | null>(null)
-  const [elapsed, setElapsed]       = useState(0)
-  const [lastBeat, setLastBeat]     = useState<number>(0)
+  const [now, setNow]               = useState(Date.now())
   const logsEndRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
-
+  // 1. On mount: check for active job to resume
   useEffect(() => {
-    if (!running || !startedAt) return
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    fetch('/api/accounts/discover').then(async r => {
+      if (!r.ok) return
+      const { job } = await r.json()
+      if (job) {
+        setJobId(job.id)
+        setJob(job)
+      }
+    })
+  }, [])
+
+  // 2. Tick clock every second for elapsed display + alive indicator
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
-  }, [running, startedAt])
+  }, [])
 
-  function fmtTime(s: number) {
-    const m = Math.floor(s / 60)
-    const r = s % 60
-    return `${m}:${String(r).padStart(2, '0')}`
-  }
+  // 3. Poll job status while running
+  useEffect(() => {
+    if (!jobId) return
+    let cancelled = false
+    async function tick() {
+      try {
+        const res = await fetch(`/api/accounts/discover/${jobId}`)
+        if (!res.ok) return
+        const data: Job = await res.json()
+        if (cancelled) return
+        setJob(data)
+        // Auto-pre-select strong candidates that user hasn't touched yet
+        setSelected(prev => {
+          if (prev.size > 0) return prev
+          const next = new Set<string>()
+          for (const c of data.candidates) if (c.relevance_score >= 7) next.add(c.username)
+          return next
+        })
+      } catch {}
+    }
+    tick()
+    const interval = setInterval(tick, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [jobId])
 
-  async function handleDiscover() {
-    setRunning(true)
-    setCandidates([])
-    setLogs([])
-    setPhase(null)
+  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [job?.logs.length])
+
+  async function handleStart() {
     setSaved(false)
-    setStartedAt(Date.now())
-    setElapsed(0)
-    setLastBeat(Date.now())
+    setSelected(new Set())
     const tags = hashtags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean)
 
     const res = await fetch('/api/accounts/discover', {
@@ -71,58 +115,26 @@ export default function AccountDiscoverPage() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ hashtags: tags }),
     })
-
-    if (!res.ok || !res.body) {
-      setLogs(prev => [...prev, `✗ HTTP ${res.status}`])
-      setRunning(false)
-      return
-    }
-
-    const reader  = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          const event = JSON.parse(line)
-          if (event.type === 'log') {
-            setLogs(prev => [...prev, event.message])
-            setLastBeat(Date.now())
-          } else if (event.type === 'heartbeat') {
-            setLastBeat(Date.now())
-          } else if (event.type === 'phase') {
-            setPhase({ phase: event.phase, current: event.current, total: event.total, label: event.label })
-            setLastBeat(Date.now())
-          } else if (event.type === 'candidate') {
-            setCandidates(prev => [...prev, { ...event.candidate, selected: event.candidate.relevance_score >= 7 }])
-          } else if (event.type === 'done') {
-            setCandidates(event.candidates.map((c: Omit<Candidate, 'selected'>) => ({ ...c, selected: c.relevance_score >= 7 })))
-          }
-        } catch {}
-      }
-    }
-
-    setRunning(false)
-    setPhase(null)
+    if (!res.ok) return
+    const { job_id } = await res.json()
+    setJobId(job_id)
+    setJob(null)
   }
 
   function toggle(username: string) {
-    setCandidates(prev => prev.map(c => c.username === username ? { ...c, selected: !c.selected } : c))
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(username)) next.delete(username); else next.add(username)
+      return next
+    })
   }
 
   async function handleSave() {
-    const selected = candidates.filter(c => c.selected)
-    if (!selected.length) return
+    if (!job) return
+    const picked = job.candidates.filter(c => selected.has(c.username))
+    if (!picked.length) return
     setSaving(true)
-    for (const c of selected) {
+    for (const c of picked) {
       await fetch('/api/accounts', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,8 +145,13 @@ export default function AccountDiscoverPage() {
     setSaved(true)
   }
 
-  const selectedCount = candidates.filter(c => c.selected).length
-  const progressPct   = phase ? Math.round((phase.current / phase.total) * 100) : 0
+  const running       = job?.state === 'running'
+  const candidates    = job?.candidates ?? []
+  const sortedCands   = [...candidates].sort((a, b) => b.relevance_score - a.relevance_score)
+  const elapsed       = job ? Math.floor((now - new Date(job.created_at).getTime()) / 1000) : 0
+  const sinceUpdate   = job ? Math.floor((now - new Date(job.updated_at).getTime()) / 1000) : 0
+  const progressPct   = job?.phase_total ? Math.round((job.phase_current! / job.phase_total) * 100) : 0
+  const selectedCount = selected.size
 
   return (
     <Shell>
@@ -154,63 +171,65 @@ export default function AccountDiscoverPage() {
           <textarea
             value={hashtags}
             onChange={e => setHashtags(e.target.value)}
-            rows={2}
+            rows={3}
             disabled={running}
             className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-gray-500 resize-none disabled:opacity-50"
             placeholder="winestore, wineshop, sommelier…"
           />
-          <p className="text-gray-500 text-xs mt-2">Comma-separated. No # needed. Each hashtag takes ~10–30 sec on Apify.</p>
+          <p className="text-gray-500 text-xs mt-2">Comma-separated. No # needed. Each hashtag takes ~30–90 sec on Apify.</p>
 
           <button
-            onClick={handleDiscover}
+            onClick={handleStart}
             disabled={running}
             className="mt-4 px-5 py-2.5 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {running && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            {running ? 'Searching…' : 'Find accounts'}
+            {running ? 'Running…' : 'Find accounts'}
           </button>
         </div>
 
-        {/* Progress + log */}
-        {(running || logs.length > 0) && (
+        {/* Status + log — survives reload */}
+        {job && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-            {/* Always-visible status row while running */}
-            {running && (
-              <div className="flex items-center justify-between mb-3 text-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-white font-medium">
-                    {phase
-                      ? `${phase.phase === 'hashtag' ? 'Сканирование хэштегов' : 'Проверка профилей'} · ${phase.label}`
-                      : 'Подключаюсь к Apify…'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-gray-400 font-mono">
-                  {phase && <span>{phase.current} / {phase.total}</span>}
-                  <span>elapsed {fmtTime(elapsed)}</span>
-                  <span title={`Last activity ${Math.round((Date.now() - lastBeat) / 1000)}s ago`}>
-                    {Date.now() - lastBeat < 8000 ? '🟢 alive' : '🟡 waiting…'}
-                  </span>
-                </div>
+            <div className="flex items-center justify-between mb-3 text-sm">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${
+                  job.state === 'done' ? 'bg-green-500'
+                  : job.state === 'failed' ? 'bg-red-500'
+                  : sinceUpdate < 8 ? 'bg-green-500 animate-pulse'
+                  : 'bg-yellow-500 animate-pulse'
+                }`} />
+                <span className="text-white font-medium">
+                  {job.state === 'done' ? 'Готово' :
+                   job.state === 'failed' ? `Ошибка: ${job.error}` :
+                   job.phase ? `${job.phase === 'hashtag' ? 'Сканирование хэштегов' : 'Проверка профилей'} · ${job.phase_label}` :
+                   'Подключаюсь к Apify…'}
+                </span>
               </div>
-            )}
+              <div className="flex items-center gap-4 text-xs text-gray-400 font-mono">
+                {job.phase_total && <span>{job.phase_current} / {job.phase_total}</span>}
+                <span>elapsed {fmtTime(elapsed)}</span>
+                {running && (
+                  <span title={`Last update ${sinceUpdate}s ago`}>
+                    {sinceUpdate < 8 ? '🟢 alive' : sinceUpdate < 60 ? '🟡 slow' : '🔴 stuck'}
+                  </span>
+                )}
+              </div>
+            </div>
 
-            {phase && (
+            {job.phase_total ? (
               <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-4">
-                <div
-                  className="h-full bg-wine-700 transition-all duration-300"
-                  style={{ width: `${progressPct}%` }}
-                />
+                <div className="h-full bg-wine-700 transition-all duration-300" style={{ width: `${progressPct}%` }} />
               </div>
-            )}
+            ) : null}
 
             <div className="bg-black/40 rounded-lg p-3 max-h-72 overflow-y-auto font-mono text-xs leading-relaxed">
-              {logs.map((line, i) => (
+              {job.logs.map((line, i) => (
                 <div key={i} className="text-gray-300 whitespace-pre-wrap">{line}</div>
               ))}
               {running && (
                 <div className="text-gray-600 italic mt-1">
-                  Apify сейчас крутит actor — обычно 30–90 сек на хэштег. Жди живой статус.
+                  Apify сейчас крутит actor — обычно 30–90 сек на хэштег.
                 </div>
               )}
               <div ref={logsEndRef} />
@@ -218,11 +237,11 @@ export default function AccountDiscoverPage() {
           </div>
         )}
 
-        {candidates.length > 0 && (
+        {sortedCands.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-white">
-                {candidates.length} candidates found · {selectedCount} selected
+                {sortedCands.length} candidates {running ? '(пополняется...)' : 'found'} · {selectedCount} selected
               </h2>
               {saved ? (
                 <div className="flex items-center gap-3">
@@ -232,7 +251,7 @@ export default function AccountDiscoverPage() {
               ) : (
                 <button
                   onClick={handleSave}
-                  disabled={saving || !selectedCount || running}
+                  disabled={saving || !selectedCount}
                   className="px-4 py-2 bg-green-800 hover:bg-green-700 text-green-100 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : `Save ${selectedCount} accounts`}
@@ -241,22 +260,22 @@ export default function AccountDiscoverPage() {
             </div>
 
             <div className="space-y-2">
-              {candidates
-                .sort((a, b) => b.relevance_score - a.relevance_score)
-                .map(c => (
+              {sortedCands.map(c => {
+                const isSel = selected.has(c.username)
+                return (
                   <button
                     key={c.username}
                     onClick={() => toggle(c.username)}
                     className={`w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl border transition-colors ${
-                      c.selected
+                      isSel
                         ? 'bg-wine-950 border-wine-800'
                         : 'bg-gray-900 border-gray-800 hover:border-gray-700'
                     }`}
                   >
                     <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center ${
-                      c.selected ? 'bg-wine-700 border-wine-600' : 'border-gray-600'
+                      isSel ? 'bg-wine-700 border-wine-600' : 'border-gray-600'
                     }`}>
-                      {c.selected && <span className="text-white text-xs">✓</span>}
+                      {isSel && <span className="text-white text-xs">✓</span>}
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -279,7 +298,8 @@ export default function AccountDiscoverPage() {
                       </span>
                     </div>
                   </button>
-                ))}
+                )
+              })}
             </div>
           </div>
         )}
