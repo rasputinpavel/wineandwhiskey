@@ -26,6 +26,8 @@ export const SPIRIT_TYPE_LABELS: Record<string, { label: string; emoji: string }
   vermouth:    { label: 'Вермут',    emoji: '🍷' },
   aperitif:    { label: 'Аперитив',  emoji: '🍹' },
   bitters:     { label: 'Биттер',    emoji: '🥃' },
+  amaro:       { label: 'Амаро',     emoji: '🌿' },
+  digestif:    { label: 'Дижестив',  emoji: '🌿' },
   'eau-de-vie': { label: 'О-де-ви',  emoji: '🥃' },
   other:       { label: 'Прочее',    emoji: '🥃' },
 }
