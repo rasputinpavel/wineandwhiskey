@@ -35,23 +35,30 @@ export function detectFileType(filename: string, mimeType: string): FileType {
   return 'image'
 }
 
+export type ProgressCb = (pct: number, phase?: string, itemCount?: number) => Promise<void> | void
+
 export async function extractFromFile(
   buffer: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  onProgress?: ProgressCb,
 ): Promise<ExtractionResult> {
   const type = detectFileType(filename, mimeType)
+  const report = onProgress ?? (() => {})
 
   if (type === 'pdf') {
     // Supplier-specific parsers come first — they don't lose items to
     // generic LLM token limits or dedup-by-name collisions.
     if (await isBBB(buffer)) {
       console.log('[extract] using BB&B deterministic parser')
-      return parseBBB(buffer)
+      await report(10, 'parsing')
+      const r = await parseBBB(buffer)
+      await report(95, 'inserting')
+      return r
     }
     if (await isMagMag(buffer, filename)) {
       console.log('[extract] using MagMag parser (Claude with supplier-specific prompt)')
-      return parseMagMag(buffer, filename)
+      return parseMagMag(buffer, filename, report)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)

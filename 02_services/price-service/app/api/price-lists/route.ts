@@ -58,7 +58,25 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
     const buffer = Buffer.from(await blob.arrayBuffer())
     console.log(`[extraction] file: ${filename} (${mimeType}), size: ${buffer.length} bytes`)
 
-    const result = await extractFromFile(buffer, filename, mimeType)
+    // Throttle progress writes — don't hit the DB more than once per 1.5s
+    // even if the parser reports more frequently.
+    let lastProgressAt = 0
+    let lastProgress = -1
+    const onProgress = async (pct: number, phase?: string, itemCount?: number) => {
+      const now = Date.now()
+      if (pct === lastProgress && now - lastProgressAt < 1500) return
+      lastProgress = pct
+      lastProgressAt = now
+      const update: Record<string, unknown> = {
+        progress: Math.min(100, Math.max(0, Math.round(pct))),
+        progress_phase: phase ?? null,
+      }
+      if (typeof itemCount === 'number') update.item_count = itemCount
+      await supabase.from('price_lists').update(update).eq('id', priceListId)
+    }
+    await onProgress(2, 'starting')
+
+    const result = await extractFromFile(buffer, filename, mimeType, onProgress)
     console.log(`[extraction] items found: ${result.items.length}`)
 
     const rawName = result.supplier_name
@@ -87,8 +105,9 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       supplier_id: supplierId,
       supplier_name: result.supplier_name,
       date: result.price_list_date ?? null,
-      status: 'done',
       item_count: result.items.length,
+      progress: 95,
+      progress_phase: 'inserting',
     }).eq('id', priceListId)
 
     const items = result.items.map(item => {
@@ -125,6 +144,9 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       inserted += count ?? batch.length
     }
     console.log(`[extraction] inserted ${inserted}/${items.length} wine_items`)
+    await supabase.from('price_lists')
+      .update({ status: 'done', progress: 100, progress_phase: null })
+      .eq('id', priceListId)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[extraction] failed:', message)

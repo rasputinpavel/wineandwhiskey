@@ -13,6 +13,9 @@ export default function UploadPage() {
   const [dragging, setDragging] = useState(false)
   const [filename, setFilename] = useState('')
   const [progress, setProgress] = useState(0)
+  const [extractProgress, setExtractProgress] = useState(0)
+  const [extractPhase, setExtractPhase] = useState<string>('')
+  const [extractItemCount, setExtractItemCount] = useState<number>(0)
   const [itemCount, setItemCount] = useState<number | null>(null)
   const [supplierName, setSupplierName] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -29,6 +32,9 @@ export default function UploadPage() {
       const res = await fetch(`/api/price-lists/${id}`)
       if (!res.ok) return
       const pl = await res.json()
+      if (typeof pl.progress === 'number') setExtractProgress(pl.progress)
+      if (pl.progress_phase) setExtractPhase(pl.progress_phase)
+      if (typeof pl.item_count === 'number') setExtractItemCount(pl.item_count)
       if (pl.status === 'done') {
         stopPolling()
         setItemCount(pl.item_count)
@@ -119,6 +125,9 @@ export default function UploadPage() {
     setState('idle')
     setFilename('')
     setProgress(0)
+    setExtractProgress(0)
+    setExtractPhase('')
+    setExtractItemCount(0)
     setItemCount(null)
     setSupplierName('')
     setError('')
@@ -187,8 +196,18 @@ export default function UploadPage() {
             <div>
               <p className="font-medium text-gray-900">Читаем прайс...</p>
               <p className="text-sm text-gray-500 mt-1">{filename}</p>
-              <p className="text-xs text-gray-400 mt-3">Обычно занимает несколько секунд для известных поставщиков, до 2 минут для незнакомых</p>
             </div>
+            <div className="w-full bg-gray-100 rounded-full h-2 mt-2">
+              <div className="bg-wine-600 h-2 rounded-full transition-all duration-500" style={{ width: `${extractProgress}%` }} />
+            </div>
+            <div className="flex items-center justify-center gap-3 text-xs text-gray-500">
+              <span>{extractProgress}%</span>
+              {extractPhase && <span className="text-gray-400">·</span>}
+              {extractPhase && <span className="text-gray-400 capitalize">{extractPhase}</span>}
+              {extractItemCount > 0 && <span className="text-gray-400">·</span>}
+              {extractItemCount > 0 && <span className="text-gray-700 font-medium">{extractItemCount} позиций</span>}
+            </div>
+            <p className="text-xs text-gray-400">Обычно несколько секунд для известных поставщиков, до 2 минут для каталогов</p>
           </div>
         )}
 

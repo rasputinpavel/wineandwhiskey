@@ -45,17 +45,23 @@ export async function isMagMag(buf: Buffer, filename: string): Promise<boolean> 
   }
 }
 
-export async function parseMagMag(buf: Buffer, filename: string): Promise<ExtractionResult> {
+type ProgressCb = (pct: number, phase?: string, itemCount?: number) => Promise<void> | void
+
+export async function parseMagMag(
+  buf: Buffer,
+  filename: string,
+  onProgress?: ProgressCb,
+): Promise<ExtractionResult> {
   const totalPages = await getPageCount(buf)
   const isPromo = totalPages <= 5 || /promo/i.test(filename)
 
   if (isPromo) {
     console.log(`[magmag] promo path (${totalPages} pages)`)
-    return parsePromo(buf)
+    return parsePromo(buf, onProgress)
   }
 
   console.log(`[magmag] catalog path (${totalPages} pages)`)
-  return parseCatalog(buf, totalPages)
+  return parseCatalog(buf, totalPages, onProgress)
 }
 
 // ─── Promo: single Claude call ─────────────────────────────────────────────
@@ -97,12 +103,15 @@ Extract every numbered item. For each, return:
 
 Return ONLY JSON: {"items": [...]}. No markdown, no explanation.`
 
-async function parsePromo(buf: Buffer): Promise<ExtractionResult> {
+async function parsePromo(buf: Buffer, onProgress?: ProgressCb): Promise<ExtractionResult> {
+  await onProgress?.(20, 'reading')
   const base64 = buf.toString('base64')
   const raw = await callWithPdf(PROMO_PROMPT, base64)
+  await onProgress?.(80, 'parsing')
   const parsed = parseJson<{ items: ExtractedItem[] }>(raw)
   const items = parsed?.items ?? []
   console.log(`[magmag] promo extracted ${items.length} items`)
+  await onProgress?.(95, 'inserting')
   return {
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
@@ -147,7 +156,12 @@ Return ONLY JSON: {"items": [{
   "description": "<short tasting note OR aging summary, max 200 chars>"
 }, ...]}`
 
-async function parseCatalog(buf: Buffer, totalPages: number): Promise<ExtractionResult> {
+async function parseCatalog(
+  buf: Buffer,
+  totalPages: number,
+  onProgress?: ProgressCb,
+): Promise<ExtractionResult> {
+  await onProgress?.(5, 'reading contents')
   // Build page→country map from contents page.
   const pageCountry = await buildPageCountryMap(buf)
   console.log(`[magmag] page→country mappings: ${pageCountry.size}`)
@@ -165,6 +179,9 @@ async function parseCatalog(buf: Buffer, totalPages: number): Promise<Extraction
     const country = pageCountry.get(from) || pageCountry.get(to) || ''
     chunks.push({ from, to, country })
   }
+
+  let chunksDone = 0
+  await onProgress?.(10, 'extracting')
 
   for (let i = 0; i < chunks.length; i += PARALLEL) {
     const batch = chunks.slice(i, i + PARALLEL)
@@ -187,8 +204,13 @@ async function parseCatalog(buf: Buffer, totalPages: number): Promise<Extraction
       })
     )
     results.forEach(items => allItems.push(...items))
+    chunksDone += batch.length
+    // Map chunk progress into 10–90 range; reserve last 10% for DB insert.
+    const pct = 10 + Math.round((chunksDone / chunks.length) * 80)
+    await onProgress?.(pct, `extracting ${chunksDone}/${chunks.length}`, allItems.length)
   }
 
+  await onProgress?.(95, 'inserting')
   return {
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
