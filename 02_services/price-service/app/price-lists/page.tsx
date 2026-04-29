@@ -258,15 +258,26 @@ export default function PriceListsPage() {
                       </>
                     )}
 
-                    {/* Starting spinner */}
+                    {/* Starting: spinner + Stop (so a stuck queued job can be cancelled) */}
                     {es.state === 'starting' && (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-400">
-                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                        Запуск...
-                      </div>
+                      <>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-400">
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          </svg>
+                          Запуск...
+                        </div>
+                        <button
+                          onClick={() => handleStop(pl.id)}
+                          className="p-1.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                          title="Отменить запуск"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="5" y="5" width="14" height="14" rx="1"/>
+                          </svg>
+                        </button>
+                      </>
                     )}
 
                     {/* Running controls: Pause + Stop */}
