@@ -99,9 +99,19 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       }
     })
 
+    let inserted = 0
     for (let i = 0; i < items.length; i += 100) {
-      await supabase.from('wine_items').insert(items.slice(i, i + 100))
+      const batch = items.slice(i, i + 100)
+      const { error: insErr, count } = await supabase
+        .from('wine_items')
+        .insert(batch, { count: 'exact' })
+      if (insErr) {
+        console.error(`[extraction] insert batch ${i}-${i + batch.length} failed:`, insErr.message, insErr.details ?? '', insErr.hint ?? '')
+        throw new Error(`wine_items insert failed at batch ${i}: ${insErr.message}`)
+      }
+      inserted += count ?? batch.length
     }
+    console.log(`[extraction] inserted ${inserted}/${items.length} wine_items`)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[extraction] failed:', message)
