@@ -1,26 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+// Use the get_filter_options() SQL function (003_filter_options_fn.sql) so
+// DISTINCT happens server-side. Selecting raw rows hits PostgREST's 1000-row
+// limit and silently drops suppliers that fall outside the first page —
+// e.g. a 1195-item Bangkok Beer & Beverages list.
 export async function GET() {
-  const [suppliersRes, countriesRes, grapesRes] = await Promise.all([
-    supabase.from('wine_items').select('supplier_name').not('supplier_name', 'is', null),
-    supabase.from('wine_items').select('country').not('country', 'is', null),
-    supabase.from('wine_items').select('grape_variety').not('grape_variety', 'is', null),
-  ])
-
-  const unique = <T>(arr: T[]): T[] => [...new Set(arr)].sort() as T[]
-
-  const suppliers = unique(
-    (suppliersRes.data ?? []).map(r => r.supplier_name as string).filter(Boolean)
-  )
-  const countries = unique(
-    (countriesRes.data ?? []).map(r => r.country as string).filter(Boolean)
-  )
-  const grapes = unique(
-    (grapesRes.data ?? [])
-      .flatMap(r => (r.grape_variety as string ?? '').split(',').map(g => g.trim()))
-      .filter(Boolean)
-  )
-
-  return NextResponse.json({ suppliers, countries, grapes })
+  const { data, error } = await supabase.rpc('get_filter_options')
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data ?? { suppliers: [], countries: [], grapes: [] })
 }
