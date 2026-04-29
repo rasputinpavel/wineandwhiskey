@@ -3,6 +3,7 @@ import { extractFromChunks, extractFromImage, extractFromText, extractFromImageB
 import type { ExtractionResult, ExtractedItem } from './claude'
 import { renderPdfToImages, isPdftoppmAvailable } from './pdf-render'
 import { isBBB, parseBBB } from './parsers/bbb'
+import { isMagMag, parseMagMag } from './parsers/magmag'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -42,11 +43,15 @@ export async function extractFromFile(
   const type = detectFileType(filename, mimeType)
 
   if (type === 'pdf') {
-    // Supplier-specific deterministic parsers come first — they don't lose
-    // items to LLM token limits or dedup-by-name collisions.
+    // Supplier-specific parsers come first — they don't lose items to
+    // generic LLM token limits or dedup-by-name collisions.
     if (await isBBB(buffer)) {
       console.log('[extract] using BB&B deterministic parser')
       return parseBBB(buffer)
+    }
+    if (await isMagMag(buffer, filename)) {
+      console.log('[extract] using MagMag parser (Claude with supplier-specific prompt)')
+      return parseMagMag(buffer, filename)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
