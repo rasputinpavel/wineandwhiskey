@@ -147,6 +147,7 @@ export async function parseIWS(
         ctx.spiritType = null
         ctx.wineType = null
         ctx.country = null // re-derive per spirit sub-section / SKU
+        ctx.winery = null
         prevLines.length = 0
         continue
       }
@@ -157,16 +158,36 @@ export async function parseIWS(
         prevLines.length = 0
         continue
       }
+      // CODE header row anchor — also the moment to capture the producer
+      // block's winery from the lines immediately above it. Many wineries
+      // (Domaine Tariquet, Barton & Guestier, ...) ship wines with very
+      // short names like "Classic" / "Sauvignon Blanc" that are meaningless
+      // without the producer name prepended.
+      // If we can't find a winery candidate in prevLines, CLEAR the carry-
+      // over from the previous block to avoid bleed (e.g. "Penfolds,
+      // Fortified" sticking to Tio Pepe rows under the Sherry sub-section).
+      if (/^CODE\b.*\bNAME\b.*\b(APPELLATION|PRICE)\b/i.test(trimmed)) {
+        let found: string | null = null
+        for (let p = prevLines.length - 1; p >= 0; p--) {
+          const w = pickWinery(prevLines[p])
+          if (w) { found = w; break }
+        }
+        ctx.winery = found
+        prevLines.length = 0
+        continue
+      }
       const wt = WINE_TYPE_SUBS[trimmed]
       if (wt !== undefined && ctx.section === 'wine') {
         ctx.wineType = wt
-        prevLines.length = 0
+        // Don't reset winery — Red/White/Rose are sub-sections of the same
+        // producer block.
         continue
       }
       if (ctx.section === 'spirit') {
         const st = detectSpiritSubtype(trimmed)
         if (st) {
           ctx.spiritType = st
+          ctx.winery = null
           prevLines.length = 0
           continue
         }
@@ -249,6 +270,29 @@ function detectSpiritSubtype(line: string): string | null {
   return null
 }
 
+// Pull the winery name from a candidate line. The IWS format puts winery
+// either alone on a line ("BARTON & GUESTIER") or as the first column of a
+// row that may carry trailing tags ("Domaine Tariquet    Sustainable & Vegan
+// friendly"). Returns null for lines that are clearly descriptions, section
+// markers, or noise.
+function pickWinery(line: string): string | null {
+  const first = line.split(/\s{2,}/, 1)[0].trim()
+  if (first.length < 3 || first.length > 70) return null
+  if (!/^[A-Z0-9]/.test(first)) return null // descriptions start lowercase
+  // Skip sentence-ish lines (descriptions).
+  if (/\b(is|was|are|were|produces?|produce|produced|makes?|made|established|owns?|owned|founded|created|consist|locate|grow|grew|when|where|the\s+(\w+))\b/i.test(first)) {
+    return null
+  }
+  // Skip section markers (Red/White/Rose/Sparkling, country names handled
+  // elsewhere) and headers like "CODE NAME APPELLATION".
+  if (/^(Red|White|Rose|Rosé|Sparkling|Champagne|Sweet|Dessert|Sherry|Port|Fortified|CODE)$/i.test(first)) return null
+  // Title-case if the source is all-caps.
+  if (first === first.toUpperCase() && first.length > 3) {
+    return first.split(/\s+/).map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+  }
+  return first
+}
+
 function detectCountryHeading(line: string): string | null {
   const u = line.toUpperCase()
   if (COUNTRY_HEADINGS[u]) return COUNTRY_HEADINGS[u]
@@ -324,6 +368,13 @@ function parseRow(line: string, ctx: Ctx, prevLines: string[] = []): ExtractedIt
     name = candidates.join(' ').replace(/\s+/g, ' ').trim()
   }
   if (!name) return null
+
+  // Prepend the producer when the row's name is short or doesn't already
+  // reference it. Wineries like Domaine Tariquet ship "Classic" / "Sauvignon
+  // Blanc" / "Premieres Grives" — meaningless without the brand.
+  if (ctx.winery && !name.toLowerCase().includes(ctx.winery.toLowerCase())) {
+    name = `${ctx.winery} ${name}`
+  }
 
   const price = parsePrice(priceRaw)
   const year = parseYear(vintageRaw, sku)
