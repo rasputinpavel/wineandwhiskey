@@ -58,14 +58,6 @@ const COUNTRY_HEADINGS = new Set([
   'SPAIN & PORTUGAL', 'SPAIN', 'PORTUGAL', 'SOUTH AFRICA', 'USA',
 ])
 
-// Wine type tokens that may appear in the Type column of country-block pages.
-// Used to validate the type column when slicing.
-const WINE_TYPE_TOKENS = new Set([
-  'Red', 'White', 'Rose', 'Rosé', 'Sparkling', 'Champagne', 'Crémant',
-  'Cremant', 'Prosecco', 'Spumante', 'Frizzante', 'Port', 'Sweet',
-  'Dessert', 'Fortified', 'Sweet fortified',
-])
-
 type ColumnGrid = {
   // Map: column header word → starting x-position in the layout line.
   positions: { name: string; start: number }[]
@@ -403,12 +395,11 @@ function parseRow(line: string, grid: ColumnGrid, ctx: ParseContext): ExtractedI
   let ratingRaw: string | null = null
   let countryRaw: string | null = null
   let sizeRaw: string | null = null
-  let alcRaw: string | null = null
 
   if (ctx.section === 'spirits') {
     // Schema: [..., Country, Size, Alc., Price]
     priceRaw = popMatch(remain, PRICE_RE)
-    alcRaw = popMatch(remain, ALC_RE)
+    popMatch(remain, ALC_RE)
     sizeRaw = popMatch(remain, SIZE_RE)
     countryRaw = popCountry(remain)
   } else {
