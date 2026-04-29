@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { runJob } from '@/lib/vivino/enrich'
 
 type Action = 'pause' | 'resume' | 'cancel'
 
@@ -26,9 +27,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (action === 'resume') {
     if (job.state !== 'paused') return NextResponse.json({ ok: true, state: job.state, noop: true })
     await supabase.from('vivino_jobs').update({ state: 'running', heartbeat_at: new Date().toISOString() }).eq('id', id)
-    // Trigger a tick to pick the job back up.
-    const url = `${req.nextUrl.origin}/api/vivino/tick?job_id=${encodeURIComponent(id)}`
-    fetch(url, { method: 'POST' }).catch(err => console.error('[vivino:jobs] resume trigger failed:', err))
+    runJob(id)
     return NextResponse.json({ ok: true, state: 'running' })
   }
 

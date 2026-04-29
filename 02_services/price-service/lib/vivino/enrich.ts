@@ -293,6 +293,37 @@ async function markJobItem(id: string, state: 'done' | 'not_found' | 'error', er
   }).eq('id', id)
 }
 
+// In-process loop runner — keeps ticking until job is done/paused/failed.
+// Fire-and-forget from API handlers; survives as long as the Node process lives.
+const RUNNING_JOBS = new Set<string>()
+
+export function runJob(job_id: string): void {
+  if (RUNNING_JOBS.has(job_id)) {
+    console.log(`[vivino:enrich] job ${job_id} already running in-process; skipping kick`)
+    return
+  }
+  RUNNING_JOBS.add(job_id)
+  void (async () => {
+    try {
+      while (true) {
+        const { remaining, finished } = await tickJob(job_id)
+        if (finished || remaining === 0) break
+        // Re-check state — pause/cancel may have flipped it between ticks.
+        const { data: j } = await supabase.from('vivino_jobs').select('state').eq('id', job_id).maybeSingle()
+        if (!j || j.state !== 'running') break
+      }
+    } catch (e) {
+      console.error(`[vivino:enrich] runJob ${job_id} crashed:`, (e as Error).message)
+      await supabase.from('vivino_jobs').update({
+        last_error: (e as Error).message,
+        heartbeat_at: new Date().toISOString(),
+      }).eq('id', job_id)
+    } finally {
+      RUNNING_JOBS.delete(job_id)
+    }
+  })()
+}
+
 async function finalizeJob(job_id: string): Promise<void> {
   // Determine if any items errored; mark failed in that case, otherwise done.
   const { count: errored } = await supabase

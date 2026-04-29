@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { createJob, type JobMode } from '@/lib/vivino/enrich'
+import { createJob, runJob, type JobMode } from '@/lib/vivino/enrich'
 import { apifyConfigured } from '@/lib/vivino/apify'
 
 const ALLOWED_MODES: JobMode[] = ['missing', 'failed', 'all']
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    triggerTick(req.nextUrl.origin, existing.id)
+    runJob(existing.id)
     return NextResponse.json({
       job_id: existing.id,
       total: existing.total,
@@ -48,18 +48,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ enriched: 0, message: 'Nothing to enrich for this mode' })
   }
 
-  triggerTick(req.nextUrl.origin, job.job_id)
+  runJob(job.job_id)
   return NextResponse.json({
     job_id: job.job_id,
     total: job.total,
     mode,
     message: 'Enrichment started',
   })
-}
-
-// Fire-and-forget self-call to start the tick chain. We do NOT await — the
-// HTTP response should return immediately so the UI can start polling.
-function triggerTick(origin: string, job_id: string) {
-  const url = `${origin}/api/vivino/tick?job_id=${encodeURIComponent(job_id)}`
-  fetch(url, { method: 'POST' }).catch(err => console.error('[vivino:enrich] trigger tick failed:', err))
 }
