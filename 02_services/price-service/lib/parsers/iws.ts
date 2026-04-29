@@ -131,6 +131,10 @@ export async function parseIWS(
     const lines = text.split('\n')
     const total = lines.length
     let lastReport = 0
+    // Buffer of recent non-empty / non-context lines so we can recover a
+    // name that landed on the previous line (Maison Bouey gift-box rows
+    // have NAME on the line ABOVE the SKU row).
+    const prevLines: string[] = []
 
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i].replace(/\s+$/, '')
@@ -143,23 +147,27 @@ export async function parseIWS(
         ctx.spiritType = null
         ctx.wineType = null
         ctx.country = null // re-derive per spirit sub-section / SKU
+        prevLines.length = 0
         continue
       }
       const country = detectCountryHeading(trimmed)
       if (country) {
         ctx.country = country
         ctx.winery = null
+        prevLines.length = 0
         continue
       }
       const wt = WINE_TYPE_SUBS[trimmed]
       if (wt !== undefined && ctx.section === 'wine') {
         ctx.wineType = wt
+        prevLines.length = 0
         continue
       }
       if (ctx.section === 'spirit') {
         const st = detectSpiritSubtype(trimmed)
         if (st) {
           ctx.spiritType = st
+          prevLines.length = 0
           continue
         }
       }
@@ -167,7 +175,7 @@ export async function parseIWS(
       // Data row?
       const firstTok = trimmed.split(/\s+/, 1)[0]
       if (SKU_RE.test(firstTok)) {
-        const item = parseRow(trimmed, ctx)
+        const item = parseRow(trimmed, ctx, prevLines)
         if (item && item.supplier_sku) {
           const key = item.supplier_sku.toLowerCase()
           if (!skuSeen.has(key)) {
@@ -175,6 +183,7 @@ export async function parseIWS(
             items.push(item)
           }
         }
+        prevLines.length = 0
         if (i - lastReport > 200) {
           lastReport = i
           const pct = 15 + Math.round((i / total) * 75)
@@ -183,8 +192,12 @@ export async function parseIWS(
         continue
       }
 
-      // Possible winery sub-header (left-justified non-CAPS line near a CODE
-      // header). We don't strictly need this for ingestion; skip.
+      // Stash this line as a possible name carryover for the next SKU row.
+      // Skip header rows ("CODE NAME APPELLATION ...") and obvious noise.
+      if (!/^CODE\b/i.test(trimmed) && trimmed.length > 1 && trimmed.length < 200) {
+        prevLines.push(trimmed)
+        if (prevLines.length > 3) prevLines.shift()
+      }
     }
 
     await onProgress?.(95, 'inserting')
@@ -248,7 +261,7 @@ function detectCountryHeading(line: string): string | null {
 
 // ─── Row parsing ────────────────────────────────────────────────────────────
 
-function parseRow(line: string, ctx: Ctx): ExtractedItem | null {
+function parseRow(line: string, ctx: Ctx, prevLines: string[] = []): ExtractedItem | null {
   // Tokenize by 2+ spaces.
   const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean)
   if (tokens.length < 4) return null
@@ -258,12 +271,15 @@ function parseRow(line: string, ctx: Ctx): ExtractedItem | null {
 
   const remain = tokens.slice() // we'll shrink from the right
 
-  // Right-peel deterministic fields (price → pack → unit). They're always
-  // present at the end of a real data row.
+  // Right-peel deterministic fields. PRICE is always last. PACK is
+  // sometimes empty (e.g. Maison Bouey gift-box rows); UNIT is the next
+  // tail-token in any wine/spirit row but theoretically could also be
+  // absent. PACK and UNIT are popped in order if present.
   const priceRaw = popMatch(remain, PRICE_RE)
+  if (!priceRaw) return null
   const packRaw = popMatch(remain, PACK_RE)
   const unitRaw = popMatch(remain, UNIT_RE)
-  if (!priceRaw || !packRaw || !unitRaw) return null
+  void packRaw // currently unused, kept for clarity
 
   // After unit, fields in source order are:
   //   APPELLATION | VINTAGE | RATING
@@ -275,15 +291,21 @@ function parseRow(line: string, ctx: Ctx): ExtractedItem | null {
   let vintageRaw: string | null = null
   let appellationRaw: string | null = null
 
-  // Attempt up to 3 pops. Each token is classified by its content.
-  for (let attempt = 0; attempt < 3 && remain.length > 2; attempt++) {
+  // Vintage is unambiguous (4-digit year or NV) — peel even if it's the
+  // last remaining token (NAME on a previous line scenario).
+  if (remain.length > 1 && VINTAGE_RE.test(remain[remain.length - 1])) {
+    vintageRaw = remain.pop() ?? null
+  }
+  // For rating/appellation, keep the conservative `> 2` guard so we don't
+  // eat a multi-word NAME when its tail looks plausible.
+  for (let attempt = 0; attempt < 2 && remain.length > 2; attempt++) {
     const last = remain[remain.length - 1]
-    if (VINTAGE_RE.test(last) && !vintageRaw) {
-      vintageRaw = remain.pop() ?? null
-    } else if (looksLikeRating(last) && !ratingRaw) {
+    if (looksLikeRating(last) && !ratingRaw) {
       ratingRaw = remain.pop() ?? null
     } else if (looksLikeAppellation(last) && !appellationRaw) {
       appellationRaw = remain.pop() ?? null
+    } else if (VINTAGE_RE.test(last) && !vintageRaw) {
+      vintageRaw = remain.pop() ?? null
     } else {
       break
     }
@@ -292,7 +314,15 @@ function parseRow(line: string, ctx: Ctx): ExtractedItem | null {
   // Whatever's left between SKU (remain[0]) and what we've consumed is NAME
   // (possibly the appellation slipped in if its detector missed). Join.
   const nameTokens = remain.slice(1)
-  const name = nameTokens.join(' ').trim()
+  let name = nameTokens.join(' ').trim()
+
+  // No NAME on this row → recover from the last non-context line buffered
+  // above it. Multi-line gift-box names span 2 lines, so join the most
+  // recent prevLines that look like name fragments (no SKU, no headers).
+  if (!name && prevLines.length > 0) {
+    const candidates = prevLines.filter(p => !SKU_RE.test(p.split(/\s+/, 1)[0]) && !/^(Red|White|Rose|Sparkling|Champagne)$/i.test(p))
+    name = candidates.join(' ').replace(/\s+/g, ' ').trim()
+  }
   if (!name) return null
 
   const price = parsePrice(priceRaw)
