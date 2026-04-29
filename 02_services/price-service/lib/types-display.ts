@@ -38,6 +38,18 @@ export function wineTypeLabel(t: string | null | undefined): string {
   return meta ? `${meta.emoji} ${meta.label}` : t
 }
 
+// Single emoji that represents the high-level category. Used as a visual
+// scanning aid in the price table when scrolling lots of rows.
+export function categoryEmoji(category: string | null | undefined): string {
+  switch (category) {
+    case 'spirits': return '🥃'
+    case 'beer':    return '🍺'
+    case 'other':   return '🥤'
+    case 'wine':
+    default:        return '🍷'
+  }
+}
+
 export function spiritTypeLabel(t: string | null | undefined): string {
   if (!t) return ''
   const meta = SPIRIT_TYPE_LABELS[t]

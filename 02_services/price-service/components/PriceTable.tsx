@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { WineItem } from '@/lib/supabase'
 import Image from 'next/image'
 import WineItemPanel from './WineItemPanel'
-import { wineTypeLabel, spiritTypeLabel } from '@/lib/types-display'
+import { wineTypeLabel, spiritTypeLabel, categoryEmoji } from '@/lib/types-display'
 
 type Props = {
   items: WineItem[]
@@ -106,6 +106,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                     { col: null, label: 'Тип', align: 'left' },
                     { col: 'vivino_rating', label: 'Vivino', align: 'left' },
                     { col: 'year', label: 'Год', align: 'left' },
+                    { col: 'vivino_alcohol', label: 'ABV', align: 'left' },
                     { col: null, label: 'Объём', align: 'left' },
                     { col: 'price', label: 'Цена', align: 'right' },
                   ] as const).map(({ col, label, align }) => (
@@ -177,12 +178,17 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
           </div>
         ) : (
           <div className="w-8 h-10 rounded bg-gray-100 flex items-center justify-center">
-            <span className="text-gray-300 text-xs">🍷</span>
+            <span className="text-gray-300 text-xs">{categoryEmoji(item.category)}</span>
           </div>
         )}
       </td>
       <td className="px-4 py-3">
-        <div className="font-medium text-gray-900">{item.name}</div>
+        <div className="font-medium text-gray-900 flex items-center gap-1.5">
+          {item.category && item.category !== 'wine' && (
+            <span className="text-sm" title={item.category}>{categoryEmoji(item.category)}</span>
+          )}
+          <span>{item.name}</span>
+        </div>
         {item.description && (
           <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
         )}
@@ -207,7 +213,10 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
           <span className="text-xs font-medium text-purple-700">★ {item.vivino_rating}</span>
         ) : '—'}
       </td>
-      <td className="px-4 py-3 text-gray-600">{item.year ?? '—'}</td>
+      <td className="px-4 py-3 text-gray-600">{item.year ?? item.vivino_year ?? '—'}</td>
+      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+        {item.vivino_alcohol != null ? `${item.vivino_alcohol}%` : '—'}
+      </td>
       <td className="px-4 py-3 text-gray-500">{item.volume ?? '—'}</td>
       <td className="px-4 py-3 text-right font-semibold text-gray-900">
         {item.price != null ? `฿${item.price.toLocaleString('ru-RU')}` : '—'}
@@ -225,10 +234,13 @@ function MobileCard({ item, onClick }: { item: WineItem; onClick: () => void }) 
             <Image src={item.image_url ?? item.vivino_image_url!} alt={item.name} fill className="object-cover" />
           </div>
         ) : (
-          <div className="w-10 h-14 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-lg">🍷</div>
+          <div className="w-10 h-14 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-lg">{categoryEmoji(item.category)}</div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900 text-sm leading-tight">{item.name}</div>
+          <div className="font-medium text-gray-900 text-sm leading-tight flex items-center gap-1">
+            {item.category && item.category !== 'wine' && <span>{categoryEmoji(item.category)}</span>}
+            <span>{item.name}</span>
+          </div>
           <div className="flex flex-wrap gap-1 mt-1.5">
             {item.supplier_name && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
