@@ -157,7 +157,15 @@ function AccountRow({ account, onToggle }: { account: Account; onToggle: () => v
     }`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-white font-medium">@{account.username}</span>
+          <a
+            href={`https://www.instagram.com/${account.username}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white font-medium hover:text-wine-400 hover:underline"
+            title="Открыть в Instagram"
+          >
+            @{account.username} ↗
+          </a>
           {account.display_name && (
             <span className="text-gray-500 text-sm">{account.display_name}</span>
           )}

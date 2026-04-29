@@ -279,10 +279,13 @@ export default function AccountDiscoverPage() {
               {sortedCands.map(c => {
                 const isSel = selected.has(c.username)
                 return (
-                  <button
+                  <div
                     key={c.username}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggle(c.username)}
-                    className={`w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl border transition-colors ${
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(c.username) } }}
+                    className={`w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
                       isSel
                         ? 'bg-wine-950 border-wine-800'
                         : 'bg-gray-900 border-gray-800 hover:border-gray-700'
@@ -296,7 +299,16 @@ export default function AccountDiscoverPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-white font-medium">@{c.username}</span>
+                        <a
+                          href={`https://www.instagram.com/${c.username}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-white font-medium hover:text-wine-400 hover:underline"
+                          title="Открыть в Instagram"
+                        >
+                          @{c.username} ↗
+                        </a>
                         {c.display_name && <span className="text-gray-500 text-sm">{c.display_name}</span>}
                         <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">{c.category}</span>
                       </div>
@@ -313,7 +325,7 @@ export default function AccountDiscoverPage() {
                         {c.relevance_score}/10
                       </span>
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>
