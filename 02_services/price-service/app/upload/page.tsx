@@ -185,9 +185,9 @@ export default function UploadPage() {
               </svg>
             </div>
             <div>
-              <p className="font-medium text-gray-900">Claude читает прайс...</p>
+              <p className="font-medium text-gray-900">Читаем прайс...</p>
               <p className="text-sm text-gray-500 mt-1">{filename}</p>
-              <p className="text-xs text-gray-400 mt-3">Извлечение позиций занимает 30–120 секунд</p>
+              <p className="text-xs text-gray-400 mt-3">Обычно занимает несколько секунд для известных поставщиков, до 2 минут для незнакомых</p>
             </div>
           </div>
         )}

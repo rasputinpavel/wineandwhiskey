@@ -95,6 +95,7 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
         description: item.description,
         category: item.category ?? fallback?.category ?? null,
         wine_type: item.wine_type ?? fallback?.wine_type ?? null,
+        supplier_sku: item.supplier_sku ?? null,
       }
     })
 

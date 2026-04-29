@@ -13,6 +13,7 @@ export type ExtractedItem = {
   description: string | null
   category: 'wine' | 'spirits' | 'beer' | 'other' | null
   wine_type: 'red' | 'white' | 'rose' | 'sparkling' | null
+  supplier_sku?: string | null
 }
 
 export type ExtractionResult = {
