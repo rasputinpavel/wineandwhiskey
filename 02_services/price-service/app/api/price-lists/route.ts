@@ -43,7 +43,7 @@ function detectKindFromFilename(name: string): string {
   if (/promo/.test(n)) return 'promo'
   if (/wholesale|trade/.test(n)) return 'wholesale'
   if (/closeout|clearance/.test(n)) return 'closeout'
-  if (/vip/.test(n)) return 'vip'
+  if (/vip|exclusive/.test(n)) return 'vip'
   return 'regular'
 }
 

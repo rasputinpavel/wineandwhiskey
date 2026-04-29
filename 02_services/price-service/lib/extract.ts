@@ -4,6 +4,7 @@ import type { ExtractionResult, ExtractedItem } from './claude'
 import { renderPdfToImages, isPdftoppmAvailable } from './pdf-render'
 import { isBBB, parseBBB } from './parsers/bbb'
 import { isMagMag, parseMagMag } from './parsers/magmag'
+import { isItalasia, parseItalasia } from './parsers/italasia'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -59,6 +60,10 @@ export async function extractFromFile(
     if (await isMagMag(buffer, filename)) {
       console.log('[extract] using MagMag parser (Claude with supplier-specific prompt)')
       return parseMagMag(buffer, filename, report)
+    }
+    if (await isItalasia(buffer, filename)) {
+      console.log('[extract] using Italasia parser (Claude with supplier-specific prompt)')
+      return parseItalasia(buffer, filename, report)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
