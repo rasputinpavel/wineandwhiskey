@@ -371,9 +371,9 @@ bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text   = ctx.message.text;
   if (text.startsWith("/")) return;
-  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(text, ctx.me.username ?? "")) return;
 
-  // If there's a pending photo, treat this text as its caption
+  // If there's a pending photo, treat this text as its caption — even in group chats
+  // where the user didn't explicitly address the bot. The bot already asked for a reply.
   const pendingPhoto = pendingPhotos.get(chatId);
   if (pendingPhoto) {
     pendingPhotos.delete(chatId);
@@ -392,6 +392,8 @@ bot.on("message:text", async (ctx) => {
     }
     return;
   }
+
+  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(text, ctx.me.username ?? "")) return;
 
   // Expense text shortcut
   if (looksLikeExpense(text)) {
