@@ -109,10 +109,10 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                     { col: 'vivino_alcohol', label: 'ABV', align: 'left' },
                     { col: null, label: 'Объём', align: 'left' },
                     { col: 'price', label: 'Цена', align: 'right' },
-                  ] as const).map(({ col, label, align }) => (
+                  ] as const).map(({ col, label, align }, i, arr) => (
                     <th
                       key={label}
-                      className={`px-4 py-3 text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider ${col ? 'cursor-pointer hover:text-ink select-none' : ''}`}
+                      className={`py-3 ${i === arr.length - 1 ? 'pl-4 pr-6' : 'px-4'} text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-ink select-none' : ''}`}
                       onClick={col ? () => onSort(col) : undefined}
                     >
                       {label}
@@ -218,7 +218,7 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
         {item.vivino_alcohol != null ? `${item.vivino_alcohol}%` : '—'}
       </td>
       <td className="px-4 py-3 text-gray-500">{item.volume ?? '—'}</td>
-      <td className="px-4 py-3 text-right font-semibold text-gray-900">
+      <td className="pl-4 pr-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
         {item.price != null ? `฿${item.price.toLocaleString('ru-RU')}` : '—'}
       </td>
     </tr>
