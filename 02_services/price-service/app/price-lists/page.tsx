@@ -60,7 +60,9 @@ function applyStatusRes(s: StatusRes): EnrichStatus {
   if (job && job.state === 'failed')   return { state: 'error', enriched, total, failed, cacheHits: job.cache_hits, apifyRuns: job.apify_runs, jobId: job.id, msg: job.last_error ?? 'Ошибка' }
 
   if (total > 0 && enriched >= total) return { state: 'done', enriched, total, failed, cacheHits: job?.cache_hits ?? 0, apifyRuns: job?.apify_runs ?? 0, jobId: job?.id ?? null }
-  if (enriched > 0)                   return { state: 'paused', enriched, total, failed, cacheHits: job?.cache_hits ?? 0, apifyRuns: job?.apify_runs ?? 0, jobId: job?.id ?? null }
+  // No active job. Even if some wines were enriched in a previous run,
+  // remaining ones are eligible for a fresh `missing` job — show idle so the
+  // primary 🍇 button appears (resume on a done/failed job is a no-op).
   return { ...EMPTY_STATUS, total, enriched, failed }
 }
 

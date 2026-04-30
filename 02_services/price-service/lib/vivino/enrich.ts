@@ -27,20 +27,45 @@ type JobRow = {
 // Job creation: enumerates wine_items eligible under the chosen mode and
 // writes one vivino_job_items row per wine, with normalized query string.
 // ---------------------------------------------------------------------------
+type WineSelection = {
+  id: string
+  name: string | null
+  grape_variety: string | null
+  winery: string | null
+  wine_type: string | null
+  country: string | null
+  year: number | null
+}
+
+// Supabase REST caps SELECT at 1000 rows; large price lists need pagination
+// or the job silently truncates and reports total=1000.
+async function selectAllEligibleWines(price_list_id: string, mode: JobMode): Promise<WineSelection[]> {
+  const PAGE = 1000
+  const out: WineSelection[] = []
+  for (let from = 0; ; from += PAGE) {
+    let q = supabase
+      .from('wine_items')
+      .select('id, name, grape_variety, winery, wine_type, country, year')
+      .eq('price_list_id', price_list_id)
+      .not('name', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (mode === 'missing') q = q.is('vivino_enriched_at', null)
+    if (mode === 'failed')  q = q.not('vivino_failed_at', 'is', null)
+
+    const { data, error } = await q
+    if (error) throw new Error(`select wines: ${error.message}`)
+    const page = (data ?? []) as WineSelection[]
+    out.push(...page)
+    if (page.length < PAGE) break
+  }
+  return out
+}
+
 export async function createJob(price_list_id: string, mode: JobMode): Promise<{ job_id: string; total: number }> {
-  let q = supabase
-    .from('wine_items')
-    .select('id, name, grape_variety, winery, wine_type, country, year, vivino_enriched_at, vivino_failed_at')
-    .eq('price_list_id', price_list_id)
-    .not('name', 'is', null)
-
-  if (mode === 'missing') q = q.is('vivino_enriched_at', null)
-  if (mode === 'failed')  q = q.not('vivino_failed_at', 'is', null)
-  // mode === 'all' — no extra filter; will retry every wine in the list
-
-  const { data: items, error } = await q
-  if (error) throw new Error(`select wines: ${error.message}`)
-  if (!items || items.length === 0) {
+  const items = await selectAllEligibleWines(price_list_id, mode)
+  if (items.length === 0) {
     return { job_id: '', total: 0 }
   }
 
