@@ -10,6 +10,7 @@ import { isJanhom, parseJanhom } from './parsers/janhom'
 import { isPhop, parsePhop } from './parsers/phop'
 import { isHarvest, parseHarvest } from './parsers/harvest'
 import { isUniversal, parseUniversal } from './parsers/universal'
+import { isVinumLector, parseVinumLector } from './parsers/vinum-lector'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -91,6 +92,12 @@ export async function extractFromFile(
     if (await isUniversal(buffer, filename)) {
       console.log('[extract] using Universal parser (auto-routes fine_wine / horeca / spirits)')
       return parseUniversal(buffer, filename, report)
+    }
+    if (await isVinumLector(buffer, filename)) {
+      console.log('[extract] using Vinum Lector deterministic parser')
+      const r = await parseVinumLector(buffer, filename, report)
+      await report(95, 'inserting')
+      return r
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
