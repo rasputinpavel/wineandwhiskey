@@ -92,9 +92,9 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
       {items.length > 0 && (
         <>
           {/* Desktop table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-100">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-stone bg-white">
+            <table className="min-w-[1200px] w-full text-sm">
+              <thead className="bg-warm-white border-b border-stone">
                 <tr>
                   <th className="px-4 py-3 w-8"></th>
                   {([
@@ -112,7 +112,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                   ] as const).map(({ col, label, align }) => (
                     <th
                       key={label}
-                      className={`px-4 py-3 text-${align} font-medium text-gray-500 ${col ? 'cursor-pointer hover:text-gray-800 select-none' : ''}`}
+                      className={`px-4 py-3 text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider ${col ? 'cursor-pointer hover:text-ink select-none' : ''}`}
                       onClick={col ? () => onSort(col) : undefined}
                     >
                       {label}
@@ -121,7 +121,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 bg-white">
+              <tbody className="divide-y divide-stone/60 bg-white">
                 {items.map(item => (
                   <TableRow key={item.id} item={item} onClick={() => openItem(item)} selected={selected?.id === item.id} />
                 ))}

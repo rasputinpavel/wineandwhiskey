@@ -60,31 +60,38 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const processingCount = priceListsRes.data?.length ?? 0
 
   return (
-    <div className="min-h-screen bg-[#f8f7f5]">
+    <div className="min-h-screen bg-warm-white">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-wine-600 font-bold text-lg tracking-tight">Price Service</span>
-            <span className="hidden sm:block text-gray-300">·</span>
-            <span className="hidden sm:block text-sm text-gray-500">Wine &amp; Whiskey</span>
-          </div>
+      <header className="bg-white border-b border-stone sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-3 group">
+            <BrandMark />
+            <div className="flex flex-col leading-none">
+              <span className="font-display text-xl sm:text-2xl tracking-wide leading-none">
+                <span className="text-wine-600">WINE</span>
+                <span className="text-ink"> &amp; WHISKEY</span>
+              </span>
+              <span className="mt-1 text-[10px] tracking-[0.2em] uppercase font-semibold text-graphite">
+                Price Service
+              </span>
+            </div>
+          </Link>
           <div className="flex items-center gap-2">
             {processingCount > 0 && (
-              <span className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-medium animate-pulse">
+              <span className="text-xs bg-amber/15 text-wine-700 px-2.5 py-1 rounded-full font-medium animate-pulse">
                 Обработка {processingCount} прайса...
               </span>
             )}
             <Link
               href="/price-lists"
-              className="text-sm text-gray-500 hover:text-gray-700 px-2 py-2 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block"
+              className="text-sm text-graphite hover:text-ink px-2 py-2 rounded-lg hover:bg-warm-white transition-colors hidden sm:block"
               title="Управление прайсами"
             >
               Прайсы
             </Link>
             <Link
               href="/upload"
-              className="flex items-center gap-1.5 bg-wine-600 hover:bg-wine-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition-colors"
+              className="flex items-center gap-1.5 bg-wine-600 hover:bg-wine-700 text-warm-white text-sm font-medium px-3.5 py-2 rounded-xl transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -101,9 +108,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         {/* Stats row */}
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-graphite">
             {total > 0 ? (
-              <span><strong className="text-gray-900">{total.toLocaleString('ru-RU')}</strong> позиций · <strong className="text-gray-900">{suppliers.length}</strong> поставщиков</span>
+              <span><strong className="text-ink font-heading font-semibold">{total.toLocaleString('ru-RU')}</strong> позиций · <strong className="text-ink font-heading font-semibold">{suppliers.length}</strong> поставщиков</span>
             ) : (
               <span>Нет данных — загрузите первый прайс</span>
             )}
@@ -132,12 +139,24 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   )
 }
 
+function BrandMark() {
+  // Compact monogram echoing the WINE & WHISKEY wordmark
+  return (
+    <span
+      aria-hidden
+      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-wine-600 text-warm-white font-display text-xl leading-none tracking-tight shrink-0"
+    >
+      W
+    </span>
+  )
+}
+
 function LogoutButton() {
   return (
     <form action="/api/auth/logout" method="POST">
       <button
         type="submit"
-        className="text-sm text-gray-500 hover:text-gray-700 px-2 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+        className="text-sm text-graphite hover:text-ink px-2 py-2 rounded-lg hover:bg-warm-white transition-colors"
         title="Выйти"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
