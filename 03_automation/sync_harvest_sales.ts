@@ -234,7 +234,10 @@ function fmt(bg: any, fg: any, size = 9, bold = false, hAlign = "LEFT", italic =
 }
 function cStr(v: string, f: any)  { return { userEnteredValue: { stringValue: v }, userEnteredFormat: f }; }
 function cNum(n: number, f: any, pattern?: string) {
-  const obj: any = { userEnteredValue: { numberValue: n }, userEnteredFormat: { ...f } };
+  // Sheets API silently drops the cell value if numberValue is NaN/undefined,
+  // which produces blank cells AND blank totals when reduce() propagates NaN.
+  const v = Number.isFinite(n) ? n : 0;
+  const obj: any = { userEnteredValue: { numberValue: v }, userEnteredFormat: { ...f } };
   if (pattern) obj.userEnteredFormat.numberFormat = { type: "NUMBER", pattern };
   return obj;
 }
