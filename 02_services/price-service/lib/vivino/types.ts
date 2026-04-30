@@ -9,36 +9,46 @@ export type VivinoResult = {
   image_url?: string | string[]
   images?: string[]
   vivino_url?: string
-  grapes?: VivinoGrape[]
+
+  // Actor's real field names (verified 2026-04-30 against
+  // mrbridge~vivino-wine-data-scraper).
+  grape_varieties?: NamedRef[]   // canonical
+  grapes?: VivinoGrape[]         // legacy / alt name kept for tolerance
+
   winery?: NamedRef
-  wine_type_id?: number
-  type?: string
+  wine_type?: string             // "Red" | "White" | "Sparkling" | "Rosé"
+  wine_type_id?: number          // legacy
+  type?: string                  // legacy
+
   name?: string
 
-  // Region / geography
   region?: NamedRef
   subregion?: NamedRef
   appellation?: NamedRef
   country?: NamedRef
 
-  // Vintage / chemistry
   vintage?: number | string
   year?: number | string
   alcohol?: number | string
   abv?: number | string
 
-  // Style / taste
   style?: NamedRef
   body?: string | number
   flavors?: NamedRef[]
   flavor_profile?: { flavors?: NamedRef[] } | NamedRef[]
-  taste_profile?: Record<string, unknown>
+  taste_profile?: {
+    body?: number
+    acidity?: number
+    tannins?: number
+    sweetness?: number
+    fizziness?: number | null
+    flavor_notes?: string[]
+    flavors?: NamedRef[]         // legacy alias if actor changes
+  } & Record<string, unknown>
 
-  // Food pairings
   food_pairings?: NamedRef[]
   food_pairing?: NamedRef[]
 
-  // Generic catch-all so we don't blow up on unknown shapes.
   [key: string]: unknown
 }
 

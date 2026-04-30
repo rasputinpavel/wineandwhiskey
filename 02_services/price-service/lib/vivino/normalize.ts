@@ -21,8 +21,9 @@ export function normalizeName(raw: string): string {
 }
 
 // Build the actual search query we send to the Apify actor.
-// We add winery/year if present and not already in the name — Vivino's search
-// resolves these well, so giving it more signal improves match rate.
+// We add winery only — the actor strips year tokens from `searchQuery` before
+// returning, which would break our exact-match-by-searchQuery mapping. Vintage
+// is still recovered from the actor's `vintage` field on the result.
 export function buildVivinoQuery(item: {
   name: string
   winery: string | null
@@ -35,14 +36,6 @@ export function buildVivinoQuery(item: {
     const w = normalizeName(item.winery)
     if (w && !base.includes(w)) parts.unshift(w)
   }
-  if (item.year) {
-    const y = String(item.year)
-    if (!base.includes(y)) parts.push(y)
-  }
-
-  // Year is intentionally not part of the cache key for popular wines without a
-  // big vintage spread — but we DO include it here because Vivino treats vintage
-  // as a search dimension. Trade-off: more cache misses, better match quality.
 
   return parts.join(' ').replace(WHITESPACE_RX, ' ').trim()
 }

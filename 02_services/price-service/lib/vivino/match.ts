@@ -6,7 +6,8 @@ type NamedRef = string | { name?: string } | null | undefined
 
 export function parseWineType(r: VivinoResult): 'red' | 'white' | 'rose' | 'sparkling' | null {
   if (r.wine_type_id && VIVINO_WINE_TYPES[r.wine_type_id]) return VIVINO_WINE_TYPES[r.wine_type_id]
-  const t = (r.type ?? '').toLowerCase()
+  // Actor returns capitalized strings like "Red" / "Rosé" in `wine_type`.
+  const t = (r.wine_type ?? r.type ?? '').toString().toLowerCase()
   if (t.includes('red')) return 'red'
   if (t.includes('white')) return 'white'
   if (t.includes('ros')) return 'rose'
@@ -14,9 +15,13 @@ export function parseWineType(r: VivinoResult): 'red' | 'white' | 'rose' | 'spar
   return null
 }
 
-export function parseGrapes(grapes?: VivinoGrape[]): string | null {
-  if (!grapes || grapes.length === 0) return null
-  const names = grapes.map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean)
+export function parseGrapes(r: VivinoResult): string | null {
+  // Actor's canonical field is `grape_varieties` (string[]); older code passed
+  // `grapes` (VivinoGrape[] = string | { name }) — accept both for resilience.
+  const list: VivinoGrape[] | undefined = (Array.isArray(r.grape_varieties) ? r.grape_varieties : undefined) as VivinoGrape[] | undefined
+                                          ?? r.grapes
+  if (!list || list.length === 0) return null
+  const names = list.map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean)
   return names.length ? names.join(', ') : null
 }
 
@@ -36,9 +41,15 @@ function flattenList(v: unknown): string[] {
   return out
 }
 
-// Vivino sometimes wraps flavors in { flavors: [...] } and sometimes returns
-// the array directly. Handle both.
+// Actor's canonical field is `taste_profile.flavor_notes` (string[], typically
+// 100+ entries ordered by frequency). We cap at 15 — the rest is noise for UI.
+// Older shapes are kept as fallbacks.
+const FLAVOR_LIMIT = 15
 function extractFlavors(r: VivinoResult): string[] {
+  const tp = r.taste_profile
+  if (tp && Array.isArray(tp.flavor_notes) && tp.flavor_notes.length) {
+    return tp.flavor_notes.slice(0, FLAVOR_LIMIT)
+  }
   const candidates: unknown[] = []
   if (r.flavors) candidates.push(r.flavors)
   if (r.flavor_profile) {
@@ -47,12 +58,10 @@ function extractFlavors(r: VivinoResult): string[] {
       candidates.push((r.flavor_profile as { flavors: unknown[] }).flavors)
     }
   }
-  // Some actor versions put flavors inside taste_profile.flavors[]
-  const tp = r.taste_profile as Record<string, unknown> | undefined
   if (tp && Array.isArray(tp.flavors)) candidates.push(tp.flavors)
   for (const c of candidates) {
     const list = flattenList(c)
-    if (list.length) return list
+    if (list.length) return list.slice(0, FLAVOR_LIMIT)
   }
   return []
 }
@@ -186,7 +195,7 @@ export function buildEnrichmentUpdate(
   query: string,
   now: string
 ): EnrichmentUpdate {
-  const grapes = parseGrapes(result.grapes)
+  const grapes = parseGrapes(result)
   const winery = flatten(result.winery as NamedRef)
   const wineType = parseWineType(result)
   const confidence = matchConfidence(item, result)
