@@ -14,6 +14,10 @@ export function normalizeName(raw: string): string {
     // strip diacritics
     .replace(/[̀-ͯ]/g, '')
     .replace(VOLUME_RX, ' ')
+    // Strip 4-digit year tokens — the Vivino actor removes them from
+    // `searchQuery` before returning, so leaving them in our query breaks
+    // the exact-match mapping (we'd never find the result by query key).
+    .replace(YEAR_RX, ' ')
     .replace(PUNCT_RX, ' ')
     .replace(/\s*-\s*/g, ' ')
     .replace(WHITESPACE_RX, ' ')
