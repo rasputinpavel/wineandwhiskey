@@ -206,7 +206,10 @@ async function isCancelled(jobId: string): Promise<boolean> {
 // ─── Main worker ─────────────────────────────────────────────────────────────
 
 const MAX_ACCOUNTS_TO_ENRICH = 100
-const MIN_REELS_PER_ACCOUNT  = 3
+// 2 reels = enough signal in pre-filter; the per-account scoring still uses
+// median/p75/etc on whatever sample we have. Was 3 — too strict, killed ~95%
+// of candidates on a 14-hashtag run.
+const MIN_REELS_PER_ACCOUNT  = 2
 
 async function runDiscovery(jobId: string, tags: string[]) {
   await appendLog(jobId, `🔍 Запускаю поиск по ${tags.length} хэштегам — ~${Math.round(tags.length * 0.7)} мин на скан + ~30 мин на профили.`)
