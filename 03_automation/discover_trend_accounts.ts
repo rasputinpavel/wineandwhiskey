@@ -211,7 +211,9 @@ async function analyzeAccount(
 ): Promise<AccountAnalysis> {
   const prompt =
     `You are scoring Instagram accounts as content inspiration for Wine & Whiskey — ` +
-    `a wine & spirits retail store in Phuket (Russian-speaking audience, casual luxury tone).\n\n` +
+    `a wine & spirits retail store in Phuket (casual luxury tone). ` +
+    `Language and target market are NOT a factor — we adapt content into our own voice. ` +
+    `Score based purely on content format strength, retail applicability, and reproducibility.\n\n` +
     `Account: @${username}\n` +
     `Followers: ${followers.toLocaleString()}\n` +
     `Median Reel views: ${medianViews.toLocaleString()}\n` +
