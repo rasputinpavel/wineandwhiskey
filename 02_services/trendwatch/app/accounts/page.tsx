@@ -10,6 +10,13 @@ type Account = {
   display_name: string | null
   followers_count: number | null
   avg_reel_views: number | null
+  median_reel_views: number | null
+  virality_ratio: number | null
+  stability_label: string | null
+  size_bucket: string | null
+  business_model: string | null
+  why_matters: string | null
+  tier: 'a' | 'b' | 'c' | null
   relevance_score: number | null
   category: string | null
   is_active: boolean
@@ -151,54 +158,81 @@ function AccountRow({ account, onToggle }: { account: Account; onToggle: () => v
     return String(n)
   }
 
+  const tierLabel = account.tier === 'a' ? '🔴 A' : account.tier === 'b' ? '🟡 B' : account.tier === 'c' ? '⚪ C' : null
+
   return (
-    <div className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${
+    <div className={`px-4 py-3 rounded-xl border ${
       account.is_active ? 'bg-gray-900 border-gray-800' : 'bg-gray-950 border-gray-900'
     }`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <a
-            href={`https://www.instagram.com/${account.username}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-white font-medium hover:text-wine-400 hover:underline"
-            title="Открыть в Instagram"
-          >
-            @{account.username} ↗
-          </a>
-          {account.display_name && (
-            <span className="text-gray-500 text-sm">{account.display_name}</span>
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {tierLabel && <span className="text-xs font-mono text-gray-300 w-8">{tierLabel}</span>}
+            <a
+              href={`https://www.instagram.com/${account.username}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white font-medium hover:text-wine-400 hover:underline"
+              title="Открыть в Instagram"
+            >
+              @{account.username} ↗
+            </a>
+            {account.display_name && (
+              <span className="text-gray-500 text-sm">{account.display_name}</span>
+            )}
+            {account.business_model && (
+              <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">{account.business_model}</span>
+            )}
+            {account.size_bucket && (
+              <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-500 rounded">{account.size_bucket}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-5 text-sm text-gray-400">
+          <span title="Followers">{fmt(account.followers_count)} flw</span>
+          <span title="Median Reel views">med {fmt(account.median_reel_views ?? account.avg_reel_views)}</span>
+          {account.virality_ratio != null && (
+            <span title="Median views / followers">{account.virality_ratio.toFixed(1)}x</span>
           )}
-          {account.category && (
-            <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">{account.category}</span>
+          {account.stability_label && (
+            <span title="Top1/median ratio" className={
+              account.stability_label === 'good' ? 'text-green-400'
+              : account.stability_label === 'watch' ? 'text-yellow-400'
+              : account.stability_label === 'low' ? 'text-red-400'
+              : 'text-gray-500'
+            }>
+              {account.stability_label}
+            </span>
+          )}
+          {account.relevance_score != null && (
+            <span title="Relevance score" className={
+              account.relevance_score >= 8 ? 'text-green-400 font-semibold'
+              : account.relevance_score >= 5 ? 'text-yellow-400'
+              : 'text-gray-500'
+            }>
+              {account.relevance_score}/10
+            </span>
           )}
         </div>
+
+        <button
+          onClick={onToggle}
+          className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+            account.is_active
+              ? 'bg-green-900 text-green-300 hover:bg-red-900 hover:text-red-300'
+              : 'bg-gray-800 text-gray-400 hover:bg-green-900 hover:text-green-300'
+          }`}
+        >
+          {account.is_active ? 'Active' : 'Inactive'}
+        </button>
       </div>
 
-      <div className="flex gap-6 text-sm text-gray-400">
-        <span title="Followers">{fmt(account.followers_count)} followers</span>
-        <span title="Avg reel views">{fmt(account.avg_reel_views)} avg views</span>
-        {account.relevance_score && (
-          <span title="Relevance score" className={
-            account.relevance_score >= 8 ? 'text-green-400'
-            : account.relevance_score >= 5 ? 'text-yellow-400'
-            : 'text-gray-500'
-          }>
-            {account.relevance_score}/10
-          </span>
-        )}
-      </div>
-
-      <button
-        onClick={onToggle}
-        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-          account.is_active
-            ? 'bg-green-900 text-green-300 hover:bg-red-900 hover:text-red-300'
-            : 'bg-gray-800 text-gray-400 hover:bg-green-900 hover:text-green-300'
-        }`}
-      >
-        {account.is_active ? 'Active' : 'Inactive'}
-      </button>
+      {account.why_matters && (
+        <div className="mt-2 ml-9 text-xs text-gray-500 italic">
+          → {account.why_matters}
+        </div>
+      )}
     </div>
   )
 }

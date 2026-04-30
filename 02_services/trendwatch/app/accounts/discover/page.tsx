@@ -5,14 +5,30 @@ import Shell from '@/components/Shell'
 import Link from 'next/link'
 
 type Candidate = {
-  username:        string
-  display_name:    string | null
-  followers_count: number
-  avg_reel_views:  number
-  relevance_score: number
-  category:        string
-  sample_reel_url: string | null
-  selected?:       boolean
+  username:               string
+  display_name:           string | null
+  followers_count:        number
+  avg_reel_views:         number
+  median_reel_views?:     number
+  hit_rate_50k?:          number
+  virality_ratio?:        number
+  size_bucket?:           string
+  stability_label?:       string
+  confidence_score?:      number
+  freshness_score?:       number
+  format_copyability?:    number
+  production_copyability?: number
+  retail_copyability?:    number
+  business_model?:        string
+  why_matters?:           string
+  verdict?:               'keep' | 'maybe' | 'reject'
+  tier?:                  'a' | 'b' | 'c'
+  source_clusters?:       string[]
+  matched_clusters_count?: number
+  sample_size?:           number
+  relevance_score:        number
+  category:               string
+  sample_reel_url:        string | null
 }
 
 type Job = {
@@ -90,11 +106,13 @@ export default function AccountDiscoverPage() {
         const data: Job = await res.json()
         if (cancelled) return
         setJob(data)
-        // Auto-pre-select strong candidates that user hasn't touched yet
+        // Auto-pre-select strong candidates (tier A or score ≥7) that user hasn't touched yet
         setSelected(prev => {
           if (prev.size > 0) return prev
           const next = new Set<string>()
-          for (const c of data.candidates) if (c.relevance_score >= 7) next.add(c.username)
+          for (const c of data.candidates) {
+            if (c.tier === 'a' || c.relevance_score >= 7) next.add(c.username)
+          }
           return next
         })
       } catch {}
@@ -151,10 +169,11 @@ export default function AccountDiscoverPage() {
     if (!picked.length) return
     setSaving(true)
     for (const c of picked) {
+      // Pass through all v3 fields so trend_accounts gets the full scoring picture
       await fetch('/api/accounts', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ username: c.username, display_name: c.display_name, category: c.category }),
+        body:    JSON.stringify({ ...c, is_active: c.tier === 'a' }),
       })
     }
     setSaving(false)
@@ -294,6 +313,11 @@ export default function AccountDiscoverPage() {
             <div className="space-y-2">
               {sortedCands.map(c => {
                 const isSel = selected.has(c.username)
+                const tierLabel = c.tier === 'a' ? '🔴 A' : c.tier === 'b' ? '🟡 B' : c.tier === 'c' ? '⚪ C' : null
+                const verdictColor =
+                  c.verdict === 'keep'  ? 'bg-green-900 text-green-300' :
+                  c.verdict === 'maybe' ? 'bg-yellow-900 text-yellow-300' :
+                  c.verdict === 'reject'? 'bg-red-900 text-red-300' : ''
                 return (
                   <div
                     key={c.username}
@@ -301,46 +325,78 @@ export default function AccountDiscoverPage() {
                     tabIndex={0}
                     onClick={() => toggle(c.username)}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(c.username) } }}
-                    className={`w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
                       isSel
                         ? 'bg-wine-950 border-wine-800'
                         : 'bg-gray-900 border-gray-800 hover:border-gray-700'
                     }`}
                   >
-                    <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center ${
-                      isSel ? 'bg-wine-700 border-wine-600' : 'border-gray-600'
-                    }`}>
-                      {isSel && <span className="text-white text-xs">✓</span>}
-                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center ${
+                        isSel ? 'bg-wine-700 border-wine-600' : 'border-gray-600'
+                      }`}>
+                        {isSel && <span className="text-white text-xs">✓</span>}
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`https://www.instagram.com/${c.username}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          className="text-white font-medium hover:text-wine-400 hover:underline"
-                          title="Открыть в Instagram"
-                        >
-                          @{c.username} ↗
-                        </a>
-                        {c.display_name && <span className="text-gray-500 text-sm">{c.display_name}</span>}
-                        <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">{c.category}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {tierLabel && (
+                            <span className="text-xs font-mono text-gray-300 w-8">{tierLabel}</span>
+                          )}
+                          <a
+                            href={`https://www.instagram.com/${c.username}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="text-white font-medium hover:text-wine-400 hover:underline"
+                            title="Открыть в Instagram"
+                          >
+                            @{c.username} ↗
+                          </a>
+                          {c.display_name && <span className="text-gray-500 text-sm">{c.display_name}</span>}
+                          {c.business_model && (
+                            <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">{c.business_model}</span>
+                          )}
+                          {c.verdict && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${verdictColor}`}>{c.verdict}</span>
+                          )}
+                          {c.size_bucket && (
+                            <span className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-500 rounded">{c.size_bucket}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-5 text-sm text-gray-400 flex-shrink-0">
+                        <span title="Followers">{fmt(c.followers_count)} flw</span>
+                        <span title="Median Reel views">med {fmt(c.median_reel_views ?? c.avg_reel_views)}</span>
+                        {c.virality_ratio !== undefined && (
+                          <span title="Median views / followers">{c.virality_ratio.toFixed(1)}x</span>
+                        )}
+                        {c.stability_label && (
+                          <span title="Top1/median ratio" className={
+                            c.stability_label === 'good' ? 'text-green-400'
+                            : c.stability_label === 'watch' ? 'text-yellow-400'
+                            : c.stability_label === 'low' ? 'text-red-400'
+                            : 'text-gray-500'
+                          }>
+                            {c.stability_label}
+                          </span>
+                        )}
+                        <span className={
+                          c.relevance_score >= 8 ? 'text-green-400 font-semibold'
+                          : c.relevance_score >= 5 ? 'text-yellow-400'
+                          : 'text-gray-500'
+                        }>
+                          {c.relevance_score}/10
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex gap-5 text-sm text-gray-400 flex-shrink-0">
-                      <span>{fmt(c.followers_count)} followers</span>
-                      <span>{fmt(c.avg_reel_views)} avg views</span>
-                      <span className={
-                        c.relevance_score >= 8 ? 'text-green-400 font-semibold'
-                        : c.relevance_score >= 5 ? 'text-yellow-400'
-                        : 'text-gray-500'
-                      }>
-                        {c.relevance_score}/10
-                      </span>
-                    </div>
+                    {c.why_matters && (
+                      <div className="mt-2 ml-9 text-xs text-gray-500 italic">
+                        → {c.why_matters}
+                      </div>
+                    )}
                   </div>
                 )
               })}

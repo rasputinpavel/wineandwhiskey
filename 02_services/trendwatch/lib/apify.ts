@@ -26,6 +26,7 @@ export type InstagramProfile = {
   followersCount: number
   postsCount: number
   isVerified: boolean
+  biography?: string | null
 }
 
 async function runActor(actorId: string, input: Record<string, unknown>): Promise<string> {

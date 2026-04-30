@@ -147,38 +147,82 @@ Return ONLY valid JSON.`,
   }
 }
 
-type RelevanceInput = {
-  username: string
-  followersCount: number
-  recentReelViews: number[]
-  sampleCaptions: string[]
+// ─── Account analysis (v3) ────────────────────────────────────────────────────
+
+export type AccountAnalysis = {
+  business_model_fit:           'wine_shop' | 'wine_bar' | 'media' | 'creator' | 'other'
+  content_format_strength:      number   // 1–5
+  retail_idea_density:          number   // 1–5
+  format_copyability:           number   // 1–5: can you replicate the mechanic?
+  production_copyability:       number   // 1–5: 5=phone, 1=studio
+  retail_copyability:           number   // 1–5: 5=perfect for wine shop
+  red_flags:                    string[]
+  why_matters:                  string
+  verdict:                      'keep' | 'maybe' | 'reject'
 }
 
-export async function scoreAccountRelevance(input: RelevanceInput): Promise<number> {
-  const avgViews = input.recentReelViews.length
-    ? Math.round(input.recentReelViews.reduce((a, b) => a + b, 0) / input.recentReelViews.length)
-    : 0
+type AnalyzeAccountInput = {
+  username:        string
+  followers:       number
+  medianViews:     number
+  top3Views:       number
+  hitRate:         number     // 0–1
+  medianRatio:     number     // medianViews / followers
+  stabilityLabel:  'good' | 'watch' | 'low' | 'unknown'
+  sourceClusters:  string[]
+  bio:             string
+  sampleCaptions:  string[]
+}
+
+export async function analyzeAccount(input: AnalyzeAccountInput): Promise<AccountAnalysis> {
+  const prompt =
+    `You are scoring Instagram accounts as content inspiration for Wine & Whiskey — ` +
+    `a wine & spirits retail store in Phuket targeting Russian-speaking customers (casual luxury tone).\n\n` +
+    `Account: @${input.username}\n` +
+    `Followers: ${input.followers.toLocaleString()}\n` +
+    `Median Reel views: ${input.medianViews.toLocaleString()}\n` +
+    `Top-3 avg views: ${input.top3Views.toLocaleString()}\n` +
+    `Views/followers (median): ${input.medianRatio.toFixed(1)}x\n` +
+    `Hit rate (reels >50K views): ${(input.hitRate * 100).toFixed(0)}%\n` +
+    `Virality stability: ${input.stabilityLabel} (top1/median ratio)\n` +
+    `Found via clusters: ${input.sourceClusters.join(', ')}\n` +
+    `Bio: ${input.bio || '(none)'}\n` +
+    `Sample captions: ${input.sampleCaptions.slice(0, 3).join(' | ') || '(none)'}\n\n` +
+    `Return ONLY valid JSON, no markdown:\n` +
+    `{"business_model_fit":"wine_shop|wine_bar|media|creator|other",` +
+    `"content_format_strength":1-5,` +
+    `"retail_idea_density":1-5,` +
+    `"format_copyability":1-5,` +
+    `"production_copyability":1-5,` +
+    `"retail_copyability":1-5,` +
+    `"red_flags":["..."],` +
+    `"why_matters":"one specific sentence",` +
+    `"verdict":"keep|maybe|reject"}\n\n` +
+    `Copyability guide:\n` +
+    `- format_copyability: can the reel mechanic be replicated without a team?\n` +
+    `- production_copyability: 5=phone-shot, 1=needs studio/pro crew\n` +
+    `- retail_copyability: 5=perfect for a wine shop, 1=only works for creator/media`
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 50,
-    messages: [
-      {
-        role: 'user',
-        content: `Rate this Instagram account for relevance as a wine/spirits content source (1-10).
-
-Account: @${input.username}
-Followers: ${input.followersCount.toLocaleString()}
-Avg Reel views: ${avgViews.toLocaleString()}
-Sample captions: ${input.sampleCaptions.slice(0, 3).join(' | ')}
-
-Criteria: wine/spirits focused content, posts Reels regularly, good engagement ratio.
-Reply with ONLY a single integer 1-10.`,
-      },
-    ],
+    model:      'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    messages:   [{ role: 'user', content: prompt }],
   })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '5'
-  const score = parseInt(text)
-  return isNaN(score) ? 5 : Math.max(1, Math.min(10, score))
+  const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '{}'
+  try {
+    return JSON.parse(text.replace(/```json|```/g, '').trim()) as AccountAnalysis
+  } catch {
+    return {
+      business_model_fit:      'other',
+      content_format_strength: 3,
+      retail_idea_density:     3,
+      format_copyability:      3,
+      production_copyability:  3,
+      retail_copyability:      3,
+      red_flags:               [],
+      why_matters:             '',
+      verdict:                 'maybe',
+    }
+  }
 }
