@@ -24,7 +24,10 @@
 // SKU is absent. Dedup by (sheet, name, year, price).
 
 import * as XLSX from 'xlsx'
+import Anthropic from '@anthropic-ai/sdk'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const SUPPLIER_NAME = 'Wine Gallery'
 
@@ -306,6 +309,74 @@ function parsePrice(raw: string): number | null {
   const cleaned = raw.replace(/[,\s฿THB]/gi, '')
   const n = parseFloat(cleaned)
   return isFinite(n) ? n : null
+}
+
+// ─── Wine Gallery clearance offer (image) ─────────────────────────────────
+
+export function isWineGalleryOffer(filename: string, mimeType: string): boolean {
+  if (!mimeType.startsWith('image/') && !/\.(jpe?g|png|webp)$/i.test(filename)) return false
+  return /wine\s*gallery.*offer/i.test(filename) || /offer.*wine\s*gallery/i.test(filename)
+}
+
+const OFFER_PROMPT = `This is a Wine Gallery clearance offer table. Each row is a wine on closeout pricing.
+
+Columns: no. | items | vintage | unit price | clearance price | remark
+
+For EACH numbered row return ONE item:
+{
+  "name": "<full wine name from 'items' column, prepend producer if abbreviated, e.g. 'M.G. Cab-Sau' → 'Mont Gras Cabernet Sauvignon'; 'Antu ninquen Cab-Sau+Carmenere' → 'Antu Ninquen Cabernet Sauvignon Carmenere'; 'Echeverria Syrah GRAN RESERVA' stays as is>",
+  "winery": "<producer brand: 'Mont Gras' for M.G., 'Antu Ninquen', 'Echeverria'>",
+  "country": "Chile",
+  "region": null,
+  "grape_variety": "<grape from name, e.g. 'Cabernet Sauvignon', 'Syrah', 'Merlot', 'Cabernet Sauvignon | Carmenere'>",
+  "year": <vintage as integer>,
+  "price": <CLEARANCE price as integer>,
+  "volume": "750ml",
+  "wine_type": "red",
+  "category": "wine",
+  "spirit_type": null,
+  "description": "Regular ฿<unit price> (clearance), min order: <remark text>"
+}
+
+ALL items in this list are RED wines from Chile.
+
+Return ONLY JSON: {"items": [...]}.`
+
+export async function parseWineGalleryOffer(
+  buffer: Buffer,
+  mimeType: string,
+  onProgress?: ProgressCb,
+): Promise<ExtractionResult> {
+  await onProgress?.(20, 'reading offer image')
+  const safeMime = mimeType.startsWith('image/') ? mimeType : 'image/jpeg'
+  const data = buffer.toString('base64')
+  const res = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image' as const, source: { type: 'base64' as const, media_type: safeMime as 'image/jpeg' | 'image/png' | 'image/webp', data } },
+        { type: 'text' as const, text: OFFER_PROMPT },
+      ] as unknown as Anthropic.TextBlockParam[],
+    }],
+  })
+  const raw = res.content[0].type === 'text' ? res.content[0].text : ''
+  await onProgress?.(80, 'parsing')
+  let items: ExtractedItem[] = []
+  try {
+    const parsed = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()) as { items: ExtractedItem[] }
+    items = parsed.items ?? []
+  } catch (e) {
+    console.error('[wine-gallery-offer] JSON parse failed:', e instanceof Error ? e.message : e)
+  }
+  console.log(`[wine-gallery-offer] extracted ${items.length} items`)
+  return {
+    supplier_name: SUPPLIER_NAME,
+    price_list_date: null,
+    currency: 'THB',
+    items,
+  }
 }
 
 function inferWineType(name: string, grape: string | null): ExtractedItem['wine_type'] {

@@ -11,7 +11,7 @@ import { isPhop, parsePhop } from './parsers/phop'
 import { isHarvest, parseHarvest } from './parsers/harvest'
 import { isUniversal, parseUniversal } from './parsers/universal'
 import { isVinumLector, parseVinumLector } from './parsers/vinum-lector'
-import { isWineGallery, parseWineGallery } from './parsers/wine-gallery'
+import { isWineGallery, parseWineGallery, isWineGalleryOffer, parseWineGalleryOffer } from './parsers/wine-gallery'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -136,6 +136,12 @@ export async function extractFromFile(
   }
 
   // image
+  if (isWineGalleryOffer(filename, mimeType)) {
+    console.log('[extract] using Wine Gallery clearance offer parser')
+    const r = await parseWineGalleryOffer(buffer, mimeType, report)
+    await report(95, 'inserting')
+    return r
+  }
   const base64 = buffer.toString('base64')
   const safeMime = mimeType.startsWith('image/') ? mimeType as 'image/jpeg' | 'image/png' | 'image/webp' : 'image/jpeg'
   return extractFromImage(base64, safeMime)

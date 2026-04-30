@@ -42,7 +42,7 @@ function detectKindFromFilename(name: string): string {
   const n = name.toLowerCase()
   if (/promo/.test(n)) return 'promo'
   if (/wholesale|trade/.test(n)) return 'wholesale'
-  if (/closeout|clearance/.test(n)) return 'closeout'
+  if (/closeout|clearance|offer/.test(n)) return 'closeout'
   if (/vip|exclusive|fine\s+wine|reserve\s+collection/.test(n)) return 'vip'
   return 'regular'
 }
