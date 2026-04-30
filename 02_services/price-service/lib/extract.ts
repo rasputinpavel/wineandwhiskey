@@ -11,6 +11,7 @@ import { isPhop, parsePhop } from './parsers/phop'
 import { isHarvest, parseHarvest } from './parsers/harvest'
 import { isUniversal, parseUniversal } from './parsers/universal'
 import { isVinumLector, parseVinumLector } from './parsers/vinum-lector'
+import { isWineGallery, parseWineGallery } from './parsers/wine-gallery'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -125,6 +126,12 @@ export async function extractFromFile(
   }
 
   if (type === 'excel') {
+    if (isWineGallery(buffer, filename)) {
+      console.log('[extract] using Wine Gallery parser (multi-sheet XLSX)')
+      const r = await parseWineGallery(buffer, filename, report)
+      await report(95, 'inserting')
+      return r
+    }
     return extractFromExcel(buffer, filename)
   }
 
