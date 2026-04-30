@@ -9,6 +9,7 @@ import { isIWS, parseIWS } from './parsers/iws'
 import { isJanhom, parseJanhom } from './parsers/janhom'
 import { isPhop, parsePhop } from './parsers/phop'
 import { isHarvest, parseHarvest } from './parsers/harvest'
+import { isUniversal, parseUniversal } from './parsers/universal'
 
 export type FileType = 'pdf' | 'excel' | 'image'
 
@@ -86,6 +87,10 @@ export async function extractFromFile(
     if (await isHarvest(buffer, filename)) {
       console.log('[extract] using Russian Wine Harvest parser (Claude Vision per chunk)')
       return parseHarvest(buffer, filename, report)
+    }
+    if (await isUniversal(buffer, filename)) {
+      console.log('[extract] using Universal parser (auto-routes fine_wine / horeca / spirits)')
+      return parseUniversal(buffer, filename, report)
     }
 
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
