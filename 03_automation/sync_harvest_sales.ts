@@ -560,6 +560,10 @@ async function main() {
         properties: { pixelSize: h }, fields: "pixelSize",
       },
     })),
+    // Drop merges from the previous run before re-applying — updateCells
+    // clears content but not merges, and our new merges may overlap old ones
+    // ("You must select all cells in a merged range to merge or unmerge them").
+    { unmergeCells: { range: { sheetId: tabId } } },
     ...built.merges,
     // Freeze top 8 rows
     { updateSheetProperties: {
