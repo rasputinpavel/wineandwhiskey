@@ -417,8 +417,17 @@ async function writeDataSheet(
     ["Ср. чек", curData.checks > 0 ? Math.round(curData.total / curData.checks) : 0],
   ];
 
+  // 7-day rolling retail average (date-anchored, ignores month boundary).
+  // Window: last 7 calendar days ending today (Bangkok), retail-only (excludes B2B).
+  const nowBkk = bangkokNow();
+  const sevenAgo = new Date(nowBkk.getTime() - 6 * 86_400_000); // inclusive 7-day window
+  const fmtDay = (d: Date) => d.toISOString().slice(0, 10);
+  const rolling7 = await fetchPeriod(fmtDay(sevenAgo), fmtDay(nowBkk));
+  const rollingAvg = Math.round(rolling7.retailRevenue / 7);
+
   // Write all sections
   await writeValues(DATA_TAB, "A1", dailyRows);
+  await writeValues(DATA_TAB, "F1", [["Ср. розница/день (7д)", rollingAvg]]);
 
   const monthlyStartRow = dim + 3; // 1-indexed
   await writeValues(DATA_TAB, `A${monthlyStartRow}`, monthlyRows);
@@ -528,9 +537,12 @@ async function writeDashboard(
   row2[8] = "ЦЕЛЬ";
   row2[9] = fK(annuals.plan);
 
+  const bkk = bangkokNow();
+  const ts = `${String(bkk.getUTCDate()).padStart(2, "0")}.${String(bkk.getUTCMonth() + 1).padStart(2, "0")}.${bkk.getUTCFullYear()} ${String(bkk.getUTCHours()).padStart(2, "0")}:${String(bkk.getUTCMinutes()).padStart(2, "0")}`;
+
   const annualBlock = [
     // Row 0: title
-    [`Wine & Whiskey — Годовой план ${annuals.curYear}`, ...new Array(9).fill("")],
+    [`Wine & Whiskey — Годовой план ${annuals.curYear}   ·   обновлено ${ts} (Bangkok)`, ...new Array(9).fill("")],
     // Row 1: labels
     ["ФАКТ", ...new Array(6).fill(""), "ПЛАН (LY ×1.25)", "ФАКТ", fK(annuals.ytd)],
     // Row 2: main
