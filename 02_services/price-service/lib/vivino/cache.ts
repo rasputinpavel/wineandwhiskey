@@ -1,7 +1,14 @@
 import { supabase } from '@/lib/supabase'
 import type { VivinoResult } from './types'
 
-export type CacheHit = { query: string; found: boolean; raw: VivinoResult | null }
+// `raw` may hold multiple candidates (from maxResultsPerSearch=5) for a single
+// query. Older entries store a single object — readers must accept either.
+export type CacheHit = { query: string; found: boolean; raw: VivinoResult[] | VivinoResult | null }
+
+export function candidatesFromHit(raw: CacheHit['raw']): VivinoResult[] {
+  if (!raw) return []
+  return Array.isArray(raw) ? raw : [raw]
+}
 
 // 90 days — Vivino ratings shift slowly; not worth re-paying for the same wine.
 const CACHE_TTL_DAYS = 90
@@ -29,17 +36,17 @@ export async function lookupCache(queries: string[]): Promise<Map<string, CacheH
       out.set(row.query as string, {
         query: row.query as string,
         found: row.found as boolean,
-        raw: (row.raw as VivinoResult | null) ?? null,
+        raw: (row.raw as VivinoResult[] | VivinoResult | null) ?? null,
       })
     }
   }
   return out
 }
 
-export async function saveCache(entries: { query: string; found: boolean; raw: VivinoResult | null }[]): Promise<void> {
+export async function saveCache(entries: { query: string; found: boolean; raw: VivinoResult[] | VivinoResult | null }[]): Promise<void> {
   if (entries.length === 0) return
   // Dedupe within batch — last write wins.
-  const dedup = new Map<string, { query: string; found: boolean; raw: VivinoResult | null }>()
+  const dedup = new Map<string, { query: string; found: boolean; raw: VivinoResult[] | VivinoResult | null }>()
   for (const e of entries) dedup.set(e.query, e)
   const rows = [...dedup.values()].map(e => ({
     query: e.query,

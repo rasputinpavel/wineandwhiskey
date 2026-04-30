@@ -27,7 +27,11 @@ export async function runVivinoActor(wineNames: string[]): Promise<VivinoResult[
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wineNames, maxResultsPerSearch: 1, includeTasteProfile: true }),
+      // 5 candidates per query — Vivino's search ranks by brand popularity,
+      // so the top hit is often a different product from the same winery
+      // (e.g. "Eisele Vineyard Grappa" instead of "Altagracia Cabernet").
+      // We pick the best candidate locally via match.ts:pickBestMatch.
+      body: JSON.stringify({ wineNames, maxResultsPerSearch: 5, includeTasteProfile: true }),
     }
   )
   if (!runRes.ok) {

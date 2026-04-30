@@ -134,30 +134,54 @@ function extractRegionHierarchy(r: VivinoResult): {
   }
 }
 
-// Token-overlap match confidence between the wine name we have locally and
-// the result Vivino returned. We use this to decide whether we trust Vivino
-// enough to overwrite local fields.
-export function matchConfidence(item: WineItemRow, result: VivinoResult): number {
-  const localName = normalizeName(item.name)
-  const vivinoName = normalizeName(result.name ?? '')
-  if (!localName || !vivinoName) return 0
+function tokenize(s: string): Set<string> {
+  return new Set(normalizeName(s).split(' ').filter(t => t.length > 1))
+}
 
-  const local = new Set(localName.split(' ').filter(t => t.length > 1))
-  const vivino = new Set(vivinoName.split(' ').filter(t => t.length > 1))
+// Score how well a Vivino result matches our local item. We jaccard the
+// local (name + winery) tokens against the candidate's (name + winery)
+// tokens. Combining winery on both sides matters: many Vivino results put
+// the brand only in `winery` (e.g. name="Altagracia Red", winery="Eisele
+// Vineyard"), while our local name often duplicates the winery prefix
+// ("Eisele Vineyard Altagracia"). Without combining, the Altagracia loses
+// to "Eisele Vineyard Grappa" by token count.
+export function matchConfidence(item: WineItemRow, result: VivinoResult): number {
+  const localName = item.name ?? ''
+  const localWinery = item.winery ?? ''
+  const vivinoName = result.name ?? ''
+  const vivinoWinery = flatten(result.winery as NamedRef) ?? ''
+
+  const local = new Set([...tokenize(localName), ...tokenize(localWinery)])
+  const vivino = new Set([...tokenize(vivinoName), ...tokenize(vivinoWinery)])
   if (local.size === 0 || vivino.size === 0) return 0
 
   let overlap = 0
   for (const t of local) if (vivino.has(t)) overlap++
   const jaccard = overlap / new Set([...local, ...vivino]).size
 
-  let bonus = 0
-  const localWinery = item.winery ? normalizeName(item.winery) : null
-  const vivinoWinery = flatten(result.winery as NamedRef)
-  if (localWinery && vivinoWinery && normalizeName(vivinoWinery).includes(localWinery)) {
-    bonus += 0.15
-  }
+  return Math.round(Math.min(1, jaccard) * 100) / 100
+}
 
-  return Math.min(1, jaccard + bonus)
+// Pick the best candidate from the actor's results for one local item.
+// Returns null when no candidate clears MIN_MATCH (treat as not_found).
+const MIN_MATCH = 0.5
+
+export function pickBestMatch(item: WineItemRow, candidates: VivinoResult[]): { result: VivinoResult; confidence: number } | null {
+  if (candidates.length === 0) return null
+  let best: { result: VivinoResult; confidence: number } | null = null
+  for (const c of candidates) {
+    const conf = matchConfidence(item, c)
+    if (!best || conf > best.confidence) {
+      best = { result: c, confidence: conf }
+    } else if (conf === best.confidence) {
+      // Tiebreak by ratings_count — more reviews = more likely the canonical wine.
+      const cur = (c.ratings_count ?? 0)
+      const prv = (best.result.ratings_count ?? 0)
+      if (cur > prv) best = { result: c, confidence: conf }
+    }
+  }
+  if (!best || best.confidence < MIN_MATCH) return null
+  return best
 }
 
 export type EnrichmentUpdate = {

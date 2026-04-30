@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
-import { lookupCache, saveCache } from './cache'
+import { lookupCache, saveCache, candidatesFromHit } from './cache'
 import { runVivinoActorWithRetry, ApifyError } from './apify'
-import { buildEnrichmentUpdate } from './match'
+import { buildEnrichmentUpdate, pickBestMatch } from './match'
 import { buildVivinoQuery } from './normalize'
 import type { VivinoResult, WineItemRow } from './types'
 
@@ -180,8 +180,10 @@ export async function tickJob(job_id: string): Promise<{ remaining: number; fini
       await markJobItem(ji.id, 'error', 'wine_item missing')
       continue
     }
-    if (hit.found && hit.raw) {
-      const ok = await applyResult(wine, ji.query, hit.raw)
+    const candidates = candidatesFromHit(hit.raw)
+    const best = hit.found && candidates.length > 0 ? pickBestMatch(wine, candidates) : null
+    if (best) {
+      const ok = await applyResult(wine, ji.query, best.result)
       await markJobItem(ji.id, ok ? 'done' : 'error', ok ? null : 'apply failed')
       if (ok) enriched++
     } else {
@@ -222,30 +224,35 @@ export async function tickJob(job_id: string): Promise<{ remaining: number; fini
     }
 
     if (results) {
-      // Map searchQuery → result. Matching is by exact query string we sent.
-      const byQuery = new Map<string, VivinoResult>()
+      // Group all candidates per query (actor returns up to maxResultsPerSearch
+      // per searchQuery; matching is by exact searchQuery string we sent).
+      const byQuery = new Map<string, VivinoResult[]>()
       for (const r of results) {
-        if (r.searchQuery) byQuery.set(r.searchQuery, r)
+        if (!r.searchQuery) continue
+        const arr = byQuery.get(r.searchQuery) ?? []
+        arr.push(r)
+        byQuery.set(r.searchQuery, arr)
       }
 
       // Save cache entries for all queries we asked about — both hits and misses.
-      const cacheRows: { query: string; found: boolean; raw: VivinoResult | null }[] = []
+      const cacheRows: { query: string; found: boolean; raw: VivinoResult[] | null }[] = []
       for (const q of uncachedQueries) {
-        const hit = byQuery.get(q)
-        cacheRows.push({ query: q, found: !!hit, raw: hit ?? null })
+        const cands = byQuery.get(q) ?? []
+        cacheRows.push({ query: q, found: cands.length > 0, raw: cands.length > 0 ? cands : null })
       }
       await saveCache(cacheRows)
 
       for (const [q, jis] of queryToJobItems) {
-        const r = byQuery.get(q) ?? null
+        const candidates = byQuery.get(q) ?? []
         for (const ji of jis) {
           const wine = wineById.get(ji.wine_item_id)
           if (!wine) {
             await markJobItem(ji.id, 'error', 'wine_item missing')
             continue
           }
-          if (r) {
-            const ok = await applyResult(wine, q, r)
+          const best = candidates.length > 0 ? pickBestMatch(wine, candidates) : null
+          if (best) {
+            const ok = await applyResult(wine, q, best.result)
             await markJobItem(ji.id, ok ? 'done' : 'error', ok ? null : 'apply failed')
             if (ok) enriched++
           } else {
