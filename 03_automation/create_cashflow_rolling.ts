@@ -4,6 +4,12 @@ dotenv.config({ path: ".env.local" });
 const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 const S = ";"; // European locale formula separator
 
+// Anchor week (Monday). Lock to a real opening-balance date so closed weeks stay
+// visible after regenerations. Bump this + OPENING_BALANCE together when the
+// sheet starts dragging too much old history.
+const START_MONDAY = "2026-04-20";
+const OPENING_BALANCE = 117_656; // company + personal accounts on START_MONDAY
+
 const RU_MONTHS = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 
 // ── Month band colors (0-indexed month) ───────────────────────────────────
@@ -62,9 +68,7 @@ function weekLabel(start: Date, end: Date): string {
 }
 
 function getWeeksUntilYearEnd(today: Date): Array<{start: Date, end: Date}> {
-  const mon = new Date(today);
-  mon.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
-  mon.setUTCHours(0, 0, 0, 0);
+  const mon = new Date(`${START_MONDAY}T00:00:00Z`);
   const yearEnd = new Date(Date.UTC(today.getUTCFullYear(), 11, 31));
   const weeks: Array<{start: Date, end: Date}> = [];
   const d = new Date(mon);
@@ -98,7 +102,6 @@ function fMandatory(start: Date, end: Date): string {
 async function main() {
   const token = await gToken();
   const nowBkk = new Date(Date.now() + 7 * 3_600_000);
-  const curMonthStr = `${nowBkk.getUTCFullYear()}-${String(nowBkk.getUTCMonth() + 1).padStart(2, "0")}`;
 
   const meta = await sheetsReq(token, "GET", "");
   const sheets: any[] = meta.sheets ?? [];
@@ -172,28 +175,35 @@ async function main() {
   const FIRST_WEEK_ROW = 4;
   const NUM_COLS = 9; // A:I
 
-  const fDailyAvg =
-    `=IFERROR(` +
-    `(MAX('Данные'!B2:B31)-SUMIF(B2BData!B:B${S}"${curMonthStr}"${S}B2BData!C:C))` +
-    `/MAX(COUNTA('Данные'!B2:B31)${S}1)` +
-    `${S}0)`;
+  // 7-day rolling retail average — written by sync_dashboard.ts to 'Данные'!G1.
+  // Date-anchored window reflects recent days regardless of month boundary.
+  const fDailyAvg = `=IFERROR('Данные'!G1${S}0)`;
 
   const weekRows = weeks.map(({ start, end }, i) => {
     const row = FIRST_WEEK_ROW + i;
 
-    const fOpen = i === 0
-      ? 117_656  // actual balance on 2026-04-20 (company + personal accounts)
-      : `=I${row - 1}`;
+    const fOpen = i === 0 ? OPENING_BALANCE : `=I${row - 1}`;
 
     const fRev = `=$B$2*7`;
 
+    // Дебиторка:
+    //   • Paid → попадает в неделю по «Дата оплаты» (G), включая оплату день-в-день
+    //   • не Paid → попадает в неделю по «Оплатить до» (D)
+    //   • строки с комментарием «Юра» (старый владелец) всегда исключаем
     const fDeb =
       `=SUMPRODUCT(` +
-      `(IFERROR(DATEVALUE('Дебиторка'!D2:D200)${S}0)>=${dateF(start)})*` +
-      `(IFERROR(DATEVALUE('Дебиторка'!D2:D200)${S}0)<=${dateF(end)})*` +
-      `(UPPER(TRIM('Дебиторка'!F2:F200))<>"PAID")*` +
-      `(UPPER(TRIM('Дебиторка'!H2:H200))<>"ЮРА")*` +
-      `IFERROR('Дебиторка'!E2:E200${S}0))`;
+        `(` +
+          `(UPPER(TRIM('Дебиторка'!F2:F200))="PAID")*` +
+          `(IFERROR(DATEVALUE('Дебиторка'!G2:G200)${S}0)>=${dateF(start)})*` +
+          `(IFERROR(DATEVALUE('Дебиторка'!G2:G200)${S}0)<=${dateF(end)})` +
+        `+` +
+          `(UPPER(TRIM('Дебиторка'!F2:F200))<>"PAID")*` +
+          `(IFERROR(DATEVALUE('Дебиторка'!D2:D200)${S}0)>=${dateF(start)})*` +
+          `(IFERROR(DATEVALUE('Дебиторка'!D2:D200)${S}0)<=${dateF(end)})` +
+        `)*` +
+        `(UPPER(TRIM('Дебиторка'!H2:H200))<>"ЮРА")*` +
+        `IFERROR('Дебиторка'!E2:E200${S}0)` +
+      `)`;
 
     const fKred =
       `=SUMPRODUCT(` +
@@ -226,7 +236,7 @@ async function main() {
   const blankCols = Array(NUM_COLS - 1).fill("");
   const values = [
     [`ROLLING CASHFLOW — до конца ${nowBkk.getUTCFullYear()} г.`, ...blankCols],
-    ["Ср. выручка/день (розница, факт)", fDailyAvg, ...Array(NUM_COLS - 2).fill("")],
+    ["Ср. розница/день (7д скользящее)", fDailyAvg, ...Array(NUM_COLS - 2).fill("")],
     ["Неделя","Остаток нач.","Прогноз","Факт","Дебиторка","Кредиторка","Обяз расходы","Операц расходы","Остаток кон."],
     ...weekRows,
   ];
@@ -299,6 +309,20 @@ async function main() {
       }}, index: 0 }},
     ];
   });
+
+  // Closed-week highlight: rows where Факт (col D, idx 3) is filled → warm amber background
+  const closedWeekRule = {
+    addConditionalFormatRule: {
+      rule: {
+        ranges: [{ sheetId, startRowIndex: FIRST_WEEK_ROW - 1, endRowIndex: lastWeekIdx, startColumnIndex: 0, endColumnIndex: NUM_COLS }],
+        booleanRule: {
+          condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=$D${FIRST_WEEK_ROW}<>""` }] },
+          format: { backgroundColor: { red: 0.97, green: 0.93, blue: 0.80 } },
+        },
+      },
+      index: 0,
+    },
+  };
 
   await sheetsReq(token, "POST", ":batchUpdate", { requests: [
     // Title
@@ -390,6 +414,7 @@ async function main() {
 
     ...monthStyleReqs,
     ...monthBorderReqs,
+    closedWeekRule,
     ...cfRules,
   ]});
 
