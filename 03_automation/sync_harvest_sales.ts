@@ -23,6 +23,9 @@ const TAB_NAME             = "Реализация Harvest";
 const PO_ITEMS_TAB         = "PO Items";
 const HARVEST_SUPPLIER     = "Harvest Creation";
 const DEFAULT_PERIOD_START = "2026-04-14";
+// С этой даты bank-transfer считается нашей продажей и попадает в верхнюю таблицу.
+// Чеки до этой даты остаются внизу (продажи предыдущего владельца).
+const BANK_TRANSFER_AS_OURS_FROM = "2026-05-01";
 
 const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
@@ -49,7 +52,7 @@ function tomorrow(iso: string) {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-interface SaleRow { name: string; sku: string; qty: number; revenue: number; cost: number; }
+interface SaleRow { name: string; sku: string; qty: number; revenue: number; cost: number; customer?: string; }
 interface BankRow  { customer: string; name: string; sku: string; qty: number; revenue: number; }
 
 interface ClosedPeriod {
@@ -124,6 +127,7 @@ interface LoyItem {
   variants: { variant_id: string; sku: string }[];
 }
 interface LoyReceipt {
+  created_at: string;
   customer_id: string | null;
   payments: { name: string; money_amount: number }[];
   line_items: {
@@ -134,6 +138,10 @@ interface LoyReceipt {
 
 function isBankTransfer(receipt: LoyReceipt): boolean {
   return (receipt.payments ?? []).some(p => /bank.?transfer/i.test(p.name ?? ""));
+}
+
+function bangkokDateOf(utcIso: string): string {
+  return new Date(new Date(utcIso).getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
 }
 
 async function fetchCustomerNames(ids: Set<string>): Promise<Map<string, string>> {
@@ -167,31 +175,40 @@ async function fetchSalesForPeriod(
   );
 
   const aggOurs = new Map<string, SaleRow>();
-  // bank_transfer: keyed by "customerId:variantId" to show per-customer breakdown
+  // bank_transfer (до cutoff): keyed by "customerId:variantId"
   const aggBank = new Map<string, BankRow>();
-  const bankCustomerIds = new Set<string>();
+  const customerIdsToResolve = new Set<string>();
 
   for (const receipt of receipts) {
-    if (isBankTransfer(receipt)) {
+    const isBank = isBankTransfer(receipt);
+
+    if (isBank) {
+      // ── Bank-transfer → верхняя таблица отдельной строкой с клиентом ──
+      // Юзер вручную убирает в Loyverse/Sheets то, что относится к предыдущему владельцу.
       const cid = receipt.customer_id ?? "unknown";
-      if (receipt.customer_id) bankCustomerIds.add(cid);
+      if (receipt.customer_id) customerIdsToResolve.add(cid);
       for (const li of receipt.line_items ?? []) {
         if (!variantMap.has(li.variant_id)) continue;
         const info = variantMap.get(li.variant_id)!;
-        const key  = `${cid}:${li.variant_id}`;
-        const cur  = aggBank.get(key) ?? { customer: cid, name: info.name, sku: info.sku, qty: 0, revenue: 0 };
-        aggBank.set(key, {
+        const key  = `BT:${cid}:${li.variant_id}`;
+        const cur  = aggOurs.get(key) ?? {
+          name: info.name, sku: info.sku, qty: 0, revenue: 0, cost: 0, customer: cid,
+        };
+        aggOurs.set(key, {
           ...cur,
           qty:     cur.qty     + (li.quantity    ?? 0),
           revenue: cur.revenue + (li.total_money ?? 0),
+          cost:    cur.cost    + (li.cost_total  ?? 0),
         });
       }
     } else {
+      // ── Cash/card → верхняя таблица, агрегируется по варианту ──
       for (const li of receipt.line_items ?? []) {
         if (!variantMap.has(li.variant_id)) continue;
         const info = variantMap.get(li.variant_id)!;
-        const cur  = aggOurs.get(li.variant_id) ?? { name: info.name, sku: info.sku, qty: 0, revenue: 0, cost: 0 };
-        aggOurs.set(li.variant_id, {
+        const key  = li.variant_id;
+        const cur  = aggOurs.get(key) ?? { name: info.name, sku: info.sku, qty: 0, revenue: 0, cost: 0 };
+        aggOurs.set(key, {
           ...cur,
           qty:     cur.qty     + (li.quantity    ?? 0),
           revenue: cur.revenue + (li.total_money ?? 0),
@@ -201,14 +218,26 @@ async function fetchSalesForPeriod(
     }
   }
 
-  // Resolve customer names
-  const customerNames = await fetchCustomerNames(bankCustomerIds);
-  const bankRows: BankRow[] = [...aggBank.values()]
-    .filter(r => r.qty > 0)
-    .map(r => ({ ...r, customer: customerNames.get(r.customer) ?? r.customer }))
-    .sort((a, b) => a.customer.localeCompare(b.customer) || b.revenue - a.revenue);
+  // Resolve customer names for bank-transfer rows
+  const customerNames = await fetchCustomerNames(customerIdsToResolve);
 
-  const oursRows = [...aggOurs.values()].filter(r => r.qty > 0).sort((a, b) => b.revenue - a.revenue);
+  // Нижняя таблица больше не используется — все продажи попадают наверх.
+  const bankRows: BankRow[] = [];
+
+  const oursRows = [...aggOurs.values()]
+    .filter(r => r.qty > 0)
+    .map(r => r.customer ? { ...r, customer: customerNames.get(r.customer) ?? r.customer } : r)
+    .sort((a, b) => {
+      // Кэш/карточные продажи (без customer) — сверху, потом bank-transfer-as-ours по выручке.
+      if (!a.customer && b.customer) return -1;
+      if (a.customer && !b.customer) return 1;
+      if (a.customer && b.customer) {
+        const c = a.customer.localeCompare(b.customer);
+        if (c !== 0) return c;
+      }
+      return b.revenue - a.revenue;
+    });
+
   return { ours: oursRows, bankTransfer: bankRows };
 }
 
@@ -290,15 +319,18 @@ function buildSheet(tabId: number, state: State, currentSales: PeriodSales, toda
     for (let i = 0; i < rows.length; i++) {
       const r   = rows[i];
       const bg  = i % 2 === 0 ? C.rowA : C.rowB;
+      // Для bank-transfer-as-ours строк показываем клиента второй строкой в ячейке ТОВАР.
+      const nameText = r.customer ? `${r.name}\n  → ${r.customer}` : r.name;
+      const rowH     = r.customer ? 50 : 34;
       row([
         cNum(i + 1,    fmt(bg, C.stone,   8, false, "CENTER")),
-        cStr(r.name,   fmt(bg, nameFg,    9, !dimmed, "LEFT", false, true)),
+        cStr(nameText, fmt(bg, nameFg,    9, !dimmed, "LEFT", false, true)),
         cStr(r.sku,    fmt(bg, C.muted,   8, false, "LEFT")),
         cNum(r.qty,    fmt(bg, C.graphite,9, false, "CENTER"), "0"),
         cNum(r.revenue,fmt(bg, C.graphite,9, false, "RIGHT"),  "#,##0"),
         cNum(r.cost,   fmt(bg, C.graphite,9, false, "RIGHT"),  "#,##0"),
         cNum(r.cost,   fmt(bg, costFg,    9, !dimmed,"RIGHT"),  "#,##0"),
-      ], 34);
+      ], rowH);
     }
     if (rows.length === 0) {
       const ri = row([cStr("  Нет продаж за период", fmt(C.rowA, C.muted, 8, false, "LEFT", true)),
