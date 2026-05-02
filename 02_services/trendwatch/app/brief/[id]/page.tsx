@@ -61,7 +61,7 @@ export default function BriefPage({ params }: { params: Promise<{ id: string }> 
   }, [brief?.video_status])
 
   async function loadBrief() {
-    const res = await fetch(`/api/reels/${id}/brief`)
+    const res = await fetch(`/api/brief/${id}`)
     if (res.ok) setBrief(await res.json())
     setLoading(false)
   }
