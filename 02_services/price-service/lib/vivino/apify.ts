@@ -78,7 +78,10 @@ export async function runVivinoActorByUrl(url: string): Promise<VivinoResult[]> 
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startUrls: [{ url }], includeTasteProfile: true }),
+      // Actor input schema (mrbridge~vivino-wine-data-scraper v0.2.119) takes
+      // `wineUrls` as a plain string array — not Apify's generic `startUrls`
+      // shape. Verified against /v2/acts/.../builds/<latest> inputSchema.
+      body: JSON.stringify({ wineUrls: [url], includeTasteProfile: true }),
     }
   )
   if (!runRes.ok) {
