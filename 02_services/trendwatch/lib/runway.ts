@@ -25,9 +25,15 @@ async function generateClip(
   client: RunwayML,
   prompt: VisualPrompt
 ): Promise<string> {
+  // Prefer motion_prompt (image-to-video methodology) — image carries identity,
+  // text describes motion only. Fall back to image_prompt (full description),
+  // then to legacy prompt_en for old briefs.
+  const promptText = prompt.motion_prompt ?? prompt.image_prompt ?? prompt.prompt_en ?? ''
+  if (!promptText) throw new Error(`Scene "${prompt.scene}" has no usable prompt`)
+
   const task = await client.textToVideo.create({
     model: 'gen4.5',
-    promptText: prompt.prompt_en,
+    promptText,
     ratio: '720:1280',
     duration: Math.min(10, Math.max(2, Math.round(prompt.duration_s))),
   })

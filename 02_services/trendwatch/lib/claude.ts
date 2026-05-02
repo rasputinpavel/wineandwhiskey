@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { TrendAnalysis, TrendBrief, VisualPrompt, HookOption, OutlineStep } from './supabase'
+import type { TrendAnalysis, TrendBrief, VisualPrompt, HookOption, OutlineStep, ConsistencyAnchors } from './supabase'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -78,9 +78,65 @@ type BriefOutput = Omit<TrendBrief, 'id' | 'reel_id' | 'analysis_id' | 'video_ur
 export async function generateBrief(input: BriefInput): Promise<BriefOutput> {
   const isTalkingHead = input.analysis.format_type === 'talking_head'
 
+  const runwayMethodology = `
+## Runway Prompting Methodology (apply when generating visual_prompts)
+
+We follow the official Runway Academy prompting guide. Two pillars per prompt:
+visual identity and motion. Use the image→video workflow: every scene needs a
+first-frame IMAGE prompt and a separate MOTION prompt. Motion prompts focus
+almost exclusively on motion — Runway's official rule, because the input image
+already carries identity.
+
+**Formula for the image prompt**:
+[Shot size + angle] of [subject doing action] in [environment]. [Lighting]. [Style].
+
+**Formula for the motion prompt**:
+[Subject action]. [Camera move]. [Optional 2nd beat or environmental motion].
+
+**Consistency anchors** — produce FOUR strings, then COPY-PASTE them verbatim
+into every scene's image prompt. Never paraphrase. Anchor drift kills
+consistency more than anything else.
+- subject: name + 1-line physical description (concrete: hair, age, clothes,
+  accessories). If no human subject, describe the hero product.
+- location: 1-line interior/exterior description, props included.
+- lighting: from this list — "warm golden side lighting, soft shadows" /
+  "cool overcast diffused light" / "harsh midday sun, hard shadows" /
+  "low-key dramatic lighting, single source" / "natural daylight from a side
+  window, soft shadows".
+- style: from this list — "cinematic, raw indie film aesthetic, 35mm film
+  grain" / "polished commercial look, glossy" / "handheld documentary film
+  style, observational feel" / "low budget realism, unpolished, authentic".
+
+**Vocabulary** — pull terms from these lists, exact words:
+- Shot sizes: Macro · Extreme close up · Close up · Medium · Full · Wide ·
+  Extreme wide · Establishing
+- Angles: Aerial · High angle · Low angle · Bird's eye view · Worm's eye view ·
+  Over the shoulder · POV
+- Camera moves: Pan · Tilt up · Tilt down · Dolly · Static · Push in ·
+  Pull back · Truck · Pedestal · Tracking · Orbit · Arc · Crane · Jib · Zoom ·
+  Crash zoom · Whip pan · Handheld · Steadicam · Gimbal
+- Composition: Leading lines · Frame within frame · Symmetrical · Negative space
+- Focus: Deep focus · Soft focus · Rack focus · Shallow focus
+
+**Chaining** — for each scene N ≥ 2, set input_image_source:
+- "last_frame_of_previous" when subject + location are unchanged from N-1
+  (the most consistent path — strongly prefer this).
+- "fresh" when location or subject changes (then reuse anchor strings verbatim
+  in the image_prompt — only the location string differs).
+- "anchor_frame" only for scene 1 (or when explicitly returning to scene-1 setup).
+
+**Hard rules — Runway explicitly warns against these**:
+- No multi-paragraph prompts. Each prompt is 1–3 sentences.
+- No negative phrasing ("no people", "not blurry"). State what you DO want.
+- No abstract language ("beautiful landscape"). Be concrete ("mountains at
+  sunset, snow on the peaks").
+- Motion prompts must NOT restate the visual anchors — image carries them.
+- Same anchor strings in every scene's image_prompt, byte-for-byte.
+`
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
+    max_tokens: 3000,
     messages: [
       {
         role: 'user',
@@ -98,7 +154,7 @@ Analysis:
 - Music: ${input.analysis.music_type}
 - Text overlays: ${JSON.stringify(input.analysis.text_overlays)}
 - Why it works: ${input.analysis.why_performs}
-
+${isTalkingHead ? '' : runwayMethodology}
 Generate an adaptation brief in JSON format:
 {
   "hook_options": [
@@ -107,18 +163,35 @@ Generate an adaptation brief in JSON format:
     {"text": "Hook variant 3 in English", "style": "..."}
   ],
   "content_outline": [
-    {"step": 1, "description": "What to show/say", "duration_s": 3},
-    ...
+    {"step": 1, "description": "What to show/say", "duration_s": 3}
   ],
   "music_direction": "Specific music style/vibe recommendation",
-  "text_overlay_copy": ["Line 1", "Line 2", "..."],
+  "text_overlay_copy": ["Line 1", "Line 2"],
   "visual_notes": "Lighting, props, setting advice using our store",
   ${isTalkingHead
-    ? '"filming_instructions": "Step-by-step camera/script instructions for filming this format",'
-    : '"visual_prompts": [{"scene": "Scene name", "prompt_en": "Cinematic English prompt for Runway Gen-3", "duration_s": 5}, ...],'
+    ? '"filming_instructions": "Step-by-step camera/script instructions for filming this format",\n  "consistency_anchors": null,\n  "visual_prompts": null'
+    : `"consistency_anchors": {
+    "subject":  "name + concrete 1-line description",
+    "location": "1-line interior/exterior description with props",
+    "lighting": "one phrase from the lighting vocabulary",
+    "style":    "one phrase from the style vocabulary"
+  },
+  "visual_prompts": [
+    {
+      "scene": "Scene name",
+      "duration_s": 5,
+      "shot": "<shot size> · <angle> · <camera move>",
+      "image_prompt": "[Shot] of [subject doing action] in [location]. [Lighting]. [Style].",
+      "motion_prompt": "[Subject action]. [Camera move]. [Optional 2nd beat].",
+      "input_image_source": "anchor_frame | last_frame_of_previous | fresh"
+    }
+  ],
+  "filming_instructions": null`
   }
 }
-${isTalkingHead ? 'Since format is talking_head, set visual_prompts to null.' : 'Since format is not talking_head, set filming_instructions to null.'}
+${isTalkingHead
+  ? 'Since format is talking_head, set visual_prompts and consistency_anchors to null.'
+  : 'Since format is not talking_head, set filming_instructions to null. Visual prompts MUST follow the Runway methodology above — copy-paste anchor strings verbatim into every scene\'s image_prompt.'}
 Return ONLY valid JSON.`,
       },
     ],
@@ -132,8 +205,9 @@ Return ONLY valid JSON.`,
     music_direction: string
     text_overlay_copy: string[]
     visual_notes: string
-    filming_instructions?: string
-    visual_prompts?: VisualPrompt[]
+    filming_instructions?: string | null
+    visual_prompts?: VisualPrompt[] | null
+    consistency_anchors?: ConsistencyAnchors | null
   }
 
   return {
@@ -144,6 +218,7 @@ Return ONLY valid JSON.`,
     visual_notes: parsed.visual_notes,
     filming_instructions: parsed.filming_instructions ?? null,
     visual_prompts: parsed.visual_prompts ?? null,
+    consistency_anchors: parsed.consistency_anchors ?? null,
   }
 }
 

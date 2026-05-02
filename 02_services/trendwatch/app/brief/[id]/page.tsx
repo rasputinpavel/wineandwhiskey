@@ -13,7 +13,21 @@ type Brief = {
   text_overlay_copy: string[] | null
   visual_notes: string | null
   filming_instructions: string | null
-  visual_prompts: Array<{ scene: string; prompt_en: string; duration_s: number }> | null
+  visual_prompts: Array<{
+    scene: string
+    duration_s: number
+    shot?: string
+    image_prompt?: string
+    motion_prompt?: string
+    input_image_source?: 'fresh' | 'last_frame_of_previous' | 'anchor_frame'
+    prompt_en?: string
+  }> | null
+  consistency_anchors: {
+    subject:  string
+    location: string
+    lighting: string
+    style:    string
+  } | null
   video_url: string | null
   video_status: string
   video_error: string | null
@@ -233,15 +247,51 @@ export default function BriefPage({ params }: { params: Promise<{ id: string }> 
                 </span>
               </div>
 
-              {/* Prompts (editable preview) */}
-              <div className="space-y-2 mb-4">
+              {/* Consistency anchors — copy-pasted into every scene's image prompt */}
+              {brief.consistency_anchors && (
+                <div className="mb-4 p-3 bg-gray-950 border border-gray-800 rounded-lg space-y-1">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Consistency anchors
+                  </div>
+                  <div className="text-xs text-gray-400"><span className="text-gray-500">subject:</span> {brief.consistency_anchors.subject}</div>
+                  <div className="text-xs text-gray-400"><span className="text-gray-500">location:</span> {brief.consistency_anchors.location}</div>
+                  <div className="text-xs text-gray-400"><span className="text-gray-500">lighting:</span> {brief.consistency_anchors.lighting}</div>
+                  <div className="text-xs text-gray-400"><span className="text-gray-500">style:</span> {brief.consistency_anchors.style}</div>
+                </div>
+              )}
+
+              {/* Prompts (per-scene preview) */}
+              <div className="space-y-3 mb-4">
                 {brief.visual_prompts.map((p, i) => (
-                  <div key={i} className="p-3 bg-gray-800 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-gray-500 text-xs w-16 flex-shrink-0">Scene {i + 1}</span>
-                      <span className="text-gray-400 text-xs">{p.scene} · {p.duration_s}s</span>
+                  <div key={i} className="p-3 bg-gray-800 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 text-xs">Scene {i + 1}</span>
+                        <span className="text-gray-400 text-xs">{p.scene} · {p.duration_s}s</span>
+                      </div>
+                      {p.shot && <span className="text-gray-500 text-xs">{p.shot}</span>}
                     </div>
-                    <p className="text-gray-300 text-sm italic">{p.prompt_en}</p>
+                    {p.image_prompt && (
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Image prompt</div>
+                        <p className="text-gray-300 text-sm">{p.image_prompt}</p>
+                      </div>
+                    )}
+                    {p.motion_prompt && (
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Motion prompt (image→video)</div>
+                        <p className="text-gray-300 text-sm italic">{p.motion_prompt}</p>
+                      </div>
+                    )}
+                    {p.input_image_source && (
+                      <div className="text-xs text-gray-600">
+                        Input image: {p.input_image_source === 'last_frame_of_previous' ? '← last frame of previous scene' : p.input_image_source === 'anchor_frame' ? 'anchor frame (scene 1)' : 'fresh generation'}
+                      </div>
+                    )}
+                    {/* Legacy fallback */}
+                    {!p.image_prompt && !p.motion_prompt && p.prompt_en && (
+                      <p className="text-gray-400 text-sm italic">{p.prompt_en}</p>
+                    )}
                   </div>
                 ))}
               </div>

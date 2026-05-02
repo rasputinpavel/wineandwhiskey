@@ -71,8 +71,22 @@ export type TrendAnalysis = {
 
 export type VisualPrompt = {
   scene: string
-  prompt_en: string
   duration_s: number
+  // New shape (runway-prompts methodology — image→video):
+  shot?: string                  // e.g. "Medium · Over the shoulder · Push in"
+  image_prompt?: string          // first-frame prompt
+  motion_prompt?: string         // image-to-video prompt (motion only)
+  input_image_source?: 'fresh' | 'last_frame_of_previous' | 'anchor_frame'
+  // Legacy field (text-to-video). Still read by old briefs and as a fallback
+  // when image_prompt / motion_prompt are missing.
+  prompt_en?: string
+}
+
+export type ConsistencyAnchors = {
+  subject:  string  // "Maria, 30s, red shoulder-length hair, navy linen apron…"
+  location: string  // "interior of a Phuket boutique wine store, warm wood shelves…"
+  lighting: string  // "warm golden side lighting, soft shadows, natural daylight"
+  style:    string  // "cinematic, raw indie film aesthetic, 35mm film grain"
 }
 
 export type HookOption = {
@@ -99,6 +113,7 @@ export type TrendBrief = {
   visual_notes: string | null
   filming_instructions: string | null
   visual_prompts: VisualPrompt[] | null
+  consistency_anchors: ConsistencyAnchors | null
   video_url: string | null
   video_status: VideoStatus
   created_at: string
