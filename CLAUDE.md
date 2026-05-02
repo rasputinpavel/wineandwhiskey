@@ -63,4 +63,10 @@ See `config/secrets.example.env` for required variables.
 
 ## GitHub
 
-https://github.com/rasputinpavel/wineandwhiskey
+- Main repo: https://github.com/rasputinpavel/wineandwhiskey
+- Storefront (Lovable, separate repo): https://github.com/rasputinpavel/phuket-sip-reserve
+  - Customer-facing wine catalog + reservations. Edited via Lovable, synced to its own repo.
+  - Backed by a separate Lovable Cloud Supabase (project ref `fqpnhcsidaxlclmvcawj`).
+  - Reads Vivino enrichment from `price-service` via `GET /api/public/vivino/lookup`
+    (key in `STOREFRONT_API_KEY` on Railway).
+  - Stock comes from its own Loyverse-sync edge function, not from `price-service`.
