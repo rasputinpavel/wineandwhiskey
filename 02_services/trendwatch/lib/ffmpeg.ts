@@ -104,6 +104,9 @@ export async function getFrameBase64(storagePath: string): Promise<string> {
 }
 
 export async function getPublicFrameUrl(storagePath: string): Promise<string> {
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath)
-  return data.publicUrl
+  // Bucket is private — getPublicUrl returns a URL that 400s. Use a signed URL
+  // (1h TTL is plenty: the frames page re-fetches every reel view).
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
+  if (error || !data) throw new Error(`signed url failed: ${error?.message}`)
+  return data.signedUrl
 }
