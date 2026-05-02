@@ -302,11 +302,27 @@ async function applyResult(wine: WineItemRow, query: string, result: VivinoResul
 }
 
 async function markWineNotFound(wine_id: string, query: string): Promise<void> {
+  // Clear every enrichment field — otherwise a prior successful match leaves
+  // stale image/rating/region behind when re-runs no longer find the wine
+  // (e.g. matching got stricter and the previously-picked candidate now
+  // fails the grape/type check).
   await supabase.from('wine_items').update({
     vivino_enriched_at: new Date().toISOString(),
     vivino_failed_at: null,
     vivino_query: query,
     vivino_match_confidence: 0,
+    vivino_rating: null,
+    vivino_reviews_count: null,
+    vivino_url: null,
+    vivino_image_url: null,
+    vivino_images: null,
+    vivino_alcohol: null,
+    vivino_body: null,
+    vivino_flavors: null,
+    vivino_food_pairings: null,
+    vivino_region_hierarchy: null,
+    vivino_style: null,
+    vivino_year: null,
   }).eq('id', wine_id)
 }
 

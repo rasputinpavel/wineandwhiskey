@@ -138,6 +138,22 @@ function tokenize(s: string): Set<string> {
   return new Set(normalizeName(s).split(' ').filter(t => t.length > 1))
 }
 
+function tokenizeMulti(values: (string | null | undefined)[]): Set<string> {
+  const out = new Set<string>()
+  for (const v of values) {
+    if (!v) continue
+    for (const t of tokenize(v)) out.add(t)
+  }
+  return out
+}
+
+// Penalty applied when local grape/type explicitly disagrees with the
+// candidate. Big enough to push a same-winery, wrong-grape sibling below
+// MIN_MATCH (e.g. 0.625 jaccard − 0.3 grape − 0.3 type = 0.025), but only
+// triggers when both sides have data — avoids penalizing thin local rows.
+const GRAPE_MISMATCH_PENALTY = 0.3
+const TYPE_MISMATCH_PENALTY = 0.3
+
 // Score how well a Vivino result matches our local item. We jaccard the
 // local (name + winery) tokens against the candidate's (name + winery)
 // tokens. Combining winery on both sides matters: many Vivino results put
@@ -145,6 +161,12 @@ function tokenize(s: string): Set<string> {
 // Vineyard"), while our local name often duplicates the winery prefix
 // ("Eisele Vineyard Altagracia"). Without combining, the Altagracia loses
 // to "Eisele Vineyard Grappa" by token count.
+//
+// We then penalize known grape/wine-type mismatches. Without this, a
+// "St. Michael-Eppan Pinot Noir Alto Adige DOC" candidate scores 0.625
+// against a local "St. Michael-Eppan Gewürztraminer Alto Adige DOC" — same
+// winery + region tokens carry the match — and silently swaps in a red
+// Pinot Noir image for a white Gewürztraminer.
 export function matchConfidence(item: WineItemRow, result: VivinoResult): number {
   const localName = item.name ?? ''
   const localWinery = item.winery ?? ''
@@ -159,7 +181,27 @@ export function matchConfidence(item: WineItemRow, result: VivinoResult): number
   for (const t of local) if (vivino.has(t)) overlap++
   const jaccard = overlap / new Set([...local, ...vivino]).size
 
-  return Math.round(Math.min(1, jaccard) * 100) / 100
+  let score = jaccard
+
+  // Grape penalty: if both sides declare a grape and they share no token,
+  // they're almost certainly different wines.
+  const localGrapes = tokenizeMulti([item.grape_variety])
+  const vivinoGrapes = tokenizeMulti([parseGrapes(result), vivinoName])
+  if (localGrapes.size > 0 && vivinoGrapes.size > 0) {
+    let grapeOverlap = 0
+    for (const t of localGrapes) if (vivinoGrapes.has(t)) grapeOverlap++
+    if (grapeOverlap === 0) score -= GRAPE_MISMATCH_PENALTY
+  }
+
+  // Wine-type penalty: red vs white is a hard mismatch.
+  const localType = item.wine_type
+  const vivinoType = parseWineType(result)
+  if (localType && vivinoType && localType !== vivinoType) {
+    score -= TYPE_MISMATCH_PENALTY
+  }
+
+  if (score < 0) score = 0
+  return Math.round(Math.min(1, score) * 100) / 100
 }
 
 // Pick the best candidate from the actor's results for one local item.
