@@ -309,3 +309,45 @@ export function buildEnrichmentUpdate(
 
   return update
 }
+
+// Public-API shape used by /api/public/vivino/by-url and (semantically) /lookup.
+// Decoupled from EnrichmentUpdate, which is wine_items-row shaped. This is what
+// storefront consumers expect under `match.*`.
+export type PublicVivinoShape = {
+  rating: number | null
+  reviews_count: number | null
+  image_url: string | null
+  country: string | null
+  region: string | null
+  grape: string | null
+  description: string | null
+  wine_type: 'red' | 'white' | 'rose' | 'sparkling' | null
+  year: number | null
+  alcohol: number | null
+  body: string | null
+  flavors: string[] | null
+  food_pairings: string[] | null
+  vivino_url: string | null
+}
+
+export function toPublicShape(r: VivinoResult): PublicVivinoShape {
+  const region = extractRegionHierarchy(r)
+  const flavors = extractFlavors(r)
+  const foods = extractFoodPairings(r)
+  return {
+    rating: r.average_rating ?? null,
+    reviews_count: r.ratings_count ?? null,
+    image_url: extractImages(r)[0] ?? null,
+    country: region.country,
+    region: region.region,
+    grape: parseGrapes(r),
+    description: typeof r.description === 'string' ? r.description : null,
+    wine_type: parseWineType(r),
+    year: extractYear(r),
+    alcohol: extractAlcohol(r),
+    body: extractBody(r),
+    flavors: flavors.length ? flavors : null,
+    food_pairings: foods.length ? foods : null,
+    vivino_url: r.vivino_url ?? null,
+  }
+}
