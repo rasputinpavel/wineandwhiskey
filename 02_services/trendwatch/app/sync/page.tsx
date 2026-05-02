@@ -213,7 +213,7 @@ export default function SyncPage() {
                     {r.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={r.thumbnail}
+                        src={`/api/img?url=${encodeURIComponent(r.thumbnail)}`}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

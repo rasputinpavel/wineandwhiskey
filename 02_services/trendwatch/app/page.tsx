@@ -107,7 +107,7 @@ export default async function DashboardPage() {
                     {reel.thumbnail_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={reel.thumbnail_url}
+                        src={`/api/img?url=${encodeURIComponent(reel.thumbnail_url)}`}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
