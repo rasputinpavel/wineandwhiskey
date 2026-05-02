@@ -218,13 +218,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ match: null, reason: 'no_candidates' }, { headers })
   }
 
+  const debug = searchParams.get('debug') === '1'
+  type Scored = { row: Candidate; score: number; rowTokens: string[]; distinctRow: string[] }
   type Best = { row: Candidate; score: number }
   let best: Best | null = null
+  const scored: Scored[] = []
   for (const row of candidates) {
     const rowTokens = tokens(`${row.winery ?? ''} ${row.name}`)
     let score = similarity(inputTokens, rowTokens)
     if (year && (row.vivino_year === year || row.year === year)) score += 0.05
     score = Math.min(1, score)
+    if (debug) scored.push({ row, score, rowTokens: [...rowTokens], distinctRow: [...distinct(rowTokens)] })
     const cur: Best = { row, score }
     if (best === null) best = cur
     else if (score > best.score) best = cur
@@ -233,6 +237,24 @@ export async function GET(req: NextRequest) {
       const b = best.row.vivino_reviews_count ?? 0
       if (a > b) best = cur
     }
+  }
+
+  if (debug) {
+    scored.sort((a, b) => b.score - a.score)
+    return NextResponse.json({
+      input: name, winery, year,
+      inputTokens: [...inputTokens],
+      distinctInput: [...distinct(inputTokens)],
+      candidateCount: candidates.length,
+      usedFallback,
+      top: scored.slice(0, 5).map(s => ({
+        score: Math.round(s.score * 100) / 100,
+        name: s.row.name,
+        winery: s.row.winery,
+        rowTokens: s.rowTokens,
+        distinctRow: s.distinctRow,
+      })),
+    }, { headers })
   }
 
   const topScore = best ? best.score : 0
