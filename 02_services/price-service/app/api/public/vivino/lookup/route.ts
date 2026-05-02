@@ -62,24 +62,81 @@ function tokens(s: string): Set<string> {
 
 // Score how well two token sets match.
 //
-// Pure Jaccard (overlap/union) penalizes short queries against rows that have
-// many descriptive tokens — e.g. input ["bandicoot"] vs row ["bandicoot","cabernet","margaret","river"]
-// = 1/4 = 0.25 even though the unique brand token matched. Wineries name
-// themselves with distinctive words, so finding the input tokens in the row
-// is usually enough.
+// Two failure modes we balance:
 //
-// We blend Jaccard with input-coverage (overlap/|input|): take the max,
-// scaling input-coverage by 0.85 so a fully-matched short input lands ~0.85,
-// leaving room for full-overlap long inputs to score higher.
+// 1. Pure Jaccard penalizes short queries against rows with many descriptive
+//    tokens — input ["bandicoot"] vs row ["bandicoot","cabernet","margaret","river"]
+//    scores 1/4 = 0.25 even though the brand token matched. We use input-coverage
+//    (overlap/|input|) as a secondary signal so unique-brand-only matches clear.
+//
+// 2. Common varietal/style tokens (sauvignon, blanc, brut, cabernet, ...) are not
+//    distinctive — input ["kono","sauvignon","blanc"] vs row ["petit","villebois",
+//    "sauvignon","blanc"] would score 2/3 input-coverage = 0.57 even though Kono
+//    ≠ Petit Villebois. We require the overlap to include at least one DISTINCT
+//    (non-common) input token; otherwise the match is suppressed.
+const COMMON_TOKENS = new Set([
+  // colors / styles
+  'red', 'white', 'rose', 'rosé', 'orange', 'sparkling',
+  'wine', 'wines', 'vino', 'vine',
+  // dry/sweet/bubble markers
+  'brut', 'extra', 'sec', 'demi', 'dry', 'sweet', 'doux',
+  // varietals (frequent enough to be noise)
+  'cabernet', 'sauvignon', 'merlot', 'chardonnay', 'pinot',
+  'noir', 'blanc', 'gris', 'grigio', 'bianco', 'nero', 'nera',
+  'syrah', 'shiraz', 'malbec', 'tempranillo', 'garnacha', 'grenache',
+  'sangiovese', 'riesling', 'gewurztraminer', 'gewürztraminer',
+  'viognier', 'semillon', 'sémillon', 'verdejo', 'albariño', 'albarino',
+  'muscat', 'moscato', 'zinfandel', 'primitivo', 'aglianico',
+  'nebbiolo', 'barbera', 'dolcetto', 'corvina', 'montepulciano',
+  'mourvedre', 'mourvèdre', 'carmenere', 'carménère', 'tannat',
+  // appellation/quality markers
+  'reserve', 'reserva', 'riserva', 'gran', 'grand', 'cru', 'classico',
+  'estate', 'vineyard', 'vineyards', 'domaine', 'domain', 'chateau', 'château',
+  'bodega', 'cantina', 'azienda', 'agricola', 'castello', 'tenuta', 'fattoria',
+  'doc', 'docg', 'igt', 'aoc', 'aop', 'dop', 'igp', 'avas',
+  'cuvee', 'cuvée', 'tete', 'tête',
+  // misc filler
+  'old', 'vine', 'fine', 'collection', 'selection', 'edition',
+  'limited', 'premium', 'classic', 'traditional', 'natural',
+  // generic regions
+  'champagne', 'prosecco', 'cava', 'port', 'sherry', 'amarone',
+])
+
+function distinct(tokens: Set<string>): Set<string> {
+  const out = new Set<string>()
+  for (const t of tokens) if (!COMMON_TOKENS.has(t)) out.add(t)
+  return out
+}
+
 function similarity(input: Set<string>, row: Set<string>): number {
   if (input.size === 0 || row.size === 0) return 0
+
+  // Total overlap (used for Jaccard so that fully-matched long inputs still score high).
   let overlap = 0
   for (const t of input) if (row.has(t)) overlap++
   if (overlap === 0) return 0
+
+  // Distinct overlap — must be > 0 for the match to count, unless the input itself
+  // has no distinct tokens (e.g. "Brut Reserve" — every token is common, so we
+  // fall back to plain Jaccard rather than rejecting outright).
+  const distinctIn = distinct(input)
+  const distinctRow = distinct(row)
+  let distinctOverlap = 0
+  for (const t of distinctIn) if (distinctRow.has(t)) distinctOverlap++
+
   const union = new Set([...input, ...row]).size
   const jaccard = overlap / union
-  const inputCoverage = overlap / input.size
-  return Math.max(jaccard, inputCoverage * 0.85)
+
+  if (distinctIn.size === 0) return jaccard
+
+  if (distinctOverlap === 0) {
+    // Common-token-only overlap — likely a same-varietal but different-wine match.
+    // Cap the score below the threshold.
+    return Math.min(jaccard, 0.3)
+  }
+
+  const distinctCoverage = distinctOverlap / distinctIn.size
+  return Math.max(jaccard, distinctCoverage * 0.85)
 }
 
 const MIN_CONFIDENCE = 0.4
