@@ -193,6 +193,13 @@ Deno.serve(async (req) => {
   if (body.product_ids && body.product_ids.length > 0) {
     q = q.in("id", body.product_ids);
   } else {
+    // Only enrich products that are actually displayable on the storefront —
+    // i.e. currently in stock. Out-of-stock items are not shown, so spending
+    // Vivino lookups on them is wasted. Adapt the column name to match your
+    // schema: common variants are `in_stock` (boolean) or `stock_quantity` /
+    // `quantity` (integer > 0).
+    q = q.gt("stock_quantity", 0);
+
     if (!body.force) {
       // Skip rows we tried recently (regardless of hit/miss). We must use
       // vivino_lookup_attempted_at here, not vivino_enriched_at — misses
@@ -201,8 +208,7 @@ Deno.serve(async (req) => {
       const cutoff = new Date(Date.now() - REENRICH_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
       q = q.or(`vivino_lookup_attempted_at.is.null,vivino_lookup_attempted_at.lt.${cutoff}`);
     }
-    // Process oldest-first so the cursor sweeps the whole catalog before
-    // looping back to recheck.
+    // Oldest-first so the cursor sweeps the whole in-stock set before looping back.
     q = q.order("vivino_lookup_attempted_at", { ascending: true, nullsFirst: true }).limit(limit);
   }
 
