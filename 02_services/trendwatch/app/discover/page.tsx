@@ -43,14 +43,12 @@ export default async function DiscoverPage({
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-white">Discover</h1>
-          <form action="/api/reels/sync" method="POST">
-            <button
-              type="submit"
-              className="px-4 py-2 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              Sync accounts
-            </button>
-          </form>
+          <Link
+            href="/sync"
+            className="px-4 py-2 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Sync accounts
+          </Link>
         </div>
 
         {/* Status filter tabs */}

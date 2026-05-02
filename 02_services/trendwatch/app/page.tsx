@@ -132,14 +132,12 @@ export default async function DashboardPage() {
 
         {/* Quick actions */}
         <div className="flex gap-3">
-          <form action="/api/reels/sync" method="POST">
-            <button
-              type="submit"
-              className="px-4 py-2 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              Sync now
-            </button>
-          </form>
+          <Link
+            href="/sync"
+            className="px-4 py-2 bg-wine-700 hover:bg-wine-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Sync now
+          </Link>
           <Link
             href="/accounts/discover"
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors"
