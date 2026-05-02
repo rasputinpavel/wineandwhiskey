@@ -190,12 +190,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ match: null, reason: 'no_significant_tokens' }, { headers })
   }
 
-  // Two-tier candidate fetch:
-  //   1. OR-ILIKE on the first 5 tokens (cheap, hits the GIN(name) index).
-  //   2. Fallback if 0 rows: OR-ILIKE on the 3 longest tokens (most distinctive).
-  // Both passes scored client-side via Jaccard.
-  const primary = allTokens.slice(0, 5)
-  const r1 = await fetchCandidates(primary, 80)
+  // Candidate fetch strategy:
+  //   1. OR-ILIKE on the DISTINCT (non-common) tokens. Common tokens like
+  //      "sauvignon" / "blanc" / "cabernet" each match hundreds of rows, so
+  //      including them in the OR pushes the actual winery-named row past the
+  //      LIMIT cap. Filtering by distinct tokens (winery / brand names)
+  //      drastically shrinks the pool.
+  //   2. Fallback if no distinct tokens (e.g. "Brut Reserve"): use all tokens.
+  //   3. Fallback if 0 rows: OR-ILIKE on the 3 longest input tokens.
+  const distinctTokens = [...distinct(inputTokens)]
+  const primary = distinctTokens.length > 0
+    ? distinctTokens.slice(0, 5)
+    : allTokens.slice(0, 5)
+  const r1 = await fetchCandidates(primary, 100)
   if (r1.error) {
     return NextResponse.json({ error: r1.error }, { status: 500, headers })
   }
