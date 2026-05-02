@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { normalizeName } from '@/lib/vivino/normalize'
+import { normalizeForMatch } from '@/lib/vivino/normalize'
 
 const STOREFRONT_API_KEY = process.env.STOREFRONT_API_KEY ?? ''
 
@@ -56,7 +56,7 @@ type Candidate = {
 
 function tokens(s: string): Set<string> {
   return new Set(
-    normalizeName(s).split(' ').filter(t => t.length >= 3)
+    normalizeForMatch(s).split(' ').filter(t => t.length >= 3)
   )
 }
 
@@ -68,7 +68,29 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return overlap / union
 }
 
-const MIN_CONFIDENCE = 0.5
+const MIN_CONFIDENCE = 0.4
+
+const SELECT_FIELDS = `
+  id, name, winery, year, country, grape_variety, description, wine_type,
+  vivino_rating, vivino_reviews_count, vivino_url, vivino_image_url,
+  vivino_alcohol, vivino_body, vivino_year,
+  vivino_flavors, vivino_food_pairings, vivino_region_hierarchy
+`
+
+async function fetchCandidates(tokens: string[], limit: number): Promise<{ data: Candidate[]; error: string | null }> {
+  if (tokens.length === 0) return { data: [], error: null }
+  const orFilter = tokens
+    .map(t => `name.ilike.%${t.replace(/[%,]/g, '')}%`)
+    .join(',')
+  const { data, error } = await supabase
+    .from('wine_items')
+    .select(SELECT_FIELDS)
+    .not('vivino_rating', 'is', null)
+    .or(orFilter)
+    .limit(limit)
+  if (error) return { data: [], error: error.message }
+  return { data: (data ?? []) as Candidate[], error: null }
+}
 
 export async function GET(req: NextRequest) {
   const headers = corsHeaders(req.headers.get('origin'))
@@ -92,35 +114,35 @@ export async function GET(req: NextRequest) {
   }
 
   const inputTokens = tokens(`${winery} ${name}`)
-  const sqlTokens = [...inputTokens].slice(0, 5)
-  if (sqlTokens.length === 0) {
+  const allTokens = [...inputTokens]
+  if (allTokens.length === 0) {
     return NextResponse.json({ match: null, reason: 'no_significant_tokens' }, { headers })
   }
 
-  // Pull candidates: any wine_item enriched by Vivino whose name shares at
-  // least one significant token with the input. Scored client-side to keep
-  // the SQL simple and use the existing GIN(name) index for ILIKE pre-filter.
-  const orFilter = sqlTokens
-    .map(t => `name.ilike.%${t.replace(/[%,]/g, '')}%`)
-    .join(',')
-
-  const { data, error } = await supabase
-    .from('wine_items')
-    .select(`
-      id, name, winery, year, country, grape_variety, description, wine_type,
-      vivino_rating, vivino_reviews_count, vivino_url, vivino_image_url,
-      vivino_alcohol, vivino_body, vivino_year,
-      vivino_flavors, vivino_food_pairings, vivino_region_hierarchy
-    `)
-    .not('vivino_rating', 'is', null)
-    .or(orFilter)
-    .limit(60)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500, headers })
+  // Two-tier candidate fetch:
+  //   1. OR-ILIKE on the first 5 tokens (cheap, hits the GIN(name) index).
+  //   2. Fallback if 0 rows: OR-ILIKE on the 3 longest tokens (most distinctive).
+  // Both passes scored client-side via Jaccard.
+  const primary = allTokens.slice(0, 5)
+  const r1 = await fetchCandidates(primary, 80)
+  if (r1.error) {
+    return NextResponse.json({ error: r1.error }, { status: 500, headers })
   }
 
-  const candidates = (data ?? []) as Candidate[]
+  let candidates = r1.data
+  let usedFallback = false
+  if (candidates.length === 0) {
+    const distinctive = [...allTokens]
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 3)
+    const r2 = await fetchCandidates(distinctive, 120)
+    if (r2.error) {
+      return NextResponse.json({ error: r2.error }, { status: 500, headers })
+    }
+    candidates = r2.data
+    usedFallback = true
+  }
+
   if (candidates.length === 0) {
     return NextResponse.json({ match: null, reason: 'no_candidates' }, { headers })
   }
@@ -145,7 +167,7 @@ export async function GET(req: NextRequest) {
   const topScore = best ? best.score : 0
   if (best === null || topScore < MIN_CONFIDENCE) {
     return NextResponse.json(
-      { match: null, reason: 'low_confidence', topScore },
+      { match: null, reason: 'low_confidence', topScore, usedFallback },
       { headers }
     )
   }
@@ -170,6 +192,7 @@ export async function GET(req: NextRequest) {
         vivino_url: r.vivino_url,
       },
       confidence: Math.round(best.score * 100) / 100,
+      usedFallback,
     },
     { headers }
   )

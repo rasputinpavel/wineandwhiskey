@@ -24,6 +24,31 @@ export function normalizeName(raw: string): string {
     .trim()
 }
 
+// More aggressive normalizer for fuzzy matching in the public lookup endpoint.
+// Differences from `normalizeName`: hyphens always become separators (`Bila-Haut`
+// → `bila haut`), `&` is treated as punctuation, and bare decimal volumes
+// (`0.75`, `0,75`) are stripped.
+//
+// Kept separate because changing `normalizeName` would invalidate existing
+// vivino_cache keys built with the old normalization.
+const BARE_DECIMAL_RX = /\b\d+[.,]\d+\b/g
+const MATCH_PUNCT_RX = /[«»"'`’“”()\[\]{}.,;:!?#*/\\|&_+=]+/g
+
+export function normalizeForMatch(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(VOLUME_RX, ' ')
+    .replace(BARE_DECIMAL_RX, ' ')
+    .replace(YEAR_RX, ' ')
+    .replace(MATCH_PUNCT_RX, ' ')
+    // Hyphens as separators regardless of surrounding spaces.
+    .replace(/-/g, ' ')
+    .replace(WHITESPACE_RX, ' ')
+    .trim()
+}
+
 // Build the actual search query we send to the Apify actor.
 // We add winery only — the actor strips year tokens from `searchQuery` before
 // returning, which would break our exact-match-by-searchQuery mapping. Vintage
