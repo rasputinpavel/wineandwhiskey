@@ -206,10 +206,11 @@ async function isCancelled(jobId: string): Promise<boolean> {
 // ─── Main worker ─────────────────────────────────────────────────────────────
 
 const MAX_ACCOUNTS_TO_ENRICH = 100
-// 2 reels = enough signal in pre-filter; the per-account scoring still uses
-// median/p75/etc on whatever sample we have. Was 3 — too strict, killed ~95%
-// of candidates on a 14-hashtag run.
-const MIN_REELS_PER_ACCOUNT  = 2
+// 1 reel = keep all unique accounts. With multi-hashtag scrape we'd want 2+
+// to require cross-cluster signal, but for narrow tests almost no account
+// appears twice in a single 30-reel hashtag sample. Stats (median/p75) will
+// be degenerate on n=1 but the pipeline still works for pipeline testing.
+const MIN_REELS_PER_ACCOUNT  = 1
 
 async function runDiscovery(jobId: string, tags: string[]) {
   await appendLog(jobId, `🔍 Запускаю поиск по ${tags.length} хэштегам — ~${Math.round(tags.length * 0.7)} мин на скан + ~30 мин на профили.`)
@@ -285,6 +286,8 @@ async function runDiscovery(jobId: string, tags: string[]) {
       const bio            = profile.biography ?? ''
       const captions       = posts.map(p => p.caption ?? '').filter(Boolean)
       const bucket         = sizeBucket(followers)
+
+      await appendLog(jobId, `   · @${username} — профиль ок (${followers.toLocaleString()} flw), анализирую...`)
 
       const analysis = await analyzeAccount({
         username, followers, medianViews, top3Views, hitRate, medianRatio,

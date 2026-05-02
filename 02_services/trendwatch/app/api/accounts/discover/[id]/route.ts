@@ -13,11 +13,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
 
-  // Auto-fail jobs that are running but haven't updated for >3 min — usually means
-  // the background worker died (Railway redeploy, OOM, etc.).
+  // Auto-fail jobs that are running but haven't updated for >5 min — usually means
+  // the background worker died (Railway redeploy, OOM, etc.). Threshold matches
+  // the list-route check in discover/route.ts and accommodates a single account's
+  // worst case (Apify profile up to 60s + Claude analyzeAccount up to ~60s without
+  // intermediate heartbeats).
   if (data.state === 'running') {
     const ageSec = (Date.now() - new Date(data.updated_at).getTime()) / 1000
-    if (ageSec > 180) {
+    if (ageSec > 300) {
       await supabase.from('discover_jobs')
         .update({ state: 'failed', error: `worker stopped responding (${Math.round(ageSec)}s idle)` })
         .eq('id', id)

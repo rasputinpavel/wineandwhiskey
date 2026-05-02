@@ -212,17 +212,33 @@ export default function SyncPage() {
                   <div className="aspect-[9/6] bg-gray-800 relative overflow-hidden">
                     {r.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={r.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <img
+                        src={r.thumbnail}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-600 text-3xl">▶</div>
                     )}
                     <div className="absolute top-2 right-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        r.trigger_type === 'both' ? 'bg-green-900 text-green-300'
-                        : r.trigger_type === 'absolute' ? 'bg-blue-900 text-blue-300'
-                        : 'bg-purple-900 text-purple-300'
-                      }`}>
-                        {r.trigger_type}
+                      <span
+                        title={
+                          r.trigger_type === 'both'
+                            ? '≥15K просмотров И ≥1.5× от подписчиков'
+                            : r.trigger_type === 'absolute'
+                              ? '≥15K просмотров (фикс. порог)'
+                              : '≥1.5× от подписчиков (вирусный)'
+                        }
+                        className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          r.trigger_type === 'both' ? 'bg-green-900 text-green-300'
+                          : r.trigger_type === 'absolute' ? 'bg-blue-900 text-blue-300'
+                          : 'bg-purple-900 text-purple-300'
+                        }`}
+                      >
+                        {r.trigger_type === 'both' ? '🔥 хит'
+                          : r.trigger_type === 'absolute' ? '👁 просмотры'
+                          : '📈 вирусный'}
                       </span>
                     </div>
                   </div>
