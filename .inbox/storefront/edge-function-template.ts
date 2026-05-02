@@ -194,11 +194,16 @@ Deno.serve(async (req) => {
     q = q.in("id", body.product_ids);
   } else {
     if (!body.force) {
-      // Skip rows already enriched within TTL.
+      // Skip rows we tried recently (regardless of hit/miss). We must use
+      // vivino_lookup_attempted_at here, not vivino_enriched_at — misses
+      // have only the former set, so filtering on enriched_at would re-pick
+      // the same miss-batch on every run and never advance the cursor.
       const cutoff = new Date(Date.now() - REENRICH_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      q = q.or(`vivino_enriched_at.is.null,vivino_enriched_at.lt.${cutoff}`);
+      q = q.or(`vivino_lookup_attempted_at.is.null,vivino_lookup_attempted_at.lt.${cutoff}`);
     }
-    q = q.limit(limit);
+    // Process oldest-first so the cursor sweeps the whole catalog before
+    // looping back to recheck.
+    q = q.order("vivino_lookup_attempted_at", { ascending: true, nullsFirst: true }).limit(limit);
   }
 
   const { data, error } = await q;

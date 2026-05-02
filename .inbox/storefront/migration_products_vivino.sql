@@ -21,7 +21,10 @@ alter table products
   add column if not exists vivino_enriched_at         timestamptz,
   add column if not exists vivino_lookup_attempted_at timestamptz;
 
--- Index helps the edge function's "find products that need enrichment" query.
-create index if not exists products_vivino_pending_idx
-  on products (vivino_lookup_attempted_at nulls first)
-  where vivino_enriched_at is null;
+-- Index for the edge function's "find products to enrich next" query.
+-- The function selects rows where vivino_lookup_attempted_at IS NULL OR
+-- vivino_lookup_attempted_at < cutoff, ordered oldest-first. A non-partial
+-- index on the attempt timestamp covers both branches.
+drop index if exists products_vivino_pending_idx;
+create index if not exists products_vivino_attempt_idx
+  on products (vivino_lookup_attempted_at nulls first);

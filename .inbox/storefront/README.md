@@ -58,5 +58,6 @@ Edge function идемпотентна и пропускает уже обога
 ## Замечания
 
 - `vivino_year` (год бутылки по версии Vivino) и собственный `year` могут расходиться. Витрина — single source of truth по году бутылки (он берётся из имени Loyverse), Vivino-год записываем рядом.
-- `confidence < 0.5` → API сам вернёт `match: null`. Если хочется записать "не нашли" чтобы повторно не дёргать — пиши `vivino_lookup_attempted_at` без других полей.
-- Картинку с Vivino кладём в `vivino_image_url`. Основная картинка товара (`image_url` / `external_product_images`) остаётся как есть — там у вас уже свой пайплайн.
+- `confidence < 0.4` → API сам вернёт `match: null`. На miss edge-функция выставляет ТОЛЬКО `vivino_lookup_attempted_at`, не `vivino_enriched_at` — последний остаётся флагом "есть реальные данные".
+- **Критично — селектор "что обогащать дальше"**: смотрит на `vivino_lookup_attempted_at`, а не на `vivino_enriched_at`. Иначе miss-партия будет пересматриваться каждый прогон и курсор не двинется по каталогу.
+- Картинку с Vivino кладём в `vivino_image_url`. На фронте используем приоритет `vivino_image_url ?? image_url ?? <placeholder>` — Vivino-картинка качественнее собственной.
