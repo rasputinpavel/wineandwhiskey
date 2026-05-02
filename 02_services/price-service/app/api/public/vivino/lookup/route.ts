@@ -60,12 +60,26 @@ function tokens(s: string): Set<string> {
   )
 }
 
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0
+// Score how well two token sets match.
+//
+// Pure Jaccard (overlap/union) penalizes short queries against rows that have
+// many descriptive tokens — e.g. input ["bandicoot"] vs row ["bandicoot","cabernet","margaret","river"]
+// = 1/4 = 0.25 even though the unique brand token matched. Wineries name
+// themselves with distinctive words, so finding the input tokens in the row
+// is usually enough.
+//
+// We blend Jaccard with input-coverage (overlap/|input|): take the max,
+// scaling input-coverage by 0.85 so a fully-matched short input lands ~0.85,
+// leaving room for full-overlap long inputs to score higher.
+function similarity(input: Set<string>, row: Set<string>): number {
+  if (input.size === 0 || row.size === 0) return 0
   let overlap = 0
-  for (const t of a) if (b.has(t)) overlap++
-  const union = new Set([...a, ...b]).size
-  return overlap / union
+  for (const t of input) if (row.has(t)) overlap++
+  if (overlap === 0) return 0
+  const union = new Set([...input, ...row]).size
+  const jaccard = overlap / union
+  const inputCoverage = overlap / input.size
+  return Math.max(jaccard, inputCoverage * 0.85)
 }
 
 const MIN_CONFIDENCE = 0.4
@@ -151,7 +165,7 @@ export async function GET(req: NextRequest) {
   let best: Best | null = null
   for (const row of candidates) {
     const rowTokens = tokens(`${row.winery ?? ''} ${row.name}`)
-    let score = jaccard(inputTokens, rowTokens)
+    let score = similarity(inputTokens, rowTokens)
     if (year && (row.vivino_year === year || row.year === year)) score += 0.05
     score = Math.min(1, score)
     const cur: Best = { row, score }
