@@ -2,6 +2,9 @@ import { supabase } from '@/lib/supabase'
 import Shell from '@/components/Shell'
 import Link from 'next/link'
 
+export const dynamic    = 'force-dynamic'
+export const revalidate = 0
+
 const STATUS_COLOR: Record<string, string> = {
   new: 'bg-gray-700 text-gray-200',
   analyzing: 'bg-blue-900 text-blue-300',

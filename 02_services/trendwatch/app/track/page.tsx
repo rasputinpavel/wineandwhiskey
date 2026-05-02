@@ -2,6 +2,9 @@ import { supabase } from '@/lib/supabase'
 import Shell from '@/components/Shell'
 import Link from 'next/link'
 
+export const dynamic    = 'force-dynamic'
+export const revalidate = 0
+
 function fmt(n: number | null) {
   if (n === null) return '—'
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

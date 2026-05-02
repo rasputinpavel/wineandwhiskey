@@ -2,6 +2,12 @@ import { supabase } from '@/lib/supabase'
 import Shell from '@/components/Shell'
 import Link from 'next/link'
 
+// Read-from-DB on every request — otherwise Next.js statically renders this at
+// build time on Railway, when the DB was empty, and the dashboard stays stuck
+// at zero counts forever.
+export const dynamic  = 'force-dynamic'
+export const revalidate = 0
+
 const STATUS_ORDER = ['new', 'analyzing', 'analyzed', 'approved', 'skipped', 'briefed', 'published']
 const STATUS_COLOR: Record<string, string> = {
   new: 'bg-gray-700 text-gray-200',
