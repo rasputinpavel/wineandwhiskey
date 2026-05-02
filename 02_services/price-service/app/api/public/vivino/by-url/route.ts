@@ -90,10 +90,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (!items || items.length === 0) {
-    // Save the negative result so retries within TTL are cheap.
-    await supabase
-      .from('vivino_cache')
-      .upsert({ query: cacheKey, found: false, raw: null, fetched_at: new Date().toISOString() }, { onConflict: 'query' })
+    // Don't cache negative results on the manual path — admins paste URLs
+    // because they expect data. A transient Apify hiccup shouldn't lock in
+    // a null answer for 90 days; let them retry.
     return NextResponse.json({ match: null, reason: 'apify_no_data' }, { headers })
   }
 
