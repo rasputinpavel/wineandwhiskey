@@ -19,14 +19,32 @@ const STATUS_COLOR: Record<string, string> = {
   published: 'bg-indigo-900 text-indigo-300',
 }
 
+// Funnel counts — each stage includes everything downstream. So "analyzed"
+// counts every reel that ever passed analyze, even if it has since moved on
+// to approved/briefed/published. Otherwise the dashboard reads "0 analyzed,
+// 0 approved" the moment you generate a brief and feels broken.
+const FUNNEL_INCLUDES: Record<string, ReadonlyArray<string>> = {
+  new:       ['new'],
+  analyzed:  ['analyzed', 'approved', 'briefed', 'published'],
+  approved:  ['approved', 'briefed', 'published'],
+  briefed:   ['briefed', 'published'],
+  published: ['published'],
+  skipped:   ['skipped'],
+}
+
 async function getStats() {
   const { data } = await supabase
     .from('trend_reels')
     .select('status')
 
-  const counts: Record<string, number> = {}
+  const raw: Record<string, number> = {}
   for (const row of data ?? []) {
-    counts[row.status] = (counts[row.status] ?? 0) + 1
+    raw[row.status] = (raw[row.status] ?? 0) + 1
+  }
+
+  const counts: Record<string, number> = {}
+  for (const [bucket, statuses] of Object.entries(FUNNEL_INCLUDES)) {
+    counts[bucket] = statuses.reduce((sum, s) => sum + (raw[s] ?? 0), 0)
   }
   return counts
 }
@@ -54,14 +72,20 @@ function fmt(n: number) {
   return String(n)
 }
 
+async function getTotalReels() {
+  const { count } = await supabase
+    .from('trend_reels')
+    .select('id', { count: 'exact', head: true })
+  return count ?? 0
+}
+
 export default async function DashboardPage() {
-  const [counts, recent, activeAccounts] = await Promise.all([
+  const [counts, recent, activeAccounts, total] = await Promise.all([
     getStats(),
     getRecentReels(),
     getActiveAccounts(),
+    getTotalReels(),
   ])
-
-  const total = Object.values(counts).reduce((a, b) => a + b, 0)
 
   return (
     <Shell>
