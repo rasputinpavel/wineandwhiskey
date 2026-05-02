@@ -121,7 +121,12 @@ export async function generateVideo(
 
   if (error) throw new Error(`Storage upload failed: ${error.message}`)
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath)
+  // Bucket is private — same as the frames path; signed URL with a long TTL so
+  // the user can still download the assembled video days later. Keep at 7d.
+  const { data, error: signErr } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, 7 * 24 * 3600)
+  if (signErr || !data) throw new Error(`signed url failed: ${signErr?.message}`)
 
   // cleanup
   try {
@@ -129,5 +134,5 @@ export async function generateVideo(
     spawnSync('rmdir', [tmpDir])
   } catch { /* ignore cleanup errors */ }
 
-  return data.publicUrl
+  return data.signedUrl
 }

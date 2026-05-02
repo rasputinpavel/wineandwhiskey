@@ -20,12 +20,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Video generation already in progress' }, { status: 409 })
   }
 
-  await supabase.from('trend_briefs').update({ video_status: 'generating' }).eq('id', id)
+  await supabase.from('trend_briefs')
+    .update({ video_status: 'generating', video_error: null })
+    .eq('id', id)
 
   // Fire and forget — client polls /video-status
   generateVideoBackground(id, brief).catch(async (err) => {
     console.error('[generate-video]', err)
-    await supabase.from('trend_briefs').update({ video_status: 'error' }).eq('id', id)
+    await supabase.from('trend_briefs').update({
+      video_status: 'error',
+      video_error: String(err?.message ?? err).slice(0, 1000),
+    }).eq('id', id)
   })
 
   return NextResponse.json({ ok: true, status: 'generating' })

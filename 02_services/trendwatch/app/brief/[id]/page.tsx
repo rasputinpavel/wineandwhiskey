@@ -16,6 +16,7 @@ type Brief = {
   visual_prompts: Array<{ scene: string; prompt_en: string; duration_s: number }> | null
   video_url: string | null
   video_status: string
+  video_error: string | null
 }
 
 const VIDEO_STATUS_LABEL: Record<string, string> = {
@@ -69,8 +70,8 @@ export default function BriefPage({ params }: { params: Promise<{ id: string }> 
   async function pollVideoStatus() {
     const res = await fetch(`/api/brief/${id}/video-status`)
     if (!res.ok) return
-    const { video_status, video_url } = await res.json()
-    setBrief(prev => prev ? { ...prev, video_status, video_url } : prev)
+    const { video_status, video_url, video_error } = await res.json()
+    setBrief(prev => prev ? { ...prev, video_status, video_url, video_error } : prev)
   }
 
   async function handleGenerateVideo() {
@@ -277,8 +278,20 @@ export default function BriefPage({ params }: { params: Promise<{ id: string }> 
               )}
 
               {brief.video_status === 'error' && (
-                <div className="text-red-400 text-sm">
-                  Generation failed. Check Runway token and retry.
+                <div className="space-y-2">
+                  <div className="text-red-400 text-sm">Generation failed.</div>
+                  {brief.video_error && (
+                    <pre className="text-red-300 text-xs bg-red-950/40 border border-red-900 rounded p-2 whitespace-pre-wrap break-words">
+                      {brief.video_error}
+                    </pre>
+                  )}
+                  <button
+                    onClick={handleGenerateVideo}
+                    disabled={generatingVideo}
+                    className="px-3 py-1.5 bg-wine-700 hover:bg-wine-600 disabled:opacity-50 text-white text-sm rounded"
+                  >
+                    {generatingVideo ? 'Запуск…' : 'Retry'}
+                  </button>
                 </div>
               )}
             </div>
