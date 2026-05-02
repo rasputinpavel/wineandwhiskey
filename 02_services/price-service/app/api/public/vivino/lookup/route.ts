@@ -139,7 +139,11 @@ function similarity(input: Set<string>, row: Set<string>): number {
   return Math.max(jaccard, distinctCoverage * 0.85)
 }
 
-const MIN_CONFIDENCE = 0.4
+// 0.55 chosen empirically: below this, false-positive matches start appearing
+// in real Loyverse traffic (e.g. Thai Granmonte wines mapping to French rows
+// via single-distinct-token overlap on geographic/varietal substrings).
+// Lovable enforces the same threshold client-side as a defensive layer.
+const MIN_CONFIDENCE = 0.55
 
 const SELECT_FIELDS = `
   id, name, winery, year, country, grape_variety, description, wine_type,
