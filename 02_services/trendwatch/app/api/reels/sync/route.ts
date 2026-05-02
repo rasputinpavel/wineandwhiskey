@@ -8,6 +8,7 @@ export const dynamic     = 'force-dynamic'
 
 const VIEWS_ABSOLUTE = 15_000  // niche-friendly threshold
 const VIEWS_RELATIVE = 1.5     // views / followers
+const MAX_AGE_DAYS   = 60      // ignore reels older than this — we want what's trending now
 
 type FoundReel = {
   url:           string
@@ -123,8 +124,13 @@ async function runSync(jobId: string, accounts: Account[]) {
     await appendLog(jobId, `→ @${account.username}...`)
 
     try {
-      const posts     = await scrapeAccountReels(account.username, 30)
+      const allPosts  = await scrapeAccountReels(account.username, 30)
       const followers = account.followers_count ?? 0
+
+      // Filter out anything older than MAX_AGE_DAYS
+      const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000
+      const posts  = allPosts.filter(p => new Date(p.timestamp).getTime() >= cutoff)
+      const dropped = allPosts.length - posts.length
 
       const withViews = posts.filter(p => (p.videoPlayCount ?? 0) > 0)
       const topViews  = withViews.length ? Math.max(...withViews.map(p => p.videoPlayCount ?? 0)) : 0
@@ -135,7 +141,8 @@ async function runSync(jobId: string, accounts: Account[]) {
       })
 
       await appendLog(jobId,
-        `  ${posts.length} Reels, ${withViews.length} с просмотрами` +
+        `  ${allPosts.length} Reels (${dropped > 0 ? `${dropped} старше ${MAX_AGE_DAYS}д откинуто, ` : ''}${posts.length} свежих)` +
+        `, ${withViews.length} с просмотрами` +
         (topViews > 0 ? ` (макс ${topViews.toLocaleString()})` : '') +
         `, ${highReach.length} прошли порог`,
       )

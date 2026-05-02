@@ -7,7 +7,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .from('trend_analysis')
     .select('*')
     .eq('reel_id', id)
-    .single()
-  if (error) return NextResponse.json(null, { status: 404 })
-  return NextResponse.json(data)
+    .maybeSingle()
+  if (error) {
+    console.error('[analysis GET]', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json(data)  // null if no row, full record if exists
 }

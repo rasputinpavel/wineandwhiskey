@@ -39,10 +39,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       duration: reel.duration_s,
     })
 
-    await supabase.from('trend_analysis').upsert({
-      reel_id: id,
-      ...analysis,
-    })
+    const { error: upsertErr } = await supabase
+      .from('trend_analysis')
+      .upsert({ reel_id: id, ...analysis }, { onConflict: 'reel_id' })
+    if (upsertErr) {
+      console.error('[analyze] trend_analysis upsert failed:', upsertErr)
+      throw new Error(`Failed to save analysis: ${upsertErr.message}`)
+    }
 
     await supabase.from('trend_reels').update({ status: 'analyzed' }).eq('id', id)
 

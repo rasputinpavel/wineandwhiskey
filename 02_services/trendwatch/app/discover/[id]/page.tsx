@@ -21,6 +21,7 @@ type Frame = {
   id: string
   timestamp_s: number
   storage_path: string
+  url: string | null
 }
 
 type Analysis = {
@@ -251,6 +252,10 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="grid grid-cols-3 gap-2">
                   {frames.map(frame => (
                     <div key={frame.id} className="relative rounded-lg overflow-hidden bg-gray-800 aspect-[9/16]">
+                      {frame.url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={frame.url} alt="" className="w-full h-full object-cover" />
+                      )}
                       <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
                         {frame.timestamp_s}s
                       </div>
