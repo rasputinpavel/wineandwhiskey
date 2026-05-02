@@ -126,12 +126,19 @@ async function runSync(jobId: string, accounts: Account[]) {
       const posts     = await scrapeAccountReels(account.username, 30)
       const followers = account.followers_count ?? 0
 
+      const withViews = posts.filter(p => (p.videoPlayCount ?? 0) > 0)
+      const topViews  = withViews.length ? Math.max(...withViews.map(p => p.videoPlayCount ?? 0)) : 0
+
       const highReach = posts.filter(p => {
         const v = p.videoPlayCount ?? 0
         return v >= VIEWS_ABSOLUTE || (followers > 0 && v / followers >= VIEWS_RELATIVE)
       })
 
-      await appendLog(jobId, `  ${posts.length} Reels всего, ${highReach.length} прошли порог`)
+      await appendLog(jobId,
+        `  ${posts.length} Reels, ${withViews.length} с просмотрами` +
+        (topViews > 0 ? ` (макс ${topViews.toLocaleString()})` : '') +
+        `, ${highReach.length} прошли порог`,
+      )
 
       let newForThisAccount = 0
       for (const post of highReach) {

@@ -71,16 +71,18 @@ async function getDataset<T>(datasetId: string): Promise<T[]> {
   return res.json()
 }
 
-export async function scrapeAccountReels(username: string, maxPosts = 50): Promise<InstagramPost[]> {
+export async function scrapeAccountReels(username: string, maxPosts = 30): Promise<InstagramPost[]> {
+  // Using directUrls + resultsType=reels — same pattern that fixed hashtag scraping.
+  // The older `usernames + resultsType=posts` filter often returned zero videos.
   const { runId, datasetId } = await startActor('apify~instagram-scraper', {
-    usernames: [username],
-    resultsType: 'posts',
+    directUrls:   [`https://www.instagram.com/${username}/reels/`],
+    resultsType:  'reels',
     resultsLimit: maxPosts,
-    addParentData: false,
   })
   await pollRun(runId)
   const items = await getDataset<InstagramPost>(datasetId)
-  return items.filter(p => p.type === 'Video')
+  console.log(`[scrapeAccountReels] @${username}: ${items.length} items raw, ${items.filter(p => p.videoPlayCount != null).length} with videoPlayCount`)
+  return items.filter(p => p.videoPlayCount != null)
 }
 
 export async function scrapeHashtagReels(hashtag: string, maxPosts = 60): Promise<InstagramPost[]> {
