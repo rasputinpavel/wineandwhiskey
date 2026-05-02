@@ -1,9 +1,11 @@
 import RunwayML from '@runwayml/sdk'
-import type { VisualPrompt } from './supabase'
+import type { VisualPrompt, ConsistencyAnchors } from './supabase'
 import { execSync, spawnSync } from 'child_process'
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { supabase } from './supabase'
+import { generateImage } from './nbp'
+import { extractLastFrame } from './ffmpeg'
 
 const BUCKET = 'trend-frames'
 
@@ -15,27 +17,55 @@ function getClient(): RunwayML {
   return new RunwayML({ apiKey: key })
 }
 
-export type VideoJobResult = {
-  scene: string
-  clipPath: string
-  durationS: number
+// ─── Anchor image generation (Nano Banana Pro) ───────────────────────────────
+
+// Compose a final image prompt: scene-specific text + a footer that pins the
+// four anchor strings verbatim. Keeps the consistency contract from the
+// runway-prompts methodology — same byte-for-byte description in every scene.
+function composeImagePrompt(prompt: VisualPrompt, anchors: ConsistencyAnchors | null): string {
+  const base = prompt.image_prompt ?? prompt.prompt_en ?? prompt.scene
+  if (!anchors) return base
+  return [
+    base,
+    '',
+    'Consistency anchors (do not deviate):',
+    `Subject: ${anchors.subject}`,
+    `Location: ${anchors.location}`,
+    `Lighting: ${anchors.lighting}`,
+    `Style: ${anchors.style}`,
+  ].join('\n')
 }
+
+async function uploadImage(briefId: string, sceneIdx: number, image: Buffer): Promise<string> {
+  const storagePath = `anchor_images/${briefId}/scene_${sceneIdx}.jpg`
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath, image, { contentType: 'image/jpeg', upsert: true })
+  if (error) throw new Error(`Anchor image upload failed: ${error.message}`)
+
+  // Runway needs a fetchable URL. Bucket is private → signed URL is fine,
+  // Runway downloads the bytes immediately as part of the task creation.
+  const { data, error: signErr } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, 3600)
+  if (signErr || !data) throw new Error(`signed url failed: ${signErr?.message}`)
+  return data.signedUrl
+}
+
+// ─── Image-to-video clip generation ──────────────────────────────────────────
 
 async function generateClip(
   client: RunwayML,
-  prompt: VisualPrompt
+  promptImage: string,
+  motionPrompt: string,
+  durationS: number,
 ): Promise<string> {
-  // Prefer motion_prompt (image-to-video methodology) — image carries identity,
-  // text describes motion only. Fall back to image_prompt (full description),
-  // then to legacy prompt_en for old briefs.
-  const promptText = prompt.motion_prompt ?? prompt.image_prompt ?? prompt.prompt_en ?? ''
-  if (!promptText) throw new Error(`Scene "${prompt.scene}" has no usable prompt`)
-
-  const task = await client.textToVideo.create({
-    model: 'gen4.5',
-    promptText,
+  const task = await client.imageToVideo.create({
+    model: 'gen4_turbo',
+    promptImage,
+    promptText: motionPrompt,
     ratio: '720:1280',
-    duration: Math.min(10, Math.max(2, Math.round(prompt.duration_s))),
+    duration: Math.min(10, Math.max(2, Math.round(durationS))) as 5 | 10,
   })
 
   let result = await client.tasks.retrieve(task.id)
@@ -44,7 +74,10 @@ async function generateClip(
   while (result.status !== 'SUCCEEDED' && Date.now() < deadline) {
     await sleep(8_000)
     result = await client.tasks.retrieve(task.id)
-    if (result.status === 'FAILED') throw new Error(`Runway task failed: ${task.id}`)
+    if (result.status === 'FAILED') {
+      const reason = (result as { failure?: string }).failure ?? task.id
+      throw new Error(`Runway task failed: ${reason}`)
+    }
   }
 
   if (result.status !== 'SUCCEEDED') throw new Error('Runway task timed out')
@@ -89,25 +122,61 @@ function burnTextOverlays(inputPath: string, texts: string[], outputPath: string
   )
 }
 
+// ─── Main pipeline: NBP image → Runway image-to-video → concat → overlay ───
+
 export async function generateVideo(
   briefId: string,
   prompts: VisualPrompt[],
   textOverlays: string[],
-  onProgress?: (done: number, total: number) => void
+  anchors: ConsistencyAnchors | null = null,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<string> {
   const runway = getClient()
   const tmpDir = `/tmp/tw_video_${briefId}`
   if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true })
 
   const clipPaths: string[] = []
+  let lastFramePath: string | null = null
+  let scene1ImagePath: string | null = null  // reused as character ref for fresh scenes
 
   for (let i = 0; i < prompts.length; i++) {
     const prompt = prompts[i]
     const clipPath = path.join(tmpDir, `clip_${i}.mp4`)
 
-    const videoUrl = await generateClip(runway, prompt)
+    // Decide where the input image comes from.
+    let imageBuffer: Buffer
+    const wantsLastFrame = i > 0 && (prompt.input_image_source ?? 'last_frame_of_previous') === 'last_frame_of_previous' && lastFramePath
+    if (wantsLastFrame && lastFramePath) {
+      imageBuffer = readFileSync(lastFramePath)
+    } else {
+      // Fresh NBP generation. For scenes ≥ 2 with input_image_source='fresh',
+      // pass scene-1 image as a character reference for consistency.
+      const refs = scene1ImagePath && i > 0
+        ? [{ data: readFileSync(scene1ImagePath), mimeType: 'image/jpeg' }]
+        : []
+      const promptText = composeImagePrompt(prompt, anchors)
+      imageBuffer = await generateImage(promptText, refs, '9:16')
+
+      // Cache scene-1 anchor for use as a reference in later "fresh" scenes.
+      if (i === 0) {
+        scene1ImagePath = path.join(tmpDir, `anchor_scene_0.jpg`)
+        writeFileSync(scene1ImagePath, imageBuffer)
+      }
+    }
+
+    // Upload to Storage so Runway can fetch it as promptImage.
+    const promptImage = await uploadImage(briefId, i, imageBuffer)
+
+    // Runway image-to-video. Motion prompt only — image carries identity.
+    const motion = prompt.motion_prompt ?? prompt.image_prompt ?? prompt.prompt_en ?? ''
+    if (!motion) throw new Error(`Scene "${prompt.scene}" has no motion prompt`)
+    const videoUrl = await generateClip(runway, promptImage, motion, prompt.duration_s)
     await downloadClip(videoUrl, clipPath)
     clipPaths.push(clipPath)
+
+    // Extract last frame for chaining into the next scene.
+    lastFramePath = path.join(tmpDir, `last_frame_${i}.jpg`)
+    extractLastFrame(clipPath, lastFramePath)
 
     onProgress?.(i + 1, prompts.length)
   }
@@ -127,8 +196,6 @@ export async function generateVideo(
 
   if (error) throw new Error(`Storage upload failed: ${error.message}`)
 
-  // Bucket is private — same as the frames path; signed URL with a long TTL so
-  // the user can still download the assembled video days later. Keep at 7d.
   const { data, error: signErr } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(storagePath, 7 * 24 * 3600)
@@ -137,6 +204,8 @@ export async function generateVideo(
   // cleanup
   try {
     for (const p of [...clipPaths, assembledPath, finalPath]) unlinkSync(p)
+    if (lastFramePath) unlinkSync(lastFramePath)
+    if (scene1ImagePath) unlinkSync(scene1ImagePath)
     spawnSync('rmdir', [tmpDir])
   } catch { /* ignore cleanup errors */ }
 

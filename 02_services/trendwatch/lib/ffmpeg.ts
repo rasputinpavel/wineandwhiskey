@@ -35,6 +35,16 @@ function extractFrame(videoPath: string, timestamp: number, framePath: string): 
   )
 }
 
+// Extract the last frame of a clip — used for last-frame chaining between
+// scenes in the image-to-video pipeline. -sseof seeks from the end so we
+// don't need to know duration.
+export function extractLastFrame(videoPath: string, framePath: string): void {
+  execSync(
+    `ffmpeg -sseof -0.1 -i "${videoPath}" -frames:v 1 -q:v 2 -y "${framePath}"`,
+    { stdio: 'pipe' }
+  )
+}
+
 function probeDuration(videoPath: string): number {
   try {
     const out = execSync(
