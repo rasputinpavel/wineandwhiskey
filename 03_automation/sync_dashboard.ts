@@ -386,10 +386,11 @@ async function writeDataSheet(
   // rows 0..dim  →  Sheet rows 1..dim+1  (0-indexed: 0..dim)
 
   // ── Section 2: Monthly summary (starts at row dim+2) ──
-  // Колонки B/C/D разбиты по принципу "взаимоисключающих месяцев":
-  //   • Для месяцев < PLAN_START_YM   → только B (Факт), C/D пустые.
-  //   • Для месяцев >= PLAN_START_YM  → только C (План) и D (Факт линией), B пустая.
-  const monthlyHeader = ["Месяц", "Факт (тыс.)", "План LY+25% (тыс.)", "Факт 2026 (тыс.)", "% плана", "Чеков", "GP%", "Розница (тыс.)", "B2B (тыс.)"];
+  // Колонки B/C/D/E взаимоисключающие по месяцам:
+  //   • Для ym < PLAN_START_YM   → только B (Факт), C/D/E пустые.
+  //   • Для ym >= PLAN_START_YM  → только C (база LY) + D (+25%) — стек плана,
+  //                                  и E (Факт 2026) для линии. B пустая.
+  const monthlyHeader = ["Месяц", "Факт (тыс.)", "Факт 2025 база (тыс.)", "Прирост +25% (тыс.)", "Факт 2026 (тыс.)", "% плана", "Чеков", "GP%", "Розница (тыс.)", "B2B (тыс.)"];
   const monthlyRows: any[][] = [monthlyHeader];
   for (const { ym, cur, last, plan, pct } of summary) {
     const gp = cur.total > 0 ? (cur.totalGP / cur.total) * 100 : 0;
@@ -397,7 +398,8 @@ async function writeDataSheet(
     monthlyRows.push([
       monthLabel(ym),
       isPlanMonth ? "" : Math.round(cur.total / 1000),
-      isPlanMonth ? Math.round(last.total * 1.25 / 1000) : "",
+      isPlanMonth ? Math.round(last.total / 1000) : "",
+      isPlanMonth ? Math.round(last.total * 0.25 / 1000) : "",
       isPlanMonth ? Math.round(cur.total / 1000) : "",
       +pct.toFixed(1),
       cur.checks,
@@ -465,12 +467,12 @@ async function writeDataSheet(
   const fmtRequests: any[] = [
     // Daily header
     headerFmt(dataSheetId, 0, 1, 0, 4, dark, white),
-    // Monthly header
-    headerFmt(dataSheetId, monthlyStartRow - 1, monthlyStartRow, 0, 9, dark, white),
-    // Monthly numeric columns B/C/D — format as "# ##0" (thousands with space separator)
+    // Monthly header (10 cols)
+    headerFmt(dataSheetId, monthlyStartRow - 1, monthlyStartRow, 0, 10, dark, white),
+    // Monthly numeric columns B..E — format as "# ##0" (thousands with space separator)
     {
       repeatCell: {
-        range: { sheetId: dataSheetId, startRowIndex: monthlyStartRow, endRowIndex: monthlyStartRow + summary.length, startColumnIndex: 1, endColumnIndex: 4 },
+        range: { sheetId: dataSheetId, startRowIndex: monthlyStartRow, endRowIndex: monthlyStartRow + summary.length, startColumnIndex: 1, endColumnIndex: 5 },
         cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "# ##0" } } },
         fields: "userEnteredFormat.numberFormat",
       },
@@ -480,7 +482,7 @@ async function writeDataSheet(
     // Annual header
     headerFmt(dataSheetId, annualStartRow - 1, annualStartRow, 0, 5, dark, white),
     // Auto-resize
-    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 9 } } },
+    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 10 } } },
   ];
 
   await sheets("POST", ":batchUpdate", { requests: fmtRequests });
@@ -907,6 +909,21 @@ async function writeDashboard(
     return { sheetId: dataSheetId, startColumnIndex: c0, endColumnIndex: c1, startRowIndex: r0, endRowIndex: r1 };
   }
 
+  // Общий потолок для левой и правой оси (в тыс. THB), чтобы шкалы совпадали.
+  // Берём максимум из (фактических столбцов прошлых месяцев, плановых стеков, фактической линии 2026).
+  const monthlyMaxKThb = (() => {
+    let max = 0;
+    for (const { ym, cur, last } of summary) {
+      const isPlan = ym >= PLAN_START_YM;
+      const barVal  = isPlan ? last.total * 1.25 : cur.total;
+      const lineVal = isPlan ? cur.total : 0;
+      if (barVal  > max) max = barVal;
+      if (lineVal > max) max = lineVal;
+    }
+    const k = max / 1000 * 1.05; // 5% headroom
+    return Math.ceil(k / 100) * 100; // round up to nearest 100k
+  })();
+
   const chartRequests: any[] = [
     // ── Chart 1: Cumulative day-by-day progress (LINE) ──
     {
@@ -958,10 +975,11 @@ async function writeDashboard(
       },
     },
 
-    // ── Chart 2: Monthly COMBO — Факт vs План + Факт 2026 линией ──
-    // Месяцы < PLAN_START_YM показывают только серый столбец "Факт".
-    // Месяцы >= PLAN_START_YM показывают оранжевый столбец "План LY+25%" и
-    // красную линию "Факт 2026" на правой оси (свой масштаб для наглядности).
+    // ── Chart 2: Monthly COMBO — Факт vs План (стек LY+25%) + Факт 2026 линией ──
+    // Месяцы < PLAN_START_YM:  серый столбец "Факт".
+    // Месяцы >= PLAN_START_YM: стек из "Факт 2025 база" (серо-голубой) + "Прирост +25%"
+    //                          (оранжевый), плюс красная линия "Факт 2026".
+    // Линия идёт на правую ось, но обе оси имеют одинаковый viewWindow → шкалы совпадают.
     {
       addChart: {
         chart: {
@@ -970,11 +988,20 @@ async function writeDashboard(
             titleTextFormat: { bold: true, fontSize: 13 },
             basicChart: {
               chartType: "COMBO",
+              stackedType: "STACKED",
               legendPosition: "RIGHT_LEGEND",
               axis: [
                 { position: "BOTTOM_AXIS" },
-                { position: "LEFT_AXIS",  title: "тыс. THB (факт / план)" },
-                { position: "RIGHT_AXIS", title: "тыс. THB (факт 2026)" },
+                {
+                  position: "LEFT_AXIS",
+                  title: "тыс. THB",
+                  viewWindowOptions: { viewWindowMode: "EXPLICIT", viewWindowMin: 0, viewWindowMax: monthlyMaxKThb },
+                },
+                {
+                  position: "RIGHT_AXIS",
+                  title: "тыс. THB (факт 2026)",
+                  viewWindowOptions: { viewWindowMode: "EXPLICIT", viewWindowMin: 0, viewWindowMax: monthlyMaxKThb },
+                },
               ],
               domains: [{ domain: { sourceRange: { sources: [dataRange(0, 1, monthlyRange.start, monthlyRange.end)] } } }],
               series: [
@@ -986,17 +1013,25 @@ async function writeDashboard(
                   color: grayBlue,
                   dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
                 },
-                // План LY+25% — оранжевый столбец (от PLAN_START_YM)
+                // База плана = Факт 2025 — серо-голубой (стек-база, от PLAN_START_YM)
                 {
                   series: { sourceRange: { sources: [dataRange(2, 3, monthlyRange.start, monthlyRange.end)] } },
+                  targetAxis: "LEFT_AXIS",
+                  type: "COLUMN",
+                  color: grayBlue,
+                  dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } },
+                },
+                // Прирост +25% — оранжевый (стек-верх плана, от PLAN_START_YM)
+                {
+                  series: { sourceRange: { sources: [dataRange(3, 4, monthlyRange.start, monthlyRange.end)] } },
                   targetAxis: "LEFT_AXIS",
                   type: "COLUMN",
                   color: { red: 0.98, green: 0.73, blue: 0.42, alpha: 1 },
                   dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
                 },
-                // Факт 2026 — тёмно-красная линия на ПРАВОЙ оси
+                // Факт 2026 — тёмно-красная линия на ПРАВОЙ оси (шкалы совпадают)
                 {
-                  series: { sourceRange: { sources: [dataRange(3, 4, monthlyRange.start, monthlyRange.end)] } },
+                  series: { sourceRange: { sources: [dataRange(4, 5, monthlyRange.start, monthlyRange.end)] } },
                   targetAxis: "RIGHT_AXIS",
                   type: "LINE",
                   color: wineRed,
@@ -1038,13 +1073,15 @@ async function writeDashboard(
             domains: [{ domain: { sourceRange: { sources: [dataRange(0, 1, monthlyRange.start, monthlyRange.end)] } } }],
             series: [
               {
-                series: { sourceRange: { sources: [dataRange(7, 8, monthlyRange.start, monthlyRange.end)] } },
+                // Розница (col I = idx 8)
+                series: { sourceRange: { sources: [dataRange(8, 9, monthlyRange.start, monthlyRange.end)] } },
                 targetAxis: "LEFT_AXIS",
                 color: steelBlue,
                 dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } },
               },
               {
-                series: { sourceRange: { sources: [dataRange(8, 9, monthlyRange.start, monthlyRange.end)] } },
+                // B2B (col J = idx 9)
+                series: { sourceRange: { sources: [dataRange(9, 10, monthlyRange.start, monthlyRange.end)] } },
                 targetAxis: "LEFT_AXIS",
                 color: orange,
                 dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
