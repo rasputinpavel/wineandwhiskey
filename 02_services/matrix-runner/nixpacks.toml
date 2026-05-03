@@ -2,12 +2,7 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-# Install deps for the runner service AND for the matrix script (it imports
-# from 03_automation/lib and uses dotenv/supabase from repo root).
-cmds = [
-  "cd 02_services/matrix-runner && npm install --production",
-  "cd ../../ && npm install --production"
-]
+cmds = ["npm ci --omit=dev || npm install --production"]
 
 [start]
-cmd = "cd 02_services/matrix-runner && npm run start"
+cmd = "npm run start"

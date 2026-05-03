@@ -1,14 +1,18 @@
 # matrix-runner
 
-Webhook-сервис для запуска `03_automation/build_purchase_matrix.ts` из меню Google Sheets.
+Webhook-сервис для запуска матрицы закупа из меню Google Sheets.
 
 ## Как это работает
 
 ```
-Google Sheet ──menu click──▶ Apps Script ──HTTPS POST /run──▶ Railway service ──spawn──▶ tsx build_purchase_matrix.ts ──writes──▶ Google Sheet
+Google Sheet ──menu click──▶ Apps Script ──HTTPS POST /run──▶ Railway service ──in-process call──▶ runMatrix() ──writes──▶ Google Sheet
 ```
 
-Apps Script передаёт в заголовке `x-webhook-secret`. Сервис проверяет его против `WEBHOOK_SECRET` в env, и если совпадает — запускает матрицу как child-процесс. Логи возвращаются в JSON, и Apps Script показывает их в alert.
+Apps Script передаёт в заголовке `x-webhook-secret`. Сервис проверяет его против `WEBHOOK_SECRET` в env, и если совпадает — импортирует и вызывает `runMatrix()` из локального `matrix.ts`. Console-вывод перехватывается и возвращается в JSON, Apps Script показывает сводку в alert.
+
+Сервис **самодостаточен** — `matrix.ts` и `wine_detect.ts` лежат рядом с `server.ts`, никаких импортов из родительских директорий нет. Это позволяет деплоить с Railway Root Directory = `02_services/matrix-runner`.
+
+> ⚠️ `matrix.ts` и `wine_detect.ts` — копии файлов из `03_automation/`. При изменении логики синхронизируй обе копии (или просто перекопируй файлы и закоммить).
 
 ## Что задеплоить на Railway
 
@@ -51,13 +55,12 @@ Apps Script передаёт в заголовке `x-webhook-secret`. Серв�
 ```bash
 cd 02_services/matrix-runner
 npm install
-WEBHOOK_SECRET=test ../../node_modules/.bin/tsx server.ts
+WEBHOOK_SECRET=test PORT=3092 npx tsx server.ts
 # в другом терминале:
-curl -X POST localhost:3000/run -H "x-webhook-secret: test"
+curl -X POST localhost:3092/run -H "x-webhook-secret: test"
 ```
 
-Сервис запустит `npx tsx 03_automation/build_purchase_matrix.ts` относительно корня репо
-и вернёт JSON со сводкой.
+Сервис автоматически подцепит `.env.local` из корня репо (Loyverse / Google / Supabase токены).
 
 ## Время выполнения
 
