@@ -352,8 +352,9 @@ interface Candidate {
   marginPct: number;         // 0..1
   loyverseSupplier: string;
   bucket: Bucket;            // core (regular) or probe (experimental)
+  currentStock: number;      // bottles already on the shelf — we don't reorder these
   // computed:
-  targetUnits: number;       // for core: ceil(velocity × weeks/4.345); for probe: 1 or 2
+  targetUnits: number;       // bottles to BUY (= max(0, monthlyTarget − stock))
   totalCost: number;
   expectedProfit: number;
   marginNorm: number;        // 0..1 within type (re-normalized within bucket)
@@ -439,10 +440,11 @@ async function main() {
 
   // 2. Loyverse data
   console.log("\n[1/4] Fetching Loyverse data...");
-  const [categories, items, suppliers] = await Promise.all([
+  const [categories, items, suppliers, invLevels] = await Promise.all([
     loyverseFetch<any>("/categories", "categories"),
     loyverseFetch<any>("/items", "items"),
     loyverseFetch<any>("/suppliers", "suppliers"),
+    loyverseFetch<any>("/inventory", "inventory_levels"),
   ]);
   const whiteCatId     = categories.find(c => /white\s*wine|бел/i.test(c.name))?.id;
   const redCatId       = categories.find(c => /red\s*wine|красн/i.test(c.name))?.id;
@@ -454,13 +456,25 @@ async function main() {
   const supplierNameById = new Map<string, string>();
   for (const s of suppliers) supplierNameById.set(s.id, s.name ?? s.supplier_name ?? "—");
   const itemMeta = new Map<string, { name: string; cat: string; supplier: string }>();
+  const variantToItem = new Map<string, string>();
   for (const it of items) {
     itemMeta.set(it.id, {
       name: it.item_name ?? it.name ?? "—",
       cat: it.category_id ?? "",
       supplier: it.primary_supplier_id ? (supplierNameById.get(it.primary_supplier_id) ?? "—") : "—",
     });
+    for (const v of it.variants ?? []) variantToItem.set(v.variant_id, it.id);
   }
+  // Aggregate inventory across variants/stores to per-item totals.
+  const itemStock = new Map<string, number>();
+  for (const lvl of invLevels) {
+    const itemId = variantToItem.get(lvl.variant_id);
+    if (!itemId) continue;
+    itemStock.set(itemId, (itemStock.get(itemId) ?? 0) + (lvl.in_stock ?? 0));
+  }
+  const wineItemIds = new Set([...itemMeta].filter(([_, m]) => m.cat === whiteCatId || m.cat === redCatId || m.cat === sparklingCatId).map(([id]) => id));
+  const totalWineStock = [...wineItemIds].reduce((s, id) => s + (itemStock.get(id) ?? 0), 0);
+  console.log(`  ${invLevels.length} inventory levels · ${Math.round(totalWineStock)} винных бутылок на складе`);
 
   // 3. Receipts
   const minUtc = new Date(`${fromIso}T00:00:00+07:00`).toISOString();
@@ -496,9 +510,13 @@ async function main() {
   interface RawCandidate {
     itemId: string; name: string; type: WineType; subgroup: string;
     units: number; velocityPerMonth: number; unitCost: number; unitRetail: number;
-    marginPct: number; loyverseSupplier: string; coreTargetUnits: number;
+    marginPct: number; loyverseSupplier: string;
+    coreTargetUnits: number; currentStock: number; needToBuy: number;
   }
   const raw: RawCandidate[] = [];
+  // Forecast monthly profit from CURRENT stock alone (what will sell next month without any new buy).
+  let stockMonthlyProfit = 0;
+  let stockMonthlyRevenue = 0;
   for (const [itemId, a] of acc) {
     if (a.units <= 0 || a.revenue <= 0) continue;
     const meta = itemMeta.get(itemId)!;
@@ -516,52 +534,67 @@ async function main() {
     }
     const velocityPerMonth = a.units / params.period_months;
     const coreTargetUnits = Math.max(0, Math.ceil(velocityPerMonth * weeksFactor));
+    const currentStock = Math.max(0, Math.floor(itemStock.get(itemId) ?? 0));
+    const needToBuy    = Math.max(0, coreTargetUnits - currentStock);
     const unitCost   = a.cost / a.units;
     const unitRetail = a.revenue / a.units;
     const marginPct  = (a.revenue - a.cost) / a.revenue;
     if (unitCost <= 0 || marginPct <= 0) continue;
     if (marginPct < params.min_margin_pct / 100) continue;
-    raw.push({ itemId, name: meta.name, type, subgroup, units: a.units, velocityPerMonth, unitCost, unitRetail, marginPct, loyverseSupplier: meta.supplier, coreTargetUnits });
+    // Stock contribution to next-month profit: bottles that will sell from existing stock,
+    // capped by velocity (we won't sell more than the item moves per month).
+    const willSellFromStock = Math.min(currentStock, velocityPerMonth);
+    stockMonthlyProfit  += willSellFromStock * (unitRetail - unitCost);
+    stockMonthlyRevenue += willSellFromStock * unitRetail;
+    raw.push({ itemId, name: meta.name, type, subgroup, units: a.units, velocityPerMonth, unitCost, unitRetail, marginPct, loyverseSupplier: meta.supplier, coreTargetUnits, currentStock, needToBuy });
   }
   console.log(`  ${raw.length} raw candidates after base filters.`);
+  console.log(`  Прогноз продаж со склада: ${Math.round(stockMonthlyRevenue).toLocaleString("ru-RU")} ฿ выручки → ${Math.round(stockMonthlyProfit).toLocaleString("ru-RU")} ฿ маржи (без новых закупок)`);
 
   // 6. Split into core vs probe
-  //    core: passes velocity, target_units, retail filters → orders coreTargetUnits bottles
-  //    probe: doesn't make core but margin ≥ probe_min_margin_pct → orders min(coreTargetUnits, 2) or 1 bottle
+  //    Filters use the full monthly target (coreTargetUnits) but the actual order
+  //    quantity is needToBuy = max(0, monthly_target − current_stock).
+  //    If stock already covers the month, the SKU is dropped from the buy plan
+  //    (no point ordering anything for it this cycle).
   const candidates: Candidate[] = [];
+  let alreadyCoveredCount = 0;
   for (const r of raw) {
     const fitsCore =
       r.velocityPerMonth >= params.core_min_velocity &&
       r.coreTargetUnits  >= params.core_min_target_units &&
       r.unitRetail       >= params.core_min_unit_retail;
+    let bucket: Bucket | null = null;
+    let targetUnits = 0;
     if (fitsCore) {
-      const targetUnits = r.coreTargetUnits;
-      candidates.push({
-        ...r,
-        bucket: "core",
-        targetUnits,
-        totalCost: r.unitCost * targetUnits,
-        expectedProfit: (r.unitRetail - r.unitCost) * targetUnits,
-        marginNorm: 0, velocityNorm: 0, baseScore: 0,
-      });
+      bucket = "core";
+      targetUnits = r.needToBuy; // already accounts for stock
     } else if (r.marginPct >= params.probe_min_margin_pct / 100) {
-      // probe: small experimental order — 1 or 2 bottles
-      const targetUnits = Math.max(1, Math.min(r.coreTargetUnits, 2));
-      candidates.push({
-        ...r,
-        bucket: "probe",
-        targetUnits,
-        totalCost: r.unitCost * targetUnits,
-        expectedProfit: (r.unitRetail - r.unitCost) * targetUnits,
-        marginNorm: 0, velocityNorm: 0, baseScore: 0,
-      });
+      bucket = "probe";
+      // Probe: 1-2 bottles experiment — but only if we don't already have stock.
+      const probeWant = Math.max(1, Math.min(r.coreTargetUnits, 2));
+      targetUnits = Math.max(0, probeWant - r.currentStock);
     }
-    // else: dropped entirely
+    if (bucket === null) continue;
+    if (targetUnits === 0) {
+      alreadyCoveredCount++;
+      continue;  // stock already meets monthly need, skip from buy plan
+    }
+    candidates.push({
+      itemId: r.itemId, name: r.name, type: r.type, subgroup: r.subgroup,
+      units: r.units, velocityPerMonth: r.velocityPerMonth,
+      unitCost: r.unitCost, unitRetail: r.unitRetail, marginPct: r.marginPct,
+      loyverseSupplier: r.loyverseSupplier, currentStock: r.currentStock,
+      bucket, targetUnits,
+      totalCost: r.unitCost * targetUnits,
+      expectedProfit: (r.unitRetail - r.unitCost) * targetUnits,
+      marginNorm: 0, velocityNorm: 0, baseScore: 0,
+    });
   }
   const coreCandidates  = candidates.filter(c => c.bucket === "core");
   const probeCandidates = candidates.filter(c => c.bucket === "probe");
-  console.log(`  Core candidates:  ${coreCandidates.length}`);
-  console.log(`  Probe candidates: ${probeCandidates.length}`);
+  console.log(`  Core candidates:   ${coreCandidates.length}`);
+  console.log(`  Probe candidates:  ${probeCandidates.length}`);
+  console.log(`  Уже на складе (не закупаем): ${alreadyCoveredCount} SKU`);
 
   // 7. Normalize within type within bucket, compute score
   for (const bucket of ["core", "probe"] as Bucket[]) {
@@ -749,6 +782,7 @@ async function main() {
     coreBudget, coreSpent, coreProfit,
     probeBudget, probeSpent, probeProfit,
     totalSpent, totalProfit,
+    stockMonthlyRevenue, stockMonthlyProfit,
     fromIso, toIso,
   );
   console.log(`\n  → https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit\n`);
@@ -766,6 +800,7 @@ async function writeMatrix(
   coreBudget: number, coreSpent: number, coreProfit: number,
   probeBudget: number, probeSpent: number, probeProfit: number,
   totalSpent: number, totalProfit: number,
+  stockMonthlyRevenue: number, stockMonthlyProfit: number,
   fromDate: string,
   toDate: string,
 ) {
@@ -776,8 +811,8 @@ async function writeMatrix(
   const white = { red: 1, green: 1, blue: 1 };
 
   const headers = [
-    "№", "Пул", "Тип", "Подгруппа", "Название", "Бутылок", "Закуп ฿", "Сумма закупа", "Розница ฿", "Маржа %",
-    "Прибыль", "Скор", "Поставщик (Loyverse)", "Цены price-service",
+    "№", "Пул", "Тип", "Подгруппа", "Название", "Склад", "Купить", "Закуп ฿", "Сумма закупа",
+    "Розница ฿", "Маржа %", "Прибыль", "Скор", "Поставщик (Loyverse)", "Цены price-service",
   ];
   const nCols = headers.length;
   const rows: any[][] = [];
@@ -805,9 +840,19 @@ async function writeMatrix(
   rows.push(["Probe: min маржа %",          params.probe_min_margin_pct]);
   const paramEndRow = rows.length;
 
+  // Stock forecast
+  rows.push([]);
+  rows.push(["Прогноз без новых закупок (продажи существующего склада)"]);
+  const stockHdrRow = rows.length - 1;
+  rows.push(["  Выручка/мес со склада",  Math.round(stockMonthlyRevenue)]);
+  rows.push(["  Маржа/мес со склада",    Math.round(stockMonthlyProfit)]);
+  rows.push(["  Маржа/мес от новой закупки",  Math.round(totalProfit)]);
+  rows.push(["  ИТОГО прогноз маржи",    Math.round(stockMonthlyProfit + totalProfit)]);
+  const stockEndRow = rows.length;
+
   // CORE / PROBE summary
   rows.push([]);
-  rows.push(["Пул", "Бюджет", "Потрачено", "Позиций", "Бутылок", "Прибыль"]);
+  rows.push(["Пул", "Бюджет", "Потрачено", "Позиций", "Купить бут.", "Маржа от закупки"]);
   const poolHdrRow = rows.length - 1;
   const coreList  = picked.filter(c => c.bucket === "core");
   const probeList = picked.filter(c => c.bucket === "probe");
@@ -849,6 +894,7 @@ async function writeMatrix(
       c.type,
       c.subgroup,
       c.name,
+      c.currentStock,
       c.targetUnits,
       Math.round(c.unitCost),
       Math.round(c.totalCost),
@@ -869,8 +915,8 @@ async function writeMatrix(
   fmt.push({
     updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" },
   });
-  // Column widths: №, Пул, Тип, Подгруппа, Название, Бутылок, Закуп, Сумма закупа, Розница, Маржа %, Прибыль, Скор, Поставщик, Цены
-  const widths = [50, 110, 90, 200, 360, 80, 100, 120, 100, 90, 110, 70, 200, 520];
+  // Column widths: №, Пул, Тип, Подгруппа, Название, Склад, Купить, Закуп, Сумма закупа, Розница, Маржа %, Прибыль, Скор, Поставщик, Цены
+  const widths = [50, 110, 90, 200, 360, 70, 80, 100, 120, 100, 90, 110, 70, 200, 520];
   for (let i = 0; i < widths.length; i++) {
     fmt.push({ updateDimensionProperties: {
       range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
@@ -909,6 +955,30 @@ async function writeMatrix(
       fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
     },
   });
+  // Stock forecast block
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: stockHdrRow, endRowIndex: stockHdrRow + 1, startColumnIndex: 0, endColumnIndex: 2 },
+      cell: { userEnteredFormat: { backgroundColor: { red: 0.18, green: 0.40, blue: 0.20 }, textFormat: { bold: true, foregroundColor: white } } },
+      fields: "userEnteredFormat(backgroundColor,textFormat)",
+    },
+  });
+  fmt.push({ mergeCells: { range: { sheetId, startRowIndex: stockHdrRow, endRowIndex: stockHdrRow + 1, startColumnIndex: 0, endColumnIndex: 2 }, mergeType: "MERGE_ALL" } });
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: stockHdrRow + 1, endRowIndex: stockEndRow, startColumnIndex: 1, endColumnIndex: 2 },
+      cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT", textFormat: { bold: true } } },
+      fields: "userEnteredFormat(numberFormat,horizontalAlignment,textFormat)",
+    },
+  });
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: stockEndRow - 1, endRowIndex: stockEndRow, startColumnIndex: 0, endColumnIndex: 2 },
+      cell: { userEnteredFormat: { backgroundColor: { red: 0.93, green: 0.97, blue: 0.93 } } },
+      fields: "userEnteredFormat.backgroundColor",
+    },
+  });
+
   // Pool block (CORE / PROBE summary)
   fmt.push({
     repeatCell: {
@@ -999,15 +1069,14 @@ async function writeMatrix(
     },
   });
   // Detail rows: numeric formats
-  // cols: 0=№ 1=Пул 2=Тип 3=Подгруппа 4=Название 5=Бутылок 6=Закуп 7=Сумма закупа 8=Розница 9=Маржа% 10=Прибыль 11=Скор 12=Поставщик 13=Цены
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 5, endColumnIndex: 6 }, cell: { userEnteredFormat: { numberFormat: FMT_INT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 6, endColumnIndex: 9 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 9, endColumnIndex: 10 }, cell: { userEnteredFormat: { numberFormat: FMT_PCT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 10, endColumnIndex: 11 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 11, endColumnIndex: 12 }, cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "0.00" }, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 13, endColumnIndex: 14 }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 9 } } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } });
+  // cols: 0=№ 1=Пул 2=Тип 3=Подгруппа 4=Название 5=Склад 6=Купить 7=Закуп 8=Сумма закупа 9=Розница 10=Маржа% 11=Прибыль 12=Скор 13=Поставщик 14=Цены
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 5, endColumnIndex: 7 }, cell: { userEnteredFormat: { numberFormat: FMT_INT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 7, endColumnIndex: 10 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 10, endColumnIndex: 11 }, cell: { userEnteredFormat: { numberFormat: FMT_PCT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 11, endColumnIndex: 12 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 12, endColumnIndex: 13 }, cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "0.00" }, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 14, endColumnIndex: 15 }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 9 } } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } });
   fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 0, endColumnIndex: 1 }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER", textFormat: { foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 } } } }, fields: "userEnteredFormat(horizontalAlignment,textFormat)" } });
-  // Pool column (col 1) — bold + colour-coded
   fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 1, endColumnIndex: 2 }, cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 9 }, horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat(textFormat,horizontalAlignment)" } });
   // Stripes per type, with probe rows tinted purple
   picked.forEach((c, idx) => {
