@@ -332,19 +332,35 @@ function computeAnnuals(summary: Awaited<ReturnType<typeof fetchSummary>>): Annu
   return { ytd, full2025, plan, pct, remaining, curYear, prevYear_: curYear - 1 };
 }
 
-async function fetchSummary(currentYM: string, n = 6) {
+function emptyMonthData(): Awaited<ReturnType<typeof fetchMonth>> {
+  return { byDay: new Map(), total: 0, totalGP: 0, checks: 0, uniqueCustomers: 0, retailTotal: 0, b2bTotal: 0 };
+}
+
+async function fetchSummary(currentYM: string, monthsBack = 6, monthsForward = 0) {
   const [cy, cm] = currentYM.split("-").map(Number);
   const months: string[] = [];
-  for (let i = n - 1; i >= 0; i--) {
+  // Прошлые месяцы + текущий
+  for (let i = monthsBack - 1; i >= 0; i--) {
     let m = cm - i, y = cy;
     while (m <= 0) { m += 12; y--; }
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+  }
+  // Будущие месяцы (для построения плана вперёд по году)
+  for (let i = 1; i <= monthsForward; i++) {
+    let m = cm + i, y = cy;
+    while (m > 12) { m -= 12; y++; }
     months.push(`${y}-${String(m).padStart(2, "0")}`);
   }
   const rows = [];
   for (const ym of months) {
     const ly = prevYear(ym);
-    process.stdout.write(`  ${ym} / ${ly}... `);
-    const [cur, last] = await Promise.all([fetchMonth(ym), fetchMonth(ly)]);
+    const isFuture = ym > currentYM;
+    process.stdout.write(`  ${ym} / ${ly}${isFuture ? " (план)" : ""}... `);
+    // Для будущих месяцев пропускаем запрос cur — данных нет, всё равно нули.
+    const [cur, last] = await Promise.all([
+      isFuture ? Promise.resolve(emptyMonthData()) : fetchMonth(ym),
+      fetchMonth(ly),
+    ]);
     const plan = last.total * 1.25;
     const pct  = plan > 0 ? (cur.total / plan) * 100 : 0;
     console.log(`✓ ${Math.round(cur.total).toLocaleString()} / plan ${Math.round(plan).toLocaleString()} (${pct.toFixed(0)}%)`);
@@ -395,12 +411,15 @@ async function writeDataSheet(
   for (const { ym, cur, last, plan, pct } of summary) {
     const gp = cur.total > 0 ? (cur.totalGP / cur.total) * 100 : 0;
     const isPlanMonth = ym >= PLAN_START_YM;
+    // Будущие месяцы: рисуем план, но факта 2026 нет — линия не должна
+    // падать в 0 после текущего месяца.
+    const isFutureMonth = ym > currentYM;
     monthlyRows.push([
       monthLabel(ym),
       isPlanMonth ? "" : Math.round(cur.total / 1000),
       isPlanMonth ? Math.round(last.total / 1000) : "",
       isPlanMonth ? Math.round(last.total * 0.25 / 1000) : "",
-      isPlanMonth ? Math.round(cur.total / 1000) : "",
+      (isPlanMonth && !isFutureMonth) ? Math.round(cur.total / 1000) : "",
       +pct.toFixed(1),
       cur.checks,
       +gp.toFixed(1),
@@ -1125,8 +1144,12 @@ async function main() {
   const lyData  = await fetchMonth(prevYear(currentYM));
   console.log(`      ${lyData.checks} receipts · ${Math.round(lyData.total).toLocaleString()} THB\n`);
 
-  console.log(`[3/4] Fetching 16-month summary (Jan 2025–now)...`);
-  const summary = await fetchSummary(currentYM, 16);
+  // Тянем все месяцы прошлого года + текущий + все будущие до Дек включительно,
+  // чтобы помесячный график вёл план по полному текущему году.
+  const monthsForward = Math.max(0, 12 - cm);
+  const monthsBack    = 16;
+  console.log(`[3/4] Fetching summary (${monthsBack} back + ${monthsForward} forward through Dec ${cy})...`);
+  const summary = await fetchSummary(currentYM, monthsBack, monthsForward);
 
   console.log(`\n[3.5/4] Fetching summary table data...`);
   const tableRows = await fetchSummaryTable(currentYM, curData, summary);
