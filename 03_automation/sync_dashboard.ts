@@ -979,7 +979,10 @@ async function writeDashboard(
     // Месяцы < PLAN_START_YM:  серый столбец "Факт".
     // Месяцы >= PLAN_START_YM: стек из "Факт 2025 база" (серо-голубой) + "Прирост +25%"
     //                          (оранжевый), плюс красная линия "Факт 2026".
-    // Линия идёт на правую ось, но обе оси имеют одинаковый viewWindow → шкалы совпадают.
+    // Все серии живут на ОДНОЙ левой оси — шкала одна, линию плана можно
+    // напрямую соотнести с фактом. Правую ось не используем намеренно:
+    // Google Sheets выбирает деления независимо для каждой оси, и идентичность
+    // шкал гарантируется только тем, что ось одна.
     {
       addChart: {
         chart: {
@@ -995,11 +998,6 @@ async function writeDashboard(
                 {
                   position: "LEFT_AXIS",
                   title: "тыс. THB",
-                  viewWindowOptions: { viewWindowMode: "EXPLICIT", viewWindowMin: 0, viewWindowMax: monthlyMaxKThb },
-                },
-                {
-                  position: "RIGHT_AXIS",
-                  title: "тыс. THB (факт 2026)",
                   viewWindowOptions: { viewWindowMode: "EXPLICIT", viewWindowMin: 0, viewWindowMax: monthlyMaxKThb },
                 },
               ],
@@ -1029,10 +1027,10 @@ async function writeDashboard(
                   color: { red: 0.98, green: 0.73, blue: 0.42, alpha: 1 },
                   dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
                 },
-                // Факт 2026 — тёмно-красная линия на ПРАВОЙ оси (шкалы совпадают)
+                // Факт 2026 — тёмно-красная линия на той же ЛЕВОЙ оси
                 {
                   series: { sourceRange: { sources: [dataRange(4, 5, monthlyRange.start, monthlyRange.end)] } },
-                  targetAxis: "RIGHT_AXIS",
+                  targetAxis: "LEFT_AXIS",
                   type: "LINE",
                   color: wineRed,
                   lineStyle: { width: 3, type: "SOLID" },
