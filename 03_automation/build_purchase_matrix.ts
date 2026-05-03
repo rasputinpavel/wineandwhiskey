@@ -46,6 +46,12 @@ interface MatrixParams {
   enforce_type_caps: number;       // 1 = hard cap per type (red/white/sparkling), 0 = free pool
   enforce_country_caps: number;    // 1 = hard cap per (type, subgroup) — country/grape, 0 = no cap
   min_margin_pct: number;          // skip items with margin below this % (0 = no filter)
+  // Core / Probe split
+  probe_budget_pct: number;        // % of total budget reserved for "probe" experimental SKUs
+  core_min_velocity: number;       // min bottles/month to enter the core matrix
+  core_min_target_units: number;   // min order qty per SKU in core (for supplier negotiation leverage)
+  core_min_unit_retail: number;    // min avg retail price (฿) — cuts off bottom-shelf SKUs
+  probe_min_margin_pct: number;    // min margin % for a probe candidate (filter weak experiments)
 }
 
 const DEFAULTS: MatrixParams = {
@@ -58,6 +64,11 @@ const DEFAULTS: MatrixParams = {
   enforce_type_caps: 1,
   enforce_country_caps: 1,
   min_margin_pct: 20,
+  probe_budget_pct: 15,
+  core_min_velocity: 0.5,
+  core_min_target_units: 3,
+  core_min_unit_retail: 600,
+  probe_min_margin_pct: 30,
 };
 
 // ─── Sheets boilerplate ────────────────────────────────────────────────────
@@ -173,7 +184,7 @@ async function ensureParamsTab(): Promise<void> {
 
   const paramRows = [
     ["Параметр", "Значение", "Описание"],
-    ["budget",                DEFAULTS.budget,                "Бюджет на закупку, ฿"],
+    ["budget",                DEFAULTS.budget,                "Общий бюджет закупки, ฿. Делится на основной пул и эксперимент."],
     ["target_weeks_of_stock", DEFAULTS.target_weeks_of_stock, "Недель запаса (4 = месяц)"],
     ["w_margin",              DEFAULTS.w_margin,              "Вес маржинальности в скоринге"],
     ["w_velocity",            DEFAULTS.w_velocity,            "Вес оборачиваемости (velocity) в скоринге"],
@@ -182,45 +193,71 @@ async function ensureParamsTab(): Promise<void> {
     ["enforce_type_caps",     DEFAULTS.enforce_type_caps,     "1 = жёсткий лимит по типам (red/white/spark), 0 = свободный пул"],
     ["enforce_country_caps",  DEFAULTS.enforce_country_caps,  "1 = жёсткий лимит по подгруппе (страна для красных, сорт для белых), 0 = только soft-бонус через w_balance"],
     ["min_margin_pct",        DEFAULTS.min_margin_pct,        "Минимальная маржа позиции в %. Всё что ниже — отбрасывается на этапе фильтра"],
+    ["probe_budget_pct",      DEFAULTS.probe_budget_pct,      "% бюджета на эксперимент. Например 15 → core = 85%, probe = 15%"],
+    ["core_min_velocity",     DEFAULTS.core_min_velocity,     "Min бут/мес для попадания в core. 0.5 = ≥ ~7-8 бут за 15 мес"],
+    ["core_min_target_units", DEFAULTS.core_min_target_units, "Min объём заказа в core (для спецусловий с поставщиком). 3 = не берём по 1-2 бут"],
+    ["core_min_unit_retail",  DEFAULTS.core_min_unit_retail,  "Min средняя розничная цена для core, ฿. Отрезает дешёвый низ ассортимента"],
+    ["probe_min_margin_pct",  DEFAULTS.probe_min_margin_pct,  "Min маржа для probe-кандидата в %. Слабые эксперименты не берём"],
   ];
-  await writeValuesPlain(PARAMS_TAB, "A1:C10", paramRows);
+  await writeValuesPlain(PARAMS_TAB, `A1:C${paramRows.length}`, paramRows);
 
   // Methodology block
   const docRows: any[][] = [
     [], [],
     ["МЕТОДОЛОГИЯ"],
+    ["Бюджет делится на ДВА пула: ОСНОВА (core) и ЭКСПЕРИМЕНТ (probe). У них разные цели и разные правила отбора."],
+    [],
+    ["ОСНОВА (core_budget = budget × (100 − probe_budget_pct) / 100):"],
+    ["Цель: оборачиваемость и прибыль. Берём проверенные SKU с предсказуемым спросом, заказываем партиями (≥ core_min_target_units штук), чтобы у поставщика была причина дать спецусловия."],
+    ["В core попадают позиции, которые ОДНОВРЕМЕННО:"],
+    ["  • velocity ≥ core_min_velocity (бут/мес)"],
+    ["  • средняя розничная цена ≥ core_min_unit_retail (отрезает «дешёвый низ»)"],
+    ["  • target_units ≥ core_min_target_units (иначе мелкий заказ — нет причин брать)"],
+    ["  • маржа ≥ min_margin_pct"],
+    [],
+    ["ЭКСПЕРИМЕНТ (probe_budget = budget × probe_budget_pct / 100):"],
+    ["Цель: найти будущих чемпионов для следующих закупок. Берём по 1-2 бутылки от перспективных, но ещё не доказавших velocity SKU. Через 2-3 месяца смотрим — кто из probe вышел в высокую velocity, тех переводим в core."],
+    ["В probe попадают позиции, которые НЕ прошли в core, но имеют:"],
+    ["  • маржу ≥ probe_min_margin_pct (отсев слабых экспериментов)"],
+    ["  • velocity > 0 (хоть кто-то это покупает)"],
+    [],
     ["Алгоритм пошагово:"],
     ["1. Загружаем продажи из Loyverse за period_months месяцев. Категории: Red Wine / White Wine / Sparkling Wine."],
     ["2. Для каждой позиции считаем: velocity_per_month = units / period_months, unit_cost (ср. закуп), unit_retail, margin = (revenue−cost)/revenue."],
-    ["3. Фильтр: отбрасываются позиции с margin ≤ 0 и margin < min_margin_pct/100."],
+    ["3. Базовый фильтр: отбрасываются позиции с margin ≤ 0 и margin < min_margin_pct/100."],
     ["4. target_units = ceil(velocity_per_month × target_weeks_of_stock / 4.345). Это объём, который мы покупаем — ровно столько, сколько уйдёт за заданное число недель по текущей скорости продаж."],
-    ["5. Для каждого типа (red/white/spark) нормализуем margin и velocity к [0,1] (делим на максимум внутри типа). Это чтобы редкие премиум-вина не задавили дешёвые массовые на одном поле."],
-    ["6. Базовый скор позиции: score = w_margin × margin_norm + w_velocity × velocity_norm."],
-    ["7. Бюджеты по типам = budget × (доля продаж типа в бутылках за period_months). Например при 28% продаж красного, на красное идёт 28% бюджета. Применяется при enforce_type_caps = 1."],
-    ["8. Бюджеты по подгруппам = type_budget × (доля продаж подгруппы внутри типа). Применяется при enforce_country_caps = 1."],
-    ["9. ФАЗА 1 (покрытие). Из каждой подгруппы (страна для красных, сорт для белых) берём топ-1 по базовому скору, который влезает в остатки бюджета. Это гарантирует, что в матрице есть хотя бы 1 позиция каждого региона/сорта."],
-    ["10. ФАЗА 2 (жадная заливка). Для каждого кандидата считаем effective_score = score + w_balance × (1 − current_units/target_units). Чем меньше подгруппа добрана к своему таргету — тем выше бонус. Кандидаты сортируются по effective_score / unit_cost (макс возврат на ฿) и берутся по очереди, пока бюджет/лимиты позволяют."],
-    ["11. ФАЗА 3 (релаксация). Если суммарно потрачено < 95% бюджета и type/country-кэпы не дали добрать — лимиты снимаются и финальные крошки добиваются по тому же скору."],
+    ["5. Разбиваем кандидатов на core / probe по правилам выше. Что не попало никуда — отбрасывается."],
+    ["6. Для каждого пула отдельно: нормализуем margin и velocity внутри типа (red/white/spark), считаем score = w_margin × margin_norm + w_velocity × velocity_norm."],
+    ["7. Бюджеты по типам = pool_budget × (доля продаж типа в бутылках). Применяется при enforce_type_caps = 1."],
+    ["8. Бюджеты по подгруппам внутри типа = type_budget × (доля подгруппы). Применяется при enforce_country_caps = 1. Действует только в core."],
+    ["9. ФАЗА 1 в core (покрытие). Из каждой подгруппы берём топ-1 по скору. Гарантирует ≥ 1 позиции каждого региона/сорта."],
+    ["10. ФАЗА 2 в core (жадная заливка). Кандидаты сортируются по effective_score / unit_cost (макс возврат на ฿) и берутся по очереди, пока бюджет/кэпы позволяют. effective_score = score + w_balance × deficit (бонус для недо-наполненных подгрупп)."],
+    ["11. ФАЗА 3 в core (релаксация). Если потрачено < 95% core_budget — снимаем кэпы и добиваем."],
+    ["12. PROBE-фаза. Кандидаты сортируются по margin_pct (≠ score — здесь маржа важнее velocity, потому что velocity у пробников по определению низкая). Берётся по 1 (если target_units = 1) или min(target_units, 2) бутылок, пока probe_budget не исчерпан."],
     [],
     ["Что значит каждая ручка:"],
     ["• budget — общий лимит закупа. По умолчанию 300 000 ฿."],
-    ["• target_weeks_of_stock — насколько глубокий запас. 4 = на месяц по текущей скорости продаж. Увеличить — больше денег уйдёт на топовые SKU и меньше на разнообразие."],
-    ["• w_margin — насколько важно «зарабатывать побольше с бутылки». Поднять — алгоритм будет предпочитать высокомаржинальные позиции."],
-    ["• w_velocity — насколько важно «продавать быстро». Поднять — топовые бестселлеры будут сильно перевешивать редкие позиции."],
-    ["• w_balance — насколько вытягивать недопредставленные подгруппы. Поднять — сильнее размажется по всем странам/сортам."],
-    ["• enforce_type_caps — 1: бюджет красного/белого/игристого жёстко равен их историческому весу в продажах. 0: эти три типа конкурируют за общий пул, можно перетянуть бюджет в более маржинальный тип."],
-    ["• enforce_country_caps — 1: бюджет каждой страны (для красных) и сорта (для белых) тоже жёстко ограничен историческим весом в продажах внутри типа. Это блокирует ситуацию когда один SKU тянет всю страну (например Shumi Kindzmarauli по Грузии). 0: внутри типа все подгруппы конкурируют свободно."],
-    ["• min_margin_pct — порог маржи в % ниже которого позиция вообще не рассматривается. Защита от убыточных и низкомаржинальных бутылок."],
-    ["• period_months — окно истории для расчёта velocity и средних цен. Чем длиннее — тем стабильнее, но менее реактивно к свежим трендам."],
+    ["• probe_budget_pct — какая доля бюджета режется на эксперимент. 15 = на core пойдёт 85%, на probe 15%."],
+    ["• target_weeks_of_stock — глубина запаса. 4 = на месяц."],
+    ["• w_margin / w_velocity — веса в скоре core. Поднять w_margin → больше премиум-маржинальных. Поднять w_velocity → больше топовых бестселлеров."],
+    ["• w_balance — соft-бонус для недо-наполненных подгрупп при жадной заливке."],
+    ["• enforce_type_caps — 1: бюджет красного/белого/игристого жёстко равен их историческому весу. 0: типы конкурируют за общий пул."],
+    ["• enforce_country_caps — 1: бюджет каждой страны/сорта внутри типа жёстко ограничен. 0: подгруппы конкурируют свободно."],
+    ["• min_margin_pct — общий порог маржи. Всё что ниже — отбрасывается на самом первом фильтре, до деления на core/probe."],
+    ["• core_min_velocity — порог попадания в core по velocity. 0.5 ≈ 7-8 бут за 15 мес. Это и есть граница «предсказуемого спроса»."],
+    ["• core_min_target_units — минимальная партия в core. 3 = не берём по 1-2, иначе нет смысла торговаться с поставщиком."],
+    ["• core_min_unit_retail — минимальная средняя розничная цена для core. Отрезает дешёвый низ. По умолчанию 600 ฿."],
+    ["• probe_min_margin_pct — порог маржи для эксперимента. Дефолт 30 — слабые эксперименты не берём."],
+    ["• period_months — окно истории. Чем длиннее — тем стабильнее, но менее реактивно к свежим трендам."],
     [],
     ["Что считается прибылью в матрице:"],
     ["expected_profit на позицию = (unit_retail − unit_cost) × target_units."],
-    ["Это ожидаемая прибыль за месяц, исходя из того что весь target_units будет продан по текущей розничной цене и текущему закупу. Сумма по всем позициям = ожидаемая месячная маржа на закупке."],
+    ["Это ожидаемая прибыль за месяц, исходя из того что весь target_units будет продан по текущей розничной цене и текущему закупу. Суммируется отдельно по core и probe."],
     [],
     ["Как пользоваться:"],
     ["1. Меняем числа в столбце B (Значение)."],
     ["2. Запускаем npx tsx 03_automation/build_purchase_matrix.ts (или нажимаем кнопку «Пересчитать матрицу» из меню Sheets, если настроен webhook)."],
-    ["3. Смотрим новый расклад на листе «Закупочная матрица»."],
+    ["3. Смотрим новый расклад на листе «Закупочная матрица». Сводки сверху показывают core / probe / итого."],
   ];
   // Write methodology starting after paramRows + blank rows
   await writeValuesPlain(PARAMS_TAB, `A${paramRows.length + 1}:C${paramRows.length + docRows.length}`, docRows);
@@ -301,6 +338,8 @@ async function loadParams(): Promise<MatrixParams> {
 
 type WineType = "Красное" | "Белое" | "Игристое";
 
+type Bucket = "core" | "probe";
+
 interface Candidate {
   itemId: string;
   name: string;
@@ -312,13 +351,14 @@ interface Candidate {
   unitRetail: number;        // avg ฿
   marginPct: number;         // 0..1
   loyverseSupplier: string;
+  bucket: Bucket;            // core (regular) or probe (experimental)
   // computed:
-  targetUnits: number;
+  targetUnits: number;       // for core: ceil(velocity × weeks/4.345); for probe: 1 or 2
   totalCost: number;
   expectedProfit: number;
-  marginNorm: number;        // 0..1 within type
-  velocityNorm: number;      // 0..1 within type
-  baseScore: number;         // = w_margin × marginNorm + w_velocity × velocityNorm
+  marginNorm: number;        // 0..1 within type (re-normalized within bucket)
+  velocityNorm: number;      // 0..1 within type (re-normalized within bucket)
+  baseScore: number;
 }
 
 interface Supplier { name: string; price: number; year?: number; volume?: string; itemName: string; }
@@ -451,9 +491,14 @@ async function main() {
   }
   console.log(`  ${acc.size} wine items with sales.`);
 
-  // 5. Build candidates
+  // 5. Build raw candidates (everything that passes basic filters)
   const weeksFactor = params.target_weeks_of_stock / 4.345;
-  const candidates: Candidate[] = [];
+  interface RawCandidate {
+    itemId: string; name: string; type: WineType; subgroup: string;
+    units: number; velocityPerMonth: number; unitCost: number; unitRetail: number;
+    marginPct: number; loyverseSupplier: string; coreTargetUnits: number;
+  }
+  const raw: RawCandidate[] = [];
   for (const [itemId, a] of acc) {
     if (a.units <= 0 || a.revenue <= 0) continue;
     const meta = itemMeta.get(itemId)!;
@@ -470,40 +515,77 @@ async function main() {
       subgroup = "Игристое";
     }
     const velocityPerMonth = a.units / params.period_months;
-    const targetUnits = Math.max(0, Math.ceil(velocityPerMonth * weeksFactor));
-    if (targetUnits === 0) continue;
+    const coreTargetUnits = Math.max(0, Math.ceil(velocityPerMonth * weeksFactor));
     const unitCost   = a.cost / a.units;
     const unitRetail = a.revenue / a.units;
     const marginPct  = (a.revenue - a.cost) / a.revenue;
     if (unitCost <= 0 || marginPct <= 0) continue;
-    if (marginPct < params.min_margin_pct / 100) continue; // user-defined margin floor
-    const totalCost      = unitCost * targetUnits;
-    const expectedProfit = (unitRetail - unitCost) * targetUnits;
-    candidates.push({
-      itemId, name: meta.name, type, subgroup,
-      units: a.units, velocityPerMonth, unitCost, unitRetail, marginPct,
-      loyverseSupplier: meta.supplier,
-      targetUnits, totalCost, expectedProfit,
-      marginNorm: 0, velocityNorm: 0, baseScore: 0,
-    });
+    if (marginPct < params.min_margin_pct / 100) continue;
+    raw.push({ itemId, name: meta.name, type, subgroup, units: a.units, velocityPerMonth, unitCost, unitRetail, marginPct, loyverseSupplier: meta.supplier, coreTargetUnits });
   }
-  console.log(`  ${candidates.length} candidates after filters.`);
+  console.log(`  ${raw.length} raw candidates after base filters.`);
 
-  // 6. Normalize within type, compute score
-  for (const t of ["Красное", "Белое", "Игристое"] as WineType[]) {
-    const inType = candidates.filter(c => c.type === t);
-    const maxMargin = Math.max(...inType.map(c => c.marginPct), 0.0001);
-    const maxVelocity = Math.max(...inType.map(c => c.velocityPerMonth), 0.0001);
-    for (const c of inType) {
-      c.marginNorm = c.marginPct / maxMargin;
-      c.velocityNorm = c.velocityPerMonth / maxVelocity;
-      c.baseScore = params.w_margin * c.marginNorm + params.w_velocity * c.velocityNorm;
+  // 6. Split into core vs probe
+  //    core: passes velocity, target_units, retail filters → orders coreTargetUnits bottles
+  //    probe: doesn't make core but margin ≥ probe_min_margin_pct → orders min(coreTargetUnits, 2) or 1 bottle
+  const candidates: Candidate[] = [];
+  for (const r of raw) {
+    const fitsCore =
+      r.velocityPerMonth >= params.core_min_velocity &&
+      r.coreTargetUnits  >= params.core_min_target_units &&
+      r.unitRetail       >= params.core_min_unit_retail;
+    if (fitsCore) {
+      const targetUnits = r.coreTargetUnits;
+      candidates.push({
+        ...r,
+        bucket: "core",
+        targetUnits,
+        totalCost: r.unitCost * targetUnits,
+        expectedProfit: (r.unitRetail - r.unitCost) * targetUnits,
+        marginNorm: 0, velocityNorm: 0, baseScore: 0,
+      });
+    } else if (r.marginPct >= params.probe_min_margin_pct / 100) {
+      // probe: small experimental order — 1 or 2 bottles
+      const targetUnits = Math.max(1, Math.min(r.coreTargetUnits, 2));
+      candidates.push({
+        ...r,
+        bucket: "probe",
+        targetUnits,
+        totalCost: r.unitCost * targetUnits,
+        expectedProfit: (r.unitRetail - r.unitCost) * targetUnits,
+        marginNorm: 0, velocityNorm: 0, baseScore: 0,
+      });
+    }
+    // else: dropped entirely
+  }
+  const coreCandidates  = candidates.filter(c => c.bucket === "core");
+  const probeCandidates = candidates.filter(c => c.bucket === "probe");
+  console.log(`  Core candidates:  ${coreCandidates.length}`);
+  console.log(`  Probe candidates: ${probeCandidates.length}`);
+
+  // 7. Normalize within type within bucket, compute score
+  for (const bucket of ["core", "probe"] as Bucket[]) {
+    const inBucket = candidates.filter(c => c.bucket === bucket);
+    for (const t of ["Красное", "Белое", "Игристое"] as WineType[]) {
+      const inType = inBucket.filter(c => c.type === t);
+      const maxMargin   = Math.max(...inType.map(c => c.marginPct), 0.0001);
+      const maxVelocity = Math.max(...inType.map(c => c.velocityPerMonth), 0.0001);
+      for (const c of inType) {
+        c.marginNorm   = c.marginPct / maxMargin;
+        c.velocityNorm = c.velocityPerMonth / maxVelocity;
+        c.baseScore    = params.w_margin * c.marginNorm + params.w_velocity * c.velocityNorm;
+      }
     }
   }
 
-  // 7. Type budget allocation by historical units share
+  // 8. Budget split
+  const probeBudget = params.budget * params.probe_budget_pct / 100;
+  const coreBudget  = params.budget - probeBudget;
+  console.log(`  Core budget: ${Math.round(coreBudget).toLocaleString("ru-RU")} ฿ · Probe budget: ${Math.round(probeBudget).toLocaleString("ru-RU")} ฿`);
+
+  // 9. Type budget allocation within CORE (probe is small enough to skip caps)
   const typeUnits = { "Красное": 0, "Белое": 0, "Игристое": 0 };
-  for (const c of candidates) typeUnits[c.type] += c.units;
+  for (const c of coreCandidates) typeUnits[c.type] += c.units;
   const totalUnits = typeUnits["Красное"] + typeUnits["Белое"] + typeUnits["Игристое"];
   const typeShare: Record<WineType, number> = {
     "Красное":  totalUnits > 0 ? typeUnits["Красное"]  / totalUnits : 0,
@@ -511,38 +593,39 @@ async function main() {
     "Игристое": totalUnits > 0 ? typeUnits["Игристое"] / totalUnits : 0,
   };
   const typeBudget: Record<WineType, number> = {
-    "Красное":  params.budget * typeShare["Красное"],
-    "Белое":    params.budget * typeShare["Белое"],
-    "Игристое": params.budget * typeShare["Игристое"],
+    "Красное":  coreBudget * typeShare["Красное"],
+    "Белое":    coreBudget * typeShare["Белое"],
+    "Игристое": coreBudget * typeShare["Игристое"],
   };
   const typeSpent: Record<WineType, number> = { "Красное": 0, "Белое": 0, "Игристое": 0 };
 
-  // Subgroup historical units (within type) → subgroup budget cap (proportional to share within type)
-  const subgroupUnits = new Map<string, number>();   // key = type|subgroup
-  const subgroupBudget = new Map<string, number>();  // key = type|subgroup
-  const subgroupSpent  = new Map<string, number>();  // key = type|subgroup
-  const subgroupTargetUnits = new Map<string, number>(); // for balance bonus (rough bottle target)
-  for (const c of candidates) {
+  // Subgroup caps within core
+  const subgroupUnits = new Map<string, number>();
+  const subgroupBudget = new Map<string, number>();
+  const subgroupSpent  = new Map<string, number>();
+  const subgroupTargetUnits = new Map<string, number>();
+  for (const c of coreCandidates) {
     const k = `${c.type}|${c.subgroup}`;
     subgroupUnits.set(k, (subgroupUnits.get(k) ?? 0) + c.units);
   }
   for (const [k, u] of subgroupUnits) {
     const type = k.split("|")[0] as WineType;
+    if (typeUnits[type] === 0) continue;
     const share = u / typeUnits[type];
     subgroupBudget.set(k, typeBudget[type] * share);
     subgroupSpent.set(k, 0);
-    // Rough bottle target: subgroup_share × (type_budget / avg_unit_cost_in_subgroup)
-    const avgCostInSub = candidates.filter(c => c.type === type && c.subgroup === k.split("|")[1])
-      .reduce((s, c, _, arr) => s + c.unitCost / arr.length, 0) || 1;
-    subgroupTargetUnits.set(k, (typeBudget[type] * share) / Math.max(avgCostInSub, 1));
+    const sub = k.split("|")[1];
+    const inSub = coreCandidates.filter(c => c.type === type && c.subgroup === sub);
+    const avgCost = inSub.length > 0 ? inSub.reduce((s, c) => s + c.unitCost, 0) / inSub.length : 1;
+    subgroupTargetUnits.set(k, (typeBudget[type] * share) / Math.max(avgCost, 1));
   }
 
-  // 8. Greedy selection
-  console.log("\n[3/4] Greedy selection...");
+  // 10. CORE greedy selection
+  console.log("\n[3/4] Core greedy selection...");
   const picked = new Set<string>();
   const subgroupPicked = new Map<string, number>();
-  let totalSpent = 0;
-  let totalProfit = 0;
+  let coreSpent = 0;
+  let coreProfit = 0;
 
   function effectiveScore(c: Candidate): number {
     const k = `${c.type}|${c.subgroup}`;
@@ -552,9 +635,9 @@ async function main() {
     return c.baseScore + params.w_balance * deficit;
   }
 
-  function tryPick(c: Candidate, ignoreTypeCap = false, ignoreCountryCap = false): boolean {
+  function tryPickCore(c: Candidate, ignoreTypeCap = false, ignoreCountryCap = false): boolean {
     if (picked.has(c.itemId)) return false;
-    if (totalSpent + c.totalCost > params.budget) return false;
+    if (coreSpent + c.totalCost > coreBudget) return false;
     if (params.enforce_type_caps && !ignoreTypeCap) {
       if (typeSpent[c.type] + c.totalCost > typeBudget[c.type]) return false;
     }
@@ -564,17 +647,17 @@ async function main() {
       if ((subgroupSpent.get(k) ?? 0) + c.totalCost > cap) return false;
     }
     picked.add(c.itemId);
-    totalSpent += c.totalCost;
+    coreSpent += c.totalCost;
+    coreProfit += c.expectedProfit;
     typeSpent[c.type] += c.totalCost;
     subgroupSpent.set(k, (subgroupSpent.get(k) ?? 0) + c.totalCost);
-    totalProfit += c.expectedProfit;
     subgroupPicked.set(k, (subgroupPicked.get(k) ?? 0) + c.targetUnits);
     return true;
   }
 
-  // Phase 1: mandatory subgroup coverage — top-1 by baseScore from each subgroup that fits.
+  // Phase 1: coverage — top-1 from each core subgroup
   const bySubgroup = new Map<string, Candidate[]>();
-  for (const c of candidates) {
+  for (const c of coreCandidates) {
     const k = `${c.type}|${c.subgroup}`;
     if (!bySubgroup.has(k)) bySubgroup.set(k, []);
     bySubgroup.get(k)!.push(c);
@@ -582,58 +665,73 @@ async function main() {
   for (const arr of bySubgroup.values()) {
     arr.sort((a, b) => b.baseScore - a.baseScore);
     for (const c of arr) {
-      // Coverage phase ignores country cap so every subgroup gets at least one position.
-      if (tryPick(c, /*ignoreTypeCap*/ false, /*ignoreCountryCap*/ true)) break;
+      if (tryPickCore(c, false, true)) break;
     }
   }
-  console.log(`  Phase 1 (coverage): ${picked.size} positions, ${Math.round(totalSpent).toLocaleString("ru-RU")} ฿`);
+  console.log(`  Phase 1 (coverage): ${[...picked].length} positions, ${Math.round(coreSpent).toLocaleString("ru-RU")} ฿`);
 
-  // Phase 2: greedy fill — re-sort by effective_score / unit_cost (max profit per ฿) until budget tight.
-  let safety = candidates.length * 2;
+  // Phase 2: greedy fill of core
+  let safety = coreCandidates.length * 2;
   while (safety-- > 0) {
-    const remaining = candidates.filter(c => !picked.has(c.itemId) && c.totalCost <= params.budget - totalSpent);
+    const remaining = coreCandidates.filter(c => !picked.has(c.itemId) && c.totalCost <= coreBudget - coreSpent);
     if (remaining.length === 0) break;
-    // Score density = effective_score / unit_cost (higher = better return per ฿)
-    remaining.sort((a, b) => {
-      const da = effectiveScore(a) / Math.max(a.unitCost, 1);
-      const db = effectiveScore(b) / Math.max(b.unitCost, 1);
-      return db - da;
-    });
+    remaining.sort((a, b) => effectiveScore(b) / Math.max(b.unitCost, 1) - effectiveScore(a) / Math.max(a.unitCost, 1));
     let progress = false;
     for (const c of remaining) {
-      if (tryPick(c)) { progress = true; break; }
+      if (tryPickCore(c)) { progress = true; break; }
     }
     if (!progress) break;
   }
-  console.log(`  Phase 2 (fill): ${picked.size} positions, ${Math.round(totalSpent).toLocaleString("ru-RU")} ฿`);
+  console.log(`  Phase 2 (fill): ${[...picked].length} positions, ${Math.round(coreSpent).toLocaleString("ru-RU")} ฿`);
 
-  // Phase 3: if budget left and any caps blocked further picks — relax both type AND country caps.
-  if ((params.enforce_type_caps || params.enforce_country_caps) && totalSpent < params.budget * 0.95) {
-    safety = candidates.length;
+  // Phase 3: relax caps if core_budget under-utilized
+  if ((params.enforce_type_caps || params.enforce_country_caps) && coreSpent < coreBudget * 0.95) {
+    safety = coreCandidates.length;
     while (safety-- > 0) {
-      const remaining = candidates.filter(c => !picked.has(c.itemId) && c.totalCost <= params.budget - totalSpent);
+      const remaining = coreCandidates.filter(c => !picked.has(c.itemId) && c.totalCost <= coreBudget - coreSpent);
       if (remaining.length === 0) break;
       remaining.sort((a, b) => effectiveScore(b) / Math.max(b.unitCost, 1) - effectiveScore(a) / Math.max(a.unitCost, 1));
       let progress = false;
       for (const c of remaining) {
-        if (tryPick(c, /*ignoreTypeCap*/ true, /*ignoreCountryCap*/ true)) { progress = true; break; }
+        if (tryPickCore(c, true, true)) { progress = true; break; }
       }
       if (!progress) break;
     }
-    console.log(`  Phase 3 (relax caps): ${picked.size} positions, ${Math.round(totalSpent).toLocaleString("ru-RU")} ฿`);
+    console.log(`  Phase 3 (relax caps): ${[...picked].length} positions, ${Math.round(coreSpent).toLocaleString("ru-RU")} ฿`);
   }
 
+  // 11. PROBE selection — sort by margin × score density, take while probe_budget allows
+  console.log("\n[3/4] Probe selection...");
+  let probeSpent = 0;
+  let probeProfit = 0;
+  const probeSorted = [...probeCandidates]
+    .sort((a, b) => (b.marginPct * b.baseScore) / Math.max(b.unitCost, 1) - (a.marginPct * a.baseScore) / Math.max(a.unitCost, 1));
+  for (const c of probeSorted) {
+    if (probeSpent + c.totalCost > probeBudget) continue;
+    picked.add(c.itemId);
+    probeSpent += c.totalCost;
+    probeProfit += c.expectedProfit;
+  }
+  console.log(`  Probe: ${probeCandidates.filter(c => picked.has(c.itemId)).length} positions, ${Math.round(probeSpent).toLocaleString("ru-RU")} ฿`);
+
+  // Sort final list: bucket → type → subgroup → profit desc
   const pickedList = candidates.filter(c => picked.has(c.itemId));
   pickedList.sort((a, b) => {
+    const bucketOrder = { "core": 0, "probe": 1 };
+    if (bucketOrder[a.bucket] !== bucketOrder[b.bucket]) return bucketOrder[a.bucket] - bucketOrder[b.bucket];
     const typeOrder = { "Красное": 0, "Белое": 1, "Игристое": 2 };
     if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
     if (a.subgroup !== b.subgroup) return a.subgroup.localeCompare(b.subgroup);
     return b.expectedProfit - a.expectedProfit;
   });
 
-  console.log(`\n  Total: ${pickedList.length} позиций · ${Math.round(totalSpent).toLocaleString("ru-RU")} ฿ закуп · ${Math.round(totalProfit).toLocaleString("ru-RU")} ฿ ожидаемая прибыль`);
+  const totalSpent  = coreSpent + probeSpent;
+  const totalProfit = coreProfit + probeProfit;
+  console.log(`\n  TOTAL: ${pickedList.length} позиций · ${Math.round(totalSpent).toLocaleString("ru-RU")} ฿ закуп · ${Math.round(totalProfit).toLocaleString("ru-RU")} ฿ ожидаемая прибыль`);
+  console.log(`         core: ${pickedList.filter(c => c.bucket === "core").length} поз · ${Math.round(coreSpent).toLocaleString("ru-RU")} ฿ · ${Math.round(coreProfit).toLocaleString("ru-RU")} ฿ profit`);
+  console.log(`         probe: ${pickedList.filter(c => c.bucket === "probe").length} поз · ${Math.round(probeSpent).toLocaleString("ru-RU")} ฿ · ${Math.round(probeProfit).toLocaleString("ru-RU")} ฿ profit`);
 
-  // 9. Supplier lookup from price-service
+  // 12. Supplier lookup
   console.log("\n[4/4] Looking up suppliers in price-service...");
   const supplierMap = new Map<string, Supplier[]>();
   let lookupCount = 0;
@@ -644,8 +742,15 @@ async function main() {
   }
   console.log(`  Suppliers found for ${lookupCount}/${pickedList.length} positions.`);
 
-  // 10. Write output
-  await writeMatrix(pickedList, supplierMap, params, typeShare, typeBudget, typeSpent, totalSpent, totalProfit, fromIso, toIso);
+  // 13. Write output
+  await writeMatrix(
+    pickedList, supplierMap, params,
+    typeShare, typeBudget, typeSpent,
+    coreBudget, coreSpent, coreProfit,
+    probeBudget, probeSpent, probeProfit,
+    totalSpent, totalProfit,
+    fromIso, toIso,
+  );
   console.log(`\n  → https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit\n`);
 }
 
@@ -658,8 +763,9 @@ async function writeMatrix(
   typeShare: Record<WineType, number>,
   typeBudget: Record<WineType, number>,
   typeSpent: Record<WineType, number>,
-  totalSpent: number,
-  totalProfit: number,
+  coreBudget: number, coreSpent: number, coreProfit: number,
+  probeBudget: number, probeSpent: number, probeProfit: number,
+  totalSpent: number, totalProfit: number,
   fromDate: string,
   toDate: string,
 ) {
@@ -670,39 +776,57 @@ async function writeMatrix(
   const white = { red: 1, green: 1, blue: 1 };
 
   const headers = [
-    "№", "Тип", "Подгруппа", "Название", "Бутылок", "Закуп ฿", "Сумма закупа", "Розница ฿", "Маржа %",
+    "№", "Пул", "Тип", "Подгруппа", "Название", "Бутылок", "Закуп ฿", "Сумма закупа", "Розница ฿", "Маржа %",
     "Прибыль", "Скор", "Поставщик (Loyverse)", "Цены price-service",
   ];
   const nCols = headers.length;
   const rows: any[][] = [];
 
   // Title
-  rows.push([`Закупочная матрица · бюджет ${params.budget.toLocaleString("ru-RU")} ฿ · период исходных данных ${fromDate} → ${toDate}`]);
+  rows.push([`Закупочная матрица · бюджет ${params.budget.toLocaleString("ru-RU")} ฿ (core ${(100 - params.probe_budget_pct)}% / probe ${params.probe_budget_pct}%) · период ${fromDate} → ${toDate}`]);
 
   // Parameter readout
   rows.push([]);
   rows.push(["Параметр", "Значение"]);
   const paramHdrRow = rows.length - 1;
-  rows.push(["Бюджет",                     params.budget]);
-  rows.push(["Недель запаса",              params.target_weeks_of_stock]);
-  rows.push(["Вес маржи",                  params.w_margin]);
-  rows.push(["Вес velocity",               params.w_velocity]);
-  rows.push(["Вес сбалансированности",     params.w_balance]);
-  rows.push(["Период истории, мес.",       params.period_months]);
-  rows.push(["Жёсткие лимиты по типам (1/0)", params.enforce_type_caps]);
+  rows.push(["Общий бюджет",                params.budget]);
+  rows.push(["% на эксперимент",            params.probe_budget_pct]);
+  rows.push(["Недель запаса",               params.target_weeks_of_stock]);
+  rows.push(["Вес маржи",                   params.w_margin]);
+  rows.push(["Вес velocity",                params.w_velocity]);
+  rows.push(["Вес сбалансированности",      params.w_balance]);
+  rows.push(["Период истории, мес.",        params.period_months]);
+  rows.push(["Лимиты по типам (1/0)",       params.enforce_type_caps]);
+  rows.push(["Лимиты по странам (1/0)",     params.enforce_country_caps]);
+  rows.push(["Min маржа (общий фильтр)",    params.min_margin_pct]);
+  rows.push(["Core: min velocity бут/мес",  params.core_min_velocity]);
+  rows.push(["Core: min партия",            params.core_min_target_units]);
+  rows.push(["Core: min розница ฿",         params.core_min_unit_retail]);
+  rows.push(["Probe: min маржа %",          params.probe_min_margin_pct]);
   const paramEndRow = rows.length;
 
-  // Type allocation summary
+  // CORE / PROBE summary
   rows.push([]);
-  rows.push(["Тип", "Доля продаж", "Бюджет", "Потрачено", "Позиций", "Бутылок", "Прибыль"]);
+  rows.push(["Пул", "Бюджет", "Потрачено", "Позиций", "Бутылок", "Прибыль"]);
+  const poolHdrRow = rows.length - 1;
+  const coreList  = picked.filter(c => c.bucket === "core");
+  const probeList = picked.filter(c => c.bucket === "probe");
+  rows.push(["ОСНОВА (core)",       Math.round(coreBudget),  Math.round(coreSpent),  coreList.length,  coreList.reduce((s, c) => s + c.targetUnits, 0),  Math.round(coreProfit)]);
+  rows.push(["ЭКСПЕРИМЕНТ (probe)", Math.round(probeBudget), Math.round(probeSpent), probeList.length, probeList.reduce((s, c) => s + c.targetUnits, 0), Math.round(probeProfit)]);
+  rows.push(["ИТОГО",               params.budget,           Math.round(totalSpent), picked.length,    picked.reduce((s, c) => s + c.targetUnits, 0),    Math.round(totalProfit)]);
+  const poolEndRow = rows.length;
+
+  // Type allocation (core only, with shares)
+  rows.push([]);
+  rows.push(["Тип (внутри core)", "Доля продаж", "Бюджет", "Потрачено", "Позиций", "Бутылок", "Прибыль"]);
   const allocHdrRow = rows.length - 1;
   for (const t of ["Красное", "Белое", "Игристое"] as WineType[]) {
-    const list = picked.filter(c => c.type === t);
+    const list = coreList.filter(c => c.type === t);
     const units = list.reduce((s, c) => s + c.targetUnits, 0);
     const profit = list.reduce((s, c) => s + c.expectedProfit, 0);
     rows.push([t, Math.round(typeShare[t] * 1000) / 10, Math.round(typeBudget[t]), Math.round(typeSpent[t]), list.length, units, Math.round(profit)]);
   }
-  rows.push(["ИТОГО", 100, params.budget, Math.round(totalSpent), picked.length, picked.reduce((s, c) => s + c.targetUnits, 0), Math.round(totalProfit)]);
+  rows.push(["ИТОГО core", 100, Math.round(coreBudget), Math.round(coreSpent), coreList.length, coreList.reduce((s, c) => s + c.targetUnits, 0), Math.round(coreProfit)]);
   const allocEndRow = rows.length;
 
   // Detail header
@@ -721,6 +845,7 @@ async function writeMatrix(
       : "—";
     rows.push([
       idx + 1,
+      c.bucket === "core" ? "Основа" : "Эксперимент",
       c.type,
       c.subgroup,
       c.name,
@@ -744,8 +869,8 @@ async function writeMatrix(
   fmt.push({
     updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" },
   });
-  // Column widths
-  const widths = [50, 90, 200, 360, 80, 100, 120, 100, 90, 110, 70, 200, 520];
+  // Column widths: №, Пул, Тип, Подгруппа, Название, Бутылок, Закуп, Сумма закупа, Розница, Маржа %, Прибыль, Скор, Поставщик, Цены
+  const widths = [50, 110, 90, 200, 360, 80, 100, 120, 100, 90, 110, 70, 200, 520];
   for (let i = 0; i < widths.length; i++) {
     fmt.push({ updateDimensionProperties: {
       range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
@@ -784,7 +909,45 @@ async function writeMatrix(
       fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
     },
   });
-  // Allocation block
+  // Pool block (CORE / PROBE summary)
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: poolHdrRow, endRowIndex: poolHdrRow + 1, startColumnIndex: 0, endColumnIndex: 6 },
+      cell: { userEnteredFormat: { backgroundColor: { red: 0.45, green: 0.36, blue: 0.08 }, textFormat: { bold: true, foregroundColor: white }, horizontalAlignment: "CENTER" } },
+      fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
+    },
+  });
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: poolHdrRow + 1, endRowIndex: poolEndRow, startColumnIndex: 1, endColumnIndex: 3 },
+      cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } },
+      fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
+    },
+  });
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: poolHdrRow + 1, endRowIndex: poolEndRow, startColumnIndex: 3, endColumnIndex: 5 },
+      cell: { userEnteredFormat: { numberFormat: FMT_INT, horizontalAlignment: "RIGHT" } },
+      fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
+    },
+  });
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: poolHdrRow + 1, endRowIndex: poolEndRow, startColumnIndex: 5, endColumnIndex: 6 },
+      cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } },
+      fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
+    },
+  });
+  // pool ИТОГО row
+  fmt.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: poolEndRow - 1, endRowIndex: poolEndRow, startColumnIndex: 0, endColumnIndex: 6 },
+      cell: { userEnteredFormat: { backgroundColor: { red: 0.93, green: 0.93, blue: 0.93 }, textFormat: { bold: true } } },
+      fields: "userEnteredFormat(backgroundColor,textFormat)",
+    },
+  });
+
+  // Allocation block (core type breakdown)
   fmt.push({
     repeatCell: {
       range: { sheetId, startRowIndex: allocHdrRow, endRowIndex: allocHdrRow + 1, startColumnIndex: 0, endColumnIndex: 7 },
@@ -820,7 +983,6 @@ async function writeMatrix(
       fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
     },
   });
-  // ИТОГО row
   fmt.push({
     repeatCell: {
       range: { sheetId, startRowIndex: allocEndRow - 1, endRowIndex: allocEndRow, startColumnIndex: 0, endColumnIndex: 7 },
@@ -837,23 +999,27 @@ async function writeMatrix(
     },
   });
   // Detail rows: numeric formats
-  // col 4 = Бутылок (int), col 5 = Закуп ฿, col 6 = Сумма закупа, col 7 = Розница, col 8 = Маржа %, col 9 = Прибыль, col 10 = Скор
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 4, endColumnIndex: 5 }, cell: { userEnteredFormat: { numberFormat: FMT_INT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 5, endColumnIndex: 8 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 8, endColumnIndex: 9 }, cell: { userEnteredFormat: { numberFormat: FMT_PCT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 9, endColumnIndex: 10 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 10, endColumnIndex: 11 }, cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "0.00" }, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
-  // Suppliers column (col 12) — wrap so multi-line text displays properly
-  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 12, endColumnIndex: 13 }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 9 } } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } });
-  // Center # column
+  // cols: 0=№ 1=Пул 2=Тип 3=Подгруппа 4=Название 5=Бутылок 6=Закуп 7=Сумма закупа 8=Розница 9=Маржа% 10=Прибыль 11=Скор 12=Поставщик 13=Цены
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 5, endColumnIndex: 6 }, cell: { userEnteredFormat: { numberFormat: FMT_INT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 6, endColumnIndex: 9 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 9, endColumnIndex: 10 }, cell: { userEnteredFormat: { numberFormat: FMT_PCT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 10, endColumnIndex: 11 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 11, endColumnIndex: 12 }, cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "0.00" }, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } });
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 13, endColumnIndex: 14 }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 9 } } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } });
   fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 0, endColumnIndex: 1 }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER", textFormat: { foregroundColor: { red: 0.5, green: 0.5, blue: 0.5 } } } }, fields: "userEnteredFormat(horizontalAlignment,textFormat)" } });
-  // Stripes per type — colour the row bg by type
+  // Pool column (col 1) — bold + colour-coded
+  fmt.push({ repeatCell: { range: { sheetId, startRowIndex: detailStart, endRowIndex: detailEnd, startColumnIndex: 1, endColumnIndex: 2 }, cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 9 }, horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat(textFormat,horizontalAlignment)" } });
+  // Stripes per type, with probe rows tinted purple
   picked.forEach((c, idx) => {
     const r = detailStart + idx;
-    const bg =
-      c.type === "Красное"  ? { red: 0.99, green: 0.95, blue: 0.95 } :
-      c.type === "Белое"    ? { red: 0.99, green: 0.97, blue: 0.88 } :
-                              { red: 0.92, green: 0.95, blue: 0.99 };
+    let bg;
+    if (c.bucket === "probe") {
+      bg = { red: 0.95, green: 0.92, blue: 0.99 };  // soft purple = experimental
+    } else {
+      bg = c.type === "Красное"  ? { red: 0.99, green: 0.95, blue: 0.95 } :
+           c.type === "Белое"    ? { red: 0.99, green: 0.97, blue: 0.88 } :
+                                   { red: 0.92, green: 0.95, blue: 0.99 };
+    }
     fmt.push({
       repeatCell: {
         range: { sheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: nCols },
