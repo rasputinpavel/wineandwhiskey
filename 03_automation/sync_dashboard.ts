@@ -14,6 +14,10 @@ const SHEET_ID   = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 const DATA_TAB   = "Данные";
 const DASH_TAB   = "Dashboard";
 
+// От этого месяца (включительно) на графике "Помесячно" показываем план (Факт LY ×1.25)
+// и факт 2026 линией на правой оси. До этого месяца — только фактический столбец.
+const PLAN_START_YM = "2026-04";
+
 const LOYVERSE_TOKEN      = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID    = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
@@ -382,15 +386,19 @@ async function writeDataSheet(
   // rows 0..dim  →  Sheet rows 1..dim+1  (0-indexed: 0..dim)
 
   // ── Section 2: Monthly summary (starts at row dim+2) ──
-  const monthlyHeader = ["Месяц", "Факт 2026 (тыс.)", "Факт 2025 (тыс.)", "Прирост +25% (тыс.)", "% плана", "Чеков", "GP%", "Розница (тыс.)", "B2B (тыс.)"];
+  // Колонки B/C/D разбиты по принципу "взаимоисключающих месяцев":
+  //   • Для месяцев < PLAN_START_YM   → только B (Факт), C/D пустые.
+  //   • Для месяцев >= PLAN_START_YM  → только C (План) и D (Факт линией), B пустая.
+  const monthlyHeader = ["Месяц", "Факт (тыс.)", "План LY+25% (тыс.)", "Факт 2026 (тыс.)", "% плана", "Чеков", "GP%", "Розница (тыс.)", "B2B (тыс.)"];
   const monthlyRows: any[][] = [monthlyHeader];
   for (const { ym, cur, last, plan, pct } of summary) {
     const gp = cur.total > 0 ? (cur.totalGP / cur.total) * 100 : 0;
+    const isPlanMonth = ym >= PLAN_START_YM;
     monthlyRows.push([
       monthLabel(ym),
-      Math.round(cur.total / 1000),
-      Math.round(last.total / 1000),
-      Math.round(last.total * 0.25 / 1000),
+      isPlanMonth ? "" : Math.round(cur.total / 1000),
+      isPlanMonth ? Math.round(last.total * 1.25 / 1000) : "",
+      isPlanMonth ? Math.round(cur.total / 1000) : "",
       +pct.toFixed(1),
       cur.checks,
       +gp.toFixed(1),
@@ -950,43 +958,46 @@ async function writeDashboard(
       },
     },
 
-    // ── Chart 2: Monthly COMBO — stacked plan (LY + +25%) + fact line ──
+    // ── Chart 2: Monthly COMBO — Факт vs План + Факт 2026 линией ──
+    // Месяцы < PLAN_START_YM показывают только серый столбец "Факт".
+    // Месяцы >= PLAN_START_YM показывают оранжевый столбец "План LY+25%" и
+    // красную линию "Факт 2026" на правой оси (свой масштаб для наглядности).
     {
       addChart: {
         chart: {
           spec: {
-            title: "Помесячно: План (Факт 2025 + прирост 25%) vs Факт 2026",
+            title: `Помесячно: Факт → План LY+25% (с ${monthLabel(PLAN_START_YM)})`,
             titleTextFormat: { bold: true, fontSize: 13 },
             basicChart: {
               chartType: "COMBO",
-              stackedType: "STACKED",
               legendPosition: "RIGHT_LEGEND",
               axis: [
                 { position: "BOTTOM_AXIS" },
-                { position: "LEFT_AXIS", title: "тыс. THB" },
+                { position: "LEFT_AXIS",  title: "тыс. THB (факт / план)" },
+                { position: "RIGHT_AXIS", title: "тыс. THB (факт 2026)" },
               ],
               domains: [{ domain: { sourceRange: { sources: [dataRange(0, 1, monthlyRange.start, monthlyRange.end)] } } }],
               series: [
-                // Факт 2025 — серый столбец (стак-база плана)
+                // Факт — серый столбец (для месяцев до PLAN_START_YM)
                 {
-                  series: { sourceRange: { sources: [dataRange(2, 3, monthlyRange.start, monthlyRange.end)] } },
+                  series: { sourceRange: { sources: [dataRange(1, 2, monthlyRange.start, monthlyRange.end)] } },
                   targetAxis: "LEFT_AXIS",
                   type: "COLUMN",
                   color: grayBlue,
-                  dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, foregroundColor: { red: 1, green: 1, blue: 1 } } },
+                  dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
                 },
-                // +25% прирост — оранжевый столбец (стак-верх плана)
+                // План LY+25% — оранжевый столбец (от PLAN_START_YM)
                 {
-                  series: { sourceRange: { sources: [dataRange(3, 4, monthlyRange.start, monthlyRange.end)] } },
+                  series: { sourceRange: { sources: [dataRange(2, 3, monthlyRange.start, monthlyRange.end)] } },
                   targetAxis: "LEFT_AXIS",
                   type: "COLUMN",
                   color: { red: 0.98, green: 0.73, blue: 0.42, alpha: 1 },
                   dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
                 },
-                // Факт 2026 — тёмно-красная линия поверх
+                // Факт 2026 — тёмно-красная линия на ПРАВОЙ оси
                 {
-                  series: { sourceRange: { sources: [dataRange(1, 2, monthlyRange.start, monthlyRange.end)] } },
-                  targetAxis: "LEFT_AXIS",
+                  series: { sourceRange: { sources: [dataRange(3, 4, monthlyRange.start, monthlyRange.end)] } },
+                  targetAxis: "RIGHT_AXIS",
                   type: "LINE",
                   color: wineRed,
                   lineStyle: { width: 3, type: "SOLID" },
