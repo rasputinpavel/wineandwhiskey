@@ -4,9 +4,14 @@
  * Stores results in Supabase: purchase_orders + purchase_order_items.
  *
  * Usage:
- *   npm run orders                    # incremental — only new/errored POs
- *   npm run orders -- --all           # re-scrape all orders
- *   npm run orders -- --po PO2890     # single order
+ *   npm run orders                                # default: discover newest POs + scrape new/errored
+ *   npm run orders -- --all                       # re-scrape every PO in Supabase
+ *   npm run orders -- --po PO2890                 # single order
+ *   npm run orders -- --no-discover               # skip the discover pass
+ *   npm run orders -- --discover-pages 10         # widen the discover scan (default 5)
+ *
+ * Discover pass walks the Loyverse PO list page and inserts headers for any
+ * po_number not yet in Supabase. This is the only way new POs enter the system.
  *
  * Env flags:
  *   SCRAPER_HEADFUL=1   open a visible browser (for selector debugging)
@@ -27,10 +32,6 @@ const LOYVERSE_EMAIL    = process.env.LOYVERSE_EMAIL!;
 const LOYVERSE_PASSWORD = process.env.LOYVERSE_PASSWORD!;
 const SUPABASE_URL      = process.env.SUPABASE_URL!;
 const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_KEY!;
-const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN!;
-const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 
 const AUTH_STATE_PATH = path.join(process.cwd(), ".loyverse-session.json");
 const HEADLESS = !process.env.SCRAPER_HEADFUL;
@@ -42,88 +43,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const args = process.argv.slice(2);
 const ALL_MODE  = args.includes("--all");
+const NO_DISCOVER = args.includes("--no-discover");
 const SINGLE_PO = (() => {
   const idx = args.indexOf("--po");
   if (idx !== -1) return args[idx + 1] ?? null;
   const eq = args.find(a => a.startsWith("--po="));
   return eq ? eq.split("=")[1] : null;
 })();
-
-// ─── Google Sheets helpers ────────────────────────────────────────────────────
-
-let _gtoken: string | null = null;
-async function gToken(): Promise<string> {
-  if (_gtoken) return _gtoken;
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: GOOGLE_REFRESH_TOKEN, grant_type: "refresh_token",
-    }),
-  });
-  if (!r.ok) throw new Error(`OAuth2: ${await r.text()}`);
-  _gtoken = (await r.json()).access_token;
-  return _gtoken!;
-}
-
-async function sheetsGet(range: string): Promise<string[][]> {
-  const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,
-    { headers: { Authorization: `Bearer ${await gToken()}` } }
-  );
-  if (!r.ok) throw new Error(`Sheets GET ${range}: ${await r.text()}`);
-  return (await r.json()).values ?? [];
-}
+// How many Loyverse list pages to scan during discover (50 POs/page).
+// Default 5 ≈ 250 newest POs — comfortably covers a week's worth.
+const DISCOVER_PAGES = (() => {
+  const idx = args.indexOf("--discover-pages");
+  const v = idx !== -1 ? args[idx + 1] : args.find(a => a.startsWith("--discover-pages="))?.split("=")[1];
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+})();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseSheetDate(s: string): string | null {
-  if (!s?.trim()) return null;
-  const d = new Date(s.trim());
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-}
-
-function parseTHB(s: string): number | null {
-  if (!s?.trim()) return null;
-  const n = parseFloat(s.replace(/[^0-9.]/g, ""));
-  return isNaN(n) ? null : n;
-}
-
-function parseNum(s: string): number | null {
-  const n = parseFloat(s.replace(/[^0-9.]/g, ""));
-  return isNaN(n) ? null : n;
-}
-
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
-
-// ─── Phase 0: Bootstrap headers from Google Sheets ───────────────────────────
-
-async function bootstrapFromSheets() {
-  console.log("[0/4] Reading Google Sheets 'Purcahse Orders' tab...");
-  const rows = await sheetsGet("Purcahse Orders!A2:H");
-  if (!rows.length) { console.log("  No rows found."); return; }
-
-  const records = rows
-    .map(r => ({
-      po_number:   r[0]?.trim(),
-      order_date:  parseSheetDate(r[1]),
-      supplier:    r[2]?.trim() || null,
-      store:       r[3]?.trim() || null,
-      status:      r[4]?.trim() || null,
-      received:    r[5]?.trim() || null,
-      expected_on: parseSheetDate(r[6]),
-      total_thb:   parseTHB(r[7]),
-    }))
-    .filter(r => r.po_number);
-
-  const { error } = await supabase
-    .from("purchase_orders")
-    .upsert(records, { onConflict: "po_number", ignoreDuplicates: true });
-
-  if (error) throw new Error(`Bootstrap upsert: ${error.message}`);
-  console.log(`  ✓ Upserted ${records.length} PO headers (headers only, no override).`);
-}
 
 // ─── Phase 1: Auth ────────────────────────────────────────────────────────────
 
@@ -233,6 +171,94 @@ async function navigateToPOList(page: Page) {
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
 
   if (DEBUG) await page.screenshot({ path: "debug-po-list.png" });
+}
+
+// Discover newest POs from the Loyverse PO list and insert headers for any
+// po_number not already in Supabase. Reads each row's columns directly (no
+// detail click), so it's much faster than full scraping.
+async function discoverNewPOs(page: Page, pagesToScan: number): Promise<number> {
+  await navigateToPOList(page);
+  const LIMIT = 50;
+
+  // Snapshot all existing po_numbers (Supabase select() caps at 1000 rows
+  // unless we page — without this the set silently misses older POs and we
+  // re-upsert headers we already have).
+  const known = new Set<string>();
+  let cur = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("purchase_orders").select("po_number").range(cur, cur + 999);
+    if (error) throw new Error(`Discover snapshot: ${error.message}`);
+    if (!data?.length) break;
+    for (const r of data) known.add((r as any).po_number as string);
+    if (data.length < 1000) break;
+    cur += 1000;
+  }
+
+  const newRecords: any[] = [];
+  for (let pageNum = 0; pageNum < pagesToScan; pageNum++) {
+    await page.evaluate(({ p, l }) => {
+      window.location.hash = `/inventory/purchase?page=${p}&limit=${l}`;
+    }, { p: pageNum, l: LIMIT });
+    await delay(1500);
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await delay(500);
+
+    const rows = page.locator("tr.tableBodyBody.list");
+    const rowCount = await rows.count();
+    if (rowCount === 0) break;
+
+    let foundOnPage = 0;
+    for (let i = 0; i < rowCount; i++) {
+      const row = rows.nth(i);
+      // Read all td.item cells in order. Layout (Loyverse PO list):
+      //   0: PO number, 1: store, 2: supplier, 3: status, 4: received,
+      //   5: expected_on, 6: order_date, 7: total
+      const cells = await row.locator("td.item").allInnerTexts();
+      const poText = (cells[0] ?? "").trim();
+      const m = poText.match(/\b(PO\d+)\b/i);
+      if (!m) continue;
+      const poNumber = m[1].toUpperCase();
+      if (known.has(poNumber)) continue;
+
+      // Date strings come like "Apr 18, 2026"; new Date() parses these fine.
+      const expDate  = (cells[5] ?? "").trim();
+      const ordDate  = (cells[6] ?? "").trim();
+      const toIso = (s: string): string | null => {
+        if (!s) return null;
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+      };
+      const totalStr = (cells[7] ?? "").replace(/[^\d.,-]/g, "").replace(/,/g, ".");
+      const total = Number(totalStr);
+
+      newRecords.push({
+        po_number:   poNumber,
+        order_date:  toIso(ordDate),
+        supplier:    (cells[2] ?? "").trim() || null,
+        store:       (cells[1] ?? "").trim() || null,
+        status:      (cells[3] ?? "").trim() || null,
+        received:    (cells[4] ?? "").trim() || null,
+        expected_on: toIso(expDate),
+        total_thb:   Number.isFinite(total) ? total : null,
+      });
+      known.add(poNumber);
+      foundOnPage++;
+    }
+    console.log(`  Discover page ${pageNum}: ${foundOnPage} new PO header(s) from ${rowCount} rows`);
+    if (rowCount < LIMIT) break;
+  }
+
+  if (newRecords.length === 0) {
+    console.log("  No new POs discovered from Loyverse.");
+    return 0;
+  }
+  const { error } = await supabase
+    .from("purchase_orders")
+    .upsert(newRecords, { onConflict: "po_number", ignoreDuplicates: true });
+  if (error) throw new Error(`Discover upsert: ${error.message}`);
+  console.log(`  ✓ Inserted ${newRecords.length} new PO header(s).`);
+  return newRecords.length;
 }
 
 // Single-pass click-based scraper.
@@ -379,44 +405,30 @@ async function upsertOrder(poNumber: string, loyverseId: number, items: LineItem
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+// Pull all distinct po_numbers that already have items (paged — Supabase caps select() at 1000 rows).
+async function loadPOsWithItems(): Promise<Set<string>> {
+  const uniq = new Set<string>();
+  let cur = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("purchase_order_items")
+      .select("po_number")
+      .range(cur, cur + 999);
+    if (error) throw new Error(`Load items index: ${error.message}`);
+    if (!data?.length) break;
+    for (const r of data) uniq.add((r as any).po_number as string);
+    if (data.length < 1000) break;
+    cur += 1000;
+  }
+  return uniq;
+}
+
 async function main() {
+  const doDiscover = !SINGLE_PO && !NO_DISCOVER;
   console.log("\nWine & Whiskey — Purchase Orders Scraper");
-  console.log(`Mode: ${SINGLE_PO ? `single (${SINGLE_PO})` : ALL_MODE ? "all" : "incremental"}\n`);
+  console.log(`Mode: ${SINGLE_PO ? `single (${SINGLE_PO})` : ALL_MODE ? "all" : "incremental"}${doDiscover ? ` + discover (${DISCOVER_PAGES} page(s))` : ""}\n`);
 
-  // Phase 0: Sync headers from Sheets (skip if running single PO or if Supabase already has data)
-  const { count: existingCount } = await supabase.from("purchase_orders").select("*", { count: "exact", head: true });
-  if (!SINGLE_PO && (existingCount ?? 0) === 0) {
-    await bootstrapFromSheets();
-  }
-
-  // Fetch all POs from Supabase
-  const { data: allPOs, error: listErr } = await supabase
-    .from("purchase_orders")
-    .select("po_number, loyverse_id, scrape_error")
-    .order("order_date", { ascending: false });
-  if (listErr) throw new Error(`Fetch POs: ${listErr.message}`);
-
-  // Find which POs need scraping
-  const { data: poWithItems } = await supabase
-    .from("purchase_order_items")
-    .select("po_number");
-  const hasItems = new Set((poWithItems ?? []).map((r: any) => r.po_number as string));
-
-  let allPOList = allPOs ?? [];
-  if (SINGLE_PO) allPOList = allPOList.filter(po => po.po_number === SINGLE_PO);
-
-  const targetSet: Set<string> = ALL_MODE
-    ? new Set(allPOList.map(po => po.po_number))
-    : new Set(allPOList
-        .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
-        .map(po => po.po_number));
-
-  if (targetSet.size === 0) {
-    console.log("Nothing to do — all orders are up to date.\n");
-    return;
-  }
-
-  console.log(`[2/3] Starting browser (headless: ${HEADLESS})...`);
+  console.log(`[1/3] Starting browser (headless: ${HEADLESS})...`);
   const browser = await chromium.launch({ headless: HEADLESS });
   const context = fs.existsSync(AUTH_STATE_PATH)
     ? await browser.newContext({ storageState: AUTH_STATE_PATH })
@@ -427,9 +439,34 @@ async function main() {
     console.log("[2/3] Authenticating...");
     await ensureLoggedIn(context, page);
 
+    if (doDiscover) {
+      console.log(`\n[2.5/3] Discovering new POs from Loyverse list (${DISCOVER_PAGES} page(s))...`);
+      await discoverNewPOs(page, DISCOVER_PAGES);
+    }
+
+    const { data: allPOs, error: listErr } = await supabase
+      .from("purchase_orders")
+      .select("po_number, scrape_error")
+      .order("order_date", { ascending: false, nullsFirst: false });
+    if (listErr) throw new Error(`Fetch POs: ${listErr.message}`);
+
+    const hasItems = await loadPOsWithItems();
+    let allPOList = allPOs ?? [];
+    if (SINGLE_PO) allPOList = allPOList.filter(po => po.po_number === SINGLE_PO);
+
+    const targetSet: Set<string> = ALL_MODE
+      ? new Set(allPOList.map(po => po.po_number))
+      : new Set(allPOList
+          .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
+          .map(po => po.po_number));
+
+    if (targetSet.size === 0) {
+      console.log("Nothing to do — all orders are up to date.\n");
+      return;
+    }
+
     console.log(`\n[3/3] Scraping ${targetSet.size} orders via list clicks...`);
     const { success, failed } = await scrapeViaListClick(page, targetSet);
-
     console.log(`\n✓ Done. ${success} succeeded, ${failed} failed.\n`);
 
   } finally {

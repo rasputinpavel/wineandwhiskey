@@ -2,12 +2,12 @@ name: Scrape Purchase Orders
 
 on:
   schedule:
-    # 02:00 Bangkok time = 19:00 UTC
+    # 02:00 Bangkok time (UTC+7) = 19:00 UTC
     - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Scrape mode: leave empty for incremental, or '--all'"
+        description: "Extra args (e.g. '--all', '--no-discover', '--discover-pages 10', '--po PO2890')"
         required: false
         default: ""
 
@@ -31,11 +31,8 @@ jobs:
 
       - name: Scrape purchase orders
         env:
-          LOYVERSE_EMAIL:          ${{ secrets.LOYVERSE_EMAIL }}
-          LOYVERSE_PASSWORD:       ${{ secrets.LOYVERSE_PASSWORD }}
-          SUPABASE_URL:            ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY:    ${{ secrets.SUPABASE_SERVICE_KEY }}
-          GOOGLE_CLIENT_ID:        ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET:    ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN:    ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          LOYVERSE_EMAIL:       ${{ secrets.LOYVERSE_EMAIL }}
+          LOYVERSE_PASSWORD:    ${{ secrets.LOYVERSE_PASSWORD }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: npm run orders -- ${{ github.event.inputs.mode || '' }}
