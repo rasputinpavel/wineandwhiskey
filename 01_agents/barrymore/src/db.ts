@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type Anthropic from "@anthropic-ai/sdk";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -248,6 +249,129 @@ export async function getChronicle(
   const { data, error } = await q;
   if (error) throw new Error(`getChronicle: ${error.message}`);
   return data ?? [];
+}
+
+// --- Conversation memory ---
+
+export async function appendConversationMessage(
+  chatId: number,
+  role: "user" | "assistant",
+  content: Anthropic.MessageParam["content"]
+): Promise<void> {
+  const { error } = await supabase
+    .from("conversation_messages")
+    .insert({ chat_id: chatId, role, content: content as unknown as object });
+  if (error) throw new Error(`appendConversationMessage: ${error.message}`);
+}
+
+export async function loadConversationMessages(
+  chatId: number,
+  limit = 30
+): Promise<Anthropic.MessageParam[]> {
+  const { data, error } = await supabase
+    .from("conversation_messages")
+    .select("role, content, ts")
+    .eq("chat_id", chatId)
+    .order("ts", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`loadConversationMessages: ${error.message}`);
+  if (!data) return [];
+  return data
+    .reverse()
+    .map((row) => ({
+      role:    row.role as "user" | "assistant",
+      content: row.content as Anthropic.MessageParam["content"],
+    }));
+}
+
+export async function deleteConversationMessages(chatId: number): Promise<void> {
+  const { error } = await supabase
+    .from("conversation_messages")
+    .delete()
+    .eq("chat_id", chatId);
+  if (error) throw new Error(`deleteConversationMessages: ${error.message}`);
+}
+
+// --- Memory search ---
+
+export interface MemorySearchHit {
+  source:       "chronicle" | "task";
+  id:           string;
+  date:         string;
+  title:        string;
+  description?: string;
+  status?:      string;
+}
+
+export async function searchMemory(query: string, limit = 20): Promise<MemorySearchHit[]> {
+  const pattern = `%${query}%`;
+
+  const [chrTitle, chrDesc, tskTitle, tskDesc, tskNotes] = await Promise.all([
+    supabase.from("chronicle")
+      .select("id,date,title,description")
+      .ilike("title", pattern)
+      .order("date", { ascending: false })
+      .limit(limit),
+    supabase.from("chronicle")
+      .select("id,date,title,description")
+      .ilike("description", pattern)
+      .order("date", { ascending: false })
+      .limit(limit),
+    supabase.from("tasks")
+      .select("id,title,description,notes,status,created_at")
+      .ilike("title", pattern)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    supabase.from("tasks")
+      .select("id,title,description,notes,status,created_at")
+      .ilike("description", pattern)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    supabase.from("tasks")
+      .select("id,title,description,notes,status,created_at")
+      .ilike("notes", pattern)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+  ]);
+
+  if (chrTitle.error) throw new Error(`searchMemory.chronicle.title: ${chrTitle.error.message}`);
+  if (chrDesc.error)  throw new Error(`searchMemory.chronicle.desc: ${chrDesc.error.message}`);
+  if (tskTitle.error) throw new Error(`searchMemory.tasks.title: ${tskTitle.error.message}`);
+  if (tskDesc.error)  throw new Error(`searchMemory.tasks.desc: ${tskDesc.error.message}`);
+  if (tskNotes.error) throw new Error(`searchMemory.tasks.notes: ${tskNotes.error.message}`);
+
+  const hits: MemorySearchHit[] = [];
+  const seen = new Set<string>();
+
+  for (const e of [...(chrTitle.data ?? []), ...(chrDesc.data ?? [])]) {
+    const key = `c:${e.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hits.push({
+      source:      "chronicle",
+      id:          e.id,
+      date:        e.date,
+      title:       e.title,
+      description: e.description ?? undefined,
+    });
+  }
+  for (const t of [...(tskTitle.data ?? []), ...(tskDesc.data ?? []), ...(tskNotes.data ?? [])]) {
+    const key = `t:${t.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hits.push({
+      source:      "task",
+      id:          t.id,
+      date:        (t.created_at as string).slice(0, 10),
+      title:       t.title,
+      description: t.description ?? t.notes ?? undefined,
+      status:      t.status,
+    });
+  }
+
+  hits.sort((a, b) => b.date.localeCompare(a.date));
+  return hits.slice(0, limit);
 }
 
 // --- Helpers ---

@@ -105,6 +105,30 @@ export const tools: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: "add_note",
+    description: "Зафиксировать в летописи свободную заметку: диктовку, ТЗ, идею, договорённость, описание процесса, обсуждение. Используй для всего, что не вписывается в формат задачи. Это ключевой инструмент долгосрочной памяти — без него свободный текст будет утерян. Сохраняй дословно.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:       { type: "string", description: "Краткий заголовок-тема (5-10 слов)" },
+        description: { type: "string", description: "Полный текст заметки. Не сокращай диктовки — сохраняй всё, что сказано." },
+      },
+      required: ["title", "description"],
+    },
+  },
+  {
+    name: "search_memory",
+    description: "Поиск по всей долгосрочной памяти: летопись (заметки, события, выполненные задачи) и задачи (включая закрытые и старые). ВСЕГДА используй этот инструмент перед тем, как сказать «не помню», «не нашёл», «такого не было». Поиск ILIKE по тексту — передавай ключевое слово (имя, фамилию, тему, термин), а не целую фразу.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Ключевое слово или фрагмент. Примеры: 'Бабешкин', 'бухгалтер', 'витрина', 'Vivino'" },
+        limit: { type: "number", description: "Максимум результатов, по умолчанию 20" },
+      },
+      required: ["query"],
+    },
+  },
 
   // --- Инструменты магазина (Chip & Dale) ---
   {
@@ -210,6 +234,8 @@ export async function runTool(name: string, input: Record<string, unknown>): Pro
       case "log_morning_plan": return await handleLogMorningPlan(input);
       case "log_evening_review": return await handleLogEveningReview(input);
       case "get_chronicle":    return await handleGetChronicle(input);
+      case "add_note":         return await handleAddNote(input);
+      case "search_memory":    return await handleSearchMemory(input);
       // Инструменты магазина — прямой вызов ops-данных
       case "get_sales":            return await getSales(String(input.date_from), String(input.date_to));
       case "get_inventory":        return await getInventory(input.filter as string | undefined);
@@ -413,6 +439,38 @@ async function handleGetChronicle(input: Record<string, unknown>): Promise<strin
   });
 
   return `Летопись (${entries.length} записей):\n\n${lines.join("\n\n")}`;
+}
+
+async function handleAddNote(input: Record<string, unknown>): Promise<string> {
+  const title       = String(input.title ?? "").trim();
+  const description = String(input.description ?? "").trim();
+  if (!title || !description) return "Для заметки нужны и заголовок, и текст.";
+
+  const today = db.bangkokDate();
+  await db.addChronicleEntry({
+    date:        today,
+    event_type:  "note",
+    title,
+    description,
+  });
+  return `Заметка «${title}» внесена в летопись (${today}).`;
+}
+
+async function handleSearchMemory(input: Record<string, unknown>): Promise<string> {
+  const query = String(input.query ?? "").trim();
+  if (!query) return "Не указан запрос для поиска.";
+  const limit = (input.limit as number) ?? 20;
+
+  const hits = await db.searchMemory(query, limit);
+  if (hits.length === 0) return `По запросу «${query}» в памяти ничего не найдено.`;
+
+  const lines = hits.map((h) => {
+    const icon   = h.source === "task" ? "📋" : "📝";
+    const status = h.status ? ` [${h.status}]` : "";
+    const desc   = h.description ? `\n  ${h.description.slice(0, 160)}` : "";
+    return `${icon} <b>${h.date}</b> ${h.title}${status}${desc}`;
+  });
+  return `Найдено по запросу «${query}» (${hits.length}):\n\n${lines.join("\n\n")}`;
 }
 
 async function handleAddCalendarEvent(input: Record<string, unknown>): Promise<string> {

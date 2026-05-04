@@ -114,9 +114,9 @@ bot.command("chatid", (ctx) => {
   ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: "HTML" });
 });
 
-bot.command("new", (ctx) => {
-  resetSession(ctx.chat.id);
-  ctx.reply("Контекст беседы сброшен. Начнём с чистого листа, сэр.");
+bot.command("new", async (ctx) => {
+  await resetSession(ctx.chat.id);
+  await ctx.reply("Контекст беседы сброшен. Начнём с чистого листа, сэр.");
 });
 
 bot.command("tasks", async (ctx) => {

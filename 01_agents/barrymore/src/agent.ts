@@ -1,6 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { tools, runTool } from "./tools.js";
-import { bangkokDate } from "./db.js";
+import {
+  bangkokDate,
+  appendConversationMessage,
+  loadConversationMessages,
+  deleteConversationMessages,
+} from "./db.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -44,6 +49,18 @@ const SYSTEM_PROMPT = `Вы — Бэрримор, преданный дворе�
 - Прямой доступ через инструменты get_sales, get_inventory и др. — используйте
 - Расходы (фото чека, «856 интернет») — вне компетенции, направьте к Chip & Dale
 
+Долгосрочная память (КРИТИЧЕСКИ ВАЖНО):
+- Перед тем как сказать «не помню», «не нахожу», «такого не было», «в летописи нет» — ВСЕГДА сначала вызовите search_memory с ключевым словом (имя, тема, термин). Это ваш главный инструмент против забывчивости. Один запрос — не отговаривайтесь.
+- Если пользователь надиктовал свободный текст (ТЗ, идея, описание процесса, обсуждение, брифинг) — немедленно сохраните через add_note. Не ждите отдельной просьбы. Заголовок — короткая тема, описание — полный текст дословно.
+- list_tasks показывает только активные/недавние задачи. Закрытые задачи и старые заметки ищите ТОЛЬКО через search_memory.
+- get_chronicle берёт записи по диапазону дат — не подходит для поиска по теме. Для поиска используйте search_memory.
+
+Голосовые сообщения:
+- Сообщения с префиксом «[голосовое]» — это автоматическая расшифровка голоса через Whisper. Это полноценный текст, обращайтесь как с обычным сообщением. НИКОГДА не утверждайте «голосовых не получаю», «не умею слушать голос» — расшифровка уже сделана за вас.
+
+Честность о возможностях:
+- Не выдумывайте ограничения. Если не уверены — попробуйте инструмент. Лучше попробовать и получить ошибку, чем отказать пользователю в том, что вы умеете.
+
 Проджект-менеджмент:
 - Предлагайте приоритеты и дедлайны
 - Замечайте блокеры и зависимости
@@ -64,7 +81,14 @@ const SESSION_TTL_MS = 60 * 60 * 1000;
 const MAX_MESSAGES    = 30;
 const MAX_TOOL_CALLS  = 5;
 
-function getSession(chatId: number): ChatSession {
+// Гарантирует, что окно начинается с user-сообщения со строковым контентом —
+// иначе orphan tool_result после среза сломает Anthropic API.
+function trimToCleanStart(msgs: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const i = msgs.findIndex((m) => m.role === "user" && typeof m.content === "string");
+  return i === -1 ? [] : msgs.slice(i);
+}
+
+async function getSession(chatId: number): Promise<ChatSession> {
   const now      = Date.now();
   const existing = sessions.get(chatId);
 
@@ -73,13 +97,27 @@ function getSession(chatId: number): ChatSession {
     return existing;
   }
 
-  const session: ChatSession = { messages: [], lastActivityAt: now };
+  const persisted = await loadConversationMessages(chatId, MAX_MESSAGES);
+  const session: ChatSession = {
+    messages:       trimToCleanStart(persisted),
+    lastActivityAt: now,
+  };
   sessions.set(chatId, session);
   return session;
 }
 
-export function resetSession(chatId: number): void {
+export async function resetSession(chatId: number): Promise<void> {
   sessions.delete(chatId);
+  await deleteConversationMessages(chatId);
+}
+
+async function pushMessage(
+  session: ChatSession,
+  chatId: number,
+  message: Anthropic.MessageParam
+): Promise<void> {
+  session.messages.push(message);
+  await appendConversationMessage(chatId, message.role, message.content);
 }
 
 function bangkokNow(): string {
@@ -95,14 +133,14 @@ export async function askBarrymore(
 ): Promise<string> {
   const today   = bangkokDate();
   const now     = bangkokNow();
-  const session = getSession(chatId);
+  const session = await getSession(chatId);
   const { messages } = session;
 
   const contextPrefix = messages.length === 0
     ? `Сейчас: ${now}\nОтправитель: ${senderName}\n\n`
     : `[${now}] ${senderName}: `;
 
-  messages.push({ role: "user", content: `${contextPrefix}${userText}` });
+  await pushMessage(session, chatId, { role: "user", content: `${contextPrefix}${userText}` });
 
   let toolCallCount = 0;
 
@@ -119,8 +157,11 @@ export async function askBarrymore(
       const text   = response.content.find((b) => b.type === "text");
       const answer = text?.text ?? "Не могу ответить.";
 
-      messages.push({ role: "assistant", content: answer });
-      if (messages.length > MAX_MESSAGES) messages.splice(0, messages.length - MAX_MESSAGES);
+      await pushMessage(session, chatId, { role: "assistant", content: answer });
+      if (messages.length > MAX_MESSAGES) {
+        const trimmed = trimToCleanStart(messages.slice(messages.length - MAX_MESSAGES));
+        messages.splice(0, messages.length, ...trimmed);
+      }
 
       return answer;
     }
@@ -131,7 +172,7 @@ export async function askBarrymore(
       }
 
       const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
-      messages.push({ role: "assistant", content: response.content });
+      await pushMessage(session, chatId, { role: "assistant", content: response.content });
 
       const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
         toolUseBlocks.map(async (block) => {
@@ -145,7 +186,7 @@ export async function askBarrymore(
         })
       );
 
-      messages.push({ role: "user", content: toolResults });
+      await pushMessage(session, chatId, { role: "user", content: toolResults });
     }
   }
 }
