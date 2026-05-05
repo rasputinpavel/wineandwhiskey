@@ -393,9 +393,8 @@ bot.on("message:text", async (ctx) => {
     return;
   }
 
-  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(text, ctx.me.username ?? "")) return;
-
-  // Expense text shortcut
+  // Expense text shortcut — works in groups without addressing the bot,
+  // same as the photo handler (фото записываются без префикса «чип»).
   if (looksLikeExpense(text)) {
     const msg = await ctx.reply("Распознаю расход...");
     try {
@@ -412,6 +411,8 @@ bot.on("message:text", async (ctx) => {
     }
     return;
   }
+
+  if (isGroupChat(ctx.chat.type) && !isAddressedToChipDale(text, ctx.me.username ?? "")) return;
 
   const msg = await ctx.reply("...");
   try {
@@ -467,7 +468,7 @@ bot.on("callback_query:data", async (ctx) => {
         `✅ Записано!\n\n` +
         `📅 ${expense.date} | ฿${expense.amount}\n` +
         `📝 ${expense.description}\n` +
-        `${expense.isCompany ? "🏢 На компанию" : "👤 Личный"} · ` +
+        `${expense.isCompany ? "🏢 Со счёта компании" : "👤 С налички/личных"} · ` +
         `${expense.hasDocs ? "📄 Есть доки" : "📭 Без доков"}`,
       );
     } catch (e) {
