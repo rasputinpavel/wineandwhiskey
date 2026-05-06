@@ -3,7 +3,7 @@
  * Runs every Sunday at 22:15 Bangkok (after dashboard sync).
  *
  * Writes the previous week's actual retail revenue into the "Закрытие" sheet.
- * Rolling Cashflow reads from it via VLOOKUP — survives cashflow recreation.
+ * Rolling reads from it via VLOOKUP — survives cashflow recreation.
  *
  * Revenue source (automated run):
  *   Reads "Текущая неделя" → Розница from the Dashboard table.
@@ -129,12 +129,9 @@ async function fetchRetailFromDashboard(): Promise<{ retail: number; b2b: number
   throw new Error("«Текущая неделя» row not found in Dashboard — did sync_dashboard.ts run first?");
 }
 
-// ─── Fix ฿ format on Rolling Cashflow D column ────────────────────────────────
+// ─── Fix ฿ format on Rolling D column ────────────────────────────────
 
-async function fixFactFormat() {
-  const meta = await gApi("GET", "");
-  const rcSheet = (meta.sheets ?? []).find((s: any) => s.properties.title === "Rolling Cashflow");
-  if (!rcSheet) { console.log("   Rolling Cashflow not found, skipping format"); return; }
+async function fixFactFormat(rcSheet: any) {
   const sid = rcSheet.properties.sheetId;
   const rows = rcSheet.properties.gridProperties?.rowCount ?? 100;
   await gApi("POST", ":batchUpdate", {
@@ -147,6 +144,42 @@ async function fixFactFormat() {
     }],
   });
   console.log("   ✓ ฿ format applied to Факт (D) column");
+}
+
+// ─── Highlight closed weeks (Факт filled) with warm amber background ──────────
+
+async function highlightClosedWeeks(rcSheet: any) {
+  const sid = rcSheet.properties.sheetId;
+  const rows = rcSheet.properties.gridProperties?.rowCount ?? 100;
+  const FIRST_WEEK_ROW = 4;
+
+  // Remove existing CUSTOM_FORMULA rules (ours from previous runs) — reverse order
+  const existing: any[] = rcSheet.conditionalFormats ?? [];
+  const toDelete = existing
+    .map((r: any, i: number) => ({ r, i }))
+    .filter(({ r }) => r.booleanRule?.condition?.type === "CUSTOM_FORMULA")
+    .map(({ i }) => i)
+    .sort((a: number, b: number) => b - a);
+
+  const deleteReqs = toDelete.map((i: number) => ({
+    deleteConditionalFormatRule: { sheetId: sid, index: i },
+  }));
+
+  const addReq = {
+    addConditionalFormatRule: {
+      rule: {
+        ranges: [{ sheetId: sid, startRowIndex: FIRST_WEEK_ROW - 1, endRowIndex: rows, startColumnIndex: 0, endColumnIndex: 9 }],
+        booleanRule: {
+          condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=$D${FIRST_WEEK_ROW}<>""` }] },
+          format: { backgroundColor: { red: 0.97, green: 0.93, blue: 0.80 } },
+        },
+      },
+      index: 0,
+    },
+  };
+
+  await gApi("POST", ":batchUpdate", { requests: [...deleteReqs, addReq] });
+  console.log("   ✓ Closed week highlight applied");
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -211,8 +244,15 @@ async function main() {
   console.log("📝 Записываю в Закрытие...");
   await upsertClosing(lastWeek.from, Math.round(retail), note);
 
-  // 4. Fix ฿ format on Rolling Cashflow D column
-  await fixFactFormat();
+  // 4. Apply formatting to Rolling
+  const meta = await gApi("GET", "");
+  const rcSheet = (meta.sheets ?? []).find((s: any) => s.properties.title === "Rolling");
+  if (rcSheet) {
+    await fixFactFormat(rcSheet);
+    await highlightClosedWeeks(rcSheet);
+  } else {
+    console.log("   Rolling not found, skipping format");
+  }
 
   console.log(`\n✅  Готово! Неделя ${lastWeek.from}: факт выручка ${Math.round(retail).toLocaleString()} ฿`);
 }

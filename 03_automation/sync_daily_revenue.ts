@@ -1,6 +1,6 @@
 /**
  * sync_daily_revenue.ts
- * Daily revenue per day (B2C, B2B, Total, GP, GP%) on the "Дневная выручка" tab.
+ * Daily revenue per day (B2C, B2B, Total, GP, GP%) on the "Daily" tab.
  *
  * Layout (rebuilt every run):
  *   Row 1: header (frozen)
@@ -20,7 +20,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
-const TAB      = "Дневная выручка";
+const TAB      = "Daily";
 const BACKFILL_START = "2026-04-01";
 
 const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
@@ -398,9 +398,10 @@ async function main() {
   const lastDate = existing.length > 0 ? existing[existing.length - 1][0] : null;
   console.log(`  Existing: ${existing.length} day(s)${lastDate ? ` (last: ${lastDate})` : ""}`);
 
-  // 2. Determine fetch range
+  // 2. Determine fetch range — always re-fetch the last existing day,
+  //    because it may have been synced mid-day with partial data.
   const startFromArg = arg ?? null;
-  const startFromIncremental = lastDate ? addDays(lastDate, 1) : BACKFILL_START;
+  const startFromIncremental = lastDate ?? BACKFILL_START;
   const fetchStart = startFromArg && startFromArg < startFromIncremental ? startFromArg : startFromIncremental;
 
   // 3. Fetch new days

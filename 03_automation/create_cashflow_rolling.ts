@@ -152,18 +152,18 @@ async function main() {
     console.log("✓ Лист «Обязательные» уже существует — не трогаем");
   }
 
-  // ── Delete + recreate Rolling Cashflow ────────────────────────────────────
-  const existing = sheets.find((s: any) => s.properties.title === "Rolling Cashflow");
+  // ── Delete + recreate Rolling ────────────────────────────────────
+  const existing = sheets.find((s: any) => s.properties.title === "Rolling");
   if (existing) {
     await sheetsReq(token, "POST", ":batchUpdate", {
       requests: [{ deleteSheet: { sheetId: existing.properties.sheetId } }],
     });
   }
   const res2 = await sheetsReq(token, "POST", ":batchUpdate", {
-    requests: [{ addSheet: { properties: { title: "Rolling Cashflow" } } }],
+    requests: [{ addSheet: { properties: { title: "Rolling" } } }],
   });
   const sheetId: number = res2.replies[0].addSheet.properties.sheetId;
-  console.log("Created Rolling Cashflow sheet, sheetId:", sheetId);
+  console.log("Created Rolling sheet, sheetId:", sheetId);
 
   const weeks = getWeeksUntilYearEnd(nowBkk);
   console.log(`Generating ${weeks.length} weeks through Dec 31`);
@@ -242,14 +242,14 @@ async function main() {
   ];
 
   await sheetsReq(token, "PUT",
-    `/values/${encodeURIComponent("Rolling Cashflow!A1")}?valueInputOption=USER_ENTERED`,
-    { range: "Rolling Cashflow!A1", majorDimension: "ROWS", values },
+    `/values/${encodeURIComponent("Rolling!A1")}?valueInputOption=USER_ENTERED`,
+    { range: "Rolling!A1", majorDimension: "ROWS", values },
   );
 
   // ── Annual payments table (cols K:N = idx 10:13) ──────────────────────────
   await sheetsReq(token, "PUT",
-    `/values/${encodeURIComponent("Rolling Cashflow!K1")}?valueInputOption=USER_ENTERED`,
-    { range: "Rolling Cashflow!K1", majorDimension: "ROWS", values: [
+    `/values/${encodeURIComponent("Rolling!K1")}?valueInputOption=USER_ENTERED`,
+    { range: "Rolling!K1", majorDimension: "ROWS", values: [
       ["КРУПНЫЕ ГОДОВЫЕ ПЛАТЕЖИ", "", "", ""],
       ["Платёж", "Сумма", "Дата", "Статус"],
       ["Лицензия на алкоголь", 10_000, "", ""],
@@ -418,7 +418,7 @@ async function main() {
     ...cfRules,
   ]});
 
-  console.log(`✓ Rolling Cashflow ready — ${weeks.length} weeks, Обязательные tab live-linked`);
+  console.log(`✓ Rolling ready — ${weeks.length} weeks, Обязательные tab live-linked`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

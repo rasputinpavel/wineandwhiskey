@@ -621,7 +621,7 @@ async function main() {
 
   const totalCost = currentSales.ours.reduce((s, r) => s + r.cost, 0);
 
-  // Sync to Кредиторка so Rolling Cashflow picks up the payment
+  // Sync to Кредиторка so Rolling picks up the payment
   console.log("📋 Синхронизирую Кредиторку...");
   await syncKreditorka(totalCost, today);
 
