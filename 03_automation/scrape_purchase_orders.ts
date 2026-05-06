@@ -50,6 +50,13 @@ const SINGLE_PO = (() => {
   const eq = args.find(a => a.startsWith("--po="));
   return eq ? eq.split("=")[1] : null;
 })();
+// --month YYYY-MM: re-scrape every PO whose order_date falls inside that
+// calendar month. Useful for refreshing totals after we changed the parser.
+const MONTH_FILTER = (() => {
+  const idx = args.indexOf("--month");
+  const v = idx !== -1 ? args[idx + 1] : args.find(a => a.startsWith("--month="))?.split("=")[1];
+  return v && /^\d{4}-\d{2}$/.test(v) ? v : null;
+})();
 // How many Loyverse list pages to scan during discover (50 POs/page).
 // Default 5 ≈ 250 newest POs — comfortably covers a week's worth.
 const DISCOVER_PAGES = (() => {
@@ -62,6 +69,32 @@ const DISCOVER_PAGES = (() => {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+// Dismiss the Cookiebot consent dialog if it appears. Loyverse renders the
+// "multilevel" variant whose primary button is `…LevelOptinAllowAll`, not
+// `…Accept` — earlier `[id*="Accept"]` selector missed it and the dialog
+// kept intercepting pointer events on the submit button.
+async function dismissCookieConsent(page: Page): Promise<boolean> {
+  const selectors = [
+    '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+    '#CybotCookiebotDialogBodyLevelButtonAcceptAll',
+    '#CybotCookiebotDialogBodyButtonAccept',
+    '#CybotCookiebotDialogBodyLevelButtonAccept',
+    'button[id*="CybotCookiebot"][id*="AllowAll"]',
+    'button[id*="CybotCookiebot"][id*="Accept"]',
+  ];
+  for (const sel of selectors) {
+    try {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 500 })) {
+        await btn.click({ timeout: 2000 });
+        await delay(400);
+        return true;
+      }
+    } catch { /* try next */ }
+  }
+  return false;
+}
 
 // ─── Phase 1: Auth ────────────────────────────────────────────────────────────
 
@@ -82,6 +115,9 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // Fresh login
   await page.goto("https://r.loyverse.com/", { waitUntil: "networkidle" });
   await delay(2000);
+
+  // Dismiss the cookie banner up-front so it doesn't intercept the submit click.
+  await dismissCookieConsent(page);
 
   if (DEBUG) await page.screenshot({ path: "debug-login.png" });
 
@@ -104,13 +140,13 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
 
   await page.locator('input[type="password"]').first().fill(LOYVERSE_PASSWORD);
   await delay(300);
-  // Dismiss CybotCookiebot dialog if it's blocking the submit button
-  try {
-    await page.locator('#CybotCookiebotDialogBodyButtonAccept, #CybotCookiebotDialogBodyLevelButtonAccept, button[id*="CybotCookiebot"][id*="Accept"]').first().click({ timeout: 3000 });
-    await delay(500);
-  } catch { /* dialog not present */ }
 
-  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first().click();
+  // Cookie banner sometimes re-renders late — dismiss again right before submit.
+  await dismissCookieConsent(page);
+
+  // force: true bypasses the actionability check; if the cookie dialog is still
+  // there after dismissCookieConsent it would otherwise block the click.
+  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first().click({ force: true });
 
   // Wait for navigation (hash routing may not trigger waitForURL)
   await delay(5000);
@@ -219,45 +255,60 @@ async function discoverNewPOs(page: Page, pagesToScan: number): Promise<number> 
       const m = poText.match(/\b(PO\d+)\b/i);
       if (!m) continue;
       const poNumber = m[1].toUpperCase();
-      if (known.has(poNumber)) continue;
 
-      // Date strings come like "Apr 18, 2026"; new Date() parses these fine.
-      const expDate  = (cells[5] ?? "").trim();
-      const ordDate  = (cells[6] ?? "").trim();
+      // Loyverse PO list page layout (verified May 2026):
+      //   0: PO number     1: order date      2: supplier
+      //   3: store         4: status          5: received "X of Y"
+      //   6: expected_on   7: total ฿
+      const ordDate = (cells[1] ?? "").trim();
+      const expDate = (cells[6] ?? "").trim();
+      // Loyverse renders dates as "Apr 28, 2026". Parse manually — using
+      // new Date(s) in a non-UTC timezone (e.g. Bangkok) shifts the calendar
+      // date back by one day after toISOString.
+      const MONTHS: Record<string, string> = {
+        Jan:"01", Feb:"02", Mar:"03", Apr:"04", May:"05", Jun:"06",
+        Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12",
+      };
       const toIso = (s: string): string | null => {
         if (!s) return null;
-        const d = new Date(s);
-        return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+        const m = s.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (m && MONTHS[m[1]]) return `${m[3]}-${MONTHS[m[1]]}-${m[2].padStart(2, "0")}`;
+        // Fallback for ISO-ish input
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        return null;
       };
-      const totalStr = (cells[7] ?? "").replace(/[^\d.,-]/g, "").replace(/,/g, ".");
+      // Strip currency / spaces; thousands separator is "," and decimal "." (US-style).
+      const totalStr = (cells[7] ?? "").replace(/[^\d.\-]/g, "");
       const total = Number(totalStr);
 
       newRecords.push({
         po_number:   poNumber,
         order_date:  toIso(ordDate),
         supplier:    (cells[2] ?? "").trim() || null,
-        store:       (cells[1] ?? "").trim() || null,
-        status:      (cells[3] ?? "").trim() || null,
-        received:    (cells[4] ?? "").trim() || null,
+        store:       (cells[3] ?? "").trim() || null,
+        status:      (cells[4] ?? "").trim() || null,
+        received:    (cells[5] ?? "").trim() || null,
         expected_on: toIso(expDate),
-        total_thb:   Number.isFinite(total) ? total : null,
+        total_thb:   Number.isFinite(total) && total > 0 ? total : null,
       });
       known.add(poNumber);
       foundOnPage++;
     }
-    console.log(`  Discover page ${pageNum}: ${foundOnPage} new PO header(s) from ${rowCount} rows`);
+    console.log(`  Discover page ${pageNum}: ${foundOnPage} PO row(s) from ${rowCount}`);
     if (rowCount < LIMIT) break;
   }
 
   if (newRecords.length === 0) {
-    console.log("  No new POs discovered from Loyverse.");
+    console.log("  No POs discovered from Loyverse.");
     return 0;
   }
+  // Upsert WITH overwrite: if Loyverse list shows different status / total now
+  // than what's in DB, trust Loyverse. This is how we self-correct stale data.
   const { error } = await supabase
     .from("purchase_orders")
-    .upsert(newRecords, { onConflict: "po_number", ignoreDuplicates: true });
+    .upsert(newRecords, { onConflict: "po_number", ignoreDuplicates: false });
   if (error) throw new Error(`Discover upsert: ${error.message}`);
-  console.log(`  ✓ Inserted ${newRecords.length} new PO header(s).`);
+  console.log(`  ✓ Upserted ${newRecords.length} PO header row(s).`);
   return newRecords.length;
 }
 
@@ -348,8 +399,47 @@ async function scrapeViaListClick(
         const loyverseId: number = idMatch ? parseInt(idMatch[1]) : (body.orderData?.id ?? 0);
 
         const items = parseXHRItems(body.items ?? []);
-        await upsertOrder(poNum, loyverseId, items);
-        console.log(`  ✓ ${poNum} — ${items.length} items`);
+
+        // Loyverse stores money in centimes. orderData.amount is the
+        // PRE-DISCOUNT items sum. PO-level discount and VAT both live as
+        // separate rows in landedCosts:
+        //   negative amount → discount    (e.g. -64000 = "-640 ฿")
+        //   positive amount → VAT or shipping  (e.g. 17920 = "179.20 ฿")
+        // Net (after discount, before VAT) = items + Σ negative landedCosts.
+        // VAT = Σ positive landedCosts.
+        // Total = Net + VAT (= what the supplier invoice / bookkeeper reflects).
+        const itemsCentimes = Number(body.orderData?.amount ?? 0);
+        const lc = (body.landedCosts ?? []) as any[];
+        const negLcCentimes = lc.filter(x => Number(x?.amount ?? 0) < 0)
+                                .reduce((s, x) => s + Number(x.amount ?? 0), 0);
+        const posLcCentimes = lc.filter(x => Number(x?.amount ?? 0) > 0)
+                                .reduce((s, x) => s + Number(x.amount ?? 0), 0);
+        const subtotalThb = (itemsCentimes + negLcCentimes) / 100;
+        const vatThb      = posLcCentimes / 100;
+        const totalThb    = subtotalThb + vatThb;
+
+        // poDateTS / expectedDateTS are stored as UTC midnight of the
+        // *Bangkok-local* day (e.g. PO created at 9am BKK on Apr 1 →
+        // "2026-03-31T17:00:00.000+00:00"). Loyverse's own list page
+        // confusingly shows the UTC calendar date, but the operator (and
+        // bookkeeper) reasons about it in Bangkok time. Convert to BKK
+        // before writing.
+        const bkkDate = (iso?: string) => iso
+          ? new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
+          : undefined;
+        const headerExtras = {
+          status:       body.orderData?.status ? String(body.orderData.status) : undefined,
+          supplier:     body.orderData?.supplier ?? body.supplier?.name ?? undefined,
+          store:        body.orderData?.store ?? undefined,
+          subtotal_thb: Number.isFinite(subtotalThb) && subtotalThb > 0 ? subtotalThb : undefined,
+          vat_thb:      Number.isFinite(vatThb) ? vatThb : undefined,
+          total_thb:    Number.isFinite(totalThb) && totalThb > 0 ? totalThb : undefined,
+          order_date:   bkkDate(body.orderData?.poDateTS),
+          expected_on:  bkkDate(body.orderData?.expectedDateTS),
+        };
+
+        await upsertOrder(poNum, loyverseId, items, headerExtras);
+        console.log(`  ✓ ${poNum} — ${items.length} items, total=${totalThb.toFixed(2)} ฿`);
         targetPOs.delete(poNum);
         success++;
       } catch (err) {
@@ -381,13 +471,29 @@ async function scrapeViaListClick(
 
 // ─── Phase 4: Supabase upsert ─────────────────────────────────────────────────
 
-async function upsertOrder(poNumber: string, loyverseId: number, items: LineItem[]) {
+async function upsertOrder(
+  poNumber: string,
+  loyverseId: number,
+  items: LineItem[],
+  extras: { status?: string; supplier?: string; store?: string; subtotal_thb?: number; vat_thb?: number; total_thb?: number; order_date?: string; expected_on?: string } = {},
+) {
+  // Build a single upsert payload that includes both the always-on fields
+  // (loyverse_id / url / scraped_at) and any header values we extracted from
+  // the XHR detail. We OMIT undefined keys so a missing field never clobbers
+  // a known good value already in DB.
+  const payload: any = {
+    po_number: poNumber,
+    loyverse_id: loyverseId,
+    url: `https://r.loyverse.com/dashboard/#/inventory/orderdetail?id=${loyverseId}`,
+    scraped_at: new Date().toISOString(),
+    scrape_error: null,
+  };
+  for (const [k, v] of Object.entries(extras)) {
+    if (v !== undefined && v !== null && v !== "") payload[k] = v;
+  }
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
-    .upsert(
-      { po_number: poNumber, loyverse_id: loyverseId, url: `https://r.loyverse.com/dashboard/#/inventory/orderdetail?id=${loyverseId}`, scraped_at: new Date().toISOString(), scrape_error: null },
-      { onConflict: "po_number" }
-    )
+    .upsert(payload, { onConflict: "po_number" })
     .select("id")
     .single();
 
@@ -426,7 +532,10 @@ async function loadPOsWithItems(): Promise<Set<string>> {
 async function main() {
   const doDiscover = !SINGLE_PO && !NO_DISCOVER;
   console.log("\nWine & Whiskey — Purchase Orders Scraper");
-  console.log(`Mode: ${SINGLE_PO ? `single (${SINGLE_PO})` : ALL_MODE ? "all" : "incremental"}${doDiscover ? ` + discover (${DISCOVER_PAGES} page(s))` : ""}\n`);
+  const modeLabel = SINGLE_PO ? `single (${SINGLE_PO})`
+                  : MONTH_FILTER ? `month (${MONTH_FILTER}) — re-scrape all in range`
+                  : ALL_MODE ? "all" : "incremental";
+  console.log(`Mode: ${modeLabel}${doDiscover ? ` + discover (${DISCOVER_PAGES} page(s))` : ""}\n`);
 
   console.log(`[1/3] Starting browser (headless: ${HEADLESS})...`);
   const browser = await chromium.launch({ headless: HEADLESS });
@@ -453,8 +562,27 @@ async function main() {
     const hasItems = await loadPOsWithItems();
     let allPOList = allPOs ?? [];
     if (SINGLE_PO) allPOList = allPOList.filter(po => po.po_number === SINGLE_PO);
+    if (MONTH_FILTER) {
+      // Widen the filter by ±1 day to catch timezone-edge POs whose
+      // order_date currently sits on the last day of the prior month or
+      // the first day of the next month due to UTC↔Bangkok shifts.
+      const [yy, mm] = MONTH_FILTER.split("-").map(Number);
+      const firstOfMonth = new Date(Date.UTC(yy, mm - 1, 1));
+      const dayBefore   = new Date(firstOfMonth.getTime() - 86_400_000).toISOString().slice(0, 10);
+      const firstNext   = new Date(Date.UTC(yy, mm, 1)).toISOString().slice(0, 10);
+      const dayAfterEnd = new Date(new Date(firstNext).getTime() + 86_400_000).toISOString().slice(0, 10);
+      const { data: dated, error: e2 } = await supabase
+        .from("purchase_orders")
+        .select("po_number, order_date, scrape_error")
+        .gte("order_date", dayBefore)
+        .lt("order_date", dayAfterEnd);
+      if (e2) throw new Error(`Month filter fetch: ${e2.message}`);
+      allPOList = (dated ?? []).map(d => ({ po_number: d.po_number, scrape_error: d.scrape_error }));
+    }
 
-    const targetSet: Set<string> = ALL_MODE
+    // --month implies a forced re-scrape of every PO in that range.
+    const forceAll = ALL_MODE || MONTH_FILTER !== null;
+    const targetSet: Set<string> = forceAll
       ? new Set(allPOList.map(po => po.po_number))
       : new Set(allPOList
           .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
