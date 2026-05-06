@@ -7,8 +7,8 @@
  *           Pass --all to re-sync from 2024-01-01.
  *
  * Usage:
- *   npx tsx scripts/sync_receipts.ts          # incremental
- *   npx tsx scripts/sync_receipts.ts --all    # full re-sync
+ *   npm run receipts                # incremental
+ *   npm run receipts -- --all       # full re-sync
  *
  * First run: create tables in Supabase SQL editor:
  *
