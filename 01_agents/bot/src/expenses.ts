@@ -129,7 +129,7 @@ export function parseExpenseFromMessage(text: string): PendingExpense | null {
     date:        dateMatch[1],
     amount:      amountMatch[1].replace(",", "."),
     description: descMatch[1].trim(),
-    isCompany:   text.includes("✅ На компанию"),
+    isCompany:   text.includes("✅ Со счёта компании"),
     hasDocs:     text.includes("✅ Есть"),
   }
 }
@@ -137,8 +137,8 @@ export function parseExpenseFromMessage(text: string): PendingExpense | null {
 // ─── UI builders ─────────────────────────────────────────────────────────────
 
 export function buildExpenseMessage(e: PendingExpense): string {
-  const company = e.isCompany ? "✅ На компанию" : "☐ Личный расход";
-  const docs    = e.hasDocs   ? "✅ Есть"        : "☐ Нет";
+  const company = e.isCompany ? "✅ Со счёта компании" : "☐ С налички / личных";
+  const docs    = e.hasDocs   ? "✅ Есть"               : "☐ Нет";
   return [
     `📋 <b>Проверь расход:</b>`,
     ``,
@@ -146,15 +146,15 @@ export function buildExpenseMessage(e: PendingExpense): string {
     `💰 <b>Сумма:</b> ฿${e.amount}`,
     `📝 <b>На что:</b> ${e.description}`,
     ``,
-    `<b>На компанию:</b> ${company}`,
+    `<b>Откуда оплатили:</b> ${company}`,
     `<b>Документы:</b> ${docs}`,
   ].join("\n");
 }
 
 export function buildExpenseKeyboard(isCompany: boolean, hasDocs: boolean): InlineKeyboard {
   return new InlineKeyboard()
-    .text(isCompany  ? "✅ На компанию" : "На компанию",  "exp_company_yes")
-    .text(!isCompany ? "✅ Личный"      : "Личный",       "exp_company_no")
+    .text(isCompany  ? "✅ Со счёта компании" : "Со счёта компании", "exp_company_yes")
+    .text(!isCompany ? "✅ С налички/личных"  : "С налички/личных",  "exp_company_no")
     .row()
     .text(hasDocs    ? "✅ Документы есть" : "Документы есть", "exp_docs_yes")
     .text(!hasDocs   ? "✅ Без документов" : "Без документов", "exp_docs_no")
@@ -184,7 +184,7 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
 
   // Find the first empty row in column A after the header (= first gap in continuous data block)
   const colAResp = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Расходы!A2:A")}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent("Expenses!A2:A")}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   const colAData = await colAResp.json();
@@ -197,7 +197,7 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
   }
   const targetRow = firstEmptyIdx + 2; // 1-based sheet row (row 1 = header)
 
-  const range = `Расходы!A${targetRow}:F${targetRow}`;
+  const range = `Expenses!A${targetRow}:F${targetRow}`;
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {
