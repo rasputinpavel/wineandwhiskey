@@ -31,4 +31,4 @@ jobs:
           LOYVERSE_API_TOKEN:   ${{ secrets.LOYVERSE_API_TOKEN }}
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: npx tsx scripts/sync_receipts.ts ${{ github.event.inputs.mode || '' }}
+        run: npm run receipts -- ${{ github.event.inputs.mode || '' }}
