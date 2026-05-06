@@ -70,30 +70,22 @@ const DISCOVER_PAGES = (() => {
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-// Dismiss the Cookiebot consent dialog if it appears. Loyverse renders the
-// "multilevel" variant whose primary button is `…LevelOptinAllowAll`, not
-// `…Accept` — earlier `[id*="Accept"]` selector missed it and the dialog
-// kept intercepting pointer events on the submit button.
-async function dismissCookieConsent(page: Page): Promise<boolean> {
-  const selectors = [
-    '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
-    '#CybotCookiebotDialogBodyLevelButtonAcceptAll',
-    '#CybotCookiebotDialogBodyButtonAccept',
-    '#CybotCookiebotDialogBodyLevelButtonAccept',
-    'button[id*="CybotCookiebot"][id*="AllowAll"]',
-    'button[id*="CybotCookiebot"][id*="Accept"]',
-  ];
-  for (const sel of selectors) {
-    try {
-      const btn = page.locator(sel).first();
-      if (await btn.isVisible({ timeout: 500 })) {
-        await btn.click({ timeout: 2000 });
-        await delay(400);
-        return true;
-      }
-    } catch { /* try next */ }
-  }
-  return false;
+// Remove the Cookiebot consent dialog from the DOM so it can't intercept
+// pointer events. Clicking the "Allow all" button worked sometimes but the
+// banner kept re-rendering and blocked the login submit. Just nuke it.
+async function nukeCookieConsent(page: Page): Promise<void> {
+  try {
+    await page.evaluate(() => {
+      const ids = [
+        "CybotCookiebotDialog",
+        "CybotCookiebotDialogBody",
+        "CybotCookiebotDialogBodyUnderlay",
+      ];
+      for (const id of ids) document.getElementById(id)?.remove();
+      // Defensive: clear any leftover Cybot* elements
+      document.querySelectorAll('[id^="CybotCookiebot"]').forEach(el => el.remove());
+    });
+  } catch { /* page closed / non-existent */ }
 }
 
 // ─── Phase 1: Auth ────────────────────────────────────────────────────────────
@@ -116,8 +108,10 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   await page.goto("https://r.loyverse.com/", { waitUntil: "networkidle" });
   await delay(2000);
 
-  // Dismiss the cookie banner up-front so it doesn't intercept the submit click.
-  await dismissCookieConsent(page);
+  // Strip the cookie banner up-front so it can't intercept clicks or
+  // navigation. We do it again right before submit just in case the page
+  // re-injects it during/after Angular bootstraps the form.
+  await nukeCookieConsent(page);
 
   if (DEBUG) await page.screenshot({ path: "debug-login.png" });
 
@@ -138,21 +132,29 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   await emailInput.fill(LOYVERSE_EMAIL);
   await delay(500);
 
-  await page.locator('input[type="password"]').first().fill(LOYVERSE_PASSWORD);
+  const passwordInput = page.locator('input[type="password"]').first();
+  await passwordInput.fill(LOYVERSE_PASSWORD);
   await delay(300);
 
-  // Cookie banner sometimes re-renders late — dismiss again right before submit.
-  await dismissCookieConsent(page);
+  // Cookie banner sometimes re-renders late — strip it again just before submit.
+  await nukeCookieConsent(page);
 
-  // force: true bypasses the actionability check; if the cookie dialog is still
-  // there after dismissCookieConsent it would otherwise block the click.
-  await page.locator('button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")').first().click({ force: true });
+  // Submit by pressing Enter from the password field — Angular's form bound
+  // ngSubmit handler fires natively, no overlay-blocked button click needed.
+  await passwordInput.press("Enter");
 
-  // Wait for navigation (hash routing may not trigger waitForURL)
-  await delay(5000);
+  // Loyverse logs the user into a hash-routed dashboard URL. Wait up to 15s
+  // for the URL to leave the login screen.
+  for (let i = 0; i < 30; i++) {
+    await delay(500);
+    const u = page.url();
+    if (!u.includes("login") && !u.includes("sign-in") && !/r\.loyverse\.com\/?$/.test(u)) break;
+  }
+
   const urlAfter = page.url();
-  if (urlAfter.includes("login") || urlAfter.includes("sign-in")) {
-    throw new Error("Login failed — check LOYVERSE_EMAIL and LOYVERSE_PASSWORD");
+  if (urlAfter.includes("login") || urlAfter.includes("sign-in") || /r\.loyverse\.com\/?$/.test(urlAfter)) {
+    if (DEBUG) await page.screenshot({ path: "debug-login-failed.png" });
+    throw new Error(`Login failed — URL still ${urlAfter}. Check LOYVERSE_EMAIL/PASSWORD.`);
   }
 
   await context.storageState({ path: AUTH_STATE_PATH });
