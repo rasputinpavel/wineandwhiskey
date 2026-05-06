@@ -90,6 +90,8 @@ async function nukeCookieConsent(page: Page): Promise<void> {
 
 // ─── Phase 1: Auth ────────────────────────────────────────────────────────────
 
+const IS_CI = !!process.env.CI || !!process.env.GITHUB_ACTIONS;
+
 async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // Try saved session
   if (fs.existsSync(AUTH_STATE_PATH)) {
@@ -100,8 +102,23 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       console.log("  ✓ Reusing saved session.");
       return;
     }
-    console.log("  Session expired, re-authenticating...");
+    console.log("  Session expired.");
     fs.unlinkSync(AUTH_STATE_PATH);
+    if (IS_CI) {
+      // Loyverse triggers hCaptcha on automated headless logins, so CI cannot
+      // re-authenticate by itself. Operator must refresh the secret manually
+      // (see workflow file for the procedure).
+      throw new Error(
+        "Loyverse session expired. Refresh LOYVERSE_SESSION_B64 secret: " +
+        "run scraper locally with SCRAPER_HEADFUL=1, solve captcha, then " +
+        "`base64 -i .loyverse-session.json | pbcopy` and update the GitHub secret."
+      );
+    }
+  } else if (IS_CI) {
+    throw new Error(
+      "No .loyverse-session.json present in CI. The workflow should decode " +
+      "LOYVERSE_SESSION_B64 into this file before running the scraper."
+    );
   }
 
   // Fresh login

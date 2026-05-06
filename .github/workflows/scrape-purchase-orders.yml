@@ -29,10 +29,23 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
 
+      # Decode the persisted Loyverse session into a file the scraper expects.
+      # To refresh the session: log in locally with SCRAPER_HEADFUL=1, solve the
+      # captcha, then `base64 -i .loyverse-session.json | pbcopy` and update
+      # the LOYVERSE_SESSION_B64 secret.
+      - name: Restore Loyverse session
+        env:
+          LOYVERSE_SESSION_B64: ${{ secrets.LOYVERSE_SESSION_B64 }}
+        run: |
+          if [ -z "$LOYVERSE_SESSION_B64" ]; then
+            echo "::error::LOYVERSE_SESSION_B64 secret is not set."
+            exit 1
+          fi
+          printf '%s' "$LOYVERSE_SESSION_B64" | base64 -d > .loyverse-session.json
+          echo "Session file size: $(wc -c < .loyverse-session.json) bytes"
+
       - name: Scrape purchase orders
         env:
-          LOYVERSE_EMAIL:       ${{ secrets.LOYVERSE_EMAIL }}
-          LOYVERSE_PASSWORD:    ${{ secrets.LOYVERSE_PASSWORD }}
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SCRAPER_DEBUG:        "1"
