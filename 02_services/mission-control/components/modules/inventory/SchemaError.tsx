@@ -20,7 +20,7 @@ export function SchemaError({ error }: { error: string }) {
         <summary className="cursor-pointer hover:text-wine-red">Что нужно сделать</summary>
         <ol className="mt-3 space-y-1 list-decimal pl-5">
           <li>В <code className="font-mono">.env.local</code> mission-control — добавить <code className="font-mono">SUPABASE_URL</code> и <code className="font-mono">SUPABASE_SERVICE_KEY</code> (можно скопировать из корневого .env.local).</li>
-          <li>В Supabase SQL editor применить <code className="font-mono">02_services/inventory/supabase/migrations/001_inventory.sql</code>.</li>
+          <li>В Supabase SQL editor применить <code className="font-mono">02_services/mission-control/supabase/migrations/001_inventory.sql</code>.</li>
           <li>В Supabase Dashboard → API → Exposed schemas — добавить <code className="font-mono">inventory</code>.</li>
           <li>Запустить sync: <code className="font-mono">npm run inv:all</code> из корня репо.</li>
         </ol>

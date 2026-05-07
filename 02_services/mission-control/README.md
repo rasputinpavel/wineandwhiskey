@@ -1,44 +1,69 @@
 # Mission Control (ЦУП)
 
-Internal operations bridge for Wine & Whiskey — single screen with all key business KPIs and a registry of every service, agent, and sync job that runs the store.
+Wine & Whiskey internal portal. Umbrella service that absorbs the per-service split — every internal tool, agent, and dashboard lives here either as a native module or as an embedded panel.
 
-Two functions:
-1. **Operator mode** (you + Ирина) — quickly see business pulse, what's healthy, what's stale, jump straight to any service.
-2. **Investor view** (later) — narrative of the AI-native wine boutique #1 on Phuket: visible agents, live KPIs, transparent automation.
+## Architecture
+
+App shell with a persistent left sidebar. Each item in the sidebar opens in the right pane and is one of four kinds:
+
+- **native**   — first-class module living at `app/(portal)/m/<slug>/*` with its own pages, sub-nav, and Supabase queries (e.g. `inventory`)
+- **iframe**   — third-party tool that allows framing (Google Sheets, Drive, Lovable storefront)
+- **external** — third-party tool that blocks framing — renders an "Open externally ↗" card (Loyverse, FlowAccount, GitHub, Railway)
+- **builtin**  — small inline React panel (KPI Pulse stub, env-vars reference)
+
+The single source of truth for the sidebar is [lib/registry.ts](lib/registry.ts).
 
 ## Stack
+
 - Next.js 15 (App Router) · React 19 · Tailwind CSS
-- Cookie auth (HMAC-signed, 30-day) — same pattern as `trendwatch`
-- Reads later from: Supabase (`price-service` + `inventory` schemas), Loyverse REST, Google Sheets, Railway API
+- Auth: HMAC-signed cookie (same pattern as `trendwatch`)
+- Data: Supabase (`inventory` schema today; `price`, `matrix` etc. as modules land)
+- Brand tokens: `/04_brand/design-tokens.json` (light theme, Wine Red / Warm White, Bebas Neue + DM Sans + Inter)
 
 ## Run locally
 
 ```bash
 cd 02_services/mission-control
 npm install
-cp .env.example .env.local   # set MC_PASSWORD + MC_SECRET
+cp .env.example .env.local   # set MC_PASSWORD + MC_SECRET + Supabase
 npm run dev                  # → http://localhost:3003
+```
+
+For real Inventory data locally:
+
+```bash
+set -a; source ../../.env.local; set +a   # picks up SUPABASE_URL + SUPABASE_SERVICE_KEY
+npm run dev
 ```
 
 ## Deploy (Railway)
 
-New service in the same Railway project. Set env vars: `MC_PASSWORD`, `MC_SECRET`. Build/start come from `railway.json` + `nixpacks.toml`. Health check: `/api/health`.
+Service in the same Railway project as price-service / trendwatch.
 
-## Layout
+- **Root Directory:** `02_services/mission-control`
+- **Builder:** Nixpacks (auto)
+- **Healthcheck:** `/api/health`
+- **Env vars:** `MC_PASSWORD`, `MC_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
 
-- `app/page.tsx` — **Bridge** (HUD KPIs + subsystem rails)
-- `app/systems/page.tsx` — fleet registry (all services as cards)
-- `app/systems/[slug]/page.tsx` — single service detail
-- `app/login/page.tsx` — bridge access
-- `lib/registry.ts` — single source of truth for the service catalog
-- `lib/kpi.ts` — KPI fetchers (currently mocks)
+## Modules
 
-## Rollout plan
+### Inventory (live)
+Bridges Loyverse stock with FlowAccount B2B invoices. Schema in [supabase/migrations/001_inventory.sql](supabase/migrations/001_inventory.sql) (apply once via Supabase SQL editor; expose `inventory` schema via API settings).
 
-1. ✅ Skeleton, auth, dark starship theme
-2. ✅ Bridge with mock KPIs + subsystem rails
-3. ✅ `/systems` registry + per-service detail
-4. Wire real KPIs one by one: revenue → GP → cash → stock health → turnover
-5. Wire real health: `inventory.sync_log`, Railway API, GitHub last commit
-6. Last-output stream: latest bot briefing, latest accounting close, latest reels
-7. Polish: investor share-link mode (read-only public KPIs), iPad layout
+Sync from the project root:
+```bash
+npm run inv:all   # = inv:loyverse + inv:flow
+```
+
+Pages:
+- `/m/inventory` — SKU breakdown (on hand / in store / B2B in transit / consignment)
+- `/m/inventory/sku/[code]` — drill-down per SKU
+- `/m/inventory/b2b` — outstanding invoices (Open vs Overdue)
+- `/m/inventory/consignment` — consignment locations (Phase 2: balances + delivery notes)
+- `/m/inventory/admin/unmapped` — FlowAccount lines without Loyverse code match
+
+### Roadmap
+- `price-service` migration into `/m/price/*` (currently iframed/external)
+- `wine-matrix` greenfield module
+- `pulse` real KPI panel
+- Internal links from sidebar to live Sheets / Drive folders work as iframes already
