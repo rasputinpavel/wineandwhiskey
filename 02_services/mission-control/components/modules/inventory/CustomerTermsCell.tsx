@@ -1,0 +1,82 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export function CustomerTermsCell({
+  customerId, initial,
+}: {
+  customerId: string
+  initial: number
+}) {
+  const router = useRouter()
+  const [value, setValue] = useState<string>(String(initial))
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    const n = Number(value)
+    if (Number.isNaN(n) || n < 0) {
+      setErr('Number ≥ 0')
+      return
+    }
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch('/api/m/inventory/customers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: customerId, payment_terms_days: n }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      setEditing(false)
+      router.refresh()
+    } catch (e: any) {
+      setErr(e?.message ?? 'save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className={`text-left ${initial === 0 ? 'text-graphite italic hover:text-wine-red' : 'text-deep-black hover:text-wine-red'}`}
+        title="Click to edit"
+      >
+        {initial === 0 ? 'set terms' : `${initial} days`}
+      </button>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        min={0}
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') save()
+          if (e.key === 'Escape') { setEditing(false); setValue(String(initial)) }
+        }}
+        className="w-16 px-1.5 py-0.5 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red"
+        disabled={saving}
+      />
+      <button onClick={save} disabled={saving}
+              className="text-[10px] px-1.5 py-0.5 bg-wine-red text-warm-white rounded-sm disabled:opacity-50">
+        {saving ? '…' : '✓'}
+      </button>
+      <button onClick={() => { setEditing(false); setValue(String(initial)); setErr(null) }} disabled={saving}
+              className="text-[10px] text-graphite hover:text-wine-red">
+        ✕
+      </button>
+      {err && <span className="text-[10px] text-wine-red ml-1">{err}</span>}
+    </span>
+  )
+}
