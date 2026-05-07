@@ -5,15 +5,31 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 
 export const dynamic = 'force-dynamic'
 
+type SortKey = 'loyverse_product_code' | 'name' | 'on_hand' | 'in_store' | 'b2b_in_transit' | 'on_consignment'
+const SORT_KEYS: SortKey[] = ['loyverse_product_code', 'name', 'on_hand', 'in_store', 'b2b_in_transit', 'on_consignment']
+const DEFAULT_SORT: SortKey = 'name'
+const DEFAULT_DIR: 'asc' | 'desc' = 'asc'
+
+type SearchParams = {
+  q?: string
+  sort?: SortKey
+  dir?: 'asc' | 'desc'
+}
+
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<SearchParams>
 }) {
-  const { q } = await searchParams
-  const query = (q ?? '').trim()
+  const sp = await searchParams
+  const sort: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : DEFAULT_SORT
+  const dir = sp.dir === 'desc' ? 'desc' : DEFAULT_DIR
+  const query = (sp.q ?? '').trim()
 
-  let req = sbInventory.from('v_sku_breakdown').select('*').order('name')
+  let req = sbInventory
+    .from('v_sku_breakdown')
+    .select('*')
+    .order(sort, { ascending: dir === 'asc', nullsFirst: false })
   if (query) {
     req = req.or(`name.ilike.%${query}%,loyverse_product_code.ilike.%${query}%`)
   }
@@ -37,9 +53,16 @@ export default async function InventoryPage({
           placeholder="Search by SKU code or name…"
           className="border border-pale-stone bg-warm-white px-3 py-2 rounded-sm w-[360px] text-sm focus:outline-none focus:border-wine-red"
         />
+        <input type="hidden" name="sort" value={sort} />
+        <input type="hidden" name="dir" value={dir} />
         <button className="bg-wine-red hover:bg-burgundy-deep text-warm-white text-sm px-4 py-2 rounded-sm transition-colors">
           Search
         </button>
+        {query && (
+          <Link href="/m/inventory" className="px-4 py-2 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite text-sm rounded-sm transition-colors">
+            Reset
+          </Link>
+        )}
       </form>
 
       {error && <SchemaError error={error.message} />}
@@ -49,12 +72,12 @@ export default async function InventoryPage({
           <table className="w-full text-[13px]">
             <thead className="text-graphite border-b border-pale-stone bg-cream/40">
               <tr>
-                <th className="text-left  py-2 px-4">Code</th>
-                <th className="text-left  py-2 px-4">Name</th>
-                <th className="text-right py-2 px-4">On hand</th>
-                <th className="text-right py-2 px-4">In store</th>
-                <th className="text-right py-2 px-4">B2B in transit</th>
-                <th className="text-right py-2 px-4">Consignment</th>
+                <SortTh col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} />
+                <SortTh col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} />
+                <SortTh col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} align="right" />
+                <SortTh col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} align="right" />
+                <SortTh col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} align="right" />
+                <SortTh col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} align="right" />
               </tr>
             </thead>
             <tbody>
@@ -76,7 +99,7 @@ export default async function InventoryPage({
               ))}
               {rows.length === 0 && !error && (
                 <tr><td colSpan={6} className="py-10 text-center text-graphite text-sm">
-                  No SKUs yet — run <code className="font-mono">npm run inv:all</code> to populate.
+                  {query ? `Ничего не нашлось по "${query}".` : <>No SKUs yet — run <code className="font-mono">npm run inv:all</code>.</>}
                 </td></tr>
               )}
             </tbody>
@@ -84,6 +107,40 @@ export default async function InventoryPage({
         </div>
       )}
     </>
+  )
+}
+
+function SortTh({
+  col, label, sort, dir, sp, align = 'left',
+}: {
+  col: SortKey
+  label: string
+  sort: SortKey
+  dir: 'asc' | 'desc'
+  sp: SearchParams
+  align?: 'left' | 'right'
+}) {
+  const isActive = sort === col
+  // Click cycles dir on the active column; switches to asc for a fresh column.
+  const nextDir: 'asc' | 'desc' = isActive ? (dir === 'asc' ? 'desc' : 'asc') : 'asc'
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(sp)) {
+    if (v !== undefined && v !== '' && k !== 'sort' && k !== 'dir') {
+      params.set(k, String(v))
+    }
+  }
+  params.set('sort', col)
+  params.set('dir', nextDir)
+  const arrow = !isActive ? ' ↕' : (dir === 'asc' ? ' ↑' : ' ↓')
+  return (
+    <th className={`py-2 px-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <Link
+        href={`?${params.toString()}`}
+        className={`whitespace-nowrap ${isActive ? 'text-wine-red' : 'text-graphite hover:text-deep-black'}`}
+      >
+        {label}<span className="opacity-60">{arrow}</span>
+      </Link>
+    </th>
   )
 }
 
