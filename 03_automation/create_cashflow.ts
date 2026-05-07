@@ -106,13 +106,13 @@ async function main() {
   // Marketing: 10% of projected revenue (row 6, after personal balance row added)
   const fMarketing = `=B6*${MARKETING_PCT.toString().replace(".", ",")}`;
 
-  // Прочие расходы: actual Расходы for previous month
+  // Прочие расходы: actual Expenses for previous month
   // Old rows have text "฿856,00" in col B → force numeric with 1* so IFERROR catches text too
   const prevDateFragment = `.${String(prevM).padStart(2, "0")}.${prevY}`; // e.g. ".04.2026"
   const fOther =
     `=SUMPRODUCT(` +
-    `(ISNUMBER(SEARCH("${prevDateFragment}"${S}'Расходы'!A2:A500)))*` +
-    `IFERROR(1*'Расходы'!B2:B500${S}0))`;
+    `(ISNUMBER(SEARCH("${prevDateFragment}"${S}'Expenses'!A2:A500)))*` +
+    `IFERROR(1*'Expenses'!B2:B500${S}0))`;
 
   // ── Layout ────────────────────────────────────────────────────────────────
   //

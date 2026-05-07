@@ -205,22 +205,25 @@ async function main() {
         `IFERROR('Дебиторка'!E2:E200${S}0)` +
       `)`;
 
+    // Harvest Creation вынесен в «Обязательные» как фиксированная статья (5 число),
+    // поэтому в Кредиторке его сумма игнорируется, чтобы не задваивалась.
     const fKred =
       `=SUMPRODUCT(` +
       `(IFERROR(DATEVALUE('Кредиторка'!E2:E200)${S}0)>=${dateF(start)})*` +
       `(IFERROR(DATEVALUE('Кредиторка'!E2:E200)${S}0)<=${dateF(end)})*` +
       `(UPPER(TRIM('Кредиторка'!G2:G200))<>"PAID")*` +
+      `(UPPER(TRIM('Кредиторка'!A2:A200))<>"HARVEST CREATION")*` +
       `IFERROR('Кредиторка'!F2:F200${S}0))`;
 
     // Обязательные: formula-driven from Обязательные tab
     const fFixed = fMandatory(start, end);
 
-    // Операционные: actual entries from Расходы sheet
+    // Операционные: actual entries from Expenses sheet
     const fOper =
       `=SUMPRODUCT(` +
-      `(IFERROR('Расходы'!A2:A500${S}0)>=${dateF(start)})*` +
-      `(IFERROR('Расходы'!A2:A500${S}0)<=${dateF(end)})*` +
-      `IFERROR(1*'Расходы'!B2:B500${S}0))`;
+      `(IFERROR('Expenses'!A2:A500${S}0)>=${dateF(start)})*` +
+      `(IFERROR('Expenses'!A2:A500${S}0)<=${dateF(end)})*` +
+      `IFERROR(1*'Expenses'!B2:B500${S}0))`;
 
     const isoStart = start.toISOString().slice(0, 10);
     const fFact = `=IFERROR(VLOOKUP("${isoStart}"${S}Закрытие!A:B${S}2${S}0)${S}"")`;
