@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sbInventory, type SkuBreakdown } from '@/lib/supabase'
 import { SyncBadge } from '@/components/modules/inventory/SyncBadge'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { SkuSearchBox } from '@/components/modules/inventory/SkuSearchBox'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,24 +47,7 @@ export default async function InventoryPage({
         </div>
       </div>
 
-      <form className="mb-6 flex gap-2">
-        <input
-          name="q"
-          defaultValue={query}
-          placeholder="Search by SKU code or name…"
-          className="border border-pale-stone bg-warm-white px-3 py-2 rounded-sm w-[360px] text-sm focus:outline-none focus:border-wine-red"
-        />
-        <input type="hidden" name="sort" value={sort} />
-        <input type="hidden" name="dir" value={dir} />
-        <button className="bg-wine-red hover:bg-burgundy-deep text-warm-white text-sm px-4 py-2 rounded-sm transition-colors">
-          Search
-        </button>
-        {query && (
-          <Link href="/m/inventory" className="px-4 py-2 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite text-sm rounded-sm transition-colors">
-            Reset
-          </Link>
-        )}
-      </form>
+      <SkuSearchBox defaultValue={query} sort={sort} dir={dir} />
 
       {error && <SchemaError error={error.message} />}
 
