@@ -464,6 +464,16 @@ bot.on("callback_query:data", async (ctx) => {
     await ctx.answerCallbackQuery("Записываю...");
     try {
       await addExpenseRow(expense);
+    } catch (e) {
+      console.error("addExpenseRow failed:", e);
+      try {
+        await ctx.editMessageText("❌ Ошибка записи в таблицу. Попробуй ещё раз.");
+      } catch (editErr) { console.error("editMessageText failed:", editErr); }
+      return;
+    }
+    // Sheet write succeeded — confirmation edit is cosmetic, swallow its errors
+    // (e.g. "message is not modified" if a duplicate callback already updated it).
+    try {
       await ctx.editMessageText(
         `✅ Записано!\n\n` +
         `📅 ${expense.date} | ฿${expense.amount}\n` +
@@ -471,10 +481,7 @@ bot.on("callback_query:data", async (ctx) => {
         `${expense.isCompany ? "🏢 Со счёта компании" : "👤 С налички/личных"} · ` +
         `${expense.hasDocs ? "📄 Есть доки" : "📭 Без доков"}`,
       );
-    } catch (e) {
-      console.error(e);
-      await ctx.editMessageText("❌ Ошибка записи в таблицу. Попробуй ещё раз.");
-    }
+    } catch (editErr) { console.error("confirmation edit failed:", editErr); }
     return;
   }
 
