@@ -6,12 +6,15 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type ExpenseCategory = "Операционные" | "Обязательные" | "Кредиторка";
+
 export interface PendingExpense {
   amount:      string; // raw number, e.g. "856"
   description: string;
   date:        string; // DD.MM.YYYY Bangkok
   isCompany:   boolean;
   hasDocs:     boolean;
+  category:    ExpenseCategory;
 }
 
 export interface PendingPhoto {
@@ -128,12 +131,17 @@ export function parseExpenseFromMessage(text: string): PendingExpense | null {
   const amountMatch = text.match(/Сумма:\s*฿(\d+(?:[.,]\d+)?)/)
   const descMatch   = text.match(/На что:\s*(.+)/)
   if (!dateMatch || !amountMatch || !descMatch) return null
+  const category: ExpenseCategory =
+    text.match(/Категория:\s*✅?\s*Обязательные/) ? "Обязательные" :
+    text.match(/Категория:\s*✅?\s*Кредиторка/)   ? "Кредиторка"   :
+                                                    "Операционные";
   return {
     date:        dateMatch[1],
     amount:      amountMatch[1].replace(",", "."),
     description: descMatch[1].trim(),
     isCompany:   text.includes("✅ Со счёта компании"),
     hasDocs:     text.includes("✅ Есть"),
+    category,
   }
 }
 
@@ -149,13 +157,22 @@ export function buildExpenseMessage(e: PendingExpense): string {
     `💰 <b>Сумма:</b> ฿${e.amount}`,
     `📝 <b>На что:</b> ${e.description}`,
     ``,
+    `<b>Категория:</b> ✅ ${e.category}`,
     `<b>Откуда оплатили:</b> ${company}`,
     `<b>Документы:</b> ${docs}`,
   ].join("\n");
 }
 
-export function buildExpenseKeyboard(isCompany: boolean, hasDocs: boolean): InlineKeyboard {
+export function buildExpenseKeyboard(
+  isCompany: boolean,
+  hasDocs:   boolean,
+  category:  ExpenseCategory,
+): InlineKeyboard {
   return new InlineKeyboard()
+    .text(category === "Операционные" ? "✅ Операц." : "Операц.", "exp_cat_op")
+    .text(category === "Обязательные" ? "✅ Обяз."   : "Обяз.",   "exp_cat_oblig")
+    .text(category === "Кредиторка"   ? "✅ Кредит." : "Кредит.", "exp_cat_cred")
+    .row()
     .text(isCompany  ? "✅ Со счёта компании" : "Со счёта компании", "exp_company_yes")
     .text(!isCompany ? "✅ С налички/личных"  : "С налички/личных",  "exp_company_no")
     .row()
@@ -200,7 +217,7 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
   }
   const targetRow = firstEmptyIdx + 2; // 1-based sheet row (row 1 = header)
 
-  const range = `Expenses!A${targetRow}:F${targetRow}`;
+  const range = `Expenses!A${targetRow}:G${targetRow}`;
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {
@@ -216,6 +233,7 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
           e.hasDocs   ? "TRUE" : "FALSE",
           "FALSE",
           e.isCompany ? "TRUE" : "FALSE",
+          e.category,
         ]],
       }),
     }

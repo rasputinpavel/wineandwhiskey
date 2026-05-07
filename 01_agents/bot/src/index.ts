@@ -68,11 +68,12 @@ async function startExpenseFlow(
     date:        bangkokDate(),
     isCompany:   false,
     hasDocs:     false,
+    category:    "Операционные",
   };
   pendingExpenses.set(chatId, expense);
   await bot.api.sendMessage(chatId, buildExpenseMessage(expense), {
     parse_mode:   "HTML",
-    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs),
+    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs, expense.category),
   });
 }
 
@@ -458,6 +459,9 @@ bot.on("callback_query:data", async (ctx) => {
   if (data === "exp_company_no")  expense.isCompany = false;
   if (data === "exp_docs_yes")    expense.hasDocs   = true;
   if (data === "exp_docs_no")     expense.hasDocs   = false;
+  if (data === "exp_cat_op")      expense.category  = "Операционные";
+  if (data === "exp_cat_oblig")   expense.category  = "Обязательные";
+  if (data === "exp_cat_cred")    expense.category  = "Кредиторка";
 
   if (data === "exp_confirm") {
     pendingExpenses.delete(chatId);
@@ -478,6 +482,7 @@ bot.on("callback_query:data", async (ctx) => {
         `✅ Записано!\n\n` +
         `📅 ${expense.date} | ฿${expense.amount}\n` +
         `📝 ${expense.description}\n` +
+        `🏷 ${expense.category}\n` +
         `${expense.isCompany ? "🏢 Со счёта компании" : "👤 С налички/личных"} · ` +
         `${expense.hasDocs ? "📄 Есть доки" : "📭 Без доков"}`,
       );
@@ -489,7 +494,7 @@ bot.on("callback_query:data", async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.editMessageText(buildExpenseMessage(expense), {
     parse_mode:   "HTML",
-    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs),
+    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs, expense.category),
   });
 });
 
