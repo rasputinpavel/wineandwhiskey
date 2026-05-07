@@ -1,5 +1,6 @@
 import { sbInventory } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { MapLineCell } from '@/components/modules/inventory/MapLineCell'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,14 +28,14 @@ export default async function UnmappedPage() {
     <>
       <h2 className="font-heading text-xl text-deep-black mb-2">Unmapped invoice lines</h2>
       <p className="text-graphite text-sm mb-6 max-w-2xl">
-        Строки FlowAccount, которые не сматчились ни с одним кодом Loyverse. Резолв:
-        либо поправь item code в FlowAccount, либо добавь override в Phase 2 admin UI.
+        Строки FlowAccount, которые не сматчились ни с одним SKU автоматически.
+        Жми <span className="text-wine-red">Map to SKU</span> и выбери в поиске.
       </p>
 
       {rows.length === 0 ? (
         <div className="text-graphite text-sm">All lines are mapped. 🎉</div>
       ) : (
-        <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+        <div className="bg-warm-white border border-pale-stone rounded-md overflow-visible">
           <table className="w-full text-[13px]">
             <thead className="text-graphite border-b border-pale-stone bg-cream/40">
               <tr>
@@ -43,6 +44,7 @@ export default async function UnmappedPage() {
                 <th className="text-left  py-2 px-4">Raw text</th>
                 <th className="text-right py-2 px-4">Qty</th>
                 <th className="text-right py-2 px-4">Amount</th>
+                <th className="text-right py-2 px-4">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -53,6 +55,9 @@ export default async function UnmappedPage() {
                   <td className="py-2 px-4">{r.raw_text}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{r.qty}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{r.amount ? `฿${Number(r.amount).toLocaleString()}` : '—'}</td>
+                  <td className="py-2 px-4 text-right">
+                    <MapLineCell lineId={r.id} defaultQuery={r.raw_text} />
+                  </td>
                 </tr>
               ))}
             </tbody>
