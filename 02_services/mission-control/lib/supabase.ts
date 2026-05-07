@@ -9,6 +9,44 @@ const key = process.env.SUPABASE_SERVICE_KEY!
 
 export const sbInventory = createClient(url, key, { db: { schema: 'inventory' } })
 
+// Default `public` schema client — used for tables that live outside our
+// custom inventory schema (today: purchase_orders + purchase_order_items
+// populated by 03_automation/scrape_purchase_orders.ts).
+export const sbPublic = createClient(url, key)
+
+// ─── public.purchase_orders types ───────────────────────────────────────
+
+export type PurchaseOrder = {
+  id: number
+  po_number: string
+  loyverse_id: number | null
+  order_date: string | null
+  expected_on: string | null
+  supplier: string | null
+  store: string | null
+  status: string | null
+  received: string | null
+  total_thb: number | null
+  subtotal_thb: number | null
+  vat_thb: number | null
+  url: string | null
+  scraped_at: string
+  scrape_error: string | null
+}
+
+export type PurchaseOrderItem = {
+  id: number
+  po_id: number
+  po_number: string
+  product_name: string
+  sku: string                 // Loyverse product code — joins to inventory.sku.loyverse_product_code
+  qty_ordered: number
+  qty_received: number
+  cost_price: number
+  line_total: number
+  scraped_at: string
+}
+
 // ─── Inventory schema types ─────────────────────────────────────────────
 // Mirror of inventory/supabase/migrations/001_inventory.sql.
 
