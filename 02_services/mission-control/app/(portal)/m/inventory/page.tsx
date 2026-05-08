@@ -6,13 +6,14 @@ import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
-type SortKey = 'loyverse_product_code' | 'name' | 'on_hand' | 'in_store' | 'b2b_in_transit' | 'on_consignment'
-const SORT_KEYS: SortKey[] = ['loyverse_product_code', 'name', 'on_hand', 'in_store', 'b2b_in_transit', 'on_consignment']
+type SortKey = 'loyverse_product_code' | 'name' | 'category' | 'on_hand' | 'in_store' | 'b2b_in_transit' | 'on_consignment'
+const SORT_KEYS: SortKey[] = ['loyverse_product_code', 'name', 'category', 'on_hand', 'in_store', 'b2b_in_transit', 'on_consignment']
 const DEFAULT_SORT: SortKey = 'name'
 const DEFAULT_DIR: 'asc' | 'desc' = 'asc'
 
 type SearchParams = {
   q?: string
+  category?: string
   sort?: SortKey
   dir?: 'asc' | 'desc'
 }
@@ -26,7 +27,11 @@ export default async function InventoryPage({
   const sort: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : DEFAULT_SORT
   const dir = sp.dir === 'desc' ? 'desc' : DEFAULT_DIR
   const query = (sp.q ?? '').trim()
+  const categoryFilter = (sp.category ?? '').trim()
 
+  // Build the query — Postgres doesn't have a great way to fetch distinct
+  // categories cheaply, so we do two passes: filtered breakdown for the
+  // table, plus a small all-categories scan for the dropdown.
   let req = sbInventory
     .from('v_sku_breakdown')
     .select('*')
@@ -34,8 +39,25 @@ export default async function InventoryPage({
   if (query) {
     req = req.or(`name.ilike.%${query}%,loyverse_product_code.ilike.%${query}%`)
   }
+  if (categoryFilter) {
+    req = req.eq('category', categoryFilter)
+  }
   const { data, error } = await req.limit(500)
   const rows = (data ?? []) as SkuBreakdown[]
+
+  // Category dropdown options. Pulls all distinct categories from the
+  // master sku table (paginated — Supabase caps select() at 1000).
+  const cats = new Set<string>()
+  for (let cur = 0; ; cur += 1000) {
+    const { data: cd, error: ce } = await sbInventory
+      .from('sku').select('category')
+      .not('category', 'is', null)
+      .range(cur, cur + 999)
+    if (ce || !cd?.length) break
+    for (const r of cd as { category: string }[]) if (r.category) cats.add(r.category)
+    if (cd.length < 1000) break
+  }
+  const categories = Array.from(cats).sort()
 
   return (
     <>
@@ -46,6 +68,36 @@ export default async function InventoryPage({
 
       <SkuSearchBox defaultValue={query} sort={sort} dir={dir} />
 
+      {/* Filters row */}
+      <div className="flex items-end gap-3 mb-4 flex-wrap text-xs">
+        <form className="flex items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="overline text-graphite">Category</span>
+            <select
+              name="category"
+              defaultValue={categoryFilter}
+              className="px-2 py-1.5 border border-pale-stone bg-warm-white rounded-sm focus:outline-none focus:border-wine-red w-56"
+            >
+              <option value="">All categories ({categories.length})</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          {/* Preserve current query + sort when applying filter */}
+          {query && <input type="hidden" name="q" value={query} />}
+          <input type="hidden" name="sort" value={sort} />
+          <input type="hidden" name="dir" value={dir} />
+          <button className="px-3 py-1.5 bg-wine-red hover:bg-burgundy-deep text-warm-white rounded-sm">Apply</button>
+        </form>
+        {(categoryFilter || query) && (
+          <Link href="/m/inventory" className="px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm">
+            Reset all
+          </Link>
+        )}
+        <div className="text-graphite ml-auto">
+          {rows.length}{rows.length === 500 ? '+ (cap)' : ''} of {/* Total catalogue size */}{categories.length} categories
+        </div>
+      </div>
+
       {error && <SchemaError error={error.message} />}
 
       {!error && (
@@ -55,6 +107,7 @@ export default async function InventoryPage({
               <tr>
                 <SortTh col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} />
                 <SortTh col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} />
+                <SortTh col="category"              label="Category"       sort={sort} dir={dir} sp={sp} />
                 <SortTh col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} align="right" />
                 <SortTh col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} align="right" />
                 <SortTh col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} align="right" />
@@ -72,6 +125,7 @@ export default async function InventoryPage({
                       </Link>
                     ) : r.name}
                   </td>
+                  <td className="py-2 px-4 text-graphite">{r.category ?? '—'}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{fmt(r.on_hand)}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{fmt(r.in_store)}</td>
                   <td className="py-2 px-4 text-right tabular-nums text-wine-red">{fmt(r.b2b_in_transit)}</td>
@@ -79,8 +133,10 @@ export default async function InventoryPage({
                 </tr>
               ))}
               {rows.length === 0 && !error && (
-                <tr><td colSpan={6} className="py-10 text-center text-graphite text-sm">
-                  {query ? `Ничего не нашлось по "${query}".` : <>No SKUs yet — run <code className="font-mono">npm run inv:all</code>.</>}
+                <tr><td colSpan={7} className="py-10 text-center text-graphite text-sm">
+                  {query || categoryFilter
+                    ? `Ничего не нашлось по фильтрам.`
+                    : <>No SKUs yet — run <code className="font-mono">npm run inv:all</code>.</>}
                 </td></tr>
               )}
             </tbody>
@@ -105,6 +161,7 @@ function SortTh({
   // Click cycles dir on the active column; switches to asc for a fresh column.
   const nextDir: 'asc' | 'desc' = isActive ? (dir === 'asc' ? 'desc' : 'asc') : 'asc'
   const params = new URLSearchParams()
+  // Preserve query + filters; sort/dir get overwritten below.
   for (const [k, v] of Object.entries(sp)) {
     if (v !== undefined && v !== '' && k !== 'sort' && k !== 'dir') {
       params.set(k, String(v))
