@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { sbInventory, type SkuBreakdown } from '@/lib/supabase'
-import { SyncBadge } from '@/components/modules/inventory/SyncBadge'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SkuSearchBox } from '@/components/modules/inventory/SkuSearchBox'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,10 +41,7 @@ export default async function InventoryPage({
     <>
       <div className="flex items-baseline justify-between mb-4 flex-wrap gap-3">
         <h2 className="font-heading text-xl text-deep-black">SKU Breakdown</h2>
-        <div className="flex gap-6">
-          <SyncBadge source="loyverse_stock" />
-          <SyncBadge source="flowaccount_invoices" />
-        </div>
+        <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices']} />
       </div>
 
       <SkuSearchBox defaultValue={query} sort={sort} dir={dir} />

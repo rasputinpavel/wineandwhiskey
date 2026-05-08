@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { sbInventory } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,10 @@ export default async function ConsignmentPage() {
   if (!locations || locations.length === 0) {
     return (
       <>
-        <h2 className="font-heading text-xl text-deep-black mb-3">Consignment</h2>
+        <div className="flex items-baseline justify-between mb-3 flex-wrap gap-3">
+          <h2 className="font-heading text-xl text-deep-black">Consignment</h2>
+          <DataFreshness sources={['loyverse_stock']} />
+        </div>
         <div className="text-graphite text-sm">
           Нет точек консигнации. Когда добавим Golden Brewery — здесь появятся остатки на каждой точке.
         </div>
@@ -50,7 +54,10 @@ export default async function ConsignmentPage() {
 
   return (
     <>
-      <h2 className="font-heading text-xl text-deep-black mb-6">Consignment</h2>
+      <div className="flex items-baseline justify-between mb-6 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Consignment</h2>
+        <DataFreshness sources={['loyverse_stock']} />
+      </div>
 
       {(locations as LocationRow[]).map(loc => {
         const items = (byLocation[loc.id] ?? [])

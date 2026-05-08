@@ -1,6 +1,7 @@
 import { sbInventory } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { MapLineCell } from '@/components/modules/inventory/MapLineCell'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,10 @@ export default async function UnmappedPage() {
 
   return (
     <>
-      <h2 className="font-heading text-xl text-deep-black mb-2">Unmapped invoice lines</h2>
+      <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Unmapped invoice lines</h2>
+        <DataFreshness sources={['flowaccount_invoices']} />
+      </div>
       <p className="text-graphite text-sm mb-6 max-w-2xl">
         Строки FlowAccount, которые не сматчились ни с одним SKU автоматически.
         Жми <span className="text-wine-red">Map to SKU</span> и выбери в поиске.

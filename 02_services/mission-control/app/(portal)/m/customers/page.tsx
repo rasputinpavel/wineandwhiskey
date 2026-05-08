@@ -4,6 +4,7 @@ import { PaneHeader } from '@/components/shell/PaneHeader'
 import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CustomerTermsCell, CustomerConsignmentCell } from '@/components/modules/customers/CustomerEditCell'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,7 +94,10 @@ export default async function CustomersPage({
       <PaneHeader item={item} />
       <div className="flex-1 overflow-y-auto bg-cream">
         <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <h2 className="font-heading text-xl text-deep-black mb-2">B2B Customers</h2>
+          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+            <h2 className="font-heading text-xl text-deep-black">B2B Customers</h2>
+            <DataFreshness sources={['flowaccount_invoices']} />
+          </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
             Условия оплаты и пометка «consignment» задаются здесь. Используются на странице{' '}
             <a href="/m/inventory/b2b" className="text-wine-red hover:underline">B2B Outstanding</a>{' '}

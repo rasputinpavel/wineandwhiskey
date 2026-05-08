@@ -78,8 +78,8 @@ const TYPE_LABEL: Record<SupplierType, string> = {
 }
 
 const TYPE_TITLE: Record<SupplierType, string> = {
-  regular:     'All products via tax invoice (instant obligation)',
-  consignment: 'All products via delivery note (monthly true-up)',
+  regular:     'All products via tax invoice — pay within Terms days (0 = on delivery)',
+  consignment: 'All products via delivery note — monthly true-up by actual sales',
   mix:         'Part regular, part consignment',
 }
 

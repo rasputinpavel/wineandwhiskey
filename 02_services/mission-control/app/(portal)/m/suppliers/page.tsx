@@ -4,6 +4,7 @@ import { PaneHeader } from '@/components/shell/PaneHeader'
 import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SupplierTermsCell, SupplierTypeCell } from '@/components/modules/suppliers/SupplierEditCell'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,12 +86,16 @@ export default async function SuppliersPage({
       <PaneHeader item={item} />
       <div className="flex-1 overflow-y-auto bg-cream">
         <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <h2 className="font-heading text-xl text-deep-black mb-2">Suppliers</h2>
+          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+            <h2 className="font-heading text-xl text-deep-black">Suppliers</h2>
+            <DataFreshness sources={['purchase_orders']} />
+          </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
-            Поставщики, у которых мы закупаем товар. Тип <span className="text-deep-black">Regular</span> —
-            работают по tax invoice (мы должны сразу). <span className="text-deep-black">Consignment</span> —
-            присылают delivery note, платим раз в месяц по факту проданного.
-            Цифры берутся из <code className="font-mono text-xs">public.purchase_orders</code> (то что задали как PO в Loyverse).
+            Поставщики, у которых мы закупаем товар. <span className="text-deep-black">Regular</span> —
+            tax invoice с отсрочкой <code className="font-mono text-xs">Terms</code> дней (0 = по факту, 30 = через месяц).
+            <span className="text-deep-black"> Consignment</span> — delivery note без обязательства, true-up раз в месяц по факту проданного.
+            <span className="text-deep-black"> Mix</span> — часть SKU regular, часть consignment.
+            Цифры из <code className="font-mono text-xs">public.purchase_orders</code> (то что оформили как PO в Loyverse).
           </p>
 
           <div className="flex gap-1 mb-4 text-xs">

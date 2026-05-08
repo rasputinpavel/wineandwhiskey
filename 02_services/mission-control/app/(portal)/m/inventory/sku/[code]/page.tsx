@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { sbInventory, sbPublic, type PurchaseOrderItem, type PurchaseOrder } from '@/lib/supabase'
 import { fetchSkuB2cSalesWindow, type SkuB2cSalesWindow } from '@/lib/loyverse'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,10 @@ export default async function SkuDetail({ params }: { params: Promise<{ code: st
     <>
       <Link href="/m/inventory" className="text-xs text-graphite hover:text-wine-red">← Back to breakdown</Link>
       <div className="text-graphite text-xs mt-4 mb-1 font-mono">SKU · {sku.loyverse_product_code}</div>
-      <h2 className="font-heading text-2xl text-deep-black mb-6">{sku.name}</h2>
+      <div className="flex items-baseline justify-between mb-6 flex-wrap gap-3">
+        <h2 className="font-heading text-2xl text-deep-black">{sku.name}</h2>
+        <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'purchase_orders']} />
+      </div>
 
       {/* Each section streams independently. Suspense with a skeleton so the */}
       {/* slow Loyverse REST scan doesn't block the rest of the page. */}

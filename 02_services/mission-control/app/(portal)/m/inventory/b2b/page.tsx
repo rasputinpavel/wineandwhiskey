@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sbInventory } from '@/lib/supabase'
-import { SyncBadge } from '@/components/modules/inventory/SyncBadge'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -133,7 +133,7 @@ export default async function B2bPage({
     <>
       <div className="flex items-baseline justify-between mb-4 flex-wrap gap-3">
         <h2 className="font-heading text-xl text-deep-black">B2B Outstanding</h2>
-        <SyncBadge source="flowaccount_invoices" />
+        <DataFreshness sources={['flowaccount_invoices']} />
       </div>
 
       {/* Summary */}
