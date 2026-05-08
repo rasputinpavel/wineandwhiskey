@@ -3,10 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export function CustomerTermsCell({
-  customerId, initial,
-}: {
-  customerId: string
+export function SupplierTermsCell({ supplierId, initial }: {
+  supplierId: string
   initial: number
 }) {
   const router = useRouter()
@@ -17,16 +15,13 @@ export function CustomerTermsCell({
 
   async function save() {
     const n = Number(value)
-    if (Number.isNaN(n) || n < 0) {
-      setErr('Number ≥ 0')
-      return
-    }
+    if (Number.isNaN(n) || n < 0) { setErr('Number ≥ 0'); return }
     setSaving(true); setErr(null)
     try {
-      const res = await fetch('/api/m/inventory/customers', {
+      const res = await fetch('/api/m/suppliers', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: customerId, payment_terms_days: n }),
+        body: JSON.stringify({ id: supplierId, payment_terms_days: n }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -36,9 +31,7 @@ export function CustomerTermsCell({
       router.refresh()
     } catch (e: any) {
       setErr(e?.message ?? 'save failed')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   if (!editing) {
@@ -56,9 +49,7 @@ export function CustomerTermsCell({
   return (
     <span className="inline-flex items-center gap-1">
       <input
-        type="number"
-        min={0}
-        autoFocus
+        type="number" min={0} autoFocus
         value={value}
         onChange={e => setValue(e.target.value)}
         onKeyDown={e => {
@@ -73,10 +64,43 @@ export function CustomerTermsCell({
         {saving ? '…' : '✓'}
       </button>
       <button onClick={() => { setEditing(false); setValue(String(initial)); setErr(null) }} disabled={saving}
-              className="text-[10px] text-graphite hover:text-wine-red">
-        ✕
-      </button>
+              className="text-[10px] text-graphite hover:text-wine-red">✕</button>
       {err && <span className="text-[10px] text-wine-red ml-1">{err}</span>}
     </span>
+  )
+}
+
+export function SupplierConsignmentCell({ supplierId, initial }: {
+  supplierId: string
+  initial: boolean
+}) {
+  const router = useRouter()
+  const [saving, setSaving] = useState(false)
+
+  async function toggle() {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/m/suppliers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: supplierId, is_consignment: !initial }),
+      })
+      if (res.ok) router.refresh()
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={saving}
+      className={`text-xs px-2 py-0.5 rounded-sm border transition-colors disabled:opacity-50 ${
+        initial
+          ? 'bg-amber-gold/20 text-deep-black border-amber-gold/60 hover:bg-amber-gold/30'
+          : 'bg-cream text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
+      }`}
+      title={initial ? 'Consignment supplier (Delivery Note → consignment, monthly true-up). Click to switch.' : 'Regular supplier (Tax Invoice → instant obligation). Click to mark Consignment.'}
+    >
+      {initial ? 'Consignment' : 'Regular'}
+    </button>
   )
 }

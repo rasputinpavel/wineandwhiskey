@@ -62,6 +62,18 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
+        slug: 'customers', name: 'Customers', icon: '👥', status: 'building',
+        description: 'B2B клиенты: условия оплаты, обороты по годам, consignment.',
+        route: '/m/customers',
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'suppliers', name: 'Suppliers', icon: '🚚', status: 'building',
+        description: 'Поставщики: tax invoices vs consignment, обороты, условия.',
+        route: '/m/suppliers',
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'price-service', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',
         route: m('price-service'),
