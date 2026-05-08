@@ -99,6 +99,32 @@ export type FlowInvoice = {
   scraped_at: string
 }
 
+export type ConsignmentLocation = {
+  id: string
+  customer_id: string
+  name: string
+  created_at: string
+}
+
+export type DeliveryNote = {
+  id: string
+  location_id: string
+  number: string
+  issued_at: string
+  status: 'draft' | 'issued' | 'delivered'
+  pdf_url: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export type DeliveryNoteLine = {
+  id: string
+  note_id: string
+  sku_id: string
+  qty: number
+  unit_price: number | null
+}
+
 export type SkuBreakdown = {
   sku_id: string
   loyverse_product_code: string | null

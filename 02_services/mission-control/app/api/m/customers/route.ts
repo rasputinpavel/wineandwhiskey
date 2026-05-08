@@ -17,5 +17,26 @@ export async function PATCH(req: Request) {
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-provision a consignment_location row when a customer is flipped to
+  // consignment, so the Deliveries tab works immediately. Idempotent.
+  if (is_consignment === true) {
+    const { data: existing } = await sbInventory
+      .from('consignment_location')
+      .select('id')
+      .eq('customer_id', id)
+      .maybeSingle()
+    if (!existing) {
+      const { data: cust } = await sbInventory
+        .from('b2b_customer')
+        .select('flowaccount_name')
+        .eq('id', id)
+        .single()
+      await sbInventory
+        .from('consignment_location')
+        .insert({ customer_id: id, name: cust?.flowaccount_name ?? 'Consignment' })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }

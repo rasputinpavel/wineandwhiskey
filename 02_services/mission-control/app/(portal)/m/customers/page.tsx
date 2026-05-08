@@ -148,7 +148,11 @@ export default async function CustomersPage({
                   const s = stats.get(c.id) ?? { open: 0, overdue: 0, openCount: 0, thisYearTotal: 0, thisYearCount: 0, lastYearTotal: 0, lastYearCount: 0 }
                   return (
                     <tr key={c.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
-                      <td className="py-2 px-4">{c.flowaccount_name}</td>
+                      <td className="py-2 px-4">
+                        <Link href={`/m/customers/${c.id}`} className="hover:text-wine-red">
+                          {c.flowaccount_name}
+                        </Link>
+                      </td>
                       <td className="py-2 px-4">
                         <CustomerConsignmentCell customerId={c.id} initial={c.is_consignment} />
                       </td>
