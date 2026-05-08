@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { SOURCES, type SourceKey } from '@/lib/dataSources'
+import { SOURCES, nextCronAt, type SourceKey } from '@/lib/dataSources'
 
 type Status = {
   finished_at: string | null
@@ -40,6 +40,7 @@ function SourceBadge({ sourceKey, status, onSynced }: {
   const [open, setOpen] = useState(false)
   const [running, setRunning] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,7 +52,7 @@ function SourceBadge({ sourceKey, status, onSynced }: {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const ts = status?.finished_at
+  const ts  = status?.finished_at
   const ago = ts ? timeAgo(ts) : 'never'
   const ok  = status?.ok !== false
   const dotCls =
@@ -59,6 +60,11 @@ function SourceBadge({ sourceKey, status, onSynced }: {
     !ok                                     ? 'bg-wine-red' :
     isStale(ts)                             ? 'bg-amber-gold' :
                                               'bg-graphite/60'
+
+  // For cron sources, compute next scheduled run.
+  const nextCron = def.runnable === 'cron' ? nextCronAt(def) : null
+  const nextLabel = nextCron ? formatBkkTime(nextCron) : null
+  const inLabel   = nextCron ? formatIn(nextCron) : null
 
   async function runSync() {
     setRunning(true); setMsg(null)
@@ -69,8 +75,6 @@ function SourceBadge({ sourceKey, status, onSynced }: {
         setMsg('✓ Done')
         onSynced()
         router.refresh()
-      } else if (res.status === 503) {
-        setMsg(`Run from laptop:`)
       } else {
         setMsg(`Error: ${j.error ?? `HTTP ${res.status}`}`)
       }
@@ -79,10 +83,6 @@ function SourceBadge({ sourceKey, status, onSynced }: {
     } finally {
       setRunning(false)
     }
-  }
-
-  async function copyCmd() {
-    try { await navigator.clipboard.writeText(def.command); setMsg('✓ Copied') } catch { setMsg(def.command) }
   }
 
   return (
@@ -97,29 +97,32 @@ function SourceBadge({ sourceKey, status, onSynced }: {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 w-[420px] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-4 text-left">
+        <div className="absolute right-0 top-full mt-1 z-30 w-[400px] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-4 text-left">
           <div className="font-heading text-sm text-deep-black mb-1">{def.label}</div>
           <p className="text-xs text-graphite leading-relaxed mb-3">{def.description}</p>
 
-          <div className="text-[11px] text-graphite mb-2">
-            <span className="font-mono">Last run:</span>{' '}
-            <span className={status?.ok === false ? 'text-wine-red' : 'text-deep-black'}>
-              {ts ? `${new Date(ts).toLocaleString('sv-SE')} (${ago})` : 'never'}
-            </span>
+          <div className="text-[11px] text-graphite mb-3 space-y-1">
+            <div>
+              <span className="font-mono">Last update:</span>{' '}
+              <span className={status?.ok === false ? 'text-wine-red' : 'text-deep-black'}>
+                {ts ? `${ago} (${formatBkkDateTime(new Date(ts))})` : 'never'}
+              </span>
+            </div>
+            {nextCron && (
+              <div>
+                <span className="font-mono">Next update:</span>{' '}
+                <span className="text-deep-black">{nextLabel} BKK</span>{' '}
+                <span className="text-graphite">· через {inLabel}</span>
+              </div>
+            )}
             {status?.error && (
               <div className="text-wine-red mt-1 font-mono break-words">{status.error}</div>
             )}
           </div>
 
-          <div className="border-t border-pale-stone pt-3">
-            <div className="overline text-graphite mb-2">CLI command</div>
-            <code className="font-mono text-xs px-2 py-1 bg-cream rounded-sm text-deep-black inline-block break-all">
-              {def.command}
-            </code>
-          </div>
-
-          <div className="mt-3 flex gap-2 items-center">
-            {def.runnable === 'server' ? (
+          {/* Action area depends on runnable */}
+          {def.runnable === 'web' && (
+            <div className="flex gap-2 items-center border-t border-pale-stone pt-3">
               <button
                 onClick={runSync}
                 disabled={running}
@@ -127,16 +130,34 @@ function SourceBadge({ sourceKey, status, onSynced }: {
               >
                 {running ? 'Running…' : 'Sync now'}
               </button>
-            ) : (
-              <button
-                onClick={copyCmd}
-                className="text-xs px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm transition-colors"
-              >
-                Copy command (run from laptop)
-              </button>
-            )}
-            {msg && <span className="text-[11px] text-graphite">{msg}</span>}
-          </div>
+              {msg && <span className="text-[11px] text-graphite">{msg}</span>}
+            </div>
+          )}
+
+          {def.runnable === 'cron' && (
+            <div className="border-t border-pale-stone pt-3 text-[11px] text-graphite">
+              Обновляется автоматически — ничего нажимать не нужно. Если данные срочно нужны
+              сейчас — попроси Павла запустить вручную.
+            </div>
+          )}
+
+          {/* Advanced — hidden by default. CLI command for power users. */}
+          <details className="mt-3 border-t border-pale-stone pt-2" open={showAdvanced} onToggle={e => setShowAdvanced((e.target as HTMLDetailsElement).open)}>
+            <summary className="text-[10px] text-graphite cursor-pointer hover:text-wine-red list-none">
+              {showAdvanced ? '▼' : '▶'} Advanced
+            </summary>
+            <div className="mt-2 text-[10px] text-graphite">
+              CLI:{' '}
+              <code className="font-mono px-1.5 py-0.5 bg-cream rounded-sm text-deep-black inline-block break-all">
+                {def.command}
+              </code>
+              {def.workflow && (
+                <div className="mt-1">
+                  Cron workflow: <code className="font-mono">.github/workflows/{def.workflow}</code>
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
     </div>
@@ -154,7 +175,29 @@ function timeAgo(iso: string): string {
   return `${d}d ago`
 }
 
+function formatIn(target: Date): string {
+  const ms = target.getTime() - Date.now()
+  if (ms <= 0) return 'now'
+  const m = Math.round(ms / 60_000)
+  if (m < 60) return `${m}m`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ${Math.round(m - h * 60)}m`
+  return `${Math.round(h / 24)}d`
+}
+
+function formatBkkTime(d: Date): string {
+  const bkk = new Date(d.getTime() + 7 * 3_600_000)
+  const hh = String(bkk.getUTCHours()).padStart(2, '0')
+  const mm = String(bkk.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+function formatBkkDateTime(d: Date): string {
+  const bkk = new Date(d.getTime() + 7 * 3_600_000)
+  return bkk.toISOString().slice(0, 16).replace('T', ' ')
+}
+
 function isStale(iso: string): boolean {
-  // > 24h since last successful run = amber.
+  // For cron-driven sources, "stale" = > 24h since last successful run.
   return Date.now() - new Date(iso).getTime() > 24 * 60 * 60 * 1000
 }

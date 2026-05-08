@@ -1,0 +1,66 @@
+name: Sync FlowAccount
+
+on:
+  schedule:
+    # Every 8 hours: 00:00 / 08:00 / 16:00 Bangkok (UTC+7) = 17 / 01 / 09 UTC
+    - cron: "0 1,9,17 * * *"
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "FLOW_FROM date (YYYY-MM-DD). Leave blank for default 90-day window."
+        required: false
+        default: ""
+      to:
+        description: "FLOW_TO date (YYYY-MM-DD). Leave blank for today."
+        required: false
+        default: ""
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60   # FA detail-page scrape is slow (Playwright + ~3s/invoice)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      # Decode the persisted FlowAccount session into a file the scraper
+      # expects. To refresh: log in locally once, then
+      #   base64 -i .flow-session.json | pbcopy
+      # and update the FA_SESSION_B64 secret on GitHub.
+      - name: Restore FlowAccount session
+        env:
+          FA_SESSION_B64: ${{ secrets.FA_SESSION_B64 }}
+        run: |
+          if [ -z "$FA_SESSION_B64" ]; then
+            echo "::error::FA_SESSION_B64 secret is not set."
+            exit 1
+          fi
+          printf '%s' "$FA_SESSION_B64" | base64 -d > .flow-session.json
+          echo "Session file size: $(wc -c < .flow-session.json) bytes"
+
+      - name: Sync FlowAccount → inventory schema
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FLOW_FROM:            ${{ github.event.inputs.from }}
+          FLOW_TO:              ${{ github.event.inputs.to }}
+        run: npm run inv:flow
+
+      - name: Upload debug screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flow-debug
+          path: debug-*.png
+          if-no-files-found: ignore
+          retention-days: 7

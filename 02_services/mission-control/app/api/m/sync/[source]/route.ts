@@ -10,11 +10,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ source
   const def = (SOURCES as Record<string, typeof SOURCES[SourceKey]>)[source]
   if (!def) return NextResponse.json({ error: `unknown source ${source}` }, { status: 404 })
 
-  if (def.runnable !== 'server') {
+  if (def.runnable !== 'web') {
     return NextResponse.json({
-      error: `Source "${def.label}" can only be synced from your laptop`,
-      reason: 'needs Playwright + persisted browser session',
-      command: def.command,
+      error: `Source "${def.label}" runs on a schedule (every ${def.cronEveryHours ?? '?'}h via GitHub Actions). No manual trigger from the portal.`,
+      runnable: def.runnable,
     }, { status: 503 })
   }
 

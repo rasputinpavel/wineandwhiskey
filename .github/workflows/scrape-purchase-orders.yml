@@ -2,8 +2,8 @@ name: Scrape Purchase Orders
 
 on:
   schedule:
-    # 02:00 Bangkok time (UTC+7) = 19:00 UTC
-    - cron: "0 19 * * *"
+    # Every 8 hours: 00:00 / 08:00 / 16:00 Bangkok (UTC+7) = 17 / 01 / 09 UTC
+    - cron: "0 1,9,17 * * *"
   workflow_dispatch:
     inputs:
       mode:
