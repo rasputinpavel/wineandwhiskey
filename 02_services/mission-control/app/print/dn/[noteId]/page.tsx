@@ -4,20 +4,24 @@ import { PrintButton } from '@/components/modules/customers/PrintButton'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PrintDeliveryNote({ params }: { params: Promise<{ id: string; noteId: string }> }) {
-  const { id: customerId, noteId } = await params
+// Print-only delivery note — top-level route on purpose. Living outside
+// the (portal) layout means: (a) the page can scroll vertically (parent
+// is no longer h-screen overflow-hidden), and (b) browser Print sees
+// only this document — the sidebar and module nav are simply not in the
+// rendered tree, so no @media-print hiding gymnastics needed.
 
-  // Header + nested customer/location lookup.
+export default async function PrintDeliveryNote({ params }: { params: Promise<{ noteId: string }> }) {
+  const { noteId } = await params
+
   const { data: note } = await sbInventory
     .from('delivery_note')
-    .select('id, number, issued_at, status, location_id, consignment_location(name, b2b_customer(flowaccount_name))')
+    .select('id, number, issued_at, status, location_id, consignment_location(name, customer_id, b2b_customer(flowaccount_name))')
     .eq('id', noteId).maybeSingle()
 
   if (!note) {
     return (
       <div className="p-8">
         <p className="text-graphite">Delivery note not found.</p>
-        <Link href={`/m/customers/${customerId}?tab=deliveries`} className="text-wine-red">← Back</Link>
       </div>
     )
   }
@@ -31,21 +35,23 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
   const rows = (lines ?? []) as any[]
   const totalQty = rows.reduce((s, l) => s + Number(l.qty || 0), 0)
   const total    = rows.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0)
+  const customerId   = (note as any).consignment_location?.customer_id
   const customerName = (note as any).consignment_location?.b2b_customer?.flowaccount_name
                     ?? (note as any).consignment_location?.name
                     ?? 'Customer'
+  const backHref = customerId ? `/m/customers/${customerId}?tab=deliveries` : '/m/customers'
 
   return (
-    <div className="bg-warm-white min-h-screen">
-      {/* Toolbar — hidden on print */}
-      <div className="print:hidden border-b border-pale-stone px-6 py-3 flex items-center justify-between">
-        <Link href={`/m/customers/${customerId}?tab=deliveries`} className="text-xs text-graphite hover:text-wine-red">
+    <div className="bg-warm-white text-deep-black">
+      {/* Toolbar — hidden on print via Tailwind's print: variant */}
+      <div className="print:hidden border-b border-pale-stone px-6 py-3 flex items-center justify-between sticky top-0 bg-warm-white z-10">
+        <Link href={backHref} className="text-xs text-graphite hover:text-wine-red">
           ← Back to deliveries
         </Link>
         <PrintButton />
       </div>
 
-      <article className="dn-page mx-auto bg-warm-white text-deep-black">
+      <article className="dn-page mx-auto bg-warm-white">
         <header className="flex items-end justify-between border-b-2 border-deep-black pb-6 mb-8">
           <div>
             <div className="flex items-baseline gap-1.5 mb-2">
@@ -118,20 +124,29 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
           </tfoot>
         </table>
 
-        <section className="grid grid-cols-2 gap-12 mt-16">
+        {/* Signatures — fillable lines for both parties */}
+        <section className="grid grid-cols-2 gap-12 mt-20 mb-12 sig">
           <div>
-            <div className="border-t border-deep-black pt-2 text-xs text-graphite">
-              <span className="overline">Released by</span><br/>Wine &amp; Whiskey
+            <div className="overline text-graphite mb-3">Released by · Wine &amp; Whiskey</div>
+            <div className="space-y-5">
+              <SignatureRow label="Name" />
+              <SignatureRow label="Position" />
+              <SignatureRow label="Signature" />
+              <SignatureRow label="Date" />
             </div>
           </div>
           <div>
-            <div className="border-t border-deep-black pt-2 text-xs text-graphite">
-              <span className="overline">Received by</span><br/>{customerName}
+            <div className="overline text-graphite mb-3">Received by · {customerName}</div>
+            <div className="space-y-5">
+              <SignatureRow label="Name" />
+              <SignatureRow label="Position" />
+              <SignatureRow label="Signature" />
+              <SignatureRow label="Date" />
             </div>
           </div>
         </section>
 
-        <footer className="mt-16 text-[10px] text-graphite text-center border-t border-pale-stone pt-3">
+        <footer className="mt-10 text-[10px] text-graphite text-center border-t border-pale-stone pt-3">
           This document records the physical movement of goods on consignment.
           Title remains with Wine &amp; Whiskey until invoiced.
         </footer>
@@ -139,12 +154,23 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
 
       <style>{`
         .dn-page { padding: 24mm 18mm; max-width: 210mm; }
+        .sig .row { display: grid; grid-template-columns: 80px 1fr; align-items: end; gap: 12px; }
+        .sig .row .line { border-bottom: 1px solid #1A1A1A; height: 22px; }
         @page { size: A4 portrait; margin: 0; }
         @media print {
-          body { background: white !important; }
-          .dn-page { padding: 18mm 14mm; }
+          html, body { background: white !important; margin: 0 !important; }
+          .dn-page { padding: 16mm 14mm; max-width: 100%; }
         }
       `}</style>
+    </div>
+  )
+}
+
+function SignatureRow({ label }: { label: string }) {
+  return (
+    <div className="row">
+      <div className="text-xs text-graphite">{label}:</div>
+      <div className="line" />
     </div>
   )
 }

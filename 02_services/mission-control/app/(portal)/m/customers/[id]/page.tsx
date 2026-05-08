@@ -203,7 +203,7 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_qty}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_money ? `฿${n.total_money.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}</td>
                   <td className="py-2 px-4 text-right">
-                    <Link href={`/m/customers/${customerId}/dn/${n.id}/print`} className="text-xs text-graphite hover:text-wine-red">
+                    <Link href={`/print/dn/${n.id}`} target="_blank" className="text-xs text-graphite hover:text-wine-red">
                       Print ↗
                     </Link>
                   </td>

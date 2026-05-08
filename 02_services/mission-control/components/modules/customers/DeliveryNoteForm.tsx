@@ -65,7 +65,9 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
       const j = await res.json()
       if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`)
       if (opts.thenPrint) {
-        router.push(`/m/customers/${customerId}/dn/${j.id}/print`)
+        // Print page is a top-level route — no portal shell, full scroll,
+        // and browser Print sees only the document.
+        router.push(`/print/dn/${j.id}`)
       } else {
         router.push(`/m/customers/${customerId}?tab=deliveries`)
         router.refresh()
