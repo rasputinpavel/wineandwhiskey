@@ -64,6 +64,22 @@ async function logFinish(sb: ReturnType<typeof client>['sb'], id: string, ok: bo
 async function syncProducts(sb: ReturnType<typeof client>['sb'], token: string) {
   const id = await logStart(sb, 'loyverse_products')
   try {
+    // Pre-fetch the category id→name map so we can denormalise into
+    // inventory.sku.category. Without this every row writes NULL and the
+    // SKU Breakdown page can't filter/sort by category.
+    const categoryName = new Map<string, string>()
+    {
+      let cur: string | undefined
+      for (let p = 0; p < 20; p++) {
+        const qs = new URLSearchParams({ limit: '250' })
+        if (cur) qs.set('cursor', cur)
+        const data = await loyverseGet<{ categories: Array<{ id: string; name: string }>; cursor?: string }>(`/categories?${qs}`, token)
+        for (const c of data.categories) categoryName.set(c.id, c.name)
+        if (!data.cursor) break
+        cur = data.cursor
+      }
+    }
+
     const items: LoyverseItem[] = []
     let cursor: string | undefined
     for (let page = 0; page < 100; page++) {
@@ -80,7 +96,7 @@ async function syncProducts(sb: ReturnType<typeof client>['sb'], token: string) 
       loyverse_item_id:    it.id,
       loyverse_product_code: v.sku,
       name:                it.item_name,
-      category:            null,
+      category:            it.category_id ? (categoryName.get(it.category_id) ?? null) : null,
       default_price:       v.default_price,
       is_inventory_tracked: it.track_stock,
       updated_at:          new Date().toISOString(),
