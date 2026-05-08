@@ -27,6 +27,19 @@ export default async function CustomerDetail({
   if (!cust)   return <><PaneHeader item={item} /><div className="p-6"><div className="text-graphite">Customer not found.</div></div></>
   const c = cust as B2bCustomer
 
+  // Self-heal: if customer is consignment but the location row never got
+  // created (e.g. flipped before auto-provision was added), create it now.
+  if (c.is_consignment) {
+    const { data: loc } = await sbInventory
+      .from('consignment_location')
+      .select('id').eq('customer_id', id).maybeSingle()
+    if (!loc) {
+      await sbInventory
+        .from('consignment_location')
+        .insert({ customer_id: id, name: c.flowaccount_name })
+    }
+  }
+
   const tab: Tab = sp.tab && ['invoices','deliveries','balance'].includes(sp.tab) ? sp.tab : 'invoices'
 
   return (
