@@ -50,10 +50,12 @@ export type PurchaseOrderItem = {
 // ─── Inventory schema types ─────────────────────────────────────────────
 // Mirror of inventory/supabase/migrations/001_inventory.sql.
 
+export type SupplierType = 'regular' | 'consignment' | 'mix'
+
 export type Supplier = {
   id: string
   name: string
-  is_consignment: boolean
+  type: SupplierType
   payment_terms_days: number
   notes: string | null
   created_at: string

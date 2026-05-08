@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { SupplierType } from '@/lib/supabase'
 
 export function SupplierTermsCell({ supplierId, initial }: {
   supplierId: string
@@ -70,37 +71,60 @@ export function SupplierTermsCell({ supplierId, initial }: {
   )
 }
 
-export function SupplierConsignmentCell({ supplierId, initial }: {
+const TYPE_LABEL: Record<SupplierType, string> = {
+  regular:     'Regular',
+  consignment: 'Consignment',
+  mix:         'Mix',
+}
+
+const TYPE_TITLE: Record<SupplierType, string> = {
+  regular:     'All products via tax invoice (instant obligation)',
+  consignment: 'All products via delivery note (monthly true-up)',
+  mix:         'Part regular, part consignment',
+}
+
+const TYPE_CLS: Record<SupplierType, string> = {
+  regular:     'bg-cream text-graphite border-pale-stone',
+  consignment: 'bg-amber-gold/20 text-deep-black border-amber-gold/60',
+  mix:         'bg-wine-red/10 text-wine-red border-wine-red/40',
+}
+
+const NEXT: Record<SupplierType, SupplierType> = {
+  regular: 'consignment', consignment: 'mix', mix: 'regular',
+}
+
+export function SupplierTypeCell({ supplierId, initial }: {
   supplierId: string
-  initial: boolean
+  initial: SupplierType
 }) {
   const router = useRouter()
+  const [type, setType] = useState<SupplierType>(initial)
   const [saving, setSaving] = useState(false)
 
-  async function toggle() {
+  async function cycle() {
+    const next = NEXT[type]
     setSaving(true)
     try {
       const res = await fetch('/api/m/suppliers', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: supplierId, is_consignment: !initial }),
+        body: JSON.stringify({ id: supplierId, type: next }),
       })
-      if (res.ok) router.refresh()
+      if (res.ok) {
+        setType(next)
+        router.refresh()
+      }
     } finally { setSaving(false) }
   }
 
   return (
     <button
-      onClick={toggle}
+      onClick={cycle}
       disabled={saving}
-      className={`text-xs px-2 py-0.5 rounded-sm border transition-colors disabled:opacity-50 ${
-        initial
-          ? 'bg-amber-gold/20 text-deep-black border-amber-gold/60 hover:bg-amber-gold/30'
-          : 'bg-cream text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
-      }`}
-      title={initial ? 'Consignment supplier (Delivery Note → consignment, monthly true-up). Click to switch.' : 'Regular supplier (Tax Invoice → instant obligation). Click to mark Consignment.'}
+      className={`text-xs px-2 py-0.5 rounded-sm border transition-colors disabled:opacity-50 hover:opacity-80 ${TYPE_CLS[type]}`}
+      title={`${TYPE_TITLE[type]}\n\nClick to cycle → ${TYPE_LABEL[NEXT[type]]}`}
     >
-      {initial ? 'Consignment' : 'Regular'}
+      {TYPE_LABEL[type]}
     </button>
   )
 }

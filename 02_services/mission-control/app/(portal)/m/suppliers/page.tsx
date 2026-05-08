@@ -3,11 +3,11 @@ import { sbInventory, sbPublic, type Supplier, type PurchaseOrder } from '@/lib/
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { SupplierTermsCell, SupplierConsignmentCell } from '@/components/modules/suppliers/SupplierEditCell'
+import { SupplierTermsCell, SupplierTypeCell } from '@/components/modules/suppliers/SupplierEditCell'
 
 export const dynamic = 'force-dynamic'
 
-type SearchParams = { type?: 'all' | 'regular' | 'consignment' }
+type SearchParams = { type?: 'all' | 'regular' | 'consignment' | 'mix' }
 
 type SupplierStats = {
   thisYearTotal: number; thisYearCount: number
@@ -32,7 +32,7 @@ export default async function SuppliersPage({
   // from public.purchase_orders.supplier).
   const { data: supRows, error: supErr } = await sbInventory
     .from('supplier')
-    .select('id, name, is_consignment, payment_terms_days, notes')
+    .select('id, name, type, payment_terms_days, notes')
     .order('name')
 
   if (supErr) {
@@ -40,8 +40,7 @@ export default async function SuppliersPage({
   }
 
   let suppliers = (supRows ?? []) as Supplier[]
-  if (typeFilter === 'regular')     suppliers = suppliers.filter(s => !s.is_consignment)
-  if (typeFilter === 'consignment') suppliers = suppliers.filter(s =>  s.is_consignment)
+  if (typeFilter !== 'all') suppliers = suppliers.filter(s => s.type === typeFilter)
 
   // Aggregate purchase_orders (= tax invoices we've received) by supplier name.
   const { data: poRows, error: poErr } = await sbPublic
@@ -73,10 +72,12 @@ export default async function SuppliersPage({
     if (po.order_date && (!b.lastDate || po.order_date > b.lastDate)) b.lastDate = po.order_date
   }
 
+  const all = (supRows ?? []) as Supplier[]
   const counts = {
-    all: ((supRows ?? []) as Supplier[]).length,
-    regular:     ((supRows ?? []) as Supplier[]).filter(s => !s.is_consignment).length,
-    consignment: ((supRows ?? []) as Supplier[]).filter(s =>  s.is_consignment).length,
+    all:         all.length,
+    regular:     all.filter(s => s.type === 'regular').length,
+    consignment: all.filter(s => s.type === 'consignment').length,
+    mix:         all.filter(s => s.type === 'mix').length,
   }
 
   return (
@@ -93,8 +94,9 @@ export default async function SuppliersPage({
           </p>
 
           <div className="flex gap-1 mb-4 text-xs">
-            {(['all', 'regular', 'consignment'] as const).map(k => {
+            {(['all', 'regular', 'consignment', 'mix'] as const).map(k => {
               const active = typeFilter === k
+              const label = k === 'all' ? 'All' : k[0].toUpperCase() + k.slice(1)
               return (
                 <Link
                   key={k}
@@ -105,7 +107,7 @@ export default async function SuppliersPage({
                       : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
                   }`}
                 >
-                  {k === 'all' ? 'All' : k === 'regular' ? 'Regular' : 'Consignment'}
+                  {label}
                   <span className={`ml-1.5 ${active ? 'opacity-80' : 'text-graphite/60'}`}>
                     {counts[k]}
                   </span>
@@ -134,7 +136,7 @@ export default async function SuppliersPage({
                     <tr key={s.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
                       <td className="py-2 px-4">{s.name}</td>
                       <td className="py-2 px-4">
-                        <SupplierConsignmentCell supplierId={s.id} initial={s.is_consignment} />
+                        <SupplierTypeCell supplierId={s.id} initial={s.type} />
                       </td>
                       <td className="py-2 px-4">
                         <SupplierTermsCell supplierId={s.id} initial={s.payment_terms_days} />
