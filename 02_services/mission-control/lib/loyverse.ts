@@ -5,8 +5,29 @@
 // is ignored), so for "sales of one SKU" we have to scan every receipt in the
 // time window and filter line_items in memory. This is why we cap to 90 days
 // in the UI — long windows would mean dozens of paginated requests.
+//
+// B2C vs B2B: Loyverse stores both kinds of receipts in /receipts. We treat
+// a receipt as B2B (and exclude it from "B2C продажи") if either:
+//   - any payment is Bank Transfer (BANK_TRANSFER_TYPE_ID), or
+//   - the receipt's customer name matches one of B2B_PATTERNS.
+// This MUST stay in sync with 03_automation/lib/b2b.ts — see comment there.
 
 const BASE = 'https://api.loyverse.com/v1.0'
+
+// Keep these two constants in sync with 03_automation/lib/b2b.ts.
+const BANK_TRANSFER_TYPE_ID = '6bafa324-92d9-45c9-80d8-0539a65de4cc'
+const B2B_PATTERNS: string[] = [
+  'arthouse', 'bella chao', 'crepes', 'fifth element', 'fine cusine',
+  'french home', 'golden brew', 'great glory', 'isak(', 'jetradar',
+  'karon par', 'kusnakafe', 'layan paradise', 'lazy avocado', 'milimon',
+  'next real', 'pinzerai', 'q-squad', 'secret spot', 'shaman phuket',
+  'tbilisi', 'seaview',
+]
+
+function isB2BCustomerName(name: string): boolean {
+  const n = name.toLowerCase()
+  return B2B_PATTERNS.some(p => n.includes(p))
+}
 
 type ReceiptsPage = { receipts: Receipt[]; cursor?: string }
 
@@ -20,6 +41,13 @@ export type ReceiptLine = {
   total_discount?: number
 }
 
+export type ReceiptPayment = {
+  payment_type_id: string
+  name?: string
+  type?: string
+  money_amount?: number
+}
+
 export type Receipt = {
   receipt_number: string
   receipt_type: 'SALE' | 'REFUND' | string
@@ -27,6 +55,7 @@ export type Receipt = {
   customer_id: string | null
   total_money: number
   line_items: ReceiptLine[]
+  payments?: ReceiptPayment[]
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -40,6 +69,30 @@ async function getJson<T>(path: string): Promise<T> {
   })
   if (!res.ok) throw new Error(`Loyverse ${res.status}: ${await res.text()}`)
   return res.json() as Promise<T>
+}
+
+// id → name. Cached per process — Loyverse customer list changes rarely.
+let _customerNameCache: Map<string, string> | null = null
+async function getCustomerNames(): Promise<Map<string, string>> {
+  if (_customerNameCache) return _customerNameCache
+  const map = new Map<string, string>()
+  let cursor: string | undefined
+  for (let page = 0; page < 30; page++) {
+    const qs = new URLSearchParams({ limit: '250' })
+    if (cursor) qs.set('cursor', cursor)
+    const data = await getJson<{ customers: { id: string; name: string }[]; cursor?: string }>(`/customers?${qs.toString()}`)
+    for (const c of data.customers ?? []) map.set(c.id, c.name)
+    if (!data.cursor) break
+    cursor = data.cursor
+  }
+  _customerNameCache = map
+  return map
+}
+
+function isB2BReceipt(r: Receipt, customerName: string | null): boolean {
+  if ((r.payments ?? []).some(p => p.payment_type_id === BANK_TRANSFER_TYPE_ID)) return true
+  if (customerName && isB2BCustomerName(customerName)) return true
+  return false
 }
 
 export type SkuB2cSalesWindow = {
@@ -60,6 +113,9 @@ export async function fetchSkuB2cSalesWindow(
 ): Promise<SkuB2cSalesWindow> {
   const fromISO = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
 
+  // Load the customer-id → name map once so we can classify by name.
+  const customerNames = await getCustomerNames()
+
   let totalQty = 0
   let totalRevenue = 0
   let receiptsCount = 0
@@ -76,6 +132,10 @@ export async function fetchSkuB2cSalesWindow(
     const data = await getJson<ReceiptsPage>(`/receipts?${qs.toString()}`)
 
     for (const r of data.receipts) {
+      // Skip B2B receipts — they belong on the FlowAccount/B2B side, not B2C.
+      const custName = r.customer_id ? (customerNames.get(r.customer_id) ?? null) : null
+      if (isB2BReceipt(r, custName)) continue
+
       const sign = r.receipt_type === 'REFUND' ? -1 : 1
       let receiptHasSku = false
       for (const li of r.line_items) {

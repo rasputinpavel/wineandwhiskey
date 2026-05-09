@@ -226,21 +226,21 @@ async function B2bSection({ skuId }: { skuId: string }) {
 
 async function ConsignmentSection({ skuId }: { skuId: string }) {
   const { data, error } = await sbInventory
-    .from('consignment_balance')
-    .select('qty, updated_at, consignment_location(name)')
+    .from('v_consignment_balance')
+    .select('qty, consignment_location(name)')
     .eq('sku_id', skuId)
+    .gt('qty', 0)
 
   return (
     <Section title="Consignment" subtitle="Где сейчас лежит на реализации">
       {(error || (data?.length ?? 0) === 0) ? (
         <Empty>На реализации не лежит.</Empty>
       ) : (
-        <Table head={['Location', 'Qty', 'Updated']}>
+        <Table head={['Location', 'Qty']}>
           {(data as any[]).map((row, i) => (
             <tr key={i} className="border-b border-pale-stone/40 last:border-0">
               <td className="py-2 px-4">{row.consignment_location?.name ?? '—'}</td>
               <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
-              <td className="py-2 px-4 text-graphite text-xs">{row.updated_at?.slice(0, 16) ?? '—'}</td>
             </tr>
           ))}
         </Table>

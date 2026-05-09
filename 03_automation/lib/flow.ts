@@ -30,8 +30,13 @@ const WORKSPACE_PATH = "/N7474669/business"; // baked-in for now; one workspace
 const BASE_URL = "https://advance.flowaccount.com";
 
 const AUTH_STATE_PATH = path.join(process.cwd(), ".flow-session.json");
-const HEADLESS = !process.env.FLOW_HEADFUL;
-const DEBUG    = !!process.env.FLOW_DEBUG;
+const HEADLESS  = !process.env.FLOW_HEADFUL;
+const DEBUG     = !!process.env.FLOW_DEBUG;
+const DEBUG_DIR = path.join(process.cwd(), ".tmp");
+const dbgPath = (name: string) => {
+  if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
+  return path.join(DEBUG_DIR, name);
+};
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -106,7 +111,7 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     // Workspace/tenant selector — click the company that matches our baked-in id.
     if (/SelectCompany|select-company|workspaces|\/select/.test(u)) {
       console.log(`[flow] Workspace picker, clicking ${WORKSPACE_PATH}…`);
-      if (DEBUG) await page.screenshot({ path: `flow-debug-select-${attempt}.png` });
+      if (DEBUG) await page.screenshot({ path: dbgPath(`flow-debug-select-${attempt}.png`) });
       const tenantId = WORKSPACE_PATH.split("/").filter(Boolean)[0]; // e.g. "N7474669"
       const tenantLink = page.locator(
         `a[href*="${tenantId}"], button[data-id*="${tenantId}"], :text("${tenantId}")`
@@ -127,7 +132,7 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       u.includes("/sign-in") || u.includes("/SignIn");
     if (!onLogin) break;
     console.log(`[flow] Login form at ${u.slice(0, 90)}…`);
-    if (DEBUG) await page.screenshot({ path: `flow-debug-login-${attempt}.png` });
+    if (DEBUG) await page.screenshot({ path: dbgPath(`flow-debug-login-${attempt}.png`) });
 
     const emailSel = [
       'input[type="email"]',
@@ -165,7 +170,7 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   }
 
   if (/login|Login|sign-?in|SignIn|SelectCompany|select-company/.test(page.url())) {
-    if (DEBUG) await page.screenshot({ path: "flow-debug-postlogin.png" });
+    if (DEBUG) await page.screenshot({ path: dbgPath("flow-debug-postlogin.png") });
     throw new Error(`FlowAccount login failed — still at ${page.url()}. Check creds / 2FA.`);
   }
 
@@ -265,6 +270,7 @@ async function paginateAll(
 // Status text on FlowAccount Tax Invoices grid (Thai locale).
 //   เปิดใบเสร็จแล้ว = Receipt issued (= Paid via linked receipt)
 //   รอดำเนินการ     = Pending (= Unpaid)
+//   รอเก็บเงิน      = Awaiting payment (= Unpaid, just a different wording FA uses)
 //   ยกเลิก          = Cancelled
 //   เกินกำหนด       = Overdue (still unpaid, past due date)
 function normalizeFlowStatus(thai: string): string {
@@ -272,6 +278,7 @@ function normalizeFlowStatus(thai: string): string {
   if (!s) return "";
   if (s.includes("เปิดใบเสร็จแล้ว")) return "Paid";
   if (s.includes("รอดำเนินการ"))    return "Unpaid";
+  if (s.includes("รอเก็บเงิน"))     return "Unpaid";
   if (s.includes("เกินกำหนด"))      return "Overdue";
   if (s.includes("ยกเลิก"))         return "Cancelled";
   return thai.trim();
@@ -311,7 +318,7 @@ export async function listInvoices(s: FlowSession, fromIso: string, toIso: strin
 
   try {
     await gotoList(s.page, "/invoices");
-    if (DEBUG) await s.page.screenshot({ path: "flow-debug-invoice-list.png", fullPage: true });
+    if (DEBUG) await s.page.screenshot({ path: dbgPath("flow-debug-invoice-list.png"), fullPage: true });
 
     const invoices: FlowInvoice[] = [];
     await paginateAll(s.page, (rows) => {
@@ -426,7 +433,7 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
       continue;
     }
     s.page.off("response", onResp);
-    if (DEBUG) await s.page.screenshot({ path: `flow-debug-invoice-${inv.number}.png`, fullPage: true });
+    if (DEBUG) await s.page.screenshot({ path: dbgPath(`flow-debug-invoice-${inv.number}.png`), fullPage: true });
 
     // FlowAccount detail API: GET /api/th/tax-invoices/<recordId>
     // Returns { data: { list: [{ productItems: [...] }, ...] } }.
@@ -465,7 +472,7 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
 export async function listReceipts(s: FlowSession, fromIso: string, toIso: string): Promise<FlowReceipt[]> {
   console.log(`[flow] Listing receipts ${fromIso} → ${toIso}...`);
   await gotoList(s.page, "/receipts");
-  if (DEBUG) await s.page.screenshot({ path: "flow-debug-receipt-list.png", fullPage: true });
+  if (DEBUG) await s.page.screenshot({ path: dbgPath("flow-debug-receipt-list.png"), fullPage: true });
 
   const out: FlowReceipt[] = [];
 
