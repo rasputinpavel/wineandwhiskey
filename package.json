@@ -15,7 +15,11 @@
     "sync:all": "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts",
     "trends": "tsx 03_automation/sync_trends.ts",
     "discover-accounts": "tsx 03_automation/discover_trend_accounts.ts",
-    "bestsellers": "tsx 03_automation/identify_bestsellers.ts"
+    "bestsellers": "tsx 03_automation/identify_bestsellers.ts",
+    "accounting": "tsx 03_automation/sync_accounting.ts",
+    "inv:loyverse": "tsx 03_automation/sync_inventory_loyverse.ts",
+    "inv:flow": "tsx 03_automation/sync_inventory_flow.ts",
+    "inv:all": "tsx 03_automation/sync_inventory_loyverse.ts && tsx 03_automation/sync_inventory_flow.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
