@@ -30,18 +30,24 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       # Decode the persisted Loyverse session into a file the scraper expects.
-      # To refresh the session: log in locally with SCRAPER_HEADFUL=1, solve the
-      # captcha, then `base64 -i .loyverse-session.json | pbcopy` and update
-      # the LOYVERSE_SESSION_B64 secret.
+      # We support both raw base64 (legacy LOYVERSE_SESSION_B64) and gzip+
+      # base64 (LOYVERSE_SESSION_B64_GZ) so this Loyverse secret stays
+      # consistent with FA's encoding. New sessions: prefer the GZ variant.
+      # To refresh: SCRAPER_HEADFUL=1 npm run orders, solve captcha, then
+      #   gzip -c -9 .loyverse-session.json | base64 | pbcopy
       - name: Restore Loyverse session
         env:
-          LOYVERSE_SESSION_B64: ${{ secrets.LOYVERSE_SESSION_B64 }}
+          LOYVERSE_SESSION_B64:    ${{ secrets.LOYVERSE_SESSION_B64 }}
+          LOYVERSE_SESSION_B64_GZ: ${{ secrets.LOYVERSE_SESSION_B64_GZ }}
         run: |
-          if [ -z "$LOYVERSE_SESSION_B64" ]; then
-            echo "::error::LOYVERSE_SESSION_B64 secret is not set."
+          if [ -n "$LOYVERSE_SESSION_B64_GZ" ]; then
+            printf '%s' "$LOYVERSE_SESSION_B64_GZ" | base64 -d | gunzip > .loyverse-session.json
+          elif [ -n "$LOYVERSE_SESSION_B64" ]; then
+            printf '%s' "$LOYVERSE_SESSION_B64" | base64 -d > .loyverse-session.json
+          else
+            echo "::error::Neither LOYVERSE_SESSION_B64_GZ nor LOYVERSE_SESSION_B64 secret is set."
             exit 1
           fi
-          printf '%s' "$LOYVERSE_SESSION_B64" | base64 -d > .loyverse-session.json
           echo "Session file size: $(wc -c < .loyverse-session.json) bytes"
 
       - name: Scrape purchase orders

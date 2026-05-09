@@ -34,18 +34,20 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       # Decode the persisted FlowAccount session into a file the scraper
-      # expects. To refresh: log in locally once, then
-      #   base64 -i .flow-session.json | pbcopy
-      # and update the FA_SESSION_B64 secret on GitHub.
+      # expects. The session JSON is ~120KB which exceeds GitHub's 64KB
+      # secret limit, so we gzip BEFORE base64 (~32KB encoded).
+      # To refresh from a fresh local login:
+      #   gzip -c -9 .flow-session.json | base64 | pbcopy
+      # then paste into FA_SESSION_B64_GZ secret.
       - name: Restore FlowAccount session
         env:
-          FA_SESSION_B64: ${{ secrets.FA_SESSION_B64 }}
+          FA_SESSION_B64_GZ: ${{ secrets.FA_SESSION_B64_GZ }}
         run: |
-          if [ -z "$FA_SESSION_B64" ]; then
-            echo "::error::FA_SESSION_B64 secret is not set."
+          if [ -z "$FA_SESSION_B64_GZ" ]; then
+            echo "::error::FA_SESSION_B64_GZ secret is not set."
             exit 1
           fi
-          printf '%s' "$FA_SESSION_B64" | base64 -d > .flow-session.json
+          printf '%s' "$FA_SESSION_B64_GZ" | base64 -d | gunzip > .flow-session.json
           echo "Session file size: $(wc -c < .flow-session.json) bytes"
 
       - name: Sync FlowAccount → inventory schema
