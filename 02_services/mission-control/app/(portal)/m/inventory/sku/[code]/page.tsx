@@ -318,18 +318,31 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
 }
 
 async function ConsignmentSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
-  const { data, error } = await sbInventory
+  // PostgREST can't infer FKs from a view, so fetch balances first then
+  // resolve location names with a second query.
+  const { data: balData, error } = await sbInventory
     .from('v_consignment_balance')
-    .select('qty, consignment_location(name)')
+    .select('location_id, qty')
     .eq('sku_id', skuId)
     .gt('qty', 0)
 
-  const rows = (data ?? []) as any[]
+  const balances = (balData ?? []) as { location_id: string; qty: number }[]
+  let names = new Map<string, string>()
+  if (balances.length) {
+    const ids = Array.from(new Set(balances.map(b => b.location_id)))
+    const { data: locs } = await sbInventory
+      .from('consignment_location')
+      .select('id, name, customer_id')
+      .in('id', ids)
+    for (const l of (locs ?? []) as { id: string; name: string }[]) names.set(l.id, l.name)
+  }
+  const rows = balances.map(b => ({ ...b, name: names.get(b.location_id) ?? '—' }))
+
   const { sort, dir } = readSortParams(
     sp, ['location','qty'] as const, 'qty', 'cons',
   )
   const sortedRows = [...rows].sort(cmpBy(r => {
-    if (sort === 'location') return r.consignment_location?.name ?? ''
+    if (sort === 'location') return r.name
     return Number(r.qty)
   }, dir))
 
@@ -349,7 +362,7 @@ async function ConsignmentSection({ skuId, sp }: { skuId: string; sp: SearchPara
             <tbody>
               {sortedRows.map((row, i) => (
                 <tr key={i} className="border-b border-pale-stone/40 last:border-0">
-                  <td className="py-2 px-4">{row.consignment_location?.name ?? '—'}</td>
+                  <td className="py-2 px-4">{row.name}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
                 </tr>
               ))}
