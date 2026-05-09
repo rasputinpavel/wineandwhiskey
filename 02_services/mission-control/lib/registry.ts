@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'operations' | 'analytics' | 'marketing' | 'knowledge' | 'tech'
+export type SectionKey = 'operations' | 'agents' | 'analytics' | 'marketing' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -53,7 +53,7 @@ export const SECTIONS: Section[] = [
   // ═══ OPERATIONS ═══════════════════════════════════════════════════════
   {
     key: 'operations', label: 'Operations',
-    description: 'Прайс, склад, B2B/B2C, агенты',
+    description: 'Прайс, склад, B2B/B2C',
     items: [
       {
         slug: 'inventory', name: 'Inventory', icon: '📦', status: 'building',
@@ -86,18 +86,14 @@ export const SECTIONS: Section[] = [
         route: m('wine-matrix'),
         embed: { kind: 'external', href: `${REPO}/tree/main/02_services/matrix-runner` },
       },
-      {
-        slug: 'loyverse', name: 'Loyverse (POS)', icon: '🛒', status: 'live',
-        description: 'Розничная POS: продажи, остатки, gross profit. Источник данных №1.',
-        route: m('loyverse'),
-        embed: { kind: 'external', href: 'https://r.loyverse.com' },
-      },
-      {
-        slug: 'flowaccount', name: 'FlowAccount (B2B)', icon: '🧾', status: 'live',
-        description: 'B2B инвойсы и расписки. Скрейпится в Supabase через npm run orders.',
-        route: m('flowaccount'),
-        embed: { kind: 'external', href: 'https://advance.flowaccount.com' },
-      },
+    ],
+  },
+
+  // ═══ AGENTS ═══════════════════════════════════════════════════════════
+  {
+    key: 'agents', label: 'Agents',
+    description: 'Telegram-боты: ops, secretary',
+    items: [
       {
         slug: 'ops-bot', name: 'Chip & Dale (ops bot)', icon: '🐿', status: 'live',
         description: 'Telegram-бот: продажи, остатки, утренний брифинг 9:30 BKK.',
@@ -241,6 +237,18 @@ export const SECTIONS: Section[] = [
         description: 'База и storage. Используется price-service, trendwatch, inventory.',
         route: m('supabase'),
         embed: { kind: 'external', href: 'https://supabase.com/dashboard' },
+      },
+      {
+        slug: 'loyverse', name: 'Loyverse (POS)', icon: '🛒', status: 'live',
+        description: 'Розничная POS: продажи, остатки, gross profit. Источник данных №1.',
+        route: m('loyverse'),
+        embed: { kind: 'external', href: 'https://r.loyverse.com' },
+      },
+      {
+        slug: 'flowaccount', name: 'FlowAccount (B2B)', icon: '🧾', status: 'live',
+        description: 'B2B инвойсы и расписки. Скрейпится в Supabase через npm run orders.',
+        route: m('flowaccount'),
+        embed: { kind: 'external', href: 'https://advance.flowaccount.com' },
       },
       {
         slug: 'env', name: 'Секреты и env', icon: '🔑', status: 'planned',
