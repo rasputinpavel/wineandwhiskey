@@ -28,7 +28,6 @@ export default function LoginPage() {
         <div className="text-center mb-10">
           <div className="flex items-baseline justify-center gap-1 mb-2">
             <span className="font-display text-4xl tracking-display text-wine-red leading-none">WINE</span>
-            <span className="text-xs text-graphite leading-none">store</span>
             <span className="font-display text-4xl tracking-display text-deep-black leading-none ml-1">&amp; WHISKEY</span>
           </div>
           <div className="overline text-graphite mt-3">Internal Portal · Phuket</div>

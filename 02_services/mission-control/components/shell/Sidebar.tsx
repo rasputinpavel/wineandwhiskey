@@ -12,7 +12,6 @@ export function Sidebar() {
       <div className="px-5 py-5 border-b border-pale-stone">
         <Link href="/" className="flex items-baseline gap-1">
           <span className="font-display text-xl tracking-display text-wine-red leading-none">WINE</span>
-          <span className="text-[10px] text-graphite leading-none">store</span>
           <span className="font-display text-xl tracking-display text-deep-black leading-none ml-1">&amp; WHISKEY</span>
         </Link>
         <div className="overline text-graphite mt-2">Internal Portal</div>
