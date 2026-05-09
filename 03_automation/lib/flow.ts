@@ -71,11 +71,12 @@ export interface FlowSession {
 
 export async function openFlow(): Promise<FlowSession> {
   const { email, password } = flowCreds();
-  if (!email || !password) {
-    throw new Error("FLOW_EMAIL / FLOW_PASSWORD not set in .env.local");
+  const hasSession = fs.existsSync(AUTH_STATE_PATH);
+  if (!hasSession && (!email || !password)) {
+    throw new Error("FLOW_EMAIL / FLOW_PASSWORD not set and no .flow-session.json present");
   }
   const browser = await chromium.launch({ headless: HEADLESS });
-  const context = fs.existsSync(AUTH_STATE_PATH)
+  const context = hasSession
     ? await browser.newContext({ storageState: AUTH_STATE_PATH })
     : await browser.newContext();
   const page = await context.newPage();
@@ -141,9 +142,12 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     ].join(", ");
     const passSel = 'input[type="password"], input[name="Password"]';
     const { email: e, password: p } = flowCreds();
-    await page.locator(emailSel).first().fill(e!);
+    if (!e || !p) {
+      throw new Error(`FlowAccount session expired and FLOW_EMAIL / FLOW_PASSWORD are not set — cannot re-login. Refresh .flow-session.json (or FA_SESSION_B64_GZ in CI).`);
+    }
+    await page.locator(emailSel).first().fill(e);
     await delay(300);
-    await page.locator(passSel).first().fill(p!);
+    await page.locator(passSel).first().fill(p);
     await delay(300);
     await page.locator(
       'button[type="submit"], input[type="submit"], button:has-text("เข้าสู่ระบบ"), button:has-text("Sign in"), button:has-text("Login"), button:has-text("Log in")'
