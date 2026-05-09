@@ -61,8 +61,9 @@ function SourceBadge({ sourceKey, status, onSynced }: {
     isStale(ts)                             ? 'bg-amber-gold' :
                                               'bg-graphite/60'
 
-  // For cron sources, compute next scheduled run.
-  const nextCron = def.runnable === 'cron' ? nextCronAt(def) : null
+  // Compute next scheduled run for any source with a cron (web sources can
+  // also be on a schedule — e.g. Loyverse runs every 8h AND has a button).
+  const nextCron = nextCronAt(def)
   const nextLabel = nextCron ? formatBkkTime(nextCron) : null
   const inLabel   = nextCron ? formatIn(nextCron) : null
 

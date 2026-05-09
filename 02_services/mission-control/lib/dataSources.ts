@@ -35,18 +35,26 @@ export const SOURCES: Record<SourceKey, DataSource> = {
     label: 'Loyverse products',
     description:
       'Каталог SKU из Loyverse POS. Тянется через REST: /v1.0/items + /v1.0/categories. ' +
-      'Пишется в inventory.sku. Жми «Sync now» — занимает ~30 сек.',
+      'Пишется в inventory.sku. Обновляется автоматически каждые 8 часов (00 / 08 / 16 BKK), ' +
+      'можно дёрнуть руками кнопкой «Sync now» (~30 сек).',
     command: 'npm run inv:loyverse',
     runnable: 'web',
+    cronEveryHours: 8,
+    cronOffsetHourUtc: 1,
+    workflow: 'sync-loyverse.yml',
   },
   loyverse_stock: {
     key: 'loyverse_stock',
     label: 'Loyverse stock',
     description:
-      'Текущие остатки по каждому SKU и магазину из Loyverse REST. ' +
-      'Идёт вместе с loyverse_products. Жми «Sync now» — ~30 сек.',
+      'Текущие остатки по каждому SKU и магазину из Loyverse REST. Идёт одним заходом ' +
+      'с loyverse_products. Обновляется автоматически каждые 8 часов (00 / 08 / 16 BKK), ' +
+      'можно дёрнуть руками кнопкой «Sync now».',
     command: 'npm run inv:loyverse',
     runnable: 'web',
+    cronEveryHours: 8,
+    cronOffsetHourUtc: 1,
+    workflow: 'sync-loyverse.yml',
   },
   flowaccount_invoices: {
     key: 'flowaccount_invoices',
@@ -87,8 +95,10 @@ export const SOURCES: Record<SourceKey, DataSource> = {
 }
 
 // Compute the next cron tick for a source. Returns ms-from-now or null.
+// Any source with cronEveryHours has a schedule, regardless of `runnable`
+// (e.g. Loyverse is 'web' for the manual button but also runs on a cron).
 export function nextCronAt(src: DataSource, now: Date = new Date()): Date | null {
-  if (src.runnable !== 'cron' || !src.cronEveryHours) return null
+  if (!src.cronEveryHours) return null
   const startUtcHour = src.cronOffsetHourUtc ?? 0
   // Build today's tick list, then find first one in the future.
   const ticks: Date[] = []
