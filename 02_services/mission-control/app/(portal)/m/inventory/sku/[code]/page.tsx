@@ -4,13 +4,23 @@ import { sbInventory, sbPublic, type PurchaseOrderItem, type PurchaseOrder } fro
 import { fetchSkuB2cSalesWindow, type SkuB2cSalesWindow } from '@/lib/loyverse'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { SortHeader, readSortParams, cmpBy } from '@/components/shell/SortHeader'
+import { fmtDate, fmtDateTime } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
 const B2C_WINDOW_DAYS = 90
 
-export default async function SkuDetail({ params }: { params: Promise<{ code: string }> }) {
+type SearchParams = Record<string, string | undefined>
+
+export default async function SkuDetail({
+  params, searchParams,
+}: {
+  params: Promise<{ code: string }>
+  searchParams: Promise<SearchParams>
+}) {
   const { code } = await params
+  const sp = await searchParams
 
   // Single fast query so the page header renders immediately on click.
   const { data: sku, error: skuErr } = await sbInventory
@@ -44,19 +54,19 @@ export default async function SkuDetail({ params }: { params: Promise<{ code: st
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title="Приходы (Loyverse Purchase Orders)" />}>
-        <ReceiptsSection code={code} />
+        <ReceiptsSection code={code} sp={sp} />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title={`B2C продажи · последние ${B2C_WINDOW_DAYS} дней`} subtitle="Loyverse REST · загрузка может занять до 10 сек" />}>
-        <B2cSection variantId={sku.loyverse_variant_id} />
+        <B2cSection variantId={sku.loyverse_variant_id} sp={sp} />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title="B2B продажи (FlowAccount)" />}>
-        <B2bSection skuId={sku.id} />
+        <B2bSection skuId={sku.id} sp={sp} />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title="Consignment" />}>
-        <ConsignmentSection skuId={sku.id} />
+        <ConsignmentSection skuId={sku.id} sp={sp} />
       </Suspense>
     </>
   )
@@ -79,12 +89,11 @@ async function StatsSection({ skuId }: { skuId: string }) {
   )
 }
 
-async function ReceiptsSection({ code }: { code: string }) {
+async function ReceiptsSection({ code, sp }: { code: string; sp: SearchParams }) {
   const { data: items, error } = await sbPublic
     .from('purchase_order_items')
     .select('id, po_id, po_number, product_name, sku, qty_ordered, qty_received, cost_price, line_total, scraped_at')
     .eq('sku', code)
-    .order('scraped_at', { ascending: false })
     .limit(200)
 
   if (error) {
@@ -102,6 +111,22 @@ async function ReceiptsSection({ code }: { code: string }) {
     for (const p of (pos ?? []) as PurchaseOrder[]) posById[p.id] = p
   }
 
+  const { sort, dir } = readSortParams(
+    sp,
+    ['po_number','order_date','supplier','status','qty_received','cost_price','line_total'] as const,
+    'order_date', 'rec',
+  )
+  const sortedItems = [...poItems].sort(cmpBy(it => {
+    const po = posById[it.po_id]
+    if (sort === 'po_number')    return it.po_number ?? ''
+    if (sort === 'order_date')   return po?.order_date ?? ''
+    if (sort === 'supplier')     return po?.supplier ?? ''
+    if (sort === 'status')       return po?.status ?? ''
+    if (sort === 'qty_received') return Number(it.qty_received ?? 0)
+    if (sort === 'cost_price')   return Number(it.cost_price ?? 0)
+    return Number(it.line_total ?? 0)
+  }, dir))
+
   return (
     <Section
       title="Приходы (Loyverse Purchase Orders)"
@@ -111,26 +136,41 @@ async function ReceiptsSection({ code }: { code: string }) {
         <Empty>Приходов нет. Запусти <Code>npm run orders</Code> чтобы подтянуть PO из Loyverse.</Empty>
       ) : (
         <>
-          <Table head={['PO', 'Date', 'Supplier', 'Status', 'Qty rcvd', 'Cost', 'Line total']}>
-            {poItems.map(it => {
-              const po = posById[it.po_id]
-              return (
-                <tr key={it.id} className="border-b border-pale-stone/40 last:border-0">
-                  <td className="py-2 px-4 font-mono">
-                    {po?.url
-                      ? <a href={po.url} target="_blank" rel="noopener noreferrer" className="hover:text-wine-red">{it.po_number}</a>
-                      : it.po_number}
-                  </td>
-                  <td className="py-2 px-4">{po?.order_date ?? '—'}</td>
-                  <td className="py-2 px-4">{po?.supplier ?? '—'}</td>
-                  <td className="py-2 px-4">{po?.status ?? '—'}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">{fmt(it.qty_received)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">฿{fmt(it.cost_price)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">฿{fmt(it.line_total)}</td>
+          <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+                <tr>
+                  <SortHeader col="po_number"    label="PO"          sort={sort} dir={dir} sp={sp} prefix="rec" />
+                  <SortHeader col="order_date"   label="Date"        sort={sort} dir={dir} sp={sp} prefix="rec" />
+                  <SortHeader col="supplier"     label="Supplier"    sort={sort} dir={dir} sp={sp} prefix="rec" />
+                  <SortHeader col="status"       label="Status"      sort={sort} dir={dir} sp={sp} prefix="rec" />
+                  <SortHeader col="qty_received" label="Qty rcvd"    sort={sort} dir={dir} sp={sp} prefix="rec" align="right" />
+                  <SortHeader col="cost_price"   label="Cost"        sort={sort} dir={dir} sp={sp} prefix="rec" align="right" />
+                  <SortHeader col="line_total"   label="Line total"  sort={sort} dir={dir} sp={sp} prefix="rec" align="right" />
                 </tr>
-              )
-            })}
-          </Table>
+              </thead>
+              <tbody>
+                {sortedItems.map(it => {
+                  const po = posById[it.po_id]
+                  return (
+                    <tr key={it.id} className="border-b border-pale-stone/40 last:border-0">
+                      <td className="py-2 px-4 font-mono">
+                        {po?.url
+                          ? <a href={po.url} target="_blank" rel="noopener noreferrer" className="hover:text-wine-red">{it.po_number}</a>
+                          : it.po_number}
+                      </td>
+                      <td className="py-2 px-4">{fmtDate(po?.order_date)}</td>
+                      <td className="py-2 px-4">{po?.supplier ?? '—'}</td>
+                      <td className="py-2 px-4">{po?.status ?? '—'}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">{fmt(it.qty_received)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">฿{fmt(it.cost_price)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">฿{fmt(it.line_total)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
           <Sum label={`Всего пришло (${poItems.length} PO)`}
                qty={poItems.reduce((s, i) => s + Number(i.qty_received || 0), 0)}
                money={poItems.reduce((s, i) => s + Number(i.line_total || 0), 0)} />
@@ -140,11 +180,20 @@ async function ReceiptsSection({ code }: { code: string }) {
   )
 }
 
-async function B2cSection({ variantId }: { variantId: string }) {
+async function B2cSection({ variantId, sp }: { variantId: string; sp: SearchParams }) {
   let data: SkuB2cSalesWindow | null = null
   let err: string | null = null
   try { data = await fetchSkuB2cSalesWindow(variantId, B2C_WINDOW_DAYS) }
   catch (e: any) { err = e?.message ?? 'unknown error' }
+
+  const { sort, dir } = readSortParams(
+    sp, ['date','receiptNumber','qty','total'] as const, 'date', 'b2c',
+  )
+  const recent = data?.recent ? [...data.recent].sort(cmpBy(r => {
+    if (sort === 'qty')   return Number(r.qty)
+    if (sort === 'total') return Number(r.total)
+    return r[sort] as string
+  }, dir)) : []
 
   return (
     <Section
@@ -166,19 +215,31 @@ async function B2cSection({ variantId }: { variantId: string }) {
             <MiniStat label={`Revenue · ${B2C_WINDOW_DAYS}d`}  value={`฿${fmt(data.totalRevenue)}`} />
             <MiniStat label={`Receipts · ${B2C_WINDOW_DAYS}d`} value={fmt(data.receiptsCount)} />
           </div>
-          {data.recent.length === 0 ? (
+          {recent.length === 0 ? (
             <Empty>За последние {B2C_WINDOW_DAYS} дней продаж не было.</Empty>
           ) : (
-            <Table head={['Date', 'Receipt #', 'Qty', 'Total']}>
-              {data.recent.map((s, i) => (
-                <tr key={i} className="border-b border-pale-stone/40 last:border-0">
-                  <td className="py-2 px-4 text-graphite text-xs">{s.date.slice(0, 16).replace('T', ' ')}</td>
-                  <td className="py-2 px-4 font-mono">{s.receiptNumber}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">{fmt(s.qty)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">฿{fmt(s.total)}</td>
-                </tr>
-              ))}
-            </Table>
+            <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+                  <tr>
+                    <SortHeader col="date"          label="Date"      sort={sort} dir={dir} sp={sp} prefix="b2c" />
+                    <SortHeader col="receiptNumber" label="Receipt #" sort={sort} dir={dir} sp={sp} prefix="b2c" />
+                    <SortHeader col="qty"           label="Qty"       sort={sort} dir={dir} sp={sp} prefix="b2c" align="right" />
+                    <SortHeader col="total"         label="Total"     sort={sort} dir={dir} sp={sp} prefix="b2c" align="right" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((s, i) => (
+                    <tr key={i} className="border-b border-pale-stone/40 last:border-0">
+                      <td className="py-2 px-4 text-graphite text-xs">{fmtDateTime(s.date)}</td>
+                      <td className="py-2 px-4 font-mono">{s.receiptNumber}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">{fmt(s.qty)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">฿{fmt(s.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
@@ -186,64 +247,115 @@ async function B2cSection({ variantId }: { variantId: string }) {
   )
 }
 
-async function B2bSection({ skuId }: { skuId: string }) {
+async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
   const { data, error } = await sbInventory
     .from('flowaccount_invoice_line')
     .select('id, qty, amount, raw_text, flowaccount_invoice(number, customer_name, issued_at, due_at, status, total)')
     .eq('sku_id', skuId)
-    .order('id', { ascending: false })
+
+  const rows = (data ?? []) as any[]
+  const { sort, dir } = readSortParams(
+    sp,
+    ['number','customer_name','issued_at','due_at','status','qty','amount'] as const,
+    'issued_at', 'b2b',
+  )
+  const sortedRows = [...rows].sort(cmpBy(r => {
+    const inv = r.flowaccount_invoice
+    if (sort === 'qty')    return Number(r.qty ?? 0)
+    if (sort === 'amount') return Number(r.amount ?? 0)
+    if (sort === 'number')        return inv?.number ?? ''
+    if (sort === 'customer_name') return inv?.customer_name ?? ''
+    if (sort === 'issued_at')     return inv?.issued_at ?? ''
+    if (sort === 'due_at')        return inv?.due_at ?? ''
+    if (sort === 'status')        return inv?.status ?? ''
+    return ''
+  }, dir))
 
   return (
     <Section title="B2B продажи (FlowAccount)" subtitle="Все строки инвойсов где встречается этот SKU">
-      {(error || (data?.length ?? 0) === 0) ? (
+      {(error || (rows.length === 0)) ? (
         <Empty>{error?.message ?? 'B2B продаж по этому SKU нет.'}</Empty>
       ) : (
         <>
-          <Table head={['Invoice', 'Customer', 'Issued', 'Due', 'Status', 'Qty', 'Amount']}>
-            {(data as any[]).map((row, i) => {
-              const inv = row.flowaccount_invoice
-              return (
-                <tr key={i} className="border-b border-pale-stone/40 last:border-0">
-                  <td className="py-2 px-4 font-mono">{inv?.number ?? '—'}</td>
-                  <td className="py-2 px-4">{inv?.customer_name ?? '—'}</td>
-                  <td className="py-2 px-4">{inv?.issued_at ?? '—'}</td>
-                  <td className="py-2 px-4">{inv?.due_at ?? '—'}</td>
-                  <td className="py-2 px-4"><StatusPill status={inv?.status} /></td>
-                  <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">{row.amount ? `฿${fmt(row.amount)}` : '—'}</td>
+          <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+                <tr>
+                  <SortHeader col="number"        label="Invoice"  sort={sort} dir={dir} sp={sp} prefix="b2b" />
+                  <SortHeader col="customer_name" label="Customer" sort={sort} dir={dir} sp={sp} prefix="b2b" />
+                  <SortHeader col="issued_at"     label="Issued"   sort={sort} dir={dir} sp={sp} prefix="b2b" />
+                  <SortHeader col="due_at"        label="Due"      sort={sort} dir={dir} sp={sp} prefix="b2b" />
+                  <SortHeader col="status"        label="Status"   sort={sort} dir={dir} sp={sp} prefix="b2b" />
+                  <SortHeader col="qty"           label="Qty"      sort={sort} dir={dir} sp={sp} prefix="b2b" align="right" />
+                  <SortHeader col="amount"        label="Amount"   sort={sort} dir={dir} sp={sp} prefix="b2b" align="right" />
                 </tr>
-              )
-            })}
-          </Table>
-          <Sum label={`Всего B2B (${data!.length} строк)`}
-               qty={(data as any[]).reduce((s, r) => s + Number(r.qty || 0), 0)}
-               money={(data as any[]).reduce((s, r) => s + Number(r.amount || 0), 0)} />
+              </thead>
+              <tbody>
+                {sortedRows.map((row, i) => {
+                  const inv = row.flowaccount_invoice
+                  return (
+                    <tr key={i} className="border-b border-pale-stone/40 last:border-0">
+                      <td className="py-2 px-4 font-mono">{inv?.number ?? '—'}</td>
+                      <td className="py-2 px-4">{inv?.customer_name ?? '—'}</td>
+                      <td className="py-2 px-4">{fmtDate(inv?.issued_at)}</td>
+                      <td className="py-2 px-4">{fmtDate(inv?.due_at)}</td>
+                      <td className="py-2 px-4"><StatusPill status={inv?.status} /></td>
+                      <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">{row.amount ? `฿${fmt(row.amount)}` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Sum label={`Всего B2B (${rows.length} строк)`}
+               qty={rows.reduce((s, r) => s + Number(r.qty || 0), 0)}
+               money={rows.reduce((s, r) => s + Number(r.amount || 0), 0)} />
         </>
       )}
     </Section>
   )
 }
 
-async function ConsignmentSection({ skuId }: { skuId: string }) {
+async function ConsignmentSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
   const { data, error } = await sbInventory
     .from('v_consignment_balance')
     .select('qty, consignment_location(name)')
     .eq('sku_id', skuId)
     .gt('qty', 0)
 
+  const rows = (data ?? []) as any[]
+  const { sort, dir } = readSortParams(
+    sp, ['location','qty'] as const, 'qty', 'cons',
+  )
+  const sortedRows = [...rows].sort(cmpBy(r => {
+    if (sort === 'location') return r.consignment_location?.name ?? ''
+    return Number(r.qty)
+  }, dir))
+
   return (
     <Section title="Consignment" subtitle="Где сейчас лежит на реализации">
-      {(error || (data?.length ?? 0) === 0) ? (
+      {(error || (rows.length === 0)) ? (
         <Empty>На реализации не лежит.</Empty>
       ) : (
-        <Table head={['Location', 'Qty']}>
-          {(data as any[]).map((row, i) => (
-            <tr key={i} className="border-b border-pale-stone/40 last:border-0">
-              <td className="py-2 px-4">{row.consignment_location?.name ?? '—'}</td>
-              <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
-            </tr>
-          ))}
-        </Table>
+        <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+              <tr>
+                <SortHeader col="location" label="Location" sort={sort} dir={dir} sp={sp} prefix="cons" />
+                <SortHeader col="qty"      label="Qty"      sort={sort} dir={dir} sp={sp} prefix="cons" align="right" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.map((row, i) => (
+                <tr key={i} className="border-b border-pale-stone/40 last:border-0">
+                  <td className="py-2 px-4">{row.consignment_location?.name ?? '—'}</td>
+                  <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Section>
   )

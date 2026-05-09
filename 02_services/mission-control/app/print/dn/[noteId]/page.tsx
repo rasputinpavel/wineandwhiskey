@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { sbInventory } from '@/lib/supabase'
 import { PrintButton } from '@/components/modules/customers/PrintButton'
+import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +58,7 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
           <div className="text-right leading-tight">
             <div className="font-display text-[24px] tracking-display text-deep-black">DELIVERY NOTE</div>
             <div className="font-mono text-[13px] text-deep-black mt-1">{note.number}</div>
-            <div className="text-[11px] text-graphite mt-1">Issued {note.issued_at}</div>
+            <div className="text-[11px] text-graphite mt-1">Issued {fmtDate(note.issued_at)}</div>
           </div>
         </header>
 

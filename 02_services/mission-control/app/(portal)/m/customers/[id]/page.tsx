@@ -3,11 +3,13 @@ import { sbInventory, type B2bCustomer } from '@/lib/supabase'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
+import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
 type Tab = 'invoices' | 'deliveries' | 'balance'
-type SearchParams = { tab?: Tab }
+type SearchParams = { tab?: Tab; sort?: string; dir?: string }
 
 export default async function CustomerDetail({
   params, searchParams,
@@ -64,9 +66,9 @@ export default async function CustomerDetail({
             )}
           </nav>
 
-          {tab === 'invoices'   && <InvoicesPanel   customerId={id} />}
-          {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} />}
-          {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} />}
+          {tab === 'invoices'   && <InvoicesPanel   customerId={id} sp={sp} />}
+          {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} sp={sp} />}
+          {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} sp={sp} />}
 
           {!c.is_consignment && tab !== 'invoices' && (
             <div className="text-sm text-graphite">
@@ -94,27 +96,33 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 }
 
 // ─── Invoices panel (mirror of FA) ──────────────────────────────────────
-async function InvoicesPanel({ customerId }: { customerId: string }) {
+async function InvoicesPanel({ customerId, sp }: { customerId: string; sp: SearchParams }) {
   const { data, error } = await sbInventory
     .from('flowaccount_invoice')
     .select('id, number, issued_at, due_at, status, total, detail_url')
     .eq('customer_id', customerId)
-    .order('issued_at', { ascending: false })
     .limit(200)
   if (error) return <SchemaError error={error.message} />
-  const rows = (data ?? []) as any[]
+  let rows = (data ?? []) as any[]
   if (rows.length === 0) return <div className="text-sm text-graphite">Инвойсов нет.</div>
+
+  const sort = parseSort(sp.sort, ['number','issued_at','due_at','status','total'] as const, 'issued_at')
+  const dir: SortDir = parseDir(sp.dir, 'desc')
+  rows = [...rows].sort(cmpBy(r => {
+    if (sort === 'total') return Number(r.total ?? 0)
+    return r[sort] as string
+  }, dir))
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
       <table className="w-full text-[13px]">
         <thead className="text-graphite border-b border-pale-stone bg-cream/40">
           <tr>
-            <th className="text-left  py-2 px-4">Number</th>
-            <th className="text-left  py-2 px-4">Issued</th>
-            <th className="text-left  py-2 px-4">Due</th>
-            <th className="text-left  py-2 px-4">Status</th>
-            <th className="text-right py-2 px-4">Total</th>
+            <SortHeader col="number"    label="Number" sort={sort} dir={dir} sp={sp} keep={['tab']} />
+            <SortHeader col="issued_at" label="Issued" sort={sort} dir={dir} sp={sp} keep={['tab']} />
+            <SortHeader col="due_at"    label="Due"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+            <SortHeader col="status"    label="Status" sort={sort} dir={dir} sp={sp} keep={['tab']} />
+            <SortHeader col="total"     label="Total"  sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
           </tr>
         </thead>
         <tbody>
@@ -125,8 +133,8 @@ async function InvoicesPanel({ customerId }: { customerId: string }) {
                   ? <a href={r.detail_url} target="_blank" rel="noopener noreferrer" className="hover:text-wine-red">{r.number}</a>
                   : r.number}
               </td>
-              <td className="py-2 px-4">{r.issued_at}</td>
-              <td className="py-2 px-4">{r.due_at ?? '—'}</td>
+              <td className="py-2 px-4">{fmtDate(r.issued_at)}</td>
+              <td className="py-2 px-4">{fmtDate(r.due_at)}</td>
               <td className="py-2 px-4">{r.status}</td>
               <td className="py-2 px-4 text-right tabular-nums">฿{Number(r.total).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
             </tr>
@@ -138,7 +146,7 @@ async function InvoicesPanel({ customerId }: { customerId: string }) {
 }
 
 // ─── Deliveries panel (consignment only) ────────────────────────────────
-async function DeliveriesPanel({ customerId }: { customerId: string }) {
+async function DeliveriesPanel({ customerId, sp }: { customerId: string; sp: SearchParams }) {
   // Find the consignment_location id.
   const { data: loc } = await sbInventory
     .from('consignment_location')
@@ -151,11 +159,10 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
     .from('delivery_note')
     .select('id, number, issued_at, status, delivery_note_line(qty, unit_price)')
     .eq('location_id', loc.id)
-    .order('issued_at', { ascending: false })
     .limit(200)
   if (error) return <SchemaError error={error.message} />
 
-  const notes = ((data ?? []) as any[]).map(n => {
+  let notes = ((data ?? []) as any[]).map(n => {
     const lines = (n.delivery_note_line ?? []) as { qty: number; unit_price: number | null }[]
     return {
       ...n,
@@ -164,6 +171,15 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
       total_money: lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0),
     }
   })
+
+  const sort = parseSort(sp.sort, ['number','issued_at','status','line_count','total_qty','total_money'] as const, 'issued_at')
+  const dir: SortDir = parseDir(sp.dir, 'desc')
+  notes = [...notes].sort(cmpBy(n => {
+    if (sort === 'line_count')  return n.line_count
+    if (sort === 'total_qty')   return n.total_qty
+    if (sort === 'total_money') return n.total_money
+    return n[sort] as string
+  }, dir))
 
   return (
     <>
@@ -184,12 +200,12 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
           <table className="w-full text-[13px]">
             <thead className="text-graphite border-b border-pale-stone bg-cream/40">
               <tr>
-                <th className="text-left  py-2 px-4">Number</th>
-                <th className="text-left  py-2 px-4">Issued</th>
-                <th className="text-left  py-2 px-4">Status</th>
-                <th className="text-right py-2 px-4">Lines</th>
-                <th className="text-right py-2 px-4">Total qty</th>
-                <th className="text-right py-2 px-4">Total ฿</th>
+                <SortHeader col="number"      label="Number"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+                <SortHeader col="issued_at"   label="Issued"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+                <SortHeader col="status"      label="Status"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+                <SortHeader col="line_count"  label="Lines"     sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
+                <SortHeader col="total_qty"   label="Total qty" sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
+                <SortHeader col="total_money" label="Total ฿"   sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
                 <th></th>
               </tr>
             </thead>
@@ -197,7 +213,7 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
               {notes.map(n => (
                 <tr key={n.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
                   <td className="py-2 px-4 font-mono">{n.number}</td>
-                  <td className="py-2 px-4">{n.issued_at}</td>
+                  <td className="py-2 px-4">{fmtDate(n.issued_at)}</td>
                   <td className="py-2 px-4">{n.status}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.line_count}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_qty}</td>
@@ -218,7 +234,7 @@ async function DeliveriesPanel({ customerId }: { customerId: string }) {
 }
 
 // ─── Balance panel — derived from v_consignment_balance ─────────────────
-async function BalancePanel({ customerId }: { customerId: string }) {
+async function BalancePanel({ customerId, sp }: { customerId: string; sp: SearchParams }) {
   const { data: loc } = await sbInventory
     .from('consignment_location')
     .select('id, name')
@@ -231,13 +247,22 @@ async function BalancePanel({ customerId }: { customerId: string }) {
     .select('sku_id, qty, sku(name, loyverse_product_code, category)')
     .eq('location_id', loc.id)
   if (error) return <SchemaError error={error.message} />
-  const rows = ((data ?? []) as any[])
-    .filter(r => r.qty > 0)
-    .sort((a, b) => (a.sku?.name ?? '').localeCompare(b.sku?.name ?? ''))
+  let rows = ((data ?? []) as any[]).filter(r => r.qty > 0)
 
   if (rows.length === 0) {
     return <div className="text-sm text-graphite">Сейчас на точке ничего не лежит.</div>
   }
+
+  // Balance has no date column, so default to Name asc.
+  const sort = parseSort(sp.sort, ['code','name','category','qty'] as const, 'name')
+  const dir: SortDir = parseDir(sp.dir, sort === 'qty' ? 'desc' : 'asc')
+  rows = [...rows].sort(cmpBy(r => {
+    if (sort === 'code')     return r.sku?.loyverse_product_code ?? ''
+    if (sort === 'name')     return r.sku?.name ?? ''
+    if (sort === 'category') return r.sku?.category ?? ''
+    return Number(r.qty)
+  }, dir))
+
   const totalQty = rows.reduce((s, r) => s + Number(r.qty || 0), 0)
 
   return (
@@ -250,10 +275,10 @@ async function BalancePanel({ customerId }: { customerId: string }) {
         <table className="w-full text-[13px]">
           <thead className="text-graphite border-b border-pale-stone bg-cream/40">
             <tr>
-              <th className="text-left  py-2 px-4">Code</th>
-              <th className="text-left  py-2 px-4">Name</th>
-              <th className="text-left  py-2 px-4">Category</th>
-              <th className="text-right py-2 px-4">Qty</th>
+              <SortHeader col="code"     label="Code"     sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="name"     label="Name"     sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="category" label="Category" sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="qty"      label="Qty"      sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
             </tr>
           </thead>
           <tbody>

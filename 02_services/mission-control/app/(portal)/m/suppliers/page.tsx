@@ -6,6 +6,8 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SupplierTermsCell, SupplierTypeCell } from '@/components/modules/suppliers/SupplierEditCell'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { SortHeader } from '@/components/shell/SortHeader'
+import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,13 +151,13 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
             <table className="w-full text-[13px]">
               <thead className="text-graphite border-b border-pale-stone bg-cream/40">
                 <tr>
-                  <SortTh col="name"      label="Supplier"             sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="type"      label="Type"                 sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="terms"     label="Terms"                sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="this_year" label={`${thisYear} YTD`}    sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="last_year" label={`${lastYear} total`}  sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="po_count"  label={`PO (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="last_po"   label="Last PO"              sort={sort} dir={dir} sp={sp} />
+                  <SortHeader col="name"      label="Supplier"             sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="type"      label="Type"                 sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="terms"     label="Terms"                sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="this_year" label={`${thisYear} YTD`}    sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="last_year" label={`${lastYear} total`}  sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="po_count"  label={`PO (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="last_po"   label="Last PO"              sort={sort} dir={dir} sp={sp} keep={['type']} />
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +173,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
                       <td className="py-2 px-4 text-right tabular-nums text-graphite">
                         {st.thisYearCount}/{st.lastYearCount}
                       </td>
-                      <td className="py-2 px-4 text-graphite text-xs">{st.lastDate ?? '—'}</td>
+                      <td className="py-2 px-4 text-graphite text-xs">{fmtDate(st.lastDate)}</td>
                     </tr>
                   )
                 })}
@@ -191,32 +193,6 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   )
 }
 
-function SortTh({
-  col, label, sort, dir, sp, align = 'left',
-}: {
-  col: SortKey
-  label: string
-  sort: SortKey
-  dir: 'asc' | 'desc'
-  sp: SearchParams
-  align?: 'left' | 'right'
-}) {
-  const isActive = sort === col
-  const nextDir: 'asc' | 'desc' = isActive ? (dir === 'asc' ? 'desc' : 'asc') : 'asc'
-  const params = new URLSearchParams()
-  if (sp.type && sp.type !== 'all') params.set('type', sp.type)
-  params.set('sort', col)
-  params.set('dir', nextDir)
-  const arrow = !isActive ? ' ↕' : (dir === 'asc' ? ' ↑' : ' ↓')
-  return (
-    <th className={`py-2 px-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-      <Link href={`?${params.toString()}`}
-            className={`whitespace-nowrap ${isActive ? 'text-wine-red' : 'text-graphite hover:text-deep-black'}`}>
-        {label}<span className="opacity-60">{arrow}</span>
-      </Link>
-    </th>
-  )
-}
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })

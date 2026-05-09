@@ -3,6 +3,7 @@ import { sbInventory, type SkuBreakdown } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SkuSearchBox } from '@/components/modules/inventory/SkuSearchBox'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { SortHeader } from '@/components/shell/SortHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,13 +106,13 @@ export default async function InventoryPage({
           <table className="w-full text-[13px]">
             <thead className="text-graphite border-b border-pale-stone bg-cream/40">
               <tr>
-                <SortTh col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} />
-                <SortTh col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} />
-                <SortTh col="category"              label="Category"       sort={sort} dir={dir} sp={sp} />
-                <SortTh col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} align="right" />
-                <SortTh col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} align="right" />
-                <SortTh col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} align="right" />
-                <SortTh col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} align="right" />
+                <SortHeader col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
+                <SortHeader col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
+                <SortHeader col="category"              label="Category"       sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
+                <SortHeader col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
+                <SortHeader col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
+                <SortHeader col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
+                <SortHeader col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
               </tr>
             </thead>
             <tbody>
@@ -144,41 +145,6 @@ export default async function InventoryPage({
         </div>
       )}
     </>
-  )
-}
-
-function SortTh({
-  col, label, sort, dir, sp, align = 'left',
-}: {
-  col: SortKey
-  label: string
-  sort: SortKey
-  dir: 'asc' | 'desc'
-  sp: SearchParams
-  align?: 'left' | 'right'
-}) {
-  const isActive = sort === col
-  // Click cycles dir on the active column; switches to asc for a fresh column.
-  const nextDir: 'asc' | 'desc' = isActive ? (dir === 'asc' ? 'desc' : 'asc') : 'asc'
-  const params = new URLSearchParams()
-  // Preserve query + filters; sort/dir get overwritten below.
-  for (const [k, v] of Object.entries(sp)) {
-    if (v !== undefined && v !== '' && k !== 'sort' && k !== 'dir') {
-      params.set(k, String(v))
-    }
-  }
-  params.set('sort', col)
-  params.set('dir', nextDir)
-  const arrow = !isActive ? ' ↕' : (dir === 'asc' ? ' ↑' : ' ↓')
-  return (
-    <th className={`py-2 px-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-      <Link
-        href={`?${params.toString()}`}
-        className={`whitespace-nowrap ${isActive ? 'text-wine-red' : 'text-graphite hover:text-deep-black'}`}
-      >
-        {label}<span className="opacity-60">{arrow}</span>
-      </Link>
-    </th>
   )
 }
 

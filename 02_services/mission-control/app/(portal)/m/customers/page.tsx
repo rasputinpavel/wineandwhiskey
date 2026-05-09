@@ -6,6 +6,7 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CustomerTermsCell, CustomerConsignmentCell } from '@/components/modules/customers/CustomerEditCell'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { SortHeader } from '@/components/shell/SortHeader'
 
 export const dynamic = 'force-dynamic'
 
@@ -164,14 +165,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <table className="w-full text-[13px]">
               <thead className="text-graphite border-b border-pale-stone bg-cream/40">
                 <tr>
-                  <SortTh col="name"      label="Customer"            sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="type"      label="Type"                sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="terms"     label="Terms"               sort={sort} dir={dir} sp={sp} />
-                  <SortTh col="open"      label="Open"                sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="overdue"   label="Overdue"             sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="this_year" label={`${thisYear} YTD`}   sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="last_year" label={`${lastYear} total`} sort={sort} dir={dir} sp={sp} align="right" />
-                  <SortTh col="invoices"  label={`Inv (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} align="right" />
+                  <SortHeader col="name"      label="Customer"            sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="type"      label="Type"                sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="terms"     label="Terms"               sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+                  <SortHeader col="open"      label="Open"                sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="overdue"   label="Overdue"             sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="this_year" label={`${thisYear} YTD`}   sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="last_year" label={`${lastYear} total`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+                  <SortHeader col="invoices"  label={`Inv (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
                 </tr>
               </thead>
               <tbody>
@@ -215,33 +216,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
     </>
-  )
-}
-
-function SortTh({
-  col, label, sort, dir, sp, align = 'left',
-}: {
-  col: SortKey
-  label: string
-  sort: SortKey
-  dir: 'asc' | 'desc'
-  sp: SearchParams
-  align?: 'left' | 'right'
-}) {
-  const isActive = sort === col
-  const nextDir: 'asc' | 'desc' = isActive ? (dir === 'asc' ? 'desc' : 'asc') : 'asc'
-  const params = new URLSearchParams()
-  if (sp.type && sp.type !== 'all') params.set('type', sp.type)
-  params.set('sort', col)
-  params.set('dir', nextDir)
-  const arrow = !isActive ? ' ↕' : (dir === 'asc' ? ' ↑' : ' ↓')
-  return (
-    <th className={`py-2 px-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-      <Link href={`?${params.toString()}`}
-            className={`whitespace-nowrap ${isActive ? 'text-wine-red' : 'text-graphite hover:text-deep-black'}`}>
-        {label}<span className="opacity-60">{arrow}</span>
-      </Link>
-    </th>
   )
 }
 

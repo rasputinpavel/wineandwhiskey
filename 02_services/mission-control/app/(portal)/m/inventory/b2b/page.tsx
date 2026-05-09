@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sbInventory } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
@@ -203,9 +204,9 @@ export default async function B2bPage({
                     <span className="text-graphite text-center select-none transition-transform group-open:rotate-90">▸</span>
                     <span className="font-mono">{inv.number}</span>
                     <span className="truncate">{inv.customer_name}</span>
-                    <span className="text-graphite">{inv.issued_at}</span>
+                    <span className="text-graphite">{fmtDate(inv.issued_at)}</span>
                     <span className={isOverdue ? 'text-wine-red font-medium' : ''}>
-                      {inv.computedDue ?? <SetTermsHint customerId={inv.customer_id} />}
+                      {inv.computedDue ? fmtDate(inv.computedDue) : <SetTermsHint customerId={inv.customer_id} />}
                     </span>
                     <span className="text-right tabular-nums text-graphite">{inv.daysOpen}</span>
                     <span><StatusPill status={inv.status} overdue={isOverdue} /></span>
