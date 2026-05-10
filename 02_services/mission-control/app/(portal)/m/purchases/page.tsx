@@ -3,7 +3,9 @@ import { sbInventory, sbPublic, type PurchaseOrder, type Supplier } from '@/lib/
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { POExcludeCell } from '@/components/modules/purchases/POExcludeCell'
+import { CashflowOverrideCell } from '@/components/modules/purchases/POExcludeCell'
+import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
+import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +14,7 @@ type SearchParams = {
   month?:    string         // YYYY-MM, default = current
   type?:     'all' | 'regular' | 'consignment' | 'mix'
   status?:   'all' | 'closed' | 'draft'
-  excluded?: 'all' | 'yes' | 'no'
+  paid?:     'all' | 'yes' | 'no'
 }
 
 function bangkokYM(): string {
@@ -25,7 +27,7 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   const month = (sp.month && /^\d{4}-\d{2}$/.test(sp.month)) ? sp.month : bangkokYM()
   const typeFilter   = sp.type     ?? 'all'
   const statusFilter = sp.status   ?? 'closed'
-  const excFilter    = sp.excluded ?? 'all'
+  const paidFilter   = sp.paid     ?? 'all'
   const item = findItem('purchases')!
 
   // Month bounds
@@ -37,7 +39,7 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   // Fetch POs in month
   const { data: poRows, error: poErr } = await sbPublic
     .from('purchase_orders')
-    .select('id,po_number,order_date,supplier,total_thb,status,url,exclude_from_cashflow')
+    .select('id,po_number,order_date,supplier,total_thb,status,url,cashflow_override,paid_at,docs_url')
     .gte('order_date', from)
     .lte('order_date', to)
     .order('order_date', { ascending: false })
@@ -63,15 +65,23 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
     const want = statusFilter === 'closed' ? 'closed' : 'draft'
     pos = pos.filter(p => (p.status ?? '').toLowerCase() === want)
   }
-  if (excFilter !== 'all') {
-    pos = pos.filter(p => excFilter === 'yes' ? p.exclude_from_cashflow : !p.exclude_from_cashflow)
+  if (paidFilter !== 'all') {
+    pos = pos.filter(p => paidFilter === 'yes' ? p.paid_at != null : p.paid_at == null)
+  }
+
+  // Effective cashflow inclusion: override='exclude' → out, override='include' → in,
+  // override='auto' → follow supplier type (consignment → out).
+  function includedInCashflow(p: PurchaseOrder): boolean {
+    if (p.cashflow_override === 'exclude') return false
+    if (p.cashflow_override === 'include') return true
+    return supType(p.supplier) !== 'consignment'
   }
 
   // Aggregate
-  const grand = pos.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
-  const excluded = pos.filter(p => p.exclude_from_cashflow).reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
-  const consignment = pos.filter(p => supType(p.supplier) === 'consignment').reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
-  const cashflowImpact = grand - excluded - consignment
+  const grand    = pos.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  const inflow   = pos.filter(includedInCashflow).reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  const outflow  = grand - inflow
+  const paidSum  = pos.filter(p => p.paid_at != null).reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
 
   // Month picker — 18 months back
   const months: string[] = []
@@ -90,17 +100,19 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
             <h2 className="font-heading text-xl text-deep-black">Purchase Orders — {monthLabel(month)}</h2>
           </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
-            Закрытые PO из Loyverse за месяц. Поставщики типа <span className="text-deep-black">consignment</span> не идут
-            в cashflow (платятся по факту реализации). Любой PO можно вручную <span className="text-deep-black">исключить</span> —
-            например когда ты по ошибке завёл консигнацию как обычный PO.
+            Закрытые PO из Loyverse. По умолчанию <span className="text-deep-black">auto</span> следует типу поставщика
+            (consignment не идёт в cashflow). <span className="text-deep-black">force include</span> — учесть несмотря на
+            тип (PO от поставщика-реализатора, проданный нам нормальным счётом).
+            <span className="text-deep-black"> force exclude</span> — выкинуть (криво заведённая запись).
+            Paid + Docs — для отметки фактической оплаты и ссылки на Drive с tax invoice + receipt.
           </p>
 
           {/* KPI */}
           <div className="grid grid-cols-4 gap-3 mb-4">
-            <KPI label="Все PO"             value={`฿${fmt(grand)}`} note={`${pos.length} штук`} />
-            <KPI label="Consignment"        value={`−฿${fmt(consignment)}`} note="по типу поставщика" muted />
-            <KPI label="Excluded вручную"   value={`−฿${fmt(excluded)}`} note="ошибочные / спорные" muted />
-            <KPI label="В cashflow"         value={`฿${fmt(cashflowImpact)}`} note="идёт в P&L (со сдвигом −1 мес.)" highlight />
+            <KPI label="Все PO"      value={`฿${fmt(grand)}`}    note={`${pos.length} штук`} />
+            <KPI label="В cashflow"  value={`฿${fmt(inflow)}`}   note="идёт в P&L (со сдвигом −1 мес.)" highlight />
+            <KPI label="Не в cashflow" value={`−฿${fmt(outflow)}`} note="консигнация + force-exclude" muted />
+            <KPI label="Уже оплачено" value={`฿${fmt(paidSum)}`} note={`${pos.filter(p => p.paid_at != null).length} PO с paid_at`} />
           </div>
 
           {/* Filters */}
@@ -109,22 +121,22 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
               label="Type"
               current={typeFilter}
               options={['all', 'regular', 'consignment', 'mix']}
-              keep={{ month, status: statusFilter, excluded: excFilter }}
+              keep={{ month, status: statusFilter, paid: paidFilter }}
               paramKey="type"
             />
             <FilterPills
               label="Status"
               current={statusFilter}
               options={['all', 'closed', 'draft']}
-              keep={{ month, type: typeFilter, excluded: excFilter }}
+              keep={{ month, type: typeFilter, paid: paidFilter }}
               paramKey="status"
             />
             <FilterPills
-              label="Excluded"
-              current={excFilter}
+              label="Paid"
+              current={paidFilter}
               options={['all', 'yes', 'no']}
               keep={{ month, type: typeFilter, status: statusFilter }}
-              paramKey="excluded"
+              paramKey="paid"
             />
           </div>
 
@@ -154,14 +166,16 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
                   <th className="text-left py-2 px-4 font-medium">Type</th>
                   <th className="text-right py-2 px-4 font-medium">Total</th>
                   <th className="text-left py-2 px-4 font-medium">Cashflow</th>
+                  <th className="text-left py-2 px-4 font-medium">Paid</th>
+                  <th className="text-left py-2 px-4 font-medium">Docs</th>
                 </tr>
               </thead>
               <tbody>
                 {pos.map(p => {
                   const t = supType(p.supplier)
-                  const consignmentRow = t === 'consignment'
+                  const dimmed = !includedInCashflow(p)
                   return (
-                    <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${consignmentRow ? 'opacity-60' : ''}`}>
+                    <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${dimmed ? 'opacity-70' : ''}`}>
                       <td className="py-2 px-4 font-mono">
                         {p.url
                           ? <a href={p.url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{p.po_number}</a>
@@ -182,15 +196,19 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
                         {p.total_thb ? `฿${fmt(p.total_thb)}` : '—'}
                       </td>
                       <td className="py-2 px-4">
-                        {consignmentRow
-                          ? <span className="text-[10px] text-graphite italic">auto-excluded</span>
-                          : <POExcludeCell poId={p.id} initial={p.exclude_from_cashflow} />}
+                        <CashflowOverrideCell poId={p.id} initial={p.cashflow_override} />
+                      </td>
+                      <td className="py-2 px-4">
+                        <PaidAtCell poId={p.id} initial={p.paid_at} />
+                      </td>
+                      <td className="py-2 px-4">
+                        <DocsUrlCell poId={p.id} initial={p.docs_url} />
                       </td>
                     </tr>
                   )
                 })}
                 {pos.length === 0 && (
-                  <tr><td colSpan={6} className="py-6 text-center text-graphite text-sm">
+                  <tr><td colSpan={8} className="py-6 text-center text-graphite text-sm">
                     Нет PO в {monthLabel(month)} с текущими фильтрами.
                   </td></tr>
                 )}

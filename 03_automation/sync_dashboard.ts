@@ -298,15 +298,21 @@ async function fetchPurchaseTotalsByMonth(): Promise<Map<string, number>> {
     }
 
     // 2) Walk through PO history with pagination.
-    // Defensive select: миграция 007 могла быть ещё не применена → пробуем
-    // с exclude_from_cashflow, при column-not-exist падаем на старый SELECT.
+    // Cashflow inclusion logic:
+    //   • cashflow_override = 'exclude' → SKIP (force-exclude)
+    //   • cashflow_override = 'include' → KEEP (force-include, override consignment)
+    //   • cashflow_override = 'auto'    → use supplier.type (consignment → SKIP)
+    //
+    // Defensive select: миграция 008 могла быть не применена → пробуем
+    // с cashflow_override, при column-not-exist падаем на legacy SELECT
+    // (только consignment-фильтр, без overrides).
     const sb = createClient(url, key);
-    let hasExcludeCol = true;
+    let hasOverrideCol = true;
     let from = 0;
-    let skippedConsignment = 0, skippedExcluded = 0, kept = 0;
+    let kept = 0, forceIn = 0, forceOut = 0, autoOut = 0;
     while (true) {
-      const cols = hasExcludeCol
-        ? "order_date,total_thb,status,supplier,exclude_from_cashflow"
+      const cols = hasOverrideCol
+        ? "order_date,total_thb,status,supplier,cashflow_override"
         : "order_date,total_thb,status,supplier";
       const { data, error } = await sb
         .from("purchase_orders")
@@ -314,9 +320,9 @@ async function fetchPurchaseTotalsByMonth(): Promise<Map<string, number>> {
         .order("order_date", { ascending: true })
         .range(from, from + 999);
       if (error) {
-        if (/column.*exclude_from_cashflow.*does not exist/i.test(error.message)) {
-          console.warn("  ⚠ purchase_orders.exclude_from_cashflow ещё не существует — миграция 007 не применена. Фильтр overrides пропущен.");
-          hasExcludeCol = false;
+        if (/column.*cashflow_override.*does not exist/i.test(error.message)) {
+          console.warn("  ⚠ purchase_orders.cashflow_override ещё не существует — миграция 008 не применена. Только consignment-фильтр.");
+          hasOverrideCol = false;
           continue; // retry same page without the column
         }
         throw error;
@@ -325,9 +331,15 @@ async function fetchPurchaseTotalsByMonth(): Promise<Map<string, number>> {
       for (const r of (data as any[])) {
         const status = String(r.status ?? "").toUpperCase();
         if (status !== "CLOSED") continue;
-        if (hasExcludeCol && r.exclude_from_cashflow === true) { skippedExcluded++; continue; }
-        const supName = String(r.supplier ?? "").trim().toLowerCase();
-        if (consignmentNames.has(supName)) { skippedConsignment++; continue; }
+        const override = hasOverrideCol ? String(r.cashflow_override ?? "auto") : "auto";
+        if (override === "exclude") { forceOut++; continue; }
+        if (override !== "include") {
+          // 'auto' — falls back to supplier.type
+          const supName = String(r.supplier ?? "").trim().toLowerCase();
+          if (consignmentNames.has(supName)) { autoOut++; continue; }
+        } else {
+          forceIn++;
+        }
         const ym = String(r.order_date ?? "").slice(0, 7);
         if (!ym) continue;
         const total = Number(r.total_thb ?? 0);
@@ -338,7 +350,7 @@ async function fetchPurchaseTotalsByMonth(): Promise<Map<string, number>> {
       if (data.length < 1000) break;
       from += 1000;
     }
-    console.log(`  filter: ${kept} kept · ${skippedConsignment} consignment · ${skippedExcluded} excluded`);
+    console.log(`  filter: ${kept} kept (incl. ${forceIn} force-include) · ${autoOut} auto-skipped (consignment) · ${forceOut} force-excluded`);
     return out;
   } catch (e) {
     console.warn(`  ⚠ Не удалось прочитать purchase_orders: ${(e as Error).message}`);

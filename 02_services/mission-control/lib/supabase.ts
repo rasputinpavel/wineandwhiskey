@@ -16,6 +16,8 @@ export const sbPublic = createClient(url, key)
 
 // ─── public.purchase_orders types ───────────────────────────────────────
 
+export type CashflowOverride = 'auto' | 'include' | 'exclude'
+
 export type PurchaseOrder = {
   id: number
   po_number: string
@@ -32,7 +34,9 @@ export type PurchaseOrder = {
   url: string | null
   scraped_at: string
   scrape_error: string | null
-  exclude_from_cashflow: boolean
+  cashflow_override: CashflowOverride
+  paid_at: string | null     // ISO date YYYY-MM-DD; null = не оплачено
+  docs_url: string | null    // ссылка на Google Drive с tax invoice + receipt
 }
 
 export type PurchaseOrderItem = {
