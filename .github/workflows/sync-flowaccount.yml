@@ -54,6 +54,9 @@ jobs:
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # Fall back to fresh login when the persisted session expires.
+          FLOW_EMAIL:           ${{ secrets.FLOW_EMAIL }}
+          FLOW_PASSWORD:        ${{ secrets.FLOW_PASSWORD }}
           FLOW_FROM:            ${{ github.event.inputs.from }}
           FLOW_TO:              ${{ github.event.inputs.to }}
         run: npm run inv:flow
