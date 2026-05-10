@@ -139,18 +139,22 @@ async function syncInvoices(invoices: FlowInvoice[], skus: IndexedSku[]) {
       if (error) throw new Error(`invoice ${inv.number}: ${error.message}`);
       const invoice_id = row!.id as string;
 
-      // Replace lines (delete-then-insert is simpler than diffing).
-      await supabase.from("flowaccount_invoice_line").delete().eq("invoice_id", invoice_id);
-      const lines = (inv.lineItems ?? []).map(li => ({
-        invoice_id,
-        sku_id: matchSku(li.name, skus).sku?.id ?? null,
-        raw_text: li.name,
-        qty: li.quantity,
-        amount: li.amount,
-      }));
-      if (lines.length) {
-        const { error: lineErr } = await supabase.from("flowaccount_invoice_line").insert(lines);
-        if (lineErr) throw new Error(`lines ${inv.number}: ${lineErr.message}`);
+      // Replace lines only when we actually re-read the detail page this run.
+      // `lineItems === undefined` means we deliberately skipped enrich (already
+      // Paid + already in DB) — keep existing lines untouched.
+      if (inv.lineItems !== undefined) {
+        await supabase.from("flowaccount_invoice_line").delete().eq("invoice_id", invoice_id);
+        const lines = inv.lineItems.map(li => ({
+          invoice_id,
+          sku_id: matchSku(li.name, skus).sku?.id ?? null,
+          raw_text: li.name,
+          qty: li.quantity,
+          amount: li.amount,
+        }));
+        if (lines.length) {
+          const { error: lineErr } = await supabase.from("flowaccount_invoice_line").insert(lines);
+          if (lineErr) throw new Error(`lines ${inv.number}: ${lineErr.message}`);
+        }
       }
       written++;
     }
@@ -219,7 +223,44 @@ async function main() {
   const session = await openFlow();
   try {
     const invoices = await listInvoices(session, fromIso, toIso);
-    await enrichInvoicesWithItems(session, invoices);
+
+    // Listing can return 0 rows for two reasons:
+    //   (a) genuinely no invoices in the window — rare but valid, e.g. a
+    //       narrow workflow_dispatch range.
+    //   (b) the page didn't render — session expired mid-run, DOM changed,
+    //       Angular still loading. CI used to silently log ok=true rows_in=0
+    //       in this case; we now fail loud so debug screenshots upload.
+    // (a) is hard to distinguish, so we trust the default 90-day window:
+    // there are always recent B2B invoices, so 0 rows in 90 days = (b).
+    const isDefaultWindow = !process.env.FLOW_FROM && !process.env.FLOW_TO;
+    if (invoices.length === 0 && isDefaultWindow) {
+      throw new Error(
+        "FlowAccount listing returned 0 invoices for the default 90-day window — " +
+        "DOM probably didn't render (session bounced through workspace picker, or ngx-datatable not yet loaded). " +
+        "Check debug-*.png artifacts."
+      );
+    }
+
+    // Skip detail-page enrichment for invoices that were already Paid in our
+    // DB and are still Paid in the listing — they don't change, and detail
+    // scraping is the slow part (~30s per invoice). For the rest (new,
+    // outstanding, or status-changed) we fetch line items as before.
+    const { data: existingRows } = await supabase
+      .from("flowaccount_invoice")
+      .select("number, status")
+      .in("number", invoices.map(i => i.number));
+    const dbStatusByNumber = new Map((existingRows ?? []).map(r => [r.number, r.status]));
+
+    const toEnrich = invoices.filter(i => {
+      const dbStatus = dbStatusByNumber.get(i.number);
+      if (!dbStatus)             return true;   // brand new
+      if (dbStatus !== "Paid")   return true;   // was outstanding — re-check status + lines
+      if (i.status !== "Paid")   return true;   // was Paid, now not — refresh
+      return false;                              // already Paid, still Paid → skip
+    });
+    console.log(`[inv-flow] ${invoices.length} invoices listed, ${toEnrich.length} need detail-page enrichment`);
+
+    await enrichInvoicesWithItems(session, toEnrich);
     const receipts = await listReceipts(session, fromIso, toIso);
     await syncInvoices(invoices, skus);
     await syncReceipts(invoices, receipts);
