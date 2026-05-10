@@ -9,6 +9,7 @@
 
 import dotenv from "dotenv";
 import { BANK_TRANSFER_TYPE_ID, isB2BCustomerName } from "./lib/b2b.js";
+import { createClient } from "@supabase/supabase-js";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID   = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
@@ -22,6 +23,15 @@ const PLAN_START_YM = "2026-04";
 // 1% от выручки добавляется к обязательным расходам — премиальный фонд по
 // текущей системе мотивации. Применяется и к историческим месяцам.
 const REVENUE_BONUS_PCT = 0.01;
+
+// Буфер на непредвиденные расходы — добавляется к месячным расходам
+// в P&L-графике «Прибыль владельца». Параметризован, не привязан к данным.
+const UNEXPECTED_BUFFER = 15_000;
+
+// Старт окна для P&L-графика. Раньше 2024-08 в данных был magnitude-bug
+// (фикс 2d540af), поэтому исторический ряд начинаем с 2025-01 — там цифры
+// уже чистые.
+const PNL_START_YM = "2025-01";
 
 const LOYVERSE_TOKEN      = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID    = process.env.GOOGLE_CLIENT_ID!;
@@ -252,6 +262,148 @@ async function fetchDebitorkaInForMonth(currentYM: string): Promise<number> {
     console.warn(`  ⚠ Не удалось прочитать Дебиторку: ${(e as Error).message}`);
     return 0;
   }
+}
+
+// ─── Закупки по месяцам (Supabase purchase_orders) ──────────────────────────
+// Группируем total_thb по месяцу order_date, статус Closed/CLOSED.
+// Используется в P&L-графике с месячным сдвигом: закупки месяца N оплачиваются
+// (по 30-day terms) в месяце N+1, поэтому для P&L месяца N берём закупки N-1.
+//
+// Исключаем:
+//   • поставщики с inventory.supplier.type = 'consignment' — оплата по факту
+//     реализации, не через 30 дней. Источник: mission-control / supplier UI.
+//   • PO с purchase_orders.exclude_from_cashflow = true — точечный override
+//     для криво заведённых записей. Управляется в /m/purchases (миграция 007).
+
+async function fetchPurchaseTotalsByMonth(): Promise<Map<string, number>> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  const out = new Map<string, number>();
+  if (!url || !key) {
+    console.warn("  ⚠ SUPABASE_URL/SERVICE_KEY не заданы — пропускаю закупки");
+    return out;
+  }
+  try {
+    // 1) Loadup of consignment supplier names (inventory.supplier.type = 'consignment')
+    const sbInv = createClient(url, key, { db: { schema: "inventory" } });
+    const { data: supRows, error: supErr } = await sbInv
+      .from("supplier")
+      .select("name,type");
+    if (supErr) throw supErr;
+    const consignmentNames = new Set<string>();
+    for (const s of supRows ?? []) {
+      if (String(s.type ?? "") === "consignment") {
+        consignmentNames.add(String(s.name ?? "").trim().toLowerCase());
+      }
+    }
+
+    // 2) Walk through PO history with pagination.
+    // Defensive select: миграция 007 могла быть ещё не применена → пробуем
+    // с exclude_from_cashflow, при column-not-exist падаем на старый SELECT.
+    const sb = createClient(url, key);
+    let hasExcludeCol = true;
+    let from = 0;
+    let skippedConsignment = 0, skippedExcluded = 0, kept = 0;
+    while (true) {
+      const cols = hasExcludeCol
+        ? "order_date,total_thb,status,supplier,exclude_from_cashflow"
+        : "order_date,total_thb,status,supplier";
+      const { data, error } = await sb
+        .from("purchase_orders")
+        .select(cols)
+        .order("order_date", { ascending: true })
+        .range(from, from + 999);
+      if (error) {
+        if (/column.*exclude_from_cashflow.*does not exist/i.test(error.message)) {
+          console.warn("  ⚠ purchase_orders.exclude_from_cashflow ещё не существует — миграция 007 не применена. Фильтр overrides пропущен.");
+          hasExcludeCol = false;
+          continue; // retry same page without the column
+        }
+        throw error;
+      }
+      if (!data || data.length === 0) break;
+      for (const r of (data as any[])) {
+        const status = String(r.status ?? "").toUpperCase();
+        if (status !== "CLOSED") continue;
+        if (hasExcludeCol && r.exclude_from_cashflow === true) { skippedExcluded++; continue; }
+        const supName = String(r.supplier ?? "").trim().toLowerCase();
+        if (consignmentNames.has(supName)) { skippedConsignment++; continue; }
+        const ym = String(r.order_date ?? "").slice(0, 7);
+        if (!ym) continue;
+        const total = Number(r.total_thb ?? 0);
+        if (!Number.isFinite(total)) continue;
+        out.set(ym, (out.get(ym) ?? 0) + total);
+        kept++;
+      }
+      if (data.length < 1000) break;
+      from += 1000;
+    }
+    console.log(`  filter: ${kept} kept · ${skippedConsignment} consignment · ${skippedExcluded} excluded`);
+    return out;
+  } catch (e) {
+    console.warn(`  ⚠ Не удалось прочитать purchase_orders: ${(e as Error).message}`);
+    return out;
+  }
+}
+
+// ─── P&L по месяцам ─────────────────────────────────────────────────────────
+// «Прибыль владельца» = Revenue месяца N − (Закупки N-1 + Обяз. + Buffer).
+// Закупки сдвигаем на 1 месяц назад: PO с order_date в феврале оплачиваются
+// в марте (30-day terms), поэтому покрываются выручкой марта.
+//   • Обязательные — текущая сумма (нет исторических снапшотов)
+//   • Buffer       — UNEXPECTED_BUFFER (15K)
+
+interface PnLRow {
+  ym:           string;     // 2025-01, 2025-02, ...
+  revenue:      number;     // выручка месяца (Loyverse)
+  purchasesPrev: number;    // закупки месяца N-1 (Supabase total_thb)
+  obligatory:   number;     // постоянные расходы (текущее значение)
+  buffer:       number;     // UNEXPECTED_BUFFER
+  expenses:     number;     // sum
+  profit:       number;     // revenue − expenses
+}
+
+function buildPnL(
+  summary: Awaited<ReturnType<typeof fetchSummary>>,
+  purchases: Map<string, number>,
+  mandatoryFixed: number,
+  startYM: string,
+  endYM: string,
+): PnLRow[] {
+  // Map ym → revenue из summary (cur.total для всех ym, last.total для прошлого года).
+  const revenueByYM = new Map<string, number>();
+  for (const s of summary) {
+    if (s.cur.total > 0) revenueByYM.set(s.ym, s.cur.total);
+    // last — прошлогодний месяц, тот же ym минус год
+    const [ly, lmo] = [Number(s.ym.slice(0, 4)) - 1, s.ym.slice(5, 7)];
+    revenueByYM.set(`${ly}-${lmo}`, s.last.total);
+  }
+
+  const months: string[] = [];
+  let [y, m] = startYM.split("-").map(Number);
+  const [yEnd, mEnd] = endYM.split("-").map(Number);
+  while (y < yEnd || (y === yEnd && m <= mEnd)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+
+  const out: PnLRow[] = [];
+  for (const ym of months) {
+    const [yy, mm] = ym.split("-").map(Number);
+    const prevY = mm === 1 ? yy - 1 : yy;
+    const prevM = mm === 1 ? 12 : mm - 1;
+    const prevYM = `${prevY}-${String(prevM).padStart(2, "0")}`;
+
+    const revenue = revenueByYM.get(ym) ?? 0;
+    const purchasesPrev = purchases.get(prevYM) ?? 0;
+    const obligatory = mandatoryFixed;
+    const buffer = UNEXPECTED_BUFFER;
+    const expenses = purchasesPrev + obligatory + buffer;
+    const profit = revenue - expenses;
+
+    out.push({ ym, revenue, purchasesPrev, obligatory, buffer, expenses, profit });
+  }
+  return out;
 }
 
 // ─── Loyverse ──────────────────────────────────────────────────────────────
@@ -613,6 +765,7 @@ async function writeDataSheet(
   mandatoryFixed: number,
   weekly: WeeklyFact[],
   rollingAvg: number,
+  pnl: PnLRow[],
 ) {
   await clearTab(dataSheetId);
 
@@ -722,6 +875,21 @@ async function writeDataSheet(
   const weeklyRows: any[][] = [weeklyHeader, ...weekly.map(w => [w.weekStart, w.retail, w.b2b, w.total])];
   await writeValues(DATA_TAB, "P1", weeklyRows);
 
+  // ── Section 6: P&L по месяцам (cols U:Z) ──
+  // Источник для графика «Прибыль владельца — Выручка vs Расходы (со сдвигом)».
+  // Закупки сдвинуты на 1 месяц назад (30-day terms); обязательные = текущее
+  // значение к каждому месяцу; buffer — константа.
+  const pnlHeader = ["Месяц", "Выручка", "Закупки prev", "Обязательные", "Buffer", "Прибыль"];
+  const pnlRows: any[][] = [pnlHeader, ...pnl.map(p => [
+    monthLabel(p.ym),
+    Math.round(p.revenue),
+    Math.round(p.purchasesPrev),
+    Math.round(p.obligatory),
+    Math.round(p.buffer),
+    Math.round(p.profit),
+  ])];
+  await writeValues(DATA_TAB, "U1", pnlRows);
+
   // Format header rows dark
   const dark  = { red: 0.15, green: 0.15, blue: 0.15 };
   const white = { red: 1, green: 1, blue: 1 };
@@ -768,8 +936,26 @@ async function writeDataSheet(
         fields: "userEnteredFormat.numberFormat",
       },
     },
+    // P&L header (cols U:Z = idx 20..26)
+    headerFmt(dataSheetId, 0, 1, 20, 26, dark, white),
+    // P&L numeric format (cols V:Z = idx 21..26)
+    {
+      repeatCell: {
+        range: { sheetId: dataSheetId, startRowIndex: 1, endRowIndex: 1 + pnl.length, startColumnIndex: 21, endColumnIndex: 25 },
+        cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "# ##0" } } },
+        fields: "userEnteredFormat.numberFormat",
+      },
+    },
+    // Прибыль с красным минусом (col Z = idx 25)
+    {
+      repeatCell: {
+        range: { sheetId: dataSheetId, startRowIndex: 1, endRowIndex: 1 + pnl.length, startColumnIndex: 25, endColumnIndex: 26 },
+        cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "# ##0;[Red]-# ##0" } } },
+        fields: "userEnteredFormat.numberFormat",
+      },
+    },
     // Auto-resize
-    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 19 } } },
+    { autoResizeDimensions: { dimensions: { sheetId: dataSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 26 } } },
   ];
 
   await sheets("POST", ":batchUpdate", { requests: fmtRequests });
@@ -808,6 +994,7 @@ async function writeDashboard(
   kreditorkaDue: number,
   retailDailyAvg: number,
   debitorkaIn: number,
+  pnlLength: number,
 ) {
   await clearTab(dashSheetId);
   await deleteCharts(dashSheetId);
@@ -1518,6 +1705,79 @@ async function writeDashboard(
     },
   });
 
+  // ── Chart 5: Прибыль владельца — Выручка vs Расходы (со сдвигом) ──
+  // Стек-бары расходов (col W=Закупки prev, X=Обяз., Y=Buffer) + линия выручки
+  // (col V). Где линия выше стека — месяц закрыт владельцу в плюс.
+  // Закупки сдвинуты на 1 месяц назад (30-day terms).
+  // Источник: Данные!U:Z, заполняется выше через writeDataSheet (pnlRows).
+  // Range: U2:Z(1+pnl.length); col U = idx 20, V=21, W=22, X=23, Y=24, Z=25.
+  const pnlStartRow = 1; // 0-indexed (U2 = row 1)
+  const pnlEndRow   = 1 + pnlLength;
+  chartRequests.push({
+    addChart: {
+      chart: {
+        spec: {
+          title: "Прибыль владельца — Выручка vs Расходы (со сдвигом)",
+          subtitle: "Выручка месяца N покрывает: Закупки месяца N-1 + Обязательные + Buffer 15K",
+          titleTextFormat: { bold: true, fontSize: 13 },
+          basicChart: {
+            chartType: "COMBO",
+            stackedType: "STACKED",
+            legendPosition: "RIGHT_LEGEND",
+            axis: [
+              { position: "BOTTOM_AXIS" },
+              { position: "LEFT_AXIS", title: "THB" },
+            ],
+            domains: [{ domain: { sourceRange: { sources: [dataRange(20, 21, pnlStartRow, pnlEndRow)] } } }],
+            series: [
+              // Закупки prev — винный (база стека)
+              {
+                series: { sourceRange: { sources: [dataRange(22, 23, pnlStartRow, pnlEndRow)] } },
+                targetAxis: "LEFT_AXIS",
+                type: "COLUMN",
+                color: wineRed,
+                dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } },
+              },
+              // Обязательные — оранжевый (середина стека)
+              {
+                series: { sourceRange: { sources: [dataRange(23, 24, pnlStartRow, pnlEndRow)] } },
+                targetAxis: "LEFT_AXIS",
+                type: "COLUMN",
+                color: orange,
+                dataLabel: { type: "DATA", placement: "INSIDE_BASE", textFormat: { fontSize: 9, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } },
+              },
+              // Buffer — серо-голубой (верх стека)
+              {
+                series: { sourceRange: { sources: [dataRange(24, 25, pnlStartRow, pnlEndRow)] } },
+                targetAxis: "LEFT_AXIS",
+                type: "COLUMN",
+                color: grayBlue,
+                dataLabel: { type: "DATA", placement: "OUTSIDE_END", textFormat: { fontSize: 9, bold: true } },
+              },
+              // Выручка — зелёная линия (если выше стека → профит)
+              {
+                series: { sourceRange: { sources: [dataRange(21, 22, pnlStartRow, pnlEndRow)] } },
+                targetAxis: "LEFT_AXIS",
+                type: "LINE",
+                color: greenColor,
+                lineStyle: { width: 3, type: "SOLID" },
+                dataLabel: { type: "DATA", placement: "ABOVE", textFormat: { fontSize: 9, bold: true, foregroundColor: greenColor } },
+              },
+            ],
+          },
+          backgroundColorStyle: { rgbColor: { red: 1, green: 1, blue: 1 } },
+        },
+        position: {
+          overlayPosition: {
+            anchorCell: { sheetId: dashSheetId, rowIndex: 144, columnIndex: 0 },
+            widthPixels: 1400,
+            heightPixels: 600,
+          },
+        },
+      },
+    },
+  });
+
   await sheets("POST", ":batchUpdate", { requests: chartRequests });
   console.log("  ✓ Charts created.");
 }
@@ -1563,14 +1823,15 @@ async function main() {
   const weekly = await fetchWeeklyHistory(12);
   console.log(`  ✓ ${weekly.length} weeks: ${weekly[0]?.weekStart} … ${weekly[weekly.length - 1]?.weekStart}\n`);
 
-  console.log(`[3.8/4] Fetching ликвидность месяца (Rolling opening + Кредит/Дебит + 7d run rate)...`);
+  console.log(`[3.8/4] Fetching ликвидность месяца (Rolling opening + Кредит/Дебит + 7d run rate + закупки)...`);
   const sevenAgoMs = now.getTime() - 6 * 86_400_000;
   const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-  const [openingBalance, kreditorkaDue, debitorkaIn, rolling7] = await Promise.all([
+  const [openingBalance, kreditorkaDue, debitorkaIn, rolling7, purchases] = await Promise.all([
     fetchOpeningBalanceForMonth(currentYM),
     fetchKreditorkaDueForMonth(currentYM),
     fetchDebitorkaInForMonth(currentYM),
     fetchPeriod(fmtDay(sevenAgoMs), fmtDay(now.getTime())),
+    fetchPurchaseTotalsByMonth(),
   ]);
   const retailDailyAvg = Math.round(rolling7.retailRevenue / 7);
   const daysInMo       = monthBounds(currentYM).days;
@@ -1580,15 +1841,25 @@ async function main() {
   console.log(`  ✓ Прогноз retail: ${retailDailyAvg.toLocaleString()}/день × ${daysInMo} = ${retailForecast.toLocaleString()} ฿`);
   console.log(`  ✓ Дебиторка ожид. в мес.: ${Math.round(debitorkaIn).toLocaleString()} ฿`);
   console.log(`  ✓ Прогноз выручки: ${Math.round(expectedRev).toLocaleString()} ฿`);
-  console.log(`  ✓ Кредиторка не-Paid в мес.: ${Math.round(kreditorkaDue).toLocaleString()} ฿\n`);
+  console.log(`  ✓ Кредиторка не-Paid в мес.: ${Math.round(kreditorkaDue).toLocaleString()} ฿`);
+  console.log(`  ✓ Закупки помесячно: ${purchases.size} месяцев в Supabase\n`);
+
+  // Build P&L по месяцам (2025-01 → currentYM)
+  const pnl = buildPnL(summary, purchases, mandatoryFixed, PNL_START_YM, currentYM);
+  console.log(`[3.9/4] P&L по месяцам (со сдвигом закупок −1 мес.):`);
+  for (const p of pnl) {
+    const sign = p.profit >= 0 ? "+" : "−";
+    console.log(`  ${p.ym}: rev ${Math.round(p.revenue).toLocaleString().padStart(10)} − exp ${Math.round(p.expenses).toLocaleString().padStart(10)} = ${sign}${Math.round(Math.abs(p.profit)).toLocaleString()} ฿`);
+  }
+  console.log("");
 
   console.log(`[4/4] Writing to Google Sheets...`);
   const [dataSheetId, dashSheetId] = await Promise.all([ensureTab(DATA_TAB), ensureTab(DASH_TAB)]);
 
-  const ranges = await writeDataSheet(dataSheetId, currentYM, curData, lyData, summary, todayDay, updatedAt, mandatoryFixed, weekly, retailDailyAvg);
+  const ranges = await writeDataSheet(dataSheetId, currentYM, curData, lyData, summary, todayDay, updatedAt, mandatoryFixed, weekly, retailDailyAvg, pnl);
   console.log(`  ✓ Data written to "${DATA_TAB}".`);
 
-  await writeDashboard(dashSheetId, dataSheetId, currentYM, curData, lyData, summary, { ...ranges, tableRows }, mandatoryFixed, openingBalance, kreditorkaDue, retailDailyAvg, debitorkaIn);
+  await writeDashboard(dashSheetId, dataSheetId, currentYM, curData, lyData, summary, { ...ranges, tableRows }, mandatoryFixed, openingBalance, kreditorkaDue, retailDailyAvg, debitorkaIn, pnl.length);
   console.log(`  ✓ Dashboard updated in "${DASH_TAB}".`);
 
   const plan = lyData.total * 1.25;

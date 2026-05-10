@@ -73,6 +73,12 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
+        slug: 'purchases', name: 'Purchases', icon: '🧾', status: 'building',
+        description: 'Закупки: PO из Loyverse помесячно, исключение кривых записей из cashflow.',
+        route: '/m/purchases',
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'price', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',
         route: m('price'),

@@ -32,6 +32,7 @@ export type PurchaseOrder = {
   url: string | null
   scraped_at: string
   scrape_error: string | null
+  exclude_from_cashflow: boolean
 }
 
 export type PurchaseOrderItem = {
