@@ -40,7 +40,6 @@ const REPO        = 'https://github.com/rasputinpavel/wineandwhiskey'
 const REPO_SF     = 'https://github.com/rasputinpavel/phuket-sip-reserve'
 const STOREFRONT  = 'https://phuket-sip-reserve.lovable.app'
 const TRENDWATCH  = 'https://trendwatch-production.up.railway.app'
-const PRICE_SVC   = 'https://price-service-production.up.railway.app'
 
 const sheetEmbed  = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing&rm=embedded&widget=true`
 const sheetEdit   = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit`
@@ -74,11 +73,10 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
-        slug: 'price-service', name: 'Прайс-листы', icon: '🏷', status: 'live',
+        slug: 'price', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',
-        route: m('price-service'),
-        embed: { kind: 'external', href: PRICE_SVC,
-          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/02_services/price-service` }] },
+        route: m('price'),
+        embed: { kind: 'native' },
       },
       {
         slug: 'wine-matrix', name: 'Wine Matrix', icon: '🧮', status: 'planned',
