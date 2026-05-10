@@ -137,39 +137,39 @@ export default function UploadPage() {
           onDragLeave={() => setDragging(false)}
           onClick={() => fileRef.current?.click()}
           className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all
-            ${dragging ? 'border-wine-red bg-wine-red/5' : 'border-pale-stone bg-warm-white hover:border-wine-red/50 hover:bg-cream'}`}
+            ${dragging ? 'border-wine-red bg-wine-red/5' : 'border-pale-stone bg-white hover:border-wine-red/50 hover:bg-cream'}`}
         >
           <input ref={fileRef} type="file" accept={ACCEPTED_EXTENSIONS} onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} className="hidden" />
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-cream mb-4">
-            <svg className="w-8 h-8 text-pale-stone" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-8 h-8 text-graphite" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 0 1-.88-7.903A5 5 0 1 1 15.9 6L16 6a5 5 0 0 1 1 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           </div>
-          <p className="text-ink font-medium">Перетащите PDF или нажмите для выбора</p>
-          <p className="text-sm text-pale-stone mt-1">PDF, XLS, XLSX, JPG, PNG — любой размер</p>
+          <p className="text-deep-black font-medium">Перетащите PDF или нажмите для выбора</p>
+          <p className="text-sm text-graphite mt-1">PDF, XLS, XLSX, JPG, PNG — любой размер</p>
         </div>
       )}
 
       {state === 'uploading' && (
-        <div className="bg-warm-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
+        <div className="bg-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-wine-red/10 mb-2">
             <svg className="w-8 h-8 text-wine-red" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 0 1-.88-7.903A5 5 0 1 1 15.9 6L16 6a5 5 0 0 1 1 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           </div>
           <div>
-            <p className="font-medium text-ink">Загрузка файла...</p>
+            <p className="font-medium text-deep-black">Загрузка файла...</p>
             <p className="text-sm text-graphite mt-1">{filename}</p>
           </div>
           <div className="w-full bg-cream rounded-full h-2">
             <div className="bg-wine-red h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
-          <p className="text-sm text-pale-stone">{progress}%</p>
+          <p className="text-sm text-graphite">{progress}%</p>
         </div>
       )}
 
       {state === 'processing' && (
-        <div className="bg-warm-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
+        <div className="bg-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-wine-red/10 mb-2">
             <svg className="w-8 h-8 text-wine-red animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -177,7 +177,7 @@ export default function UploadPage() {
             </svg>
           </div>
           <div>
-            <p className="font-medium text-ink">Читаем прайс...</p>
+            <p className="font-medium text-deep-black">Читаем прайс...</p>
             <p className="text-sm text-graphite mt-1">{filename}</p>
           </div>
           <div className="w-full bg-cream rounded-full h-2 mt-2">
@@ -185,24 +185,24 @@ export default function UploadPage() {
           </div>
           <div className="flex items-center justify-center gap-3 text-xs text-graphite">
             <span>{extractProgress}%</span>
-            {extractPhase && <span className="text-pale-stone">·</span>}
-            {extractPhase && <span className="text-pale-stone capitalize">{extractPhase}</span>}
-            {extractItemCount > 0 && <span className="text-pale-stone">·</span>}
-            {extractItemCount > 0 && <span className="text-ink font-medium">{extractItemCount} позиций</span>}
+            {extractPhase && <span className="text-graphite">·</span>}
+            {extractPhase && <span className="text-graphite capitalize">{extractPhase}</span>}
+            {extractItemCount > 0 && <span className="text-graphite">·</span>}
+            {extractItemCount > 0 && <span className="text-deep-black font-medium">{extractItemCount} позиций</span>}
           </div>
-          <p className="text-xs text-pale-stone">Обычно несколько секунд для известных поставщиков, до 2 минут для каталогов</p>
+          <p className="text-xs text-graphite">Обычно несколько секунд для известных поставщиков, до 2 минут для каталогов</p>
         </div>
       )}
 
       {state === 'done' && (
-        <div className="bg-warm-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
+        <div className="bg-white rounded-2xl border border-pale-stone p-8 text-center space-y-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-50 mb-2">
             <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <div>
-            <p className="font-semibold text-ink text-lg">Готово!</p>
+            <p className="font-semibold text-deep-black text-lg">Готово!</p>
             {supplierName && <p className="text-graphite mt-1">{supplierName}</p>}
             {itemCount != null && <p className="text-2xl font-bold text-wine-red mt-2">{itemCount} позиций</p>}
           </div>
@@ -218,14 +218,14 @@ export default function UploadPage() {
       )}
 
       {state === 'error' && (
-        <div className="bg-warm-white rounded-2xl border border-red-100 p-8 text-center space-y-4">
+        <div className="bg-white rounded-2xl border border-red-100 p-8 text-center space-y-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-50 mb-2">
             <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
           <div>
-            <p className="font-semibold text-ink">Ошибка</p>
+            <p className="font-semibold text-deep-black">Ошибка</p>
             <p className="text-sm text-graphite mt-1">{error}</p>
           </div>
           <button onClick={reset} className="px-4 py-2 bg-wine-red hover:bg-wine-red/90 text-warm-white rounded-xl text-sm transition-colors">
@@ -235,8 +235,8 @@ export default function UploadPage() {
       )}
 
       {state === 'idle' && (
-        <div className="bg-warm-white rounded-2xl border border-pale-stone p-5">
-          <h3 className="text-sm font-medium text-ink mb-3">Как это работает</h3>
+        <div className="bg-white rounded-2xl border border-pale-stone p-5">
+          <h3 className="text-sm font-medium text-deep-black mb-3">Как это работает</h3>
           <ol className="space-y-2 text-sm text-graphite">
             {[
               'Загрузите прайс в любом формате: PDF, Excel (XLS/XLSX) или картинка (JPG, PNG)',

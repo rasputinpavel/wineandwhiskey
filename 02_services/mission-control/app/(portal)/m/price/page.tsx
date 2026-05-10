@@ -63,8 +63,8 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
         <div className="text-sm text-graphite">
           {total > 0 ? (
             <span>
-              <strong className="text-ink font-heading font-semibold">{total.toLocaleString('ru-RU')}</strong> позиций ·{' '}
-              <strong className="text-ink font-heading font-semibold">{suppliers.length}</strong> поставщиков
+              <strong className="text-deep-black font-heading font-semibold">{total.toLocaleString('ru-RU')}</strong> позиций ·{' '}
+              <strong className="text-deep-black font-heading font-semibold">{suppliers.length}</strong> поставщиков
             </span>
           ) : (
             <span>Нет данных — загрузите первый прайс</span>
@@ -89,7 +89,7 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
         />
       </Suspense>
 
-      <Suspense fallback={<div className="text-center py-12 text-pale-stone text-sm">Загрузка...</div>}>
+      <Suspense fallback={<div className="text-center py-12 text-graphite text-sm">Загрузка...</div>}>
         <PriceTableClient items={items} total={total} page={page} limit={limit} sortCol={sortCol} sortAsc={sortAsc} />
       </Suspense>
     </div>

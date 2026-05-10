@@ -12,7 +12,7 @@ const TABS = [
 export function PriceNav() {
   const pathname = usePathname() || ''
   return (
-    <nav className="flex gap-1 px-6 py-2 bg-warm-white border-b border-pale-stone">
+    <nav className="flex gap-1 px-6 py-2 bg-white border-b border-pale-stone">
       {TABS.map(t => {
         const active = t.href === '/m/price'
           ? pathname === t.href

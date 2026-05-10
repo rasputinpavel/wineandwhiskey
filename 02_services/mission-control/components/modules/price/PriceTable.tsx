@@ -94,7 +94,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto rounded-xl border border-stone bg-white">
             <table className="min-w-[1200px] w-full text-sm">
-              <thead className="bg-warm-white border-b border-stone">
+              <thead className="bg-white border-b border-stone">
                 <tr>
                   <th className="px-4 py-3 w-8"></th>
                   {([
@@ -112,7 +112,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                   ] as const).map(({ col, label, align }, i, arr) => (
                     <th
                       key={label}
-                      className={`py-3 ${i === arr.length - 1 ? 'pl-4 pr-6' : 'px-4'} text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-ink select-none' : ''}`}
+                      className={`py-3 ${i === arr.length - 1 ? 'pl-4 pr-6' : 'px-4'} text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-deep-black select-none' : ''}`}
                       onClick={col ? () => onSort(col) : undefined}
                     >
                       {label}

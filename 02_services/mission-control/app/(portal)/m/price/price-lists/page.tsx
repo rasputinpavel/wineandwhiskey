@@ -181,10 +181,10 @@ export default function PriceListsPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-2">
       {loading && (
-        <div className="text-center py-12 text-pale-stone text-sm">Загрузка...</div>
+        <div className="text-center py-12 text-graphite text-sm">Загрузка...</div>
       )}
       {!loading && lists.length === 0 && (
-        <div className="text-center py-12 text-pale-stone text-sm">Нет загруженных прайсов</div>
+        <div className="text-center py-12 text-graphite text-sm">Нет загруженных прайсов</div>
       )}
       {lists.map(pl => {
         const name = (pl.supplier_name && pl.supplier_name !== 'null') ? pl.supplier_name : 'Без поставщика'
@@ -193,10 +193,10 @@ export default function PriceListsPage() {
         const es = enrichStatus[pl.id] ?? { state: 'idle', enriched: 0, total: 0 }
 
         return (
-          <div key={pl.id} className="bg-warm-white rounded-2xl border border-pale-stone px-5 py-4 flex items-center gap-4">
+          <div key={pl.id} className="bg-white rounded-2xl border border-pale-stone px-5 py-4 flex items-center gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-ink truncate">{name}</span>
+                <span className="font-medium text-deep-black truncate">{name}</span>
                 {pl.status === 'processing' && (
                   <span className="text-xs bg-amber-gold/15 text-amber-gold px-2 py-0.5 rounded-full animate-pulse">Обработка</span>
                 )}
@@ -204,7 +204,7 @@ export default function PriceListsPage() {
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full" title={pl.error_message ?? ''}>Ошибка</span>
                 )}
               </div>
-              <div className="text-xs text-pale-stone mt-0.5 flex gap-2">
+              <div className="text-xs text-graphite mt-0.5 flex gap-2">
                 {date && <span>{date}</span>}
                 {date && <span>·</span>}
                 <span>{pl.item_count} позиций</span>
@@ -326,7 +326,7 @@ export default function PriceListsPage() {
                 {es.state === 'done' && (
                   <span className="text-xs text-green-600 tabular-nums">
                     Готово: {es.enriched} из {es.total}
-                    {es.cacheHits > 0 && <span className="text-pale-stone"> · кэш: {es.cacheHits}</span>}
+                    {es.cacheHits > 0 && <span className="text-graphite"> · кэш: {es.cacheHits}</span>}
                   </span>
                 )}
                 {es.state === 'error' && (
@@ -338,7 +338,7 @@ export default function PriceListsPage() {
             <button
               onClick={() => handleDelete(pl.id, name)}
               disabled={deleting === pl.id}
-              className="flex-shrink-0 p-2 text-pale-stone hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-40"
+              className="flex-shrink-0 p-2 text-graphite hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-40"
               title="Удалить прайс"
             >
               {deleting === pl.id ? (
