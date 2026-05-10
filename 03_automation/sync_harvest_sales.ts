@@ -621,10 +621,6 @@ async function main() {
 
   const totalCost = currentSales.ours.reduce((s, r) => s + r.cost, 0);
 
-  // Sync to Кредиторка so Rolling picks up the payment
-  console.log("📋 Синхронизирую Кредиторку...");
-  await syncKreditorka(totalCost, today);
-
   console.log("");
   console.log("✅  Готово!");
   console.log(`   Текущий период: ${fmtDate(state.currentStart)} — ${fmtDate(today)}`);
@@ -634,36 +630,6 @@ async function main() {
     console.log(`   Архивных периодов: ${state.closedPeriods.length}`);
   }
   console.log(`   https://docs.google.com/spreadsheets/d/${SHEET_ID}`);
-}
-
-// ─── Кредиторка sync ──────────────────────────────────────────────────────────
-
-async function syncKreditorka(totalCost: number, today: string) {
-  const KRED_TAB = "Кредиторка";
-  const suppliers = await readRange(`${KRED_TAB}!A2:A300`);
-
-  // Find existing Harvest row (0-based index in data → sheet row = idx + 2)
-  const idx = suppliers.findIndex(r => (r[0] ?? "").trim() === HARVEST_SUPPLIER);
-
-  const [y, m, d] = nextPaymentDate(today).split("-");
-  const dueStr = `${d}.${m}.${y}`; // DD.MM.YYYY
-
-  const rowData = [HARVEST_SUPPLIER, "", "реализация", "", dueStr, totalCost, "On realization", "TRUE"];
-
-  if (idx >= 0) {
-    const sheetRow = idx + 2;
-    await gApi("PUT",
-      `/values/${encodeURIComponent(`${KRED_TAB}!A${sheetRow}:H${sheetRow}`)}?valueInputOption=USER_ENTERED`,
-      { range: `${KRED_TAB}!A${sheetRow}:H${sheetRow}`, majorDimension: "ROWS", values: [rowData] },
-    );
-    console.log(`   Кредиторка обновлена (строка ${sheetRow}): ${totalCost} ฿, срок ${dueStr}`);
-  } else {
-    await gApi("POST",
-      `/values/${encodeURIComponent(`${KRED_TAB}!A:H`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-      { range: `${KRED_TAB}!A:H`, majorDimension: "ROWS", values: [rowData] },
-    );
-    console.log(`   Кредиторка добавлена: ${totalCost} ฿, срок ${dueStr}`);
-  }
 }
 
 // ─── Helpers for SKU/variant lookup ───────────────────────────────────────────
