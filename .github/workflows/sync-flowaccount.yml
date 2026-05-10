@@ -67,7 +67,7 @@ jobs:
         with:
           name: flow-debug
           path: |
-            flow-debug-*.png
-            flow-debug-*.html
+            .tmp/flow-debug-*.png
+            .tmp/flow-debug-*.html
           if-no-files-found: ignore
           retention-days: 7

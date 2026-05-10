@@ -107,20 +107,45 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
 
   for (let attempt = 0; attempt < 4; attempt++) {
     const u = page.url();
+    // Always capture per-attempt state — invaluable when CI fails silently.
+    await page.screenshot({ path: dbgPath(`flow-debug-attempt-${attempt}.png`), fullPage: true }).catch(() => {});
 
     // Workspace/tenant selector — click the company that matches our baked-in id.
-    if (/SelectCompany|select-company|workspaces|\/select/.test(u)) {
-      console.log(`[flow] Workspace picker, clicking ${WORKSPACE_PATH}…`);
-      if (DEBUG) await page.screenshot({ path: dbgPath(`flow-debug-select-${attempt}.png`) });
+    // FlowAccount uses several different URLs for this picker over time:
+    // /SelectCompany, /select-company, /companies, /workspaces. Match all.
+    if (/SelectCompany|select-company|workspaces|\/select|\/companies/i.test(u)) {
+      console.log(`[flow] Workspace picker at ${u.slice(0, 90)}…, clicking ${WORKSPACE_PATH}`);
       const tenantId = WORKSPACE_PATH.split("/").filter(Boolean)[0]; // e.g. "N7474669"
-      const tenantLink = page.locator(
-        `a[href*="${tenantId}"], button[data-id*="${tenantId}"], :text("${tenantId}")`
-      ).first();
-      try {
-        await tenantLink.click({ timeout: 5000 });
-      } catch {
-        // fallback: click first row of company list
-        await page.locator('a[href*="callback"], a[href*="authorize"], button[type="submit"]').first().click().catch(() => {});
+      // The picker card may key off the tenant id (in href / data-id), or it
+      // may show only the human-readable company name. We accept either.
+      // Final fallback: click the first card-shaped element on the page —
+      // we only ever have one workspace anyway.
+      const candidateSelectors = [
+        `a[href*="${tenantId}"]`,
+        `button[data-id*="${tenantId}"]`,
+        `:text("${tenantId}")`,
+        `a:has-text("Head Office")`,
+        `button:has-text("Head Office")`,
+        `[role="button"]:has-text("Head Office")`,
+        `a:has-text("Co.,")`,
+        `button:has-text("Co.,")`,
+        `[role="button"]:has-text("Co.,")`,
+        `[class*="company"]:visible`,
+        `[class*="account-card"]:visible`,
+        `main a:visible, main button:visible, main [role="button"]:visible`,
+      ];
+      let clicked = false;
+      for (const sel of candidateSelectors) {
+        const el = page.locator(sel).first();
+        try {
+          await el.click({ timeout: 3000 });
+          console.log(`[flow] clicked workspace via selector: ${sel}`);
+          clicked = true;
+          break;
+        } catch { /* try next selector */ }
+      }
+      if (!clicked) {
+        console.warn(`[flow] could not click any workspace picker element at ${u}`);
       }
       await delay(4000);
       await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
