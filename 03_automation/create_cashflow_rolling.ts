@@ -205,14 +205,12 @@ async function main() {
         `IFERROR('Дебиторка'!E2:E200${S}0)` +
       `)`;
 
-    // Harvest Creation вынесен в «Обязательные» как фиксированная статья (5 число),
-    // поэтому в Кредиторке его сумма игнорируется, чтобы не задваивалась.
+    // Кредиторка — «как есть»: PAID — только информационный флаг, никаких
+    // строк не выкидываем. Harvest и всё остальное вводится вручную.
     const fKred =
       `=SUMPRODUCT(` +
       `(IFERROR(DATEVALUE('Кредиторка'!E2:E200)${S}0)>=${dateF(start)})*` +
       `(IFERROR(DATEVALUE('Кредиторка'!E2:E200)${S}0)<=${dateF(end)})*` +
-      `(UPPER(TRIM('Кредиторка'!G2:G200))<>"PAID")*` +
-      `(UPPER(TRIM('Кредиторка'!A2:A200))<>"HARVEST CREATION")*` +
       `IFERROR('Кредиторка'!F2:F200${S}0))`;
 
     // Обязательные: formula-driven from Обязательные tab
@@ -226,12 +224,17 @@ async function main() {
       `IFERROR(1*'Expenses'!B2:B500${S}0))`;
 
     const isoStart = start.toISOString().slice(0, 10);
-    const fFact = `=IFERROR(VLOOKUP("${isoStart}"${S}Закрытие!A:B${S}2${S}0)${S}"")`;
+    // «Доход факт» — розница за неделю из листа Данные (P:S, пишет sync_dashboard).
+    // Единый источник = Loyverse, всегда совпадает с дашбордом.
+    const fFact = `=IFERROR(VLOOKUP("${isoStart}"${S}'Данные'!$P:$S${S}2${S}0)${S}"")`;
 
+    // План и факт разведены:
+    //   • прошедшая неделя (Доход факт заполнен) → Открытие + Доход факт + Дебиторка − Расход факт
+    //   • будущая неделя → Открытие + Доход план + Дебиторка − Кредит план − Обяз план
     const fClose =
       `=IF(D${row}<>""` +
-      `${S}B${row}+D${row}+E${row}-F${row}-G${row}-H${row}` +
-      `${S}B${row}+C${row}+E${row}-F${row}-G${row}-H${row})`;
+      `${S}B${row}+D${row}+E${row}-H${row}` +
+      `${S}B${row}+C${row}+E${row}-F${row}-G${row})`;
 
     return [weekLabel(start, end), fOpen, fRev, fFact, fDeb, fKred, fFixed, fOper, fClose];
   });
@@ -240,7 +243,7 @@ async function main() {
   const values = [
     [`ROLLING CASHFLOW — до конца ${nowBkk.getUTCFullYear()} г.`, ...blankCols],
     ["Ср. розница/день (7д скользящее)", fDailyAvg, ...Array(NUM_COLS - 2).fill("")],
-    ["Неделя","Остаток нач.","Прогноз","Факт","Дебиторка","Кредиторка","Обяз расходы","Операц расходы","Остаток кон."],
+    ["Неделя","Остаток нач.","Доход план","Доход факт","Дебиторка","Кредит. план","Обяз. план","Расход факт","Остаток кон."],
     ...weekRows,
   ];
 

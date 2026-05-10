@@ -10,7 +10,6 @@
     "suppliers": "tsx 03_automation/sync_suppliers.ts",
     "receipts": "tsx 03_automation/sync_receipts.ts",
     "harvest": "tsx 03_automation/sync_harvest_sales.ts",
-    "actuals": "tsx 03_automation/sync_cashflow_actuals.ts",
     "daily": "tsx 03_automation/sync_daily_revenue.ts",
     "sync:all": "tsx 03_automation/sync_dashboard.ts && tsx 03_automation/wine_matrix.ts",
     "trends": "tsx 03_automation/sync_trends.ts",
