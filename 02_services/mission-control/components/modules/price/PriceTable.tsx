@@ -93,10 +93,10 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
         <>
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto rounded-xl border border-stone bg-white">
-            <table className="min-w-[1200px] w-full text-sm">
+            <table className="min-w-[1080px] w-full text-sm">
               <thead className="bg-white border-b border-stone">
                 <tr>
-                  <th className="px-4 py-3 w-8"></th>
+                  <th className="pl-3 pr-2 py-3 w-8"></th>
                   {([
                     { col: 'name', label: 'Название', align: 'left' },
                     { col: 'supplier_name', label: 'Поставщик', align: 'left' },
@@ -112,7 +112,7 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
                   ] as const).map(({ col, label, align }, i, arr) => (
                     <th
                       key={label}
-                      className={`py-3 ${i === arr.length - 1 ? 'pl-4 pr-6' : 'px-4'} text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-deep-black select-none' : ''}`}
+                      className={`py-3 ${i === arr.length - 1 ? 'pl-3 pr-4' : 'px-2.5'} text-${align} font-heading font-semibold text-graphite text-[11px] uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-deep-black select-none' : ''}`}
                       onClick={col ? () => onSort(col) : undefined}
                     >
                       {label}
@@ -176,7 +176,7 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
       onClick={() => { if (!hasTextSelection()) onClick() }}
       className={`cursor-pointer transition-colors ${selected ? 'bg-wine-50' : 'hover:bg-gray-50'}`}
     >
-      <td className="px-4 py-3">
+      <td className="pl-3 pr-2 py-3">
         {(item.image_url || item.vivino_image_url) ? (
           <div className="w-8 h-10 relative rounded overflow-hidden">
             <Image src={item.image_url ?? item.vivino_image_url!} alt={item.name} fill className="object-cover" />
@@ -187,7 +187,7 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
           </div>
         )}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-2.5 py-3">
         <div className="font-medium text-gray-900 flex items-center gap-1.5">
           {item.category && item.category !== 'wine' && (
             <span className="text-sm" title={item.category}>{categoryEmoji(item.category)}</span>
@@ -198,32 +198,35 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
           <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
         )}
       </td>
-      <td className="px-4 py-3">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
+      <td className="px-2.5 py-3 max-w-[140px]">
+        <span
+          className="inline-flex items-center max-w-full px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium whitespace-nowrap truncate"
+          title={(item.supplier_name && item.supplier_name !== 'null') ? item.supplier_name : undefined}
+        >
           {(item.supplier_name && item.supplier_name !== 'null') ? item.supplier_name : '—'}
         </span>
       </td>
-      <td className="px-4 py-3 text-gray-600">{item.country ?? '—'}</td>
-      <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px] truncate">{item.winery ?? '—'}</td>
-      <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">{item.grape_variety ?? '—'}</td>
-      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+      <td className="px-2.5 py-3 text-gray-600 whitespace-nowrap">{item.country ?? '—'}</td>
+      <td className="px-2.5 py-3 text-gray-600 text-xs max-w-[140px] truncate">{item.winery ?? '—'}</td>
+      <td className="px-2.5 py-3 text-gray-500 text-xs max-w-[140px] truncate">{item.grape_variety ?? '—'}</td>
+      <td className="px-2.5 py-3 text-gray-600 text-xs whitespace-nowrap">
         {item.wine_type
           ? wineTypeLabel(item.wine_type)
           : item.spirit_type
           ? spiritTypeLabel(item.spirit_type)
           : '—'}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-2.5 py-3 whitespace-nowrap">
         {item.vivino_rating ? (
           <span className="text-xs font-medium text-purple-700">★ {item.vivino_rating}</span>
         ) : '—'}
       </td>
-      <td className="px-4 py-3 text-gray-600">{item.year ?? item.vivino_year ?? '—'}</td>
-      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+      <td className="px-2.5 py-3 text-gray-600 whitespace-nowrap">{item.year ?? item.vivino_year ?? '—'}</td>
+      <td className="px-2.5 py-3 text-gray-600 text-xs whitespace-nowrap">
         {item.vivino_alcohol != null ? `${item.vivino_alcohol}%` : '—'}
       </td>
-      <td className="px-4 py-3 text-gray-500">{item.volume ?? '—'}</td>
-      <td className="pl-4 pr-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+      <td className="px-2.5 py-3 text-gray-500 whitespace-nowrap">{item.volume ?? '—'}</td>
+      <td className="pl-3 pr-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
         {item.price != null ? `฿${item.price.toLocaleString('ru-RU')}` : '—'}
       </td>
     </tr>
