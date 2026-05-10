@@ -66,6 +66,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: flow-debug
-          path: debug-*.png
+          path: |
+            flow-debug-*.png
+            flow-debug-*.html
           if-no-files-found: ignore
           retention-days: 7

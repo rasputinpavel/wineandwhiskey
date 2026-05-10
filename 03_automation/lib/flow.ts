@@ -348,6 +348,20 @@ export async function listInvoices(s: FlowSession, fromIso: string, toIso: strin
     const dedup = invoices.filter(i => seen.has(i.number) ? false : (seen.add(i.number), true));
     const withUrl = dedup.filter(i => i.detailUrl).length;
     console.log(`[flow] ${dedup.length} invoice(s) parsed, ${withUrl} with detailUrl`);
+
+    // If listing came back empty, capture page state unconditionally — this
+    // is the most useful artefact for diagnosing why CI silently saw 0 rows.
+    if (dedup.length === 0) {
+      try {
+        await s.page.screenshot({ path: dbgPath("flow-debug-empty-list.png"), fullPage: true });
+        const html = await s.page.content();
+        fs.writeFileSync(dbgPath("flow-debug-empty-list.html"), html);
+        console.log(`[flow] empty listing — saved screenshot + HTML at ${s.page.url()}`);
+      } catch (e) {
+        console.error("[flow] could not save empty-listing artefacts:", e);
+      }
+    }
+
     return dedup;
   } finally {
     s.page.off("response", responseListener);
