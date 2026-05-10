@@ -20,15 +20,11 @@
 //   - SKU is the dedup key (`supplier_sku`). Two rows with the same name but
 //     different SKUs (e.g. /BOX, /350, different vintages) are kept separate.
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
 import type { ExtractedItem, ExtractionResult } from '../claude'
 import { normalizeSpiritType } from '../classify'
+import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout } from './_shared'
 
-const exec = promisify(execFile)
+const writeTemp = (buf: Buffer) => writeTempShared(buf, 'bbb')
 
 // Page ranges for sections we care about.
 const SPIRITS_PAGES: [number, number] = [12, 18]
@@ -727,21 +723,3 @@ function parseDate(text: string): string | null {
   return `${m[3]}-${mo}-${m[1].padStart(2, '0')}`
 }
 
-// ─── Shell helpers ──────────────────────────────────────────────────────────
-
-async function writeTemp(buf: Buffer): Promise<string> {
-  const path = join(tmpdir(), `bbb_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
-  writeFileSync(path, buf)
-  return path
-}
-
-function safeUnlink(path: string) {
-  try { unlinkSync(path) } catch { /* ok */ }
-}
-
-async function pdftotextLayout(path: string, fromPage: number, toPage: number): Promise<string> {
-  const { stdout } = await exec('pdftotext', [
-    '-layout', '-f', String(fromPage), '-l', String(toPage), path, '-',
-  ], { maxBuffer: 32 * 1024 * 1024 })
-  return stdout
-}

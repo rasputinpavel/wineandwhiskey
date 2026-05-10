@@ -13,17 +13,13 @@
 //
 // Both paths reuse our pipeline's `callWithPdf` helper from claude.ts.
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { PDFDocument } from 'pdf-lib'
-import Anthropic from '@anthropic-ai/sdk'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+import {
+  writeTemp as writeTempShared, safeUnlink, pdftotextLayout,
+  getPageCount, extractPdfPages, parseJson, callWithPdf, dedupBy,
+} from './_shared'
 
-const exec = promisify(execFile)
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const writeTemp = (buf: Buffer) => writeTempShared(buf, 'magmag')
 
 const SUPPLIER_NAME = 'MagmaG Food and Beverage'
 
@@ -116,7 +112,7 @@ async function parsePromo(buf: Buffer, onProgress?: ProgressCb): Promise<Extract
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
     currency: 'THB',
-    items: dedupBySku(items),
+    items: dedupBy(items, it => (it.supplier_sku ?? `${it.name}|${it.year ?? ''}`).toLowerCase()),
   }
 }
 
@@ -215,7 +211,7 @@ async function parseCatalog(
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
     currency: 'THB',
-    items: dedupByNameYear(allItems),
+    items: dedupBy(allItems, it => `${(it.name || '').toLowerCase().trim()}|${it.year ?? ''}|${it.price ?? ''}`),
   }
 }
 
@@ -259,74 +255,3 @@ function normalizeCountryHeading(s: string): string | null {
   return t.split(/\s+/).map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-async function callWithPdf(prompt: string, pdfBase64: string): Promise<string> {
-  const doc = { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: pdfBase64 } }
-  const res = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8192,
-    messages: [{ role: 'user', content: [doc as unknown as Anthropic.TextBlockParam, { type: 'text', text: prompt }] }],
-  })
-  return res.content[0].type === 'text' ? res.content[0].text : ''
-}
-
-function parseJson<T>(raw: string): T | null {
-  try {
-    return JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()) as T
-  } catch {
-    return null
-  }
-}
-
-async function getPageCount(buf: Buffer): Promise<number> {
-  const doc = await PDFDocument.load(buf, { ignoreEncryption: true })
-  return doc.getPageCount()
-}
-
-async function extractPdfPages(buf: Buffer, from: number, to: number): Promise<Buffer> {
-  const src = await PDFDocument.load(buf, { ignoreEncryption: true })
-  const out = await PDFDocument.create()
-  const indices = []
-  for (let i = from - 1; i < to; i++) indices.push(i)
-  const pages = await out.copyPages(src, indices)
-  pages.forEach(p => out.addPage(p))
-  return Buffer.from(await out.save())
-}
-
-function dedupBySku(items: ExtractedItem[]): ExtractedItem[] {
-  const seen = new Set<string>()
-  return items.filter(it => {
-    const key = (it.supplier_sku ?? `${it.name}|${it.year ?? ''}`).toLowerCase()
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function dedupByNameYear(items: ExtractedItem[]): ExtractedItem[] {
-  const seen = new Set<string>()
-  return items.filter(it => {
-    const key = `${(it.name || '').toLowerCase().trim()}|${it.year ?? ''}|${it.price ?? ''}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-async function writeTemp(buf: Buffer): Promise<string> {
-  const path = join(tmpdir(), `magmag_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
-  writeFileSync(path, buf)
-  return path
-}
-
-function safeUnlink(path: string) {
-  try { unlinkSync(path) } catch { /* ok */ }
-}
-
-async function pdftotextLayout(path: string, fromPage: number, toPage: number): Promise<string> {
-  const { stdout } = await exec('pdftotext', [
-    '-layout', '-f', String(fromPage), '-l', String(toPage), path, '-',
-  ], { maxBuffer: 32 * 1024 * 1024 })
-  return stdout
-}

@@ -31,14 +31,10 @@
 // header was missed:
 //   AR/AU/AT/CL/FR/GE/HU/IT/NZ/PT/ZA/SP/US, plus OS=Austria (Österreich).
 
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout } from './_shared'
 
-const exec = promisify(execFile)
+const writeTemp = (buf: Buffer) => writeTempShared(buf, 'vl')
 
 const SUPPLIER_NAME = 'Vinum Lector Co.,Ltd.'
 
@@ -491,22 +487,3 @@ function parsePrice(raw: string): number | null {
   return isFinite(n) ? n : null
 }
 
-// ─── Shell helpers ──────────────────────────────────────────────────────────
-
-async function writeTemp(buf: Buffer): Promise<string> {
-  const path = join(tmpdir(), `vl_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
-  writeFileSync(path, buf)
-  return path
-}
-
-function safeUnlink(path: string) {
-  try { unlinkSync(path) } catch { /* ok */ }
-}
-
-async function pdftotextLayout(path: string, fromPage: number, toPage: number): Promise<string> {
-  const args = ['-layout', '-f', String(fromPage)]
-  if (toPage > 0) args.push('-l', String(toPage))
-  args.push(path, '-')
-  const { stdout } = await exec('pdftotext', args, { maxBuffer: 64 * 1024 * 1024 })
-  return stdout
-}

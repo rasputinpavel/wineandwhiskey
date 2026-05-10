@@ -16,14 +16,10 @@
 // We keep the full SKU as supplier_sku and parse fields from the columns
 // directly, falling back to SKU only when a column is missing.
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout } from './_shared'
 
-const exec = promisify(execFile)
+const writeTemp = (buf: Buffer) => writeTempShared(buf, 'iws')
 
 const SUPPLIER_NAME = 'Independent Wine & Spirit (Thailand) Co., Ltd.'
 
@@ -505,22 +501,3 @@ function parseVolume(unit: string | null): string | null {
   return `${n}ml`
 }
 
-// ─── Shell helpers ──────────────────────────────────────────────────────────
-
-async function writeTemp(buf: Buffer): Promise<string> {
-  const path = join(tmpdir(), `iws_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
-  writeFileSync(path, buf)
-  return path
-}
-
-function safeUnlink(path: string) {
-  try { unlinkSync(path) } catch { /* ok */ }
-}
-
-async function pdftotextLayout(path: string, fromPage: number, toPage: number): Promise<string> {
-  const args = ['-layout', '-f', String(fromPage)]
-  if (toPage > 0) args.push('-l', String(toPage))
-  args.push(path, '-')
-  const { stdout } = await exec('pdftotext', args, { maxBuffer: 64 * 1024 * 1024 })
-  return stdout
-}

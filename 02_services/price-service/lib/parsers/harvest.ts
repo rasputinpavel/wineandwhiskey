@@ -16,17 +16,18 @@
 // vodka are separate rows). Default country is Russia unless brand clearly
 // says otherwise. SKU is absent → dedup by (name, volume, price).
 
-import { writeFileSync, unlinkSync, readFileSync, readdirSync } from 'fs'
+import { unlinkSync, readFileSync, readdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { PDFDocument } from 'pdf-lib'
 import Anthropic from '@anthropic-ai/sdk'
 import type { ExtractedItem, ExtractionResult } from '../claude'
+import {
+  exec, anthropic,
+  writeTemp as writeTempShared, safeUnlink, pdftotextLayout,
+  getPageCount, parseJson, dedupBy,
+} from './_shared'
 
-const exec = promisify(execFile)
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const writeTemp = (buf: Buffer) => writeTempShared(buf, 'harvest')
 
 const SUPPLIER_NAME = 'Russian Wine Harvest'
 
@@ -108,7 +109,7 @@ export async function parseHarvest(
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
     currency: 'THB',
-    items: dedup(allItems),
+    items: dedupBy(allItems, it => `${(it.name || '').toLowerCase().trim()}|${it.volume ?? ''}|${it.price ?? ''}`),
   }
 }
 
@@ -215,42 +216,3 @@ async function renderPagesToJpegs(pdfPath: string, fromPage: number, toPage: num
   return images
 }
 
-function parseJson<T>(raw: string): T | null {
-  try {
-    return JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()) as T
-  } catch {
-    return null
-  }
-}
-
-async function getPageCount(buf: Buffer): Promise<number> {
-  const doc = await PDFDocument.load(buf, { ignoreEncryption: true })
-  return doc.getPageCount()
-}
-
-function dedup(items: ExtractedItem[]): ExtractedItem[] {
-  const seen = new Set<string>()
-  return items.filter(it => {
-    const key = `${(it.name || '').toLowerCase().trim()}|${it.volume ?? ''}|${it.price ?? ''}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-async function writeTemp(buf: Buffer): Promise<string> {
-  const path = join(tmpdir(), `harvest_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
-  writeFileSync(path, buf)
-  return path
-}
-
-function safeUnlink(path: string) {
-  try { unlinkSync(path) } catch { /* ok */ }
-}
-
-async function pdftotextLayout(path: string, fromPage: number, toPage: number): Promise<string> {
-  const { stdout } = await exec('pdftotext', [
-    '-layout', '-f', String(fromPage), '-l', String(toPage), path, '-',
-  ], { maxBuffer: 32 * 1024 * 1024 })
-  return stdout
-}

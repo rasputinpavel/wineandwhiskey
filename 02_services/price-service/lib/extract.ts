@@ -2,18 +2,9 @@ import { splitPdfIntoChunks, extractPdfText } from './pdf'
 import { extractFromChunks, extractFromImage, extractFromText, extractFromImageBatch } from './claude'
 import type { ExtractionResult, ExtractedItem } from './claude'
 import { renderPdfToImages, isPdftoppmAvailable } from './pdf-render'
-import { isBBB, parseBBB } from './parsers/bbb'
-import { isMagMag, parseMagMag } from './parsers/magmag'
-import { isItalasia, parseItalasia } from './parsers/italasia'
-import { isIWS, parseIWS } from './parsers/iws'
-import { isJanhom, parseJanhom } from './parsers/janhom'
-import { isPhop, parsePhop } from './parsers/phop'
-import { isHarvest, parseHarvest } from './parsers/harvest'
-import { isUniversal, parseUniversal } from './parsers/universal'
-import { isVinumLector, parseVinumLector } from './parsers/vinum-lector'
-import { isWineGallery, parseWineGallery, isWineGalleryOffer, parseWineGalleryOffer } from './parsers/wine-gallery'
+import { findMatchingParser, type FileType, type ProgressCb } from './parsers'
 
-export type FileType = 'pdf' | 'excel' | 'image'
+export type { FileType, ProgressCb }
 
 // Maps Excel sheet names to country names
 const SHEET_COUNTRY: Record<string, string | null> = {
@@ -43,8 +34,6 @@ export function detectFileType(filename: string, mimeType: string): FileType {
   return 'image'
 }
 
-export type ProgressCb = (pct: number, phase?: string, itemCount?: number) => Promise<void> | void
-
 export async function extractFromFile(
   buffer: Buffer,
   filename: string,
@@ -54,53 +43,16 @@ export async function extractFromFile(
   const type = detectFileType(filename, mimeType)
   const report = onProgress ?? (() => {})
 
-  if (type === 'pdf') {
-    // Supplier-specific parsers come first — they don't lose items to
-    // generic LLM token limits or dedup-by-name collisions.
-    if (await isBBB(buffer)) {
-      console.log('[extract] using BB&B deterministic parser')
-      await report(10, 'parsing')
-      const r = await parseBBB(buffer)
-      await report(95, 'inserting')
-      return r
-    }
-    if (await isMagMag(buffer, filename)) {
-      console.log('[extract] using MagMag parser (Claude with supplier-specific prompt)')
-      return parseMagMag(buffer, filename, report)
-    }
-    if (await isItalasia(buffer, filename)) {
-      console.log('[extract] using Italasia parser (Claude with supplier-specific prompt)')
-      return parseItalasia(buffer, filename, report)
-    }
-    if (await isIWS(buffer, filename)) {
-      console.log('[extract] using IWS deterministic parser')
-      const r = await parseIWS(buffer, filename, report)
-      await report(95, 'inserting')
-      return r
-    }
-    if (await isJanhom(buffer, filename)) {
-      console.log('[extract] using Janhom parser (Claude with supplier-specific prompts)')
-      return parseJanhom(buffer, filename, report)
-    }
-    if (await isPhop(buffer, filename)) {
-      console.log('[extract] using P-HOPS parser (Claude Vision per chunk)')
-      return parsePhop(buffer, filename, report)
-    }
-    if (await isHarvest(buffer, filename)) {
-      console.log('[extract] using Russian Wine Harvest parser (Claude Vision per chunk)')
-      return parseHarvest(buffer, filename, report)
-    }
-    if (await isUniversal(buffer, filename)) {
-      console.log('[extract] using Universal parser (auto-routes fine_wine / horeca / spirits)')
-      return parseUniversal(buffer, filename, report)
-    }
-    if (await isVinumLector(buffer, filename)) {
-      console.log('[extract] using Vinum Lector deterministic parser')
-      const r = await parseVinumLector(buffer, filename, report)
-      await report(95, 'inserting')
-      return r
-    }
+  // Supplier-specific parser wins — it knows the layout and won't lose items
+  // to generic LLM token limits or dedup-by-name collisions.
+  const parser = await findMatchingParser(buffer, filename, mimeType, type)
+  if (parser) {
+    console.log(`[extract] using ${parser.id} parser`)
+    return parser.run(buffer, filename, mimeType, report)
+  }
 
+  // No supplier match — fall back to generic strategies.
+  if (type === 'pdf') {
     // Strategy 1: render pages to images via pdftoppm (best quality, requires poppler)
     if (await isPdftoppmAvailable()) {
       console.log('[extract] using pdftoppm renderer')
@@ -126,22 +78,10 @@ export async function extractFromFile(
   }
 
   if (type === 'excel') {
-    if (isWineGallery(buffer, filename)) {
-      console.log('[extract] using Wine Gallery parser (multi-sheet XLSX)')
-      const r = await parseWineGallery(buffer, filename, report)
-      await report(95, 'inserting')
-      return r
-    }
     return extractFromExcel(buffer, filename)
   }
 
-  // image
-  if (isWineGalleryOffer(filename, mimeType)) {
-    console.log('[extract] using Wine Gallery clearance offer parser')
-    const r = await parseWineGalleryOffer(buffer, mimeType, report)
-    await report(95, 'inserting')
-    return r
-  }
+  // image fallback
   const base64 = buffer.toString('base64')
   const safeMime = mimeType.startsWith('image/') ? mimeType as 'image/jpeg' | 'image/png' | 'image/webp' : 'image/jpeg'
   return extractFromImage(base64, safeMime)
