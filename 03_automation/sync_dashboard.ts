@@ -133,6 +133,127 @@ async function fetchMandatoryFixed(): Promise<number> {
   }
 }
 
+// ─── Ликвидность месяца ───────────────────────────────────────────────────
+// Метрика: (Остаток нач. + Выручка) ≥ Кредиторка к оплате (не-Paid) в этом месяце.
+//   • Остаток нач. — из Rolling, колонка B недели, в которую попадает 1-е число.
+//     Погрешность 0–6 дней (если 1-е ≠ понедельник) — приемлемо.
+//   • Кредиторка — лист "Кредиторка" E (DD.MM.YYYY due), F (amount), G (status).
+//     Считаем не-Paid по due date в текущем месяце.
+
+const RU_MONTH_SHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+
+function parseRollingWeekStart(label: string, contextYear: number): string | null {
+  const t = (label ?? "").trim();
+  if (!t) return null;
+  // Same-month: "20–26 апр". Cross-month: "29 июн – 5 июл".
+  let m = t.match(/^(\d+)\s*[–-]\s*\d+\s+([а-я]+)$/i);
+  let day: number, mo: string;
+  if (m) { day = parseInt(m[1], 10); mo = m[2].toLowerCase(); }
+  else {
+    m = t.match(/^(\d+)\s+([а-я]+)\s*[–-]\s*\d+\s+[а-я]+$/i);
+    if (!m) return null;
+    day = parseInt(m[1], 10);
+    mo = m[2].toLowerCase();
+  }
+  const moIdx = RU_MONTH_SHORT.indexOf(mo);
+  if (moIdx < 0) return null;
+  return `${contextYear}-${String(moIdx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseSheetDate(raw: any): { month: number; year: number } | null {
+  // UNFORMATTED_VALUE: text "DD.MM.YYYY" если ячейка-текст; число (Sheets serial) если ячейка-дата.
+  if (typeof raw === "number" && raw > 0) {
+    const ms = (raw - 25569) * 86_400_000; // Sheets epoch: 1899-12-30 → UNIX 25569
+    const d = new Date(ms);
+    return { month: d.getUTCMonth() + 1, year: d.getUTCFullYear() };
+  }
+  if (typeof raw === "string") {
+    const m = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (m) return { month: parseInt(m[2], 10), year: parseInt(m[3], 10) };
+  }
+  return null;
+}
+
+async function fetchOpeningBalanceForMonth(currentYM: string): Promise<number> {
+  try {
+    const firstOfMonth = new Date(`${currentYM}-01T00:00:00Z`);
+    const dow = firstOfMonth.getUTCDay();
+    const daysSinceMon = (dow + 6) % 7;
+    const targetMondayDate = new Date(firstOfMonth.getTime() - daysSinceMon * 86_400_000);
+    const targetMonday = targetMondayDate.toISOString().slice(0, 10);
+    const targetYear = targetMondayDate.getUTCFullYear();
+
+    const r = await sheets("GET", `/values/${encodeURIComponent("Rolling!A4:B60")}?valueRenderOption=UNFORMATTED_VALUE`);
+    const rows = (r.values ?? []) as any[][];
+
+    for (const row of rows) {
+      const iso = parseRollingWeekStart(String(row[0] ?? ""), targetYear);
+      if (iso === targetMonday) {
+        const v = Number(row[1]);
+        return Number.isFinite(v) ? v : 0;
+      }
+    }
+    console.warn(`  ⚠ В Rolling нет недели с понедельником ${targetMonday}`);
+    return 0;
+  } catch (e) {
+    console.warn(`  ⚠ Не удалось прочитать Rolling: ${(e as Error).message}`);
+    return 0;
+  }
+}
+
+async function fetchKreditorkaDueForMonth(currentYM: string): Promise<number> {
+  try {
+    const r = await sheets("GET", `/values/${encodeURIComponent("Кредиторка!E2:G500")}?valueRenderOption=UNFORMATTED_VALUE`);
+    const rows = (r.values ?? []) as any[][];
+    const [yr, mo] = currentYM.split("-").map(Number);
+    let sum = 0;
+    for (const row of rows) {
+      const status = String(row[2] ?? "").trim().toUpperCase();
+      if (status === "PAID") continue;
+      const amount = Number(row[1]);
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      const due = parseSheetDate(row[0]);
+      if (!due) continue;
+      if (due.year === yr && due.month === mo) sum += amount;
+    }
+    return sum;
+  } catch (e) {
+    console.warn(`  ⚠ Не удалось прочитать Кредиторку: ${(e as Error).message}`);
+    return 0;
+  }
+}
+
+// Дебиторка: ожидаемые поступления B2B в текущем месяце.
+// Та же логика что и в Rolling fDeb (create_cashflow_rolling.ts):
+//   • Paid    → попадает в месяц по «Дата оплаты» (col G)
+//   • не-Paid → попадает в месяц по «Оплатить до»  (col D)
+//   • строки с комментарием «Юра» (col H) исключаем — старый владелец.
+
+async function fetchDebitorkaInForMonth(currentYM: string): Promise<number> {
+  try {
+    // D=Оплатить до, E=Сумма, F=Status, G=Дата оплаты, H=Комментарий
+    const r = await sheets("GET", `/values/${encodeURIComponent("Дебиторка!D2:H300")}?valueRenderOption=UNFORMATTED_VALUE`);
+    const rows = (r.values ?? []) as any[][];
+    const [yr, mo] = currentYM.split("-").map(Number);
+    let sum = 0;
+    for (const row of rows) {
+      const comment = String(row[4] ?? "").trim().toUpperCase();
+      if (comment === "ЮРА") continue;
+      const amount = Number(row[1]);
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      const status = String(row[2] ?? "").trim().toUpperCase();
+      const dateRaw = status === "PAID" ? row[3] : row[0];
+      const d = parseSheetDate(dateRaw);
+      if (!d) continue;
+      if (d.year === yr && d.month === mo) sum += amount;
+    }
+    return sum;
+  } catch (e) {
+    console.warn(`  ⚠ Не удалось прочитать Дебиторку: ${(e as Error).message}`);
+    return 0;
+  }
+}
+
 // ─── Loyverse ──────────────────────────────────────────────────────────────
 
 // B2B classification — single source of truth in lib/b2b.ts.
@@ -491,6 +612,7 @@ async function writeDataSheet(
   updatedAt: string,
   mandatoryFixed: number,
   weekly: WeeklyFact[],
+  rollingAvg: number,
 ) {
   await clearTab(dataSheetId);
 
@@ -564,13 +686,9 @@ async function writeDataSheet(
     ["Ср. чек", curData.checks > 0 ? Math.round(curData.total / curData.checks) : 0],
   ];
 
-  // 7-day rolling retail average (date-anchored, ignores month boundary).
-  // Window: last 7 calendar days ending today (Bangkok), retail-only (excludes B2B).
-  const nowBkk = bangkokNow();
-  const sevenAgo = new Date(nowBkk.getTime() - 6 * 86_400_000); // inclusive 7-day window
-  const fmtDay = (d: Date) => d.toISOString().slice(0, 10);
-  const rolling7 = await fetchPeriod(fmtDay(sevenAgo), fmtDay(nowBkk));
-  const rollingAvg = Math.round(rolling7.retailRevenue / 7);
+  // 7-day rolling retail average — computed в main, передаётся параметром.
+  // Используется и для отображения здесь (Данные!G1), и для прогноза
+  // ликвидности месяца в writeDashboard (run rate × дней в месяце).
 
   // Write all sections
   await writeValues(DATA_TAB, "A1", dailyRows);
@@ -686,6 +804,10 @@ async function writeDashboard(
   summary: Awaited<ReturnType<typeof fetchSummary>>,
   ranges: { dailyRange: {start:number;end:number}; monthlyRange: {start:number;end:number}; annualRange: {start:number;end:number}; annuals: Annuals; tableRows?: TableRow[] },
   mandatoryFixed: number,
+  openingBalance: number,
+  kreditorkaDue: number,
+  retailDailyAvg: number,
+  debitorkaIn: number,
 ) {
   await clearTab(dashSheetId);
   await deleteCharts(dashSheetId);
@@ -735,11 +857,12 @@ async function writeDashboard(
   await writeValues(DASH_TAB, "A1", annualBlock);
 
   // ── Monthly KPI block starts at row 6 ──
-  // KPI header block (rows 6-15, cols 0-7) — 3 ряда с общим шаблоном
+  // KPI header block (rows 6-18, cols 0-7) — 4 ряда с общим шаблоном
   // [факт · база · цель · % к цели]:
-  //   Ряд 1: Выручка     — Факт         · Прошлый год · План (LY ×1.25) · % плана
-  //   Ряд 2: Маржа GP    — Gross Profit · LY GP       · GP план (×1.25) · % GP-плана
-  //   Ряд 3: Безубыток   — Обязательные · +1% выручки · Прибыль         · % покрытия
+  //   Ряд 1: Выручка       — Факт         · Прошлый год · План (LY ×1.25)  · % плана
+  //   Ряд 2: Маржа GP      — Gross Profit · LY GP       · GP план (×1.25)  · % GP-плана
+  //   Ряд 3: Безубыток     — Обязательные · +1% выручки · Прибыль          · % покрытия
+  //   Ряд 4: Ликвидность   — Доступно     · Остаток нач.· К оплате (≠Paid) · % покрытия
   const lyGP           = lyData.totalGP;
   const planGP         = lyGP * 1.25;
   const gpPlanPct      = planGP > 0 ? (curData.totalGP / planGP) * 100 : 0;
@@ -750,6 +873,17 @@ async function writeDashboard(
   const coveragePct    = monthThreshold > 0 ? (curData.totalGP / monthThreshold) * 100 : 0;
   const profitSign     = monthProfit >= 0 ? "+" : "−";
   const profitAbs      = Math.abs(monthProfit);
+
+  // Прогноз выручки месяца:
+  //   • retail = run rate (7d скользящее × дней в месяце) — пример Rolling «Доход план»
+  //   • B2B    = ожидаемые поступления из «Дебиторки» в этом месяце
+  // Берём так пожизни всего месяца — не to-date, чтобы метрика отвечала на вопрос
+  // «по нашим текущим темпам и ожидаемым B2B-оплатам, закроем ли месяц?».
+  const daysInMo        = monthBounds(currentYM).days;
+  const retailForecast  = retailDailyAvg * daysInMo;
+  const revenueForecast = retailForecast + debitorkaIn;
+  const available       = openingBalance + revenueForecast;
+  const liquidityPct    = kreditorkaDue > 0 ? (available / kreditorkaDue) * 100 : Infinity;
 
   const kpiValues = [
     [`${monthLabel(currentYM)} — текущий месяц`],
@@ -776,6 +910,14 @@ async function writeDashboard(
       `${f(monthBonus)}`, "",
       `${profitSign}${f(profitAbs)}`, "",
       `${coveragePct.toFixed(1)}%`,
+    ],
+    [],
+    ["Доступно (Ост. + Прогноз)", "", "Прогноз выручки месяца", "", "К оплате (не-Paid)", "", "% покрытия"],
+    [
+      `${f(available)}`, "",
+      `${f(revenueForecast)}`, "",
+      `${f(kreditorkaDue)}`, "",
+      kreditorkaDue > 0 ? `${liquidityPct.toFixed(1)}%` : "OK",
     ],
   ];
   await writeValues(DASH_TAB, "A7", kpiValues);
@@ -929,16 +1071,16 @@ async function writeDashboard(
         fields: "userEnteredFormat(backgroundColor,textFormat)",
       },
     },
-    // Label rows (8, 11, 14)
-    ...([8, 11, 14] as const).map(r => ({
+    // Label rows (8, 11, 14, 17)
+    ...([8, 11, 14, 17] as const).map(r => ({
       repeatCell: {
         range: { sheetId: dashSheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: 8 },
         cell: { userEnteredFormat: { backgroundColor: wine, textFormat: { bold: true, fontSize: 10, foregroundColor: white } } },
         fields: "userEnteredFormat(backgroundColor,textFormat)",
       },
     })),
-    // Value rows (9, 12, 15)
-    ...([9, 12, 15] as const).map(r => ({
+    // Value rows (9, 12, 15, 18)
+    ...([9, 12, 15, 18] as const).map(r => ({
       repeatCell: {
         range: { sheetId: dashSheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: 8 },
         cell: { userEnteredFormat: { backgroundColor: lightGray, textFormat: { bold: true, fontSize: 13 } } },
@@ -953,6 +1095,14 @@ async function writeDashboard(
         fields: "userEnteredFormat.textFormat",
       },
     },
+    // % покрытия Ликвидности (row 18, col 6) — зелёный если ≥100, винный если <100
+    {
+      repeatCell: {
+        range: { sheetId: dashSheetId, startRowIndex: 18, endRowIndex: 19, startColumnIndex: 6, endColumnIndex: 7 },
+        cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 13, foregroundColor: liquidityPct >= 100 ? green : wine } } },
+        fields: "userEnteredFormat.textFormat",
+      },
+    },
     // Merge monthly title
     { mergeCells: { range: { sheetId: dashSheetId, startRowIndex: 6, endRowIndex: 7, startColumnIndex: 0, endColumnIndex: 8 }, mergeType: "MERGE_ALL" } },
 
@@ -964,9 +1114,9 @@ async function writeDashboard(
 
   await sheets("POST", ":batchUpdate", { requests: fmtReqs });
 
-  // ── Summary table (rows 17+) ──
+  // ── Summary table (rows 20+) ──
   if (ranges.tableRows && ranges.tableRows.length > 0) {
-    const TABLE_START = 17; // row index (сдвинут из-за блока «Безубыточность»)
+    const TABLE_START = 20; // row index (сдвинут из-за 4-го ряда KPI «Ликвидность»)
     const COL_COUNT = 10; // + Обяз. + Прибыль
     const colHeaders = ["Период", "Розница, ฿", "B2B, ฿", "Итого, ฿", "Чеков", "Gross Profit, ฿", "GP%", "Обяз., ฿", "Прибыль, ฿", "Ср. чек, ฿"];
     const tableValues: (string|number)[][] = [colHeaders];
@@ -1181,7 +1331,7 @@ async function writeDashboard(
           },
           position: {
             overlayPosition: {
-              anchorCell: { sheetId: dashSheetId, rowIndex: 26, columnIndex: 0 },
+              anchorCell: { sheetId: dashSheetId, rowIndex: 29, columnIndex: 0 },
               widthPixels: 1400,
               heightPixels: 420,
             },
@@ -1257,7 +1407,7 @@ async function writeDashboard(
           },
           position: {
             overlayPosition: {
-              anchorCell: { sheetId: dashSheetId, rowIndex: 50, columnIndex: 0 },
+              anchorCell: { sheetId: dashSheetId, rowIndex: 53, columnIndex: 0 },
               widthPixels: 1400,
               heightPixels: 700,
             },
@@ -1305,7 +1455,7 @@ async function writeDashboard(
         },
         position: {
           overlayPosition: {
-            anchorCell: { sheetId: dashSheetId, rowIndex: 86, columnIndex: 0 },
+            anchorCell: { sheetId: dashSheetId, rowIndex: 89, columnIndex: 0 },
             widthPixels: 1400,
             heightPixels: 500,
           },
@@ -1359,7 +1509,7 @@ async function writeDashboard(
         },
         position: {
           overlayPosition: {
-            anchorCell: { sheetId: dashSheetId, rowIndex: 113, columnIndex: 0 },
+            anchorCell: { sheetId: dashSheetId, rowIndex: 116, columnIndex: 0 },
             widthPixels: 1400,
             heightPixels: 500,
           },
@@ -1413,13 +1563,32 @@ async function main() {
   const weekly = await fetchWeeklyHistory(12);
   console.log(`  ✓ ${weekly.length} weeks: ${weekly[0]?.weekStart} … ${weekly[weekly.length - 1]?.weekStart}\n`);
 
+  console.log(`[3.8/4] Fetching ликвидность месяца (Rolling opening + Кредит/Дебит + 7d run rate)...`);
+  const sevenAgoMs = now.getTime() - 6 * 86_400_000;
+  const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const [openingBalance, kreditorkaDue, debitorkaIn, rolling7] = await Promise.all([
+    fetchOpeningBalanceForMonth(currentYM),
+    fetchKreditorkaDueForMonth(currentYM),
+    fetchDebitorkaInForMonth(currentYM),
+    fetchPeriod(fmtDay(sevenAgoMs), fmtDay(now.getTime())),
+  ]);
+  const retailDailyAvg = Math.round(rolling7.retailRevenue / 7);
+  const daysInMo       = monthBounds(currentYM).days;
+  const retailForecast = retailDailyAvg * daysInMo;
+  const expectedRev    = retailForecast + debitorkaIn;
+  console.log(`  ✓ Остаток нач. месяца: ${Math.round(openingBalance).toLocaleString()} ฿`);
+  console.log(`  ✓ Прогноз retail: ${retailDailyAvg.toLocaleString()}/день × ${daysInMo} = ${retailForecast.toLocaleString()} ฿`);
+  console.log(`  ✓ Дебиторка ожид. в мес.: ${Math.round(debitorkaIn).toLocaleString()} ฿`);
+  console.log(`  ✓ Прогноз выручки: ${Math.round(expectedRev).toLocaleString()} ฿`);
+  console.log(`  ✓ Кредиторка не-Paid в мес.: ${Math.round(kreditorkaDue).toLocaleString()} ฿\n`);
+
   console.log(`[4/4] Writing to Google Sheets...`);
   const [dataSheetId, dashSheetId] = await Promise.all([ensureTab(DATA_TAB), ensureTab(DASH_TAB)]);
 
-  const ranges = await writeDataSheet(dataSheetId, currentYM, curData, lyData, summary, todayDay, updatedAt, mandatoryFixed, weekly);
+  const ranges = await writeDataSheet(dataSheetId, currentYM, curData, lyData, summary, todayDay, updatedAt, mandatoryFixed, weekly, retailDailyAvg);
   console.log(`  ✓ Data written to "${DATA_TAB}".`);
 
-  await writeDashboard(dashSheetId, dataSheetId, currentYM, curData, lyData, summary, { ...ranges, tableRows }, mandatoryFixed);
+  await writeDashboard(dashSheetId, dataSheetId, currentYM, curData, lyData, summary, { ...ranges, tableRows }, mandatoryFixed, openingBalance, kreditorkaDue, retailDailyAvg, debitorkaIn);
   console.log(`  ✓ Dashboard updated in "${DASH_TAB}".`);
 
   const plan = lyData.total * 1.25;
