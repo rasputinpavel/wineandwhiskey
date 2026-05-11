@@ -232,14 +232,17 @@ export function ScrapeFormClient() {
             <tbody>
               {runs.map(r => {
                 const s = r.run?.status ?? 'pending'
-                const empty = s === 'succeeded' && (r.run?.scraped_count ?? 0) === 0 && (r.run?.imported_count ?? 0) === 0
+                // Empty = actor finished + we already pulled the dataset and it had nothing
+                // (or post-filters dropped everything). scraped_count is the live datasetItemCount
+                // after status='succeeded', and the actual fetched count after status='imported'.
+                const empty = s === 'imported' && (r.run?.scraped_count ?? 0) === 0
                 return (
                   <tr key={r.id} className="border-t border-pale-stone">
                     <td className="py-2">{r.district}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <StatusChip status={s} />
-                        {empty && <span className="text-[11px] text-wine-red" title="Actor returned 0 items — open Apify Console to see the log">empty ⚠</span>}
+                        {empty && <span className="text-[11px] text-wine-red" title="Apify returned 0 items — open Console for the log">empty ⚠</span>}
                       </div>
                     </td>
                     <td className="py-2 text-right text-xs">{r.run?.scraped_count ?? '—'}</td>
@@ -268,7 +271,7 @@ export function ScrapeFormClient() {
               })}
             </tbody>
           </table>
-          {runs.some(r => r.run?.status === 'succeeded' && (r.run?.scraped_count ?? 0) === 0) && (
+          {runs.some(r => r.run?.status === 'imported' && (r.run?.scraped_count ?? 0) === 0) && (
             <p className="text-[11px] text-graphite mt-3 leading-snug">
               Actor returned no places. Most likely the <code>locationQuery</code> didn’t resolve cleanly or the filters (category / min rating / min reviews / price) are too tight. Open Apify Console for the run log; the input JSON and search progress are there.
             </p>

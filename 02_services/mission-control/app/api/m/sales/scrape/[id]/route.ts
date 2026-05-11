@@ -3,7 +3,8 @@
 // Used by UI to drive the progress chip until status flips to 'succeeded'.
 
 import { NextResponse } from 'next/server'
-import { getScrapeRun, setRunStatus } from '@/lib/sales/queries'
+import { sbSales } from '@/lib/supabase'
+import { getScrapeRun } from '@/lib/sales/queries'
 import { getRunStatus, isTerminal, apifyConfigured } from '@/lib/sales/apify-places'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,8 +25,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const nextStatus =
         live.status === 'SUCCEEDED' ? 'succeeded' :
         live.status === 'ABORTED'   ? 'aborted'   : 'failed'
-      await setRunStatus(id, nextStatus)
+      // Persist datasetItemCount as scraped_count so the UI can show "60 places
+      // ready to import" *before* the user clicks Import. The /import route
+      // will overwrite this with the actual post-filter count.
+      const patch: Record<string, unknown> = {
+        status: nextStatus,
+        finished_at: new Date().toISOString(),
+      }
+      if (nextStatus === 'succeeded' && live.stats?.datasetItemCount != null) {
+        patch.scraped_count = live.stats.datasetItemCount
+      }
+      const { error } = await sbSales.from('scrape_run').update(patch).eq('id', id)
+      if (error) console.warn('[scrape status] patch failed:', error.message)
       run.status = nextStatus
+      if (typeof patch.scraped_count === 'number') run.scraped_count = patch.scraped_count
     }
     return NextResponse.json({
       run,
