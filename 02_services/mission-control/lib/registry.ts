@@ -43,8 +43,9 @@ const TRENDWATCH  = 'https://trendwatch-production.up.railway.app'
 
 const sheetEmbed  = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing&rm=embedded&widget=true`
 const sheetEdit   = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit`
-const folderEmbed = (id: string) => `https://drive.google.com/embeddedfolderview?id=${id}#list`
-const folderOpen  = (id: string) => `https://drive.google.com/drive/folders/${id}`
+const DRIVE_AUTHUSER = 'info@wine-whiskey.com'
+const folderEmbed = (id: string) => `https://drive.google.com/embeddedfolderview?id=${id}&authuser=${encodeURIComponent(DRIVE_AUTHUSER)}#list`
+const folderOpen  = (id: string) => `https://drive.google.com/drive/folders/${id}?authuser=${encodeURIComponent(DRIVE_AUTHUSER)}`
 
 const m = (slug: string) => `/m/${slug}`
 
