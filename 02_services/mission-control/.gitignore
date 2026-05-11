@@ -4,3 +4,7 @@ node_modules
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+
+# Synced from 04_brand/ and 05_creative/output/ by scripts/sync-brand-assets.mjs
+public/brand/
+public/creative/

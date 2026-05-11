@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync-brand-assets": "node scripts/sync-brand-assets.mjs",
+    "predev": "npm run sync-brand-assets",
+    "prebuild": "npm run sync-brand-assets",
     "dev": "next dev --port 3003",
     "build": "next build",
     "start": "next start",

@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'operations' | 'agents' | 'analytics' | 'marketing' | 'knowledge' | 'tech'
+export type SectionKey = 'operations' | 'agents' | 'analytics' | 'marketing' | 'brand' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -177,29 +177,42 @@ export const SECTIONS: Section[] = [
     ],
   },
 
-  // ═══ KNOWLEDGE ════════════════════════════════════════════════════════
+  // ═══ BRAND & DESIGN ═══════════════════════════════════════════════════
   {
-    key: 'knowledge', label: 'Knowledge',
-    description: 'Винная база, бренд, дизайн',
+    key: 'brand', label: 'Brand & Design',
+    description: 'Айдентика, дизайн-система, готовый дизайн',
     items: [
       {
-        slug: 'wine-library', name: 'Лекции по вину', icon: '🎓', status: 'live',
-        description: 'Расшифровки: Бордо, Прованс, Лангедок, Эльзас, Жюра, Корсика.',
-        route: m('wine-library'),
-        embed: { kind: 'external', href: `${REPO}/tree/main/06_knowledge/Lectures` },
-      },
-      {
         slug: 'design-system', name: 'Design System', icon: '🎨', status: 'live',
-        description: 'Палитра, типографика, композиции, TOV, AI-промпты.',
+        description: 'Живая дизайн-система: палитра, типографика, компоненты, TOV.',
         route: m('design-system'),
-        embed: { kind: 'external', href: `${REPO}/blob/main/04_brand/design-system.md`,
-          mirrors: [{ label: 'Tokens (JSON)', href: `${REPO}/blob/main/04_brand/design-tokens.json` }] },
+        embed: { kind: 'native' },
       },
       {
         slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
         description: 'Логотипы, визитки, референсы, фоны.',
         route: m('brand-assets'),
         embed: { kind: 'external', href: `${REPO}/tree/main/04_brand` },
+      },
+      {
+        slug: 'creative-library', name: 'Creative Library', icon: '🗂', status: 'live',
+        description: 'Архив готового дизайна: посты, прайс-теги, sales-kit, отчёты.',
+        route: m('creative-library'),
+        embed: { kind: 'native' },
+      },
+    ],
+  },
+
+  // ═══ KNOWLEDGE ════════════════════════════════════════════════════════
+  {
+    key: 'knowledge', label: 'Knowledge',
+    description: 'Винная база, документация',
+    items: [
+      {
+        slug: 'wine-library', name: 'Лекции по вину', icon: '🎓', status: 'live',
+        description: 'Расшифровки: Бордо, Прованс, Лангедок, Эльзас, Жюра, Корсика.',
+        route: m('wine-library'),
+        embed: { kind: 'external', href: `${REPO}/tree/main/06_knowledge/Lectures` },
       },
       {
         slug: 'claude-md', name: 'CLAUDE.md', icon: '📜', status: 'live',
