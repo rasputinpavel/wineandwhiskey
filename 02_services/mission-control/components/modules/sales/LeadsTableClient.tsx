@@ -20,7 +20,7 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
     })
     if (!res.ok) {
       const { error } = await res.json().catch(() => ({ error: 'unknown' }))
-      alert(`Не удалось обновить: ${error}`)
+      alert(`Update failed: ${error}`)
     } else {
       start(() => router.refresh())
     }
@@ -33,7 +33,7 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
     })
     if (!res.ok) {
       const { error } = await res.json().catch(() => ({ error: 'unknown' }))
-      alert(`Контакт не зафиксирован: ${error}`)
+      alert(`Failed to log contact: ${error}`)
     } else {
       start(() => router.refresh())
     }
@@ -42,7 +42,7 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
   if (leads.length === 0) {
     return (
       <div className="border border-pale-stone rounded-md bg-warm-white p-8 text-center text-graphite text-sm">
-        Лидов пока нет. Сделай скрейп через кнопку «New scrape ↗» выше.
+        No leads yet. Hit «New scrape ↗» above to import some.
       </div>
     )
   }
@@ -59,7 +59,7 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
             <th className="px-2 py-2 font-medium">Stage</th>
             <th className="px-2 py-2 font-medium">Assignee</th>
             <th className="px-2 py-2 font-medium">Last contact</th>
-            <th className="px-2 py-2 font-medium">Контакт</th>
+            <th className="px-2 py-2 font-medium">Touch</th>
           </tr>
         </thead>
         <tbody>
@@ -70,7 +70,7 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
               <tr key={lead.id} className={`border-t border-pale-stone ${stale ? 'bg-wine-red/5' : ''}`}>
                 <td className="px-3 py-2">
                   <div className="flex items-start gap-2">
-                    {stale && <span className="text-wine-red text-base leading-none mt-0.5" title={`${dayCount} дн без контакта`}>●</span>}
+                    {stale && <span className="text-wine-red text-base leading-none mt-0.5" title={`${dayCount}d since last contact`}>●</span>}
                     <div className="min-w-0">
                       <div className="font-medium text-deep-black truncate">{lead.name}</div>
                       <div className="text-[11px] text-graphite flex flex-wrap gap-2 mt-0.5">
@@ -121,15 +121,15 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
                 </td>
                 <td className={`px-2 py-2 text-xs whitespace-nowrap ${stale ? 'text-wine-red font-medium' : 'text-graphite'}`}>
                   {lead.last_contact_at
-                    ? `${new Date(lead.last_contact_at).toISOString().slice(0, 10)}${dayCount != null ? ` (${dayCount}д)` : ''}`
-                    : (dayCount != null ? `нет, ${dayCount}д` : '—')}
+                    ? `${new Date(lead.last_contact_at).toISOString().slice(0, 10)}${dayCount != null ? ` (${dayCount}d)` : ''}`
+                    : (dayCount != null ? `never, ${dayCount}d` : '—')}
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => logContact(lead.id, 'call')}     disabled={pending} title="Звонок"     className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">📞</button>
-                    <button onClick={() => logContact(lead.id, 'whatsapp')} disabled={pending} title="WhatsApp"  className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">💬</button>
-                    <button onClick={() => logContact(lead.id, 'email')}    disabled={pending} title="Email"     className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">✉</button>
-                    <button onClick={() => logContact(lead.id, 'meeting')}  disabled={pending} title="Встреча"   className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">🤝</button>
+                    <button onClick={() => logContact(lead.id, 'call')}     disabled={pending} title="Call"     className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">📞</button>
+                    <button onClick={() => logContact(lead.id, 'whatsapp')} disabled={pending} title="WhatsApp" className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">💬</button>
+                    <button onClick={() => logContact(lead.id, 'email')}    disabled={pending} title="Email"    className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">✉</button>
+                    <button onClick={() => logContact(lead.id, 'meeting')}  disabled={pending} title="Meeting"  className="text-[11px] px-1.5 py-0.5 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red">🤝</button>
                   </div>
                 </td>
               </tr>

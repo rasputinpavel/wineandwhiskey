@@ -49,10 +49,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         <PaneHeader item={item} />
         <div className="p-6 text-sm">
           <div className="bg-wine-red/10 border border-wine-red/40 text-wine-red rounded-md p-4">
-            <div className="font-medium">Не удалось загрузить лидов</div>
+            <div className="font-medium">Failed to load leads</div>
             <div className="mt-1 text-xs">{error.message}</div>
             <div className="mt-2 text-xs text-graphite">
-              Скорее всего, миграция <code>013_sales_crm.sql</code> ещё не накачена в Supabase, или схема <code>sales</code> не в Exposed schemas.
+              Likely the <code>013_sales_crm.sql</code> migration hasn’t run on Supabase, or the <code>sales</code> schema isn’t listed under Exposed schemas.
             </div>
           </div>
         </div>
@@ -94,7 +94,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
           {staleCount > 0 && (
             <div className="text-xs bg-wine-red/8 border border-wine-red/30 text-wine-red rounded-sm px-3 py-2">
-              {staleCount} {staleCount === 1 ? 'лид без контакта' : 'лидов без контакта'} больше 5 дней
+              {staleCount} {staleCount === 1 ? 'lead' : 'leads'} without contact for more than 5 days
             </div>
           )}
 

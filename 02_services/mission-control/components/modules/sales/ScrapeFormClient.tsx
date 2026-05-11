@@ -47,8 +47,8 @@ export function ScrapeFormClient() {
 
   async function submit() {
     setError(null)
-    if (districts.length === 0)     return setError('Выбери хотя бы один район')
-    if (searchTerms.length === 0)   return setError('Нужен хотя бы один search term')
+    if (districts.length === 0)     return setError('Pick at least one district')
+    if (searchTerms.length === 0)   return setError('Add at least one search term')
 
     setSubmitting(true)
     try {
@@ -62,7 +62,7 @@ export function ScrapeFormClient() {
         }),
       })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Не удалось запустить'); return }
+      if (!res.ok) { setError(json.error ?? 'Failed to start scrape'); return }
       const created = (json.runs as Array<{ id: string; district: string }>).map(r => ({ ...r, run: null }))
       setRuns(created)
       // Kick off polling.
@@ -97,7 +97,7 @@ export function ScrapeFormClient() {
   async function importRun(id: string) {
     const res = await fetch(`/api/m/sales/scrape/${id}/import`, { method: 'POST' })
     const json = await res.json()
-    if (!res.ok) { setError(json.error ?? 'Не удалось импортнуть'); return }
+    if (!res.ok) { setError(json.error ?? 'Import failed'); return }
     setRuns(prev => prev.map(r => r.id === id
       ? { ...r, run: r.run ? { ...r.run, status: 'imported', imported_count: json.imported, duplicate_count: json.duplicate, rejected_count: json.rejected, scraped_count: json.scraped } : r.run }
       : r))
@@ -113,7 +113,7 @@ export function ScrapeFormClient() {
   return (
     <div className="space-y-6">
       <section className="bg-warm-white border border-pale-stone rounded-md p-5 space-y-4">
-        <h2 className="font-heading font-semibold text-deep-black text-base">Параметры скрейпа</h2>
+        <h2 className="font-heading font-semibold text-deep-black text-base">Scrape parameters</h2>
 
         <Field label="Districts (Phuket)">
           <div className="flex flex-wrap gap-1.5">
@@ -188,19 +188,19 @@ export function ScrapeFormClient() {
                 }
               >{p}</button>
             ))}
-            <span className="text-[11px] text-graphite ml-2 self-center">пусто = любые</span>
+            <span className="text-[11px] text-graphite ml-2 self-center">empty = any</span>
           </div>
         </Field>
 
         <div className="flex items-center justify-between pt-2 border-t border-pale-stone">
           <div className="text-xs text-graphite">
-            Оценка: <span className="text-deep-black">~{estimatedPlaces} мест</span>
+            Estimate: <span className="text-deep-black">~{estimatedPlaces} places</span>
             {' '}· <span className="text-deep-black">${estimatedCost.toFixed(2)}</span>
             <span className="text-[10px] ml-1">(Apify $2.10 / 1k)</span>
           </div>
           <button disabled={submitting} onClick={submit}
             className="text-sm px-4 py-2 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50 transition-colors"
-          >{submitting ? 'Запускаю…' : 'Run scrape'}</button>
+          >{submitting ? 'Starting…' : 'Run scrape'}</button>
         </div>
         {error && <div className="text-xs text-wine-red bg-wine-red/8 border border-wine-red/30 rounded-sm px-3 py-2">{error}</div>}
       </section>
@@ -208,11 +208,11 @@ export function ScrapeFormClient() {
       {runs.length > 0 && (
         <section className="bg-warm-white border border-pale-stone rounded-md p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-heading font-semibold text-deep-black text-base">Запущенные скрейпы</h2>
+            <h2 className="font-heading font-semibold text-deep-black text-base">Active scrapes</h2>
             {anyReady && (
               <button onClick={importAll}
                 className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep transition-colors">
-                Import all готовые
+                Import all ready
               </button>
             )}
           </div>

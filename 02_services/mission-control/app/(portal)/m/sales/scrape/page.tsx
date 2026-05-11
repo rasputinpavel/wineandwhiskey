@@ -13,7 +13,7 @@ export default function ScrapePage() {
         item={item}
         rightSlot={
           <Link href="/m/sales" className="text-xs px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm">
-            ← Leads
+            ← Back to leads
           </Link>
         }
       />
@@ -25,7 +25,7 @@ export default function ScrapePage() {
               New scrape
             </h1>
             <p className="text-sm text-graphite mt-1 max-w-2xl">
-              На каждый выбранный район запускается отдельный Apify-run. Когда статус становится <code>succeeded</code> — жми Import, чтобы лиды попали в воронку. Дубликаты по <code>google_place_id</code> обновятся (свежий rating и т.д.), но stage и заметки сохранятся.
+              One Apify run is launched per selected district. Once status flips to <code>succeeded</code>, hit Import to materialize the leads. Duplicates (matched by <code>google_place_id</code>) get their Google-side fields refreshed; stage and notes are preserved.
             </p>
           </div>
           <ScrapeFormClient />

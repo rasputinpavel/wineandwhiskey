@@ -7,14 +7,14 @@ export const LEAD_STAGES = [
 export type LeadStage = (typeof LEAD_STAGES)[number]
 
 export const LEAD_STAGE_LABEL: Record<LeadStage, string> = {
-  lead:           'Лиды',
-  in_work:        'Взят в работу',
-  contacted:      'Контакт',
-  meeting_set:    'Встреча назнач.',
-  meeting_done:   'Встреча проведена',
-  negotiating:    'Переговоры',
-  first_purchase: 'Первая закупка',
-  rejected:       'Отказ',
+  lead:           'Leads',
+  in_work:        'In progress',
+  contacted:      'Contacted',
+  meeting_set:    'Meeting set',
+  meeting_done:   'Meeting done',
+  negotiating:    'Negotiating',
+  first_purchase: 'First purchase',
+  rejected:       'Rejected',
 }
 
 // Stages where the 5-day-stale rule applies (turns the card red).

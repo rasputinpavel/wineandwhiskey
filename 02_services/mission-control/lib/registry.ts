@@ -184,11 +184,11 @@ export const SECTIONS: Section[] = [
   // ═══ SALES ════════════════════════════════════════════════════════════
   {
     key: 'sales', label: 'Sales',
-    description: 'B2B outreach: лиды из Google Maps, воронка',
+    description: 'B2B outreach: leads from Google Maps, pipeline',
     items: [
       {
         slug: 'sales-crm', name: 'B2B Outreach', icon: '🎯', status: 'building',
-        description: 'Лиды из Apify (Google Places), воронка от лида до первой закупки.',
+        description: 'Leads from Apify (Google Places), pipeline from lead to first purchase.',
         route: m('sales'),
         embed: { kind: 'native' },
       },
