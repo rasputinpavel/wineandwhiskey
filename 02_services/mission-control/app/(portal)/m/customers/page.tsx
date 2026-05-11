@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sbInventory, type B2bCustomer, type B2bCustomerGroup } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
+import { AutoMatchButton } from '@/components/modules/customers/AutoMatchButton'
 import { CustomersTableClient, type CustomerRow, type GroupRow, type Stats } from '@/components/modules/customers/CustomersTableClient'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { SortHeader } from '@/components/shell/SortHeader'
@@ -239,6 +240,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               })}
             </div>
             <BulkTermsCell endpoint="/api/m/customers/bulk-terms" defaultDays={30} />
+            <AutoMatchButton />
           </div>
 
           <CustomersTableClient
