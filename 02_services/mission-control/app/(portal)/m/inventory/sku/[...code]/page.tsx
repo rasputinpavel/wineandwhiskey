@@ -251,12 +251,32 @@ async function B2cSection({ variantId, sp }: { variantId: string; sp: SearchPara
 }
 
 async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
-  const { data, error } = await sbInventory
-    .from('flowaccount_invoice_line')
-    .select('id, qty, amount, raw_text, flowaccount_invoice(number, customer_name, issued_at, due_at, status, total)')
-    .eq('sku_id', skuId)
+  const [linesRes, custRes] = await Promise.all([
+    sbInventory
+      .from('flowaccount_invoice_line')
+      .select('id, qty, amount, raw_text, flowaccount_invoice(number, customer_id, customer_name, issued_at, due_at, status, total)')
+      .eq('sku_id', skuId),
+    sbInventory
+      .from('b2b_customer')
+      .select('id, payment_terms_days'),
+  ])
+  const { data, error } = linesRes
+  const termsByCustomer: Record<string, number> = {}
+  for (const c of (custRes.data ?? []) as { id: string; payment_terms_days: number }[]) {
+    termsByCustomer[c.id] = c.payment_terms_days ?? 0
+  }
 
-  const rows = (data ?? []) as any[]
+  // Enrich every line with computed due-date (FA часто отдаёт due_at='' →
+  // используем || а не ??) и unpaid-флагом — это «не списано со склада».
+  const enriched = (data ?? []).map((row: any) => {
+    const inv = row.flowaccount_invoice
+    const terms = inv?.customer_id ? termsByCustomer[inv.customer_id] ?? 0 : 0
+    const computedDue = inv?.due_at || (terms > 0 && inv?.issued_at ? addDays(inv.issued_at, terms) : null)
+    const status = inv?.status ?? ''
+    const isUnpaid = status !== 'Paid' && status !== 'Cancelled'
+    return { ...row, computedDue, isUnpaid }
+  })
+  const rows = enriched
   const { sort, dir } = readSortParams(
     sp,
     ['number','customer_name','issued_at','due_at','status','qty','amount'] as const,
@@ -269,13 +289,16 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
     if (sort === 'number')        return inv?.number ?? ''
     if (sort === 'customer_name') return inv?.customer_name ?? ''
     if (sort === 'issued_at')     return inv?.issued_at ?? ''
-    if (sort === 'due_at')        return inv?.due_at ?? ''
+    if (sort === 'due_at')        return r.computedDue ?? ''
     if (sort === 'status')        return inv?.status ?? ''
     return ''
   }, dir))
 
   return (
-    <Section title="B2B продажи (FlowAccount)" subtitle="Все строки инвойсов где встречается этот SKU">
+    <Section
+      title="B2B продажи (FlowAccount)"
+      subtitle="Все строки инвойсов где встречается этот SKU. Не-Paid строки подсвечены — физически SKU всё ещё на нашей стороне (in-transit / на точке)."
+    >
       {(error || (rows.length === 0)) ? (
         <Empty>{error?.message ?? 'B2B продаж по этому SKU нет.'}</Empty>
       ) : (
@@ -297,11 +320,15 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
                 {sortedRows.map((row, i) => {
                   const inv = row.flowaccount_invoice
                   return (
-                    <tr key={i} className="border-b border-pale-stone/40 last:border-0">
+                    <tr key={i} className={`border-b border-pale-stone/40 last:border-0 ${
+                      row.isUnpaid ? 'bg-wine-red/5 border-l-2 border-l-wine-red' : ''
+                    }`}>
                       <td className="py-2 px-4 font-mono">{inv?.number ?? '—'}</td>
                       <td className="py-2 px-4">{inv?.customer_name ?? '—'}</td>
                       <td className="py-2 px-4">{fmtDate(inv?.issued_at)}</td>
-                      <td className="py-2 px-4">{fmtDate(inv?.due_at)}</td>
+                      <td className={`py-2 px-4 ${row.isUnpaid ? 'text-wine-red font-medium' : ''}`}>
+                        {fmtDate(row.computedDue)}
+                      </td>
                       <td className="py-2 px-4"><StatusPill status={inv?.status} /></td>
                       <td className="py-2 px-4 text-right tabular-nums">{fmt(row.qty)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{row.amount ? `฿${fmt(row.amount)}` : '—'}</td>
@@ -311,9 +338,23 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
               </tbody>
             </table>
           </div>
-          <Sum label={`Всего B2B (${rows.length} строк)`}
-               qty={rows.reduce((s, r) => s + Number(r.qty || 0), 0)}
-               money={rows.reduce((s, r) => s + Number(r.amount || 0), 0)} />
+          {(() => {
+            const unpaidQty = rows.filter((r: any) => r.isUnpaid).reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
+            const totalQty  = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
+            const totalMoney = rows.reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+            return (
+              <div className="mt-2 flex items-center justify-end gap-4 text-xs text-graphite">
+                <span>Всего B2B ({rows.length} строк)</span>
+                <span>Qty: <span className="text-deep-black font-medium tabular-nums">{totalQty}</span></span>
+                {unpaidQty > 0 && (
+                  <span className="text-wine-red">
+                    из них не-Paid (in-transit): <span className="font-medium tabular-nums">{unpaidQty}</span>
+                  </span>
+                )}
+                <span>Сумма: <span className="text-deep-black tabular-nums">฿{fmt(totalMoney)}</span></span>
+              </div>
+            )
+          })()}
         </>
       )}
     </Section>
@@ -484,4 +525,10 @@ function fmt(n: number | null | undefined): string {
   const num = Number(n ?? 0)
   if (num === 0) return '0'
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
 }
