@@ -24,6 +24,7 @@ import { isHarvest, parseHarvest } from './harvest'
 import { isUniversal, parseUniversal } from './universal'
 import { isVinumLector, parseVinumLector } from './vinum-lector'
 import { isIdeal, parseIdeal } from './ideal'
+import { isRichly, parseRichly } from './richly'
 import { isWineGarage, parseWineGarage } from './wine-garage'
 import {
   isWineGallery, parseWineGallery,
@@ -79,6 +80,15 @@ export const PARSERS: Parser[] = [
     fileTypes: ['pdf'],
     detect: (buf, fn) => isIdeal(buf, fn),
     run: (buf, fn, _m, cb) => parseIdeal(buf, fn, cb).then(async (r) => {
+      await cb(95, 'inserting')
+      return r
+    }),
+  },
+  {
+    id: 'richly',
+    fileTypes: ['pdf'],
+    detect: (buf, fn) => isRichly(buf, fn),
+    run: (buf, fn, _m, cb) => parseRichly(buf, fn, cb).then(async (r) => {
       await cb(95, 'inserting')
       return r
     }),
