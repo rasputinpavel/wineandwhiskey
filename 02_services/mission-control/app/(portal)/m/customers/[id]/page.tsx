@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sbInventory, type B2bCustomer } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -43,11 +44,16 @@ export default async function CustomerDetail({
 
   return (
     <>
-      <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{c.flowaccount_name}</h2>
           <div className="text-xs text-graphite mt-1 mb-5">
             {c.is_consignment ? 'Consignment' : 'Regular'} · Terms {c.payment_terms_days} days
           </div>
+        </div>
+        <DataFreshness sources={['flowaccount_invoices']} />
+      </div>
 
           {/* Tabs */}
           <nav className="border-b border-pale-stone mb-5 flex gap-1 text-sm">

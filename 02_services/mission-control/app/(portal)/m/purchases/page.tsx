@@ -6,6 +6,7 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CashflowOverrideCell } from '@/components/modules/purchases/POExcludeCell'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,7 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
         <div className="max-w-[1280px] mx-auto px-6 py-6">
           <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
             <h2 className="font-heading text-xl text-deep-black">Purchase Orders — {monthLabel(month)}</h2>
+            <DataFreshness sources={['purchase_orders']} />
           </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
             Закрытые PO из Loyverse. По умолчанию <span className="text-deep-black">auto</span> следует типу поставщика
