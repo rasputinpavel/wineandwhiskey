@@ -18,8 +18,8 @@ export function ScrapeFormClient() {
   const [kind, setKind]             = useState<BusinessKind>('restaurant')
   const [terms, setTerms]           = useState<string>(KIND_SEARCH_PRESETS.restaurant.join(', '))
   const [categories, setCategories] = useState<string>(KIND_CATEGORY_FILTER.restaurant.join(', '))
-  const [minStars, setMinStars]     = useState<MinStars>('four')
-  const [minReviews, setMinReviews] = useState<number>(20)
+  const [minStars, setMinStars]     = useState<MinStars>('')
+  const [minReviews, setMinReviews] = useState<number>(0)
   const [prices, setPrices]         = useState<string[]>([])
   const [maxPer, setMaxPer]         = useState<number>(30)
   const [submitting, setSubmitting] = useState(false)
@@ -225,22 +225,36 @@ export function ScrapeFormClient() {
                 <th className="py-1 text-right">Imported</th>
                 <th className="py-1 text-right">Duplicate</th>
                 <th className="py-1 text-right">Rejected</th>
+                <th className="py-1 text-right">Apify</th>
                 <th className="py-1"></th>
               </tr>
             </thead>
             <tbody>
               {runs.map(r => {
                 const s = r.run?.status ?? 'pending'
+                const empty = s === 'succeeded' && (r.run?.scraped_count ?? 0) === 0 && (r.run?.imported_count ?? 0) === 0
                 return (
                   <tr key={r.id} className="border-t border-pale-stone">
                     <td className="py-2">{r.district}</td>
                     <td className="py-2">
-                      <StatusChip status={s} />
+                      <div className="flex items-center gap-2">
+                        <StatusChip status={s} />
+                        {empty && <span className="text-[11px] text-wine-red" title="Actor returned 0 items — open Apify Console to see the log">empty ⚠</span>}
+                      </div>
                     </td>
                     <td className="py-2 text-right text-xs">{r.run?.scraped_count ?? '—'}</td>
                     <td className="py-2 text-right text-xs">{r.run?.imported_count ?? '—'}</td>
                     <td className="py-2 text-right text-xs">{r.run?.duplicate_count ?? '—'}</td>
                     <td className="py-2 text-right text-xs">{r.run?.rejected_count ?? '—'}</td>
+                    <td className="py-2 text-right">
+                      {r.run?.apify_run_id ? (
+                        <a
+                          href={`https://console.apify.com/actors/compass~crawler-google-places/runs/${r.run.apify_run_id}`}
+                          target="_blank" rel="noopener"
+                          className="text-[11px] text-wine-red hover:underline"
+                        >open ↗</a>
+                      ) : '—'}
+                    </td>
                     <td className="py-2 text-right">
                       {s === 'succeeded' && (
                         <button onClick={() => importRun(r.id)}
@@ -254,6 +268,11 @@ export function ScrapeFormClient() {
               })}
             </tbody>
           </table>
+          {runs.some(r => r.run?.status === 'succeeded' && (r.run?.scraped_count ?? 0) === 0) && (
+            <p className="text-[11px] text-graphite mt-3 leading-snug">
+              Actor returned no places. Most likely the <code>locationQuery</code> didn’t resolve cleanly or the filters (category / min rating / min reviews / price) are too tight. Open Apify Console for the run log; the input JSON and search progress are there.
+            </p>
+          )}
         </section>
       )}
     </div>

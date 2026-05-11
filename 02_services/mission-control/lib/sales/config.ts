@@ -36,23 +36,30 @@ export const BUSINESS_KIND_LABEL: Record<BusinessKind, string> = {
 // Search-term presets per business kind. User can edit before running scrape.
 // We pass these as `searchStringsArray` to the actor; Apify queries Google Maps
 // once per term and unions results.
+//
+// Start with a single broad term — fewer searches, more reliable. Add specifics
+// only after the base case is confirmed working in Apify Console.
 export const KIND_SEARCH_PRESETS: Record<BusinessKind, string[]> = {
-  restaurant: ['restaurant', 'italian restaurant', 'thai restaurant', 'seafood restaurant', 'steakhouse'],
-  bar:        ['bar', 'wine bar', 'cocktail bar', 'beach bar'],
-  hotel:      ['hotel', 'resort', 'boutique hotel'],
-  tour:       ['yacht charter', 'speedboat tour', 'private boat tour', 'luxury yacht'],
-  event:      ['event agency', 'wedding planner', 'corporate events'],
+  restaurant: ['restaurant'],
+  bar:        ['bar'],
+  hotel:      ['hotel'],
+  tour:       ['yacht charter'],
+  event:      ['event agency'],
   other:      [],
 }
 
-// Actor's `categoryFilterWords` — applied server-side by Apify to drop results
-// that aren't of the requested type. Maps our internal kind → Google category labels.
+// Actor's `categoryFilterWords` — applied by Apify *server-side* to drop results
+// whose Google category doesn't contain any of these strings. Default to EMPTY
+// because:
+//   1) the actor is happy without it and trusts the search term
+//   2) any typo / case mismatch silently zeroes the dataset (false-negative trap)
+// Fill it manually only after confirming the base scrape returns results.
 export const KIND_CATEGORY_FILTER: Record<BusinessKind, string[]> = {
-  restaurant: ['restaurant'],
-  bar:        ['bar', 'pub', 'wine bar', 'cocktail bar'],
-  hotel:      ['hotel', 'resort', 'lodging'],
-  tour:       ['boat tour agency', 'yacht club', 'tour operator', 'travel agency'],
-  event:      ['event planner', 'wedding planner', 'event management company'],
+  restaurant: [],
+  bar:        [],
+  hotel:      [],
+  tour:       [],
+  event:      [],
   other:      [],
 }
 
