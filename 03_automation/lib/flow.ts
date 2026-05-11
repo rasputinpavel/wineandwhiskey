@@ -573,6 +573,22 @@ export async function listReceipts(
   await gotoList(s.page, "/receipts");
   if (DEBUG) await s.page.screenshot({ path: dbgPath("flow-debug-receipt-list.png"), fullPage: true });
 
+  // After enrichInvoicesWithItems opens many detail pages, Angular's SPA
+  // router can land us on /receipts with the previous datatable still in the
+  // DOM but no rows freshly rendered. Detect that (0 rows on the first read)
+  // and force a hard reload before paginating.
+  const initialRowCount = await s.page.locator('[role="row"].datatable-body-row').count();
+  if (initialRowCount === 0) {
+    console.warn("[flow] /receipts loaded with 0 rows — reloading once");
+    await s.page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+    await delay(3000);
+    await s.page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await s.page.waitForSelector(
+      'datatable-body-row, .datatable-row-wrapper, [class*="empty-row"], [class*="datatable-empty"]',
+      { timeout: 30_000 },
+    ).catch(() => {});
+  }
+
   const out: FlowReceipt[] = [];
 
   // Read cells AND innerHTML side-by-side. We can't piggyback on the existing
@@ -605,6 +621,19 @@ export async function listReceipts(
   const seen = new Set<string>();
   const dedup = out.filter(r => seen.has(r.number) ? false : (seen.add(r.number), true));
   console.log(`[flow] ${dedup.length} receipt(s) parsed`);
+
+  // Mirror the empty-listing artefact we save for invoices — most useful
+  // signal we have when CI silently sees 0 rows.
+  if (dedup.length === 0) {
+    try {
+      await s.page.screenshot({ path: dbgPath("flow-debug-empty-receipts.png"), fullPage: true });
+      const html = await s.page.content();
+      fs.writeFileSync(dbgPath("flow-debug-empty-receipts.html"), html);
+      console.log(`[flow] empty receipts — saved screenshot + HTML at ${s.page.url()}`);
+    } catch (e) {
+      console.error("[flow] could not save empty-receipts artefacts:", e);
+    }
+  }
   return dedup;
 }
 
