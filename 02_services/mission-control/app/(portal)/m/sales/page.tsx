@@ -4,13 +4,20 @@ import { PaneHeader } from '@/components/shell/PaneHeader'
 import { sbSales } from '@/lib/supabase'
 import {
   LEAD_STAGES, LEAD_STAGE_LABEL, ACTIVE_PIPELINE_STAGES,
-  type Lead,
+  type Lead, isStale,
 } from '@/lib/sales/types'
 import { BUSINESS_KINDS, BUSINESS_KIND_LABEL, PHUKET_DISTRICTS, type BusinessKind } from '@/lib/sales/config'
 import { LeadsTableClient } from '@/components/modules/sales/LeadsTableClient'
 import { LeadsKanbanClient } from '@/components/modules/sales/LeadsKanbanClient'
+import { parseSort, parseDir, type SortDir } from '@/components/shell/SortHeader'
 
 export const dynamic = 'force-dynamic'
+
+const SORT_COLS = [
+  'name', 'rating', 'reviews_count', 'last_contact_at',
+  'created_at', 'updated_at', 'district', 'stage',
+] as const
+export type SalesSortCol = (typeof SORT_COLS)[number]
 
 type SearchParams = {
   stage?: string
@@ -18,18 +25,28 @@ type SearchParams = {
   district?: string
   q?: string
   view?: 'table' | 'kanban'
+  sort?: string
+  dir?: 'asc' | 'desc'
+  minRating?: string
+  minReviews?: string
+  stale?: '1'
+  hasWebsite?: '1'
+  hasPhone?: '1'
+  hasMenu?: '1'
 }
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
   const item = findItem('sales-crm')!
   const view: 'table' | 'kanban' = sp.view === 'kanban' ? 'kanban' : 'table'
+  const sort: SalesSortCol = parseSort(sp.sort, SORT_COLS, 'updated_at')
+  const dir: SortDir = parseDir(sp.dir, 'desc')
 
-  // Compose query.
+  // Compose query — sort respects URL params; filters narrow before fetch.
   let query = sbSales
     .from('lead')
     .select('*')
-    .order('updated_at', { ascending: false })
+    .order(sort, { ascending: dir === 'asc', nullsFirst: false })
 
   if (sp.stage && (LEAD_STAGES as readonly string[]).includes(sp.stage)) {
     query = query.eq('stage', sp.stage)
@@ -43,6 +60,17 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (sp.q) {
     query = query.ilike('name', `%${sp.q}%`)
   }
+  if (sp.minRating) {
+    const r = parseFloat(sp.minRating)
+    if (!isNaN(r)) query = query.gte('rating', r)
+  }
+  if (sp.minReviews) {
+    const n = parseInt(sp.minReviews)
+    if (!isNaN(n)) query = query.gte('reviews_count', n)
+  }
+  if (sp.hasWebsite === '1') query = query.not('website',  'is', null)
+  if (sp.hasPhone   === '1') query = query.not('phone',    'is', null)
+  if (sp.hasMenu    === '1') query = query.not('menu_url', 'is', null)
 
   const { data, error } = await query.limit(500)
   if (error) {
@@ -62,7 +90,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     )
   }
 
-  const leads = (data ?? []) as Lead[]
+  let leads = (data ?? []) as Lead[]
+  // stale filter is a derived check across last_contact_at / first_taken_at /
+  // created_at + stage membership — easier client-side than in PostgREST.
+  if (sp.stale === '1') leads = leads.filter(l => isStale(l, 5))
 
   // Counts for filter chips.
   const counts: Record<string, number> = { all: leads.length }
@@ -95,6 +126,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               >Kanban</Link>
             </div>
             <Link
+              href="/m/sales/new"
+              className="text-xs px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm"
+            >
+              + Add lead
+            </Link>
+            <Link
               href="/m/sales/scrape"
               className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep transition-colors"
             >
@@ -125,7 +162,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             ))}
           </div>
 
-          {/* Secondary filters */}
+          {/* Kind filter pills */}
           <div className="flex flex-wrap gap-2 items-center text-xs">
             <span className="text-graphite">Kind:</span>
             <FilterPill href={makeHref(sp, { kind: undefined })} active={!sp.kind} label="All" />
@@ -136,22 +173,59 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 label={BUSINESS_KIND_LABEL[k]}
               />
             ))}
-            <span className="text-graphite ml-3">District:</span>
-            <form action="/m/sales" method="get" className="inline-flex items-center gap-1">
-              <input type="hidden" name="stage" value={sp.stage ?? ''} />
-              <input type="hidden" name="kind" value={sp.kind ?? ''} />
-              <select name="district" defaultValue={sp.district ?? ''} className="text-xs border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5">
-                <option value="">All</option>
-                {PHUKET_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <input name="q" defaultValue={sp.q ?? ''} placeholder="Search name…" className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-0.5 w-40" />
-              <button type="submit" className="text-xs px-2 py-0.5 border border-pale-stone hover:border-wine-red hover:text-wine-red rounded-sm">Apply</button>
-            </form>
           </div>
+
+          {/* Advanced filters — one GET form so every filter applies on Apply.
+              Hidden inputs preserve pill-row selections (stage/kind) and view/sort. */}
+          <form action="/m/sales" method="get" className="flex flex-wrap items-center gap-2 text-xs bg-cream/30 border border-pale-stone rounded-sm px-3 py-2">
+            <input type="hidden" name="stage" value={sp.stage ?? ''} />
+            <input type="hidden" name="kind"  value={sp.kind ?? ''} />
+            <input type="hidden" name="view"  value={sp.view ?? ''} />
+            <input type="hidden" name="sort"  value={sp.sort ?? ''} />
+            <input type="hidden" name="dir"   value={sp.dir ?? ''} />
+
+            <span className="text-graphite">District</span>
+            <select name="district" defaultValue={sp.district ?? ''} className="border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5">
+              <option value="">All</option>
+              {PHUKET_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+
+            <span className="text-graphite ml-1">Min ★</span>
+            <input type="number" step="0.1" min="0" max="5" name="minRating" defaultValue={sp.minRating ?? ''}
+              placeholder="—" className="w-14 border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5" />
+
+            <span className="text-graphite ml-1">Min reviews</span>
+            <input type="number" min="0" name="minReviews" defaultValue={sp.minReviews ?? ''}
+              placeholder="—" className="w-16 border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5" />
+
+            <label className="flex items-center gap-1 ml-2 text-graphite">
+              <input type="checkbox" name="stale" value="1" defaultChecked={sp.stale === '1'} className="accent-wine-red" />
+              Stale &gt;5d
+            </label>
+            <label className="flex items-center gap-1 text-graphite">
+              <input type="checkbox" name="hasWebsite" value="1" defaultChecked={sp.hasWebsite === '1'} className="accent-wine-red" />
+              has site
+            </label>
+            <label className="flex items-center gap-1 text-graphite">
+              <input type="checkbox" name="hasPhone" value="1" defaultChecked={sp.hasPhone === '1'} className="accent-wine-red" />
+              has phone
+            </label>
+            <label className="flex items-center gap-1 text-graphite">
+              <input type="checkbox" name="hasMenu" value="1" defaultChecked={sp.hasMenu === '1'} className="accent-wine-red" />
+              has menu
+            </label>
+
+            <input name="q" defaultValue={sp.q ?? ''} placeholder="Search name…"
+              className="ml-auto border border-pale-stone bg-warm-white rounded-sm px-2 py-0.5 w-48" />
+            <button type="submit" className="px-3 py-0.5 bg-deep-black text-warm-white rounded-sm">Apply</button>
+            {hasActiveFilter(sp) && (
+              <a href="/m/sales" className="text-graphite hover:text-wine-red">clear</a>
+            )}
+          </form>
 
           {view === 'kanban'
             ? <LeadsKanbanClient leads={leads as Lead[]} />
-            : <LeadsTableClient leads={leads as Lead[]} />}
+            : <LeadsTableClient leads={leads as Lead[]} sp={sp} sort={sort} dir={dir} />}
         </div>
       </div>
     </>
@@ -181,5 +255,12 @@ function makeHref(sp: SearchParams, override: Partial<SearchParams>): string {
   }
   const qs = new URLSearchParams(next).toString()
   return qs ? `/m/sales?${qs}` : '/m/sales'
+}
+
+function hasActiveFilter(sp: SearchParams): boolean {
+  return Boolean(
+    sp.district || sp.q || sp.minRating || sp.minReviews
+    || sp.stale === '1' || sp.hasWebsite === '1' || sp.hasPhone === '1' || sp.hasMenu === '1'
+  )
 }
 

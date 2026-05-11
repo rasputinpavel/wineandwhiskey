@@ -9,7 +9,16 @@ import {
 } from '@/lib/sales/types'
 import { BUSINESS_KINDS, BUSINESS_KIND_LABEL, type BusinessKind } from '@/lib/sales/config'
 
-export function LeadsTableClient({ leads }: { leads: Lead[] }) {
+type SortDir = 'asc' | 'desc'
+
+export function LeadsTableClient({
+  leads, sp, sort, dir,
+}: {
+  leads: Lead[]
+  sp?: Record<string, string | undefined>
+  sort?: string
+  dir?: SortDir
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [editingNote, setEditingNote] = useState<string | null>(null)
@@ -63,13 +72,13 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
         </colgroup>
         <thead className="bg-cream/50 border-b border-pale-stone">
           <tr className="text-left text-graphite">
-            <th className="px-3 py-2 font-medium">Name</th>
+            <SortableTh col="name"            label="Name"         sort={sort} dir={dir} sp={sp} firstDir="asc"  className="px-3" />
             <th className="px-2 py-2 font-medium">Kind</th>
-            <th className="px-2 py-2 font-medium">District</th>
-            <th className="px-2 py-2 font-medium text-right">Rating</th>
-            <th className="px-2 py-2 font-medium">Stage</th>
+            <SortableTh col="district"        label="District"     sort={sort} dir={dir} sp={sp} firstDir="asc"  className="px-2" />
+            <SortableTh col="rating"          label="Rating"       sort={sort} dir={dir} sp={sp} firstDir="desc" className="px-2 text-right" align="right" />
+            <SortableTh col="stage"           label="Stage"        sort={sort} dir={dir} sp={sp} firstDir="asc"  className="px-2" />
             <th className="px-2 py-2 font-medium">Assignee</th>
-            <th className="px-2 py-2 font-medium">Last contact</th>
+            <SortableTh col="last_contact_at" label="Last contact" sort={sort} dir={dir} sp={sp} firstDir="asc"  className="px-2" />
             <th className="px-2 py-2 font-medium">Touch</th>
           </tr>
         </thead>
@@ -155,5 +164,42 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
       {editingNote && <div className="hidden">{editingNote}</div>}
       {!editingNote && null}
     </div>
+  )
+}
+
+// Sortable column header. Builds an href that preserves every search param
+// except its own sort/dir. Click an inactive column → starts at firstDir;
+// click the active column → flips direction.
+function SortableTh({
+  col, label, sort, dir, sp, firstDir = 'desc', className, align,
+}: {
+  col: string
+  label: string
+  sort?: string
+  dir?: SortDir
+  sp?: Record<string, string | undefined>
+  firstDir?: SortDir
+  className?: string
+  align?: 'left' | 'right'
+}) {
+  const isActive = sort === col
+  const nextDir: SortDir = isActive ? (dir === 'asc' ? 'desc' : 'asc') : firstDir
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(sp ?? {})) {
+    if (!v || k === 'sort' || k === 'dir') continue
+    params.set(k, v)
+  }
+  params.set('sort', col)
+  params.set('dir', nextDir)
+  const arrow = !isActive ? '↕' : (dir === 'asc' ? '↑' : '↓')
+  return (
+    <th className={`py-2 font-medium ${className ?? ''}`}>
+      <Link
+        href={`?${params.toString()}`}
+        className={`whitespace-nowrap ${align === 'right' ? 'inline-block w-full text-right' : ''} ${isActive ? 'text-wine-red' : 'text-graphite hover:text-deep-black'}`}
+      >
+        {label} <span className="opacity-60">{arrow}</span>
+      </Link>
+    </th>
   )
 }
