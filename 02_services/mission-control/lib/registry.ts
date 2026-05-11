@@ -192,6 +192,12 @@ export const SECTIONS: Section[] = [
         route: m('sales'),
         embed: { kind: 'native' },
       },
+      {
+        slug: 'sales-playbook', name: 'Playbook', icon: '📘', status: 'live',
+        description: 'Питч-материалы для холодных встреч: call-script, прайс, шаблон сообщения.',
+        route: m('sales-playbook'),
+        embed: { kind: 'native' },
+      },
     ],
   },
 

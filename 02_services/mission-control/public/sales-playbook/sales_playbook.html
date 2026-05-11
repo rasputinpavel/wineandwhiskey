@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Intro Call Script — Wine &amp; Whiskey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --wine-red: #8C1C1C;
+    --burgundy: #5C1010;
+    --black: #1A1A1A;
+    --warm-white: #F5F0EB;
+    --cream: #EDE0D0;
+    --amber: #C9A84C;
+    --graphite: #3D3D3D;
+    --stone: #D4C9BC;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 20mm 22mm 18mm 22mm;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #E8E2DA;
+    color: var(--black);
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* On screen — simulate a page card with comfortable padding */
+  .page {
+    max-width: 210mm;
+    margin: 24px auto;
+    padding: 24mm 26mm;
+    background: var(--warm-white);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  }
+
+  /* ---------- Header ---------- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--stone);
+    margin-bottom: 28px;
+  }
+  .wordmark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 34pt;
+    letter-spacing: 4px;
+    line-height: 0.95;
+  }
+  .wordmark .red { color: var(--wine-red); }
+  .wordmark .store {
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--graphite);
+    text-transform: uppercase;
+    margin-left: 4px;
+    vertical-align: super;
+  }
+  .header-meta {
+    text-align: right;
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    color: var(--graphite);
+    line-height: 1.5;
+  }
+  .header-meta .overline {
+    display: block;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    font-size: 8pt;
+    margin-bottom: 4px;
+  }
+
+  /* ---------- Title strip ---------- */
+  .title-strip {
+    margin-bottom: 28px;
+  }
+  .title-overline {
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .title {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 42pt;
+    line-height: 1;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--black);
+    margin: 0 0 12px 0;
+  }
+  .title em {
+    font-style: normal;
+    color: var(--wine-red);
+  }
+  .subtitle {
+    font-family: "DM Sans", sans-serif;
+    font-size: 13pt;
+    font-weight: 500;
+    color: var(--graphite);
+    line-height: 1.35;
+    max-width: 150mm;
+  }
+
+  /* ---------- Memo card ---------- */
+  .memo {
+    background: var(--cream);
+    border-left: 3px solid var(--wine-red);
+    padding: 14px 18px;
+    margin-bottom: 28px;
+    font-size: 10.5pt;
+    line-height: 1.5;
+  }
+  .memo .label {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 9pt;
+    color: var(--wine-red);
+    margin-right: 8px;
+  }
+  .memo p { margin: 0 0 6px 0; }
+  .memo p:last-child { margin-bottom: 0; }
+
+  /* ---------- Script blocks ---------- */
+  .block {
+    margin-bottom: 22px;
+  }
+  .block-head { break-after: avoid-page; }
+  .range-item { break-inside: avoid; }
+  .block-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  .block-num {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 22pt;
+    color: var(--wine-red);
+    line-height: 1;
+    min-width: 32px;
+  }
+  .block-title {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: 16pt;
+    color: var(--black);
+    line-height: 1.2;
+    flex: 1;
+  }
+  .block-time {
+    font-family: "Inter", sans-serif;
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .block-body {
+    font-size: 11.5pt;
+    line-height: 1.6;
+    color: var(--black);
+    padding-left: 46px;
+  }
+  .block-body p { margin: 0 0 8px 0; }
+  .block-body p:last-child { margin-bottom: 0; }
+
+  /* ---------- Range list ---------- */
+  .range {
+    padding-left: 46px;
+    margin-top: 4px;
+  }
+  .range-item {
+    display: flex;
+    gap: 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--stone);
+  }
+  .range-item:first-child { border-top: none; padding-top: 4px; }
+  .range-cat {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    color: var(--wine-red);
+    font-size: 11pt;
+    min-width: 72px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding-top: 1px;
+  }
+  .range-text {
+    flex: 1;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  .range-text strong {
+    color: var(--black);
+    font-weight: 600;
+  }
+
+  /* ---------- Cheat sheet ---------- */
+  .cheat {
+    margin-top: 36px;
+    page-break-before: always;
+  }
+  .section-title {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 28pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--black);
+    margin: 0 0 6px 0;
+    line-height: 1;
+  }
+  .section-overline {
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .section-sub {
+    font-family: "DM Sans", sans-serif;
+    font-size: 12pt;
+    font-weight: 500;
+    color: var(--graphite);
+    margin-bottom: 22px;
+  }
+  .qa {
+    border-top: 1px solid var(--stone);
+    padding: 14px 0;
+    page-break-inside: avoid;
+  }
+  .qa:last-child { border-bottom: 1px solid var(--stone); }
+  .qa-q {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: 11pt;
+    color: var(--wine-red);
+    margin-bottom: 6px;
+  }
+  .qa-a {
+    font-size: 11pt;
+    line-height: 1.55;
+    color: var(--black);
+  }
+
+  /* ---------- Footer ---------- */
+  .footer {
+    margin-top: 38px;
+    padding-top: 12px;
+    border-top: 1px solid var(--stone);
+    display: flex;
+    justify-content: space-between;
+    font-family: "Inter", sans-serif;
+    font-size: 8.5pt;
+    color: var(--graphite);
+    letter-spacing: 0.5px;
+  }
+  .footer .anchors {
+    color: var(--wine-red);
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  /* ---------- Print fixes ---------- */
+  @media print {
+    html, body { background: white; }
+    .page {
+      padding: 0;
+      margin: 0;
+      max-width: none;
+      box-shadow: none;
+      background: white;
+    }
+    .qa { break-inside: avoid; }
+    .range-item { break-inside: avoid; }
+    .block-head { break-after: avoid-page; }
+    /* Blocks may split across pages naturally; only headings must stay
+       with their first line of body */
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <div class="wordmark">
+      <span class="red">WINE</span> &amp; WHISKEY
+    </div>
+    <div class="header-meta">
+      <span class="overline">Sales · HoReCa</span>
+      Intro Call Script<br>
+      Phuket
+    </div>
+  </header>
+
+  <div class="title-strip">
+    <div class="title-overline">For sales reps · Cold call to restaurants &amp; bars</div>
+    <h1 class="title">First call.<br><em>15 seconds to get attention.</em></h1>
+    <div class="subtitle">
+      Goal — book a 15–20 minute in-person meeting to walk through the catalog. Not a tasting.
+      Tastings are coordinated through Bangkok and arranged after the venue picks SKUs.
+    </div>
+  </div>
+
+  <div class="memo">
+    <p><span class="label">Memory anchors</span> Abrau Durso sparkling · Barrister gin · Indigenous reds · Russian-tourist hook</p>
+    <p><span class="label">Positioning</span> We are an <strong>addition</strong> to their list — not a replacement for their main supplier. Exclusive lineup. Nobody else on the island carries it.</p>
+  </div>
+
+  <!-- BLOCK 1 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="block-num">01</div>
+      <div class="block-title">Opening</div>
+      <div class="block-time">10 sec</div>
+    </div>
+    <div class="block-body">
+      <p>"Hi, this is <strong>[name] from Wine &amp; Whiskey</strong>. We're the exclusive distributor of Russian wines, sparkling, and spirits on Phuket. I'll be quick — just calling to introduce ourselves."</p>
+    </div>
+  </section>
+
+  <!-- BLOCK 2 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="block-num">02</div>
+      <div class="block-title">Why we're calling</div>
+      <div class="block-time">15 sec</div>
+    </div>
+    <div class="block-body">
+      <p>"We're <strong>not asking you to switch your main supplier</strong>. What we offer is an addition to your list — exclusive Russian labels nobody else on the island can supply. They work two ways: as a cocktail base, or as standalone pours by the glass or bottle."</p>
+    </div>
+  </section>
+
+  <!-- BLOCK 3 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="block-num">03</div>
+      <div class="block-title">What's in the range</div>
+      <div class="block-time">30 sec</div>
+    </div>
+    <div class="range">
+      <div class="range-item">
+        <div class="range-cat">Sparkling</div>
+        <div class="range-text">A broad lineup from <strong>Abrau Durso</strong>, the most famous winery in Russia. Works as a Prosecco alternative at the entry level, and as a Crémant alternative a tier up. Noticeably better price point.</div>
+      </div>
+      <div class="range-item">
+        <div class="range-cat">Gin</div>
+        <div class="range-text"><strong>Barrister</strong>, London-quality, several flavor profiles, built for cocktails. Quality is <strong>Bombay-plus</strong>, price is <strong>Beefeater-minus</strong>.</div>
+      </div>
+      <div class="range-item">
+        <div class="range-cat">Whites</div>
+        <div class="range-text">Light styles, including a solid <strong>Riesling</strong>.</div>
+      </div>
+      <div class="range-item">
+        <div class="range-cat">Reds</div>
+        <div class="range-text">Indigenous Russian grapes, like <strong>Krasnostop</strong>. Something genuinely different for guests looking for a story.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOCK 4 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="block-num">04</div>
+      <div class="block-title">The Russian-tourist angle</div>
+      <div class="block-time">15 sec</div>
+    </div>
+    <div class="block-body">
+      <p>"One more thing worth mentioning — Phuket has a huge Russian guest flow. <strong>A familiar label on your list is often what closes the sale for them.</strong> That's a margin opportunity most venues here don't tap into."</p>
+    </div>
+  </section>
+
+  <!-- BLOCK 5 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="block-num">05</div>
+      <div class="block-title">Close</div>
+      <div class="block-time">10 sec</div>
+    </div>
+    <div class="block-body">
+      <p>"Can I drop by for <strong>15–20 minutes</strong> to walk you through the catalog and pricing? If something catches your eye, we'll coordinate samples as a next step. What works better — early week or end of week?"</p>
+    </div>
+  </section>
+
+  <!-- CHEAT SHEET -->
+  <section class="cheat">
+    <div class="section-overline">Reference</div>
+    <h2 class="section-title">If they ask.</h2>
+    <div class="section-sub">Short, calm answers. Don't argue. Bring it back to the meeting.</div>
+
+    <div class="qa">
+      <div class="qa-q">"Why Russian?"</div>
+      <div class="qa-a">Quality has come a long way. In sparkling and gin specifically, we offer the best price/quality on the island. Plus you get exclusivity — these labels aren't available through any other distributor here.</div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-q">"Licensing / import?"</div>
+      <div class="qa-a">Fully legal, official import, full paperwork. Happy to show documents when we meet.</div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-q">"Just send me the price list."</div>
+      <div class="qa-a">Will do. But the price list alone won't tell you much — the labels are unfamiliar. A 15-minute meeting is more useful, so I can show you which SKUs fit your concept.</div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-q">"Can we taste first?"</div>
+      <div class="qa-a">Tastings are coordinated through our Bangkok office, so I'd want to do them properly — pick the right SKUs for your venue first, then arrange a session.</div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div>Wine &amp; Whiskey · Phuket · Sales · Intro Call</div>
+    <div class="anchors">Sparkling · Gin · Indigenous reds</div>
+  </footer>
+
+</div>
+</body>
+</html>

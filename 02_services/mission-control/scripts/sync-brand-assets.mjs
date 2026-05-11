@@ -52,9 +52,10 @@ const skipSocial = (p) => skipCreative(p) || SOCIAL_SKIP_NAMES.some(re => re.tes
 // 05_creative/social mirrors under public/creative/social/ so the Creative Library
 // can group campaigns under a "Social" subfolder.
 const dirTasks = [
-  { src: path.join(repoRoot, '04_brand'),           dst: path.join(publicDir, 'brand'),           filter: skipName     },
-  { src: path.join(repoRoot, '05_creative/output'), dst: path.join(publicDir, 'creative'),        filter: skipCreative },
-  { src: path.join(repoRoot, '05_creative/social'), dst: path.join(publicDir, 'creative/social'), filter: skipSocial   },
+  { src: path.join(repoRoot, '04_brand'),               dst: path.join(publicDir, 'brand'),           filter: skipName     },
+  { src: path.join(repoRoot, '05_creative/output'),     dst: path.join(publicDir, 'creative'),        filter: skipCreative },
+  { src: path.join(repoRoot, '05_creative/social'),     dst: path.join(publicDir, 'creative/social'), filter: skipSocial   },
+  { src: path.join(repoRoot, '10_sales/sales_playbook'), dst: path.join(publicDir, 'sales-playbook'), filter: skipName     },
 ]
 
 for (const { src, dst, filter } of dirTasks) {
