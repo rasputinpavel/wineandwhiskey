@@ -72,6 +72,10 @@ export async function parseWineGarage(
   // Pages 1-4 are intro/highlights with no prices. Catalog body starts p.5.
   const START_PAGE = 5
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set in the environment')
+  }
+
   const pdfPath = await writeTemp(buf)
   let pageImages: string[] = []
   let firstPageText = ''
@@ -83,9 +87,14 @@ export async function parseWineGarage(
   }
   console.log(`[wine-garage] rendered ${pageImages.length} page images (p.${START_PAGE}–${totalPages})`)
 
+  if (pageImages.length === 0) {
+    throw new Error(`pdftoppm rendered 0 pages from a ${totalPages}-page PDF — check that poppler_utils is in the build image`)
+  }
+
   const CHUNK = 2
   const PARALLEL = 5
   const allItems: ExtractedItem[] = []
+  const chunkErrors: string[] = []
 
   const imageChunks: { offset: number; images: string[] }[] = []
   for (let p = 0; p < pageImages.length; p += CHUNK) {
@@ -108,7 +117,9 @@ export async function parseWineGarage(
           console.log(`[wine-garage] pages ${fromPg}-${toPg} → ${items.length} items`)
           return items
         } catch (e) {
-          console.error(`[wine-garage] pages ${fromPg}-${toPg} failed:`, e instanceof Error ? e.message : e)
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error(`[wine-garage] pages ${fromPg}-${toPg} failed:`, msg)
+          chunkErrors.push(`p.${fromPg}-${toPg}: ${msg}`)
           return []
         }
       })
@@ -117,6 +128,12 @@ export async function parseWineGarage(
     chunksDone += batch.length
     const pct = 15 + Math.round((chunksDone / imageChunks.length) * 75)
     await onProgress?.(pct, `extracting ${chunksDone}/${imageChunks.length}`, allItems.length)
+  }
+
+  // Fail loudly when every chunk errored — silently returning 0 items hides
+  // misconfigured API keys, model outages, etc.
+  if (allItems.length === 0 && chunkErrors.length > 0) {
+    throw new Error(`All ${chunkErrors.length} chunks failed. First error: ${chunkErrors[0]}`)
   }
 
   await onProgress?.(95, 'inserting')
