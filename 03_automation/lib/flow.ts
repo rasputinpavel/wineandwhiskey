@@ -32,11 +32,11 @@ const BASE_URL = "https://advance.flowaccount.com";
 const AUTH_STATE_PATH = path.join(process.cwd(), ".flow-session.json");
 const HEADLESS  = !process.env.FLOW_HEADFUL;
 const DEBUG     = !!process.env.FLOW_DEBUG;
-const DEBUG_DIR = path.join(process.cwd(), ".tmp");
-const dbgPath = (name: string) => {
-  if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
-  return path.join(DEBUG_DIR, name);
-};
+// Write debug artefacts directly into the working directory. We used to put
+// them under .tmp/, but that path turned out brittle on CI (mkdirSync was
+// silently failing somewhere) and the GH artifact glob never picked them up.
+// Repo root is simpler and matches what most playwright examples do.
+const dbgPath = (name: string) => path.join(process.cwd(), name);
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 

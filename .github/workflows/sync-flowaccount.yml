@@ -61,13 +61,21 @@ jobs:
           FLOW_TO:              ${{ github.event.inputs.to }}
         run: npm run inv:flow
 
+      - name: List debug artefacts on failure
+        if: failure()
+        run: |
+          echo "--- cwd: $(pwd) ---"
+          ls -la flow-debug-* 2>/dev/null || echo "no flow-debug-* in repo root"
+          echo "--- .tmp/ if present ---"
+          ls -la .tmp/ 2>/dev/null || echo "no .tmp/"
+
       - name: Upload debug screenshots on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: flow-debug
           path: |
-            .tmp/flow-debug-*.png
-            .tmp/flow-debug-*.html
-          if-no-files-found: ignore
+            flow-debug-*.png
+            flow-debug-*.html
+          if-no-files-found: warn
           retention-days: 7
