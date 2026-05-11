@@ -1,13 +1,13 @@
-import { readFile, stat } from 'node:fs/promises'
+import { statSync } from 'node:fs'
 import path from 'node:path'
 import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
+// Static import — bundled at build. Source of truth is 04_brand/design-tokens.json,
+// mirrored to lib/brand-tokens.json by prebuild (scripts/sync-brand-assets.mjs).
+import brandTokens from '@/lib/brand-tokens.json'
 
 export const dynamic = 'force-dynamic'
 
-// Brand tokens — synced from /04_brand/design-tokens.json into public/brand/ at prebuild.
-// We read at request time so the page always reflects the current committed tokens
-// without bundling them into the JS.
 type Tokens = {
   palette: {
     background: string; primary: string; accent: string; text: string; textSecondary: string; border: string
@@ -69,13 +69,20 @@ function rgbFromHex(hex: string): string {
   return m.map(x => parseInt(x, 16)).join(', ')
 }
 
+function getUpdatedAt(): string | null {
+  // Best-effort: mtime of the committed mirror. Falls back to null if anything goes wrong.
+  try {
+    const p = path.join(process.cwd(), 'lib/brand-tokens.json')
+    return statSync(p).mtime.toISOString().slice(0, 10)
+  } catch {
+    return null
+  }
+}
+
 export default async function DesignSystemPage() {
   const item = findItem('design-system')!
-  const publicBrand = path.join(process.cwd(), 'public/brand')
-  const tokensRaw = await readFile(path.join(publicBrand, 'design-tokens.json'), 'utf-8')
-  const tokens: Tokens = JSON.parse(tokensRaw)
-  const mdStat = await stat(path.join(publicBrand, 'design-system.md'))
-  const updatedAt = mdStat.mtime.toISOString().slice(0, 10)
+  const tokens = brandTokens as unknown as Tokens
+  const updatedAt = getUpdatedAt()
 
   return (
     <>
@@ -99,8 +106,7 @@ export default async function DesignSystemPage() {
               <span>📍 {tokens.brand.location}</span>
               <span>·</span>
               <span>🕒 {tokens.brand.hours}</span>
-              <span>·</span>
-              <span>Updated {updatedAt}</span>
+              {updatedAt && <><span>·</span><span>Updated {updatedAt}</span></>}
               <span>·</span>
               <a href={`${REPO}/blob/main/04_brand/design-system.md`} target="_blank" rel="noopener" className="text-wine-red hover:underline">
                 Source (design-system.md) ↗
@@ -297,7 +303,7 @@ export default async function DesignSystemPage() {
               <DownloadCard
                 href="/brand/design-system.md"
                 title="design-system.md"
-                meta={`Markdown · обновлено ${updatedAt}`}
+                meta={updatedAt ? `Markdown · обновлено ${updatedAt}` : 'Markdown · полная спецификация'}
                 description="Полная спецификация: токены, правила, примеры."
               />
               <DownloadCard
