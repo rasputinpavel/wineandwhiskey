@@ -309,8 +309,10 @@ async function paginateAll(
 //   รอเก็บเงิน      = Awaiting payment (= Unpaid, just a different wording FA uses)
 //   ยกเลิก          = Cancelled
 //   เกินกำหนด       = Overdue (still unpaid, past due date)
-// Also accepts English strings the detail-page API may return.
-function normalizeFlowStatus(raw: string): string {
+// Also accepts English strings + numeric enum codes the detail-page API
+// returns (paymentStatus is e.g. 1, 3, 5… and the filter dropdown in FA's
+// own UI uses the same codes — see values in the Tax Invoices listing).
+function normalizeFlowStatus(raw: string | number): string {
   const s = String(raw ?? "").replace(/\s+/g, "");
   if (!s) return "";
   if (s.includes("เปิดใบเสร็จแล้ว")) return "Paid";
@@ -323,6 +325,17 @@ function normalizeFlowStatus(raw: string): string {
   if (en === "void" || en === "cancelled" || en === "canceled") return "Cancelled";
   if (en === "overdue")                              return "Overdue";
   if (en === "open" || en === "pending" || en === "unpaid" || en === "awaitingpayment") return "Unpaid";
+  // FA numeric enum: 1 = pending, 3 = awaiting, 5 = paid (receipt issued),
+  // 7 = cancelled/void, 9 = partially paid, 11 = bad debt. Map to the same
+  // names listing-text parsing produces so the portal filter stays stable.
+  switch (s) {
+    case "1":  return "Unpaid";
+    case "3":  return "Unpaid";
+    case "5":  return "Paid";
+    case "7":  return "Cancelled";
+    case "9":  return "Unpaid";
+    case "11": return "BadDebt";
+  }
   return String(raw).trim();
 }
 
