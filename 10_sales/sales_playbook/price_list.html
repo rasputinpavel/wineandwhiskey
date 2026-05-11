@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Wine &amp; Whiskey — B2B Price List · May 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --wine-red: #8C1C1C;
+    --burgundy: #5C1010;
+    --black: #1A1A1A;
+    --warm-white: #F5F0EB;
+    --cream: #EDE0D0;
+    --amber: #C9A84C;
+    --graphite: #3D3D3D;
+    --stone: #D4C9BC;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 14mm 14mm 12mm 14mm;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #E8E2DA;
+    color: var(--black);
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 210mm;
+    margin: 24px auto;
+    padding: 18mm 18mm;
+    background: var(--warm-white);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  }
+
+  /* ---------- Header ---------- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--black);
+    margin-bottom: 18px;
+  }
+  .wordmark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 32pt;
+    letter-spacing: 4px;
+    line-height: 0.95;
+  }
+  .wordmark .red { color: var(--wine-red); }
+  .wordmark .store {
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--graphite);
+    text-transform: uppercase;
+    margin-left: 4px;
+    vertical-align: super;
+  }
+  .header-meta {
+    text-align: right;
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    color: var(--graphite);
+    line-height: 1.5;
+  }
+  .header-meta .overline {
+    display: block;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    font-size: 8pt;
+    margin-bottom: 4px;
+  }
+
+  /* ---------- Intro ---------- */
+  .intro {
+    margin-bottom: 18px;
+  }
+  .intro-overline {
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .intro-title {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 34pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    line-height: 1;
+    margin: 0 0 8px 0;
+  }
+  .intro-title em {
+    font-style: normal;
+    color: var(--wine-red);
+  }
+  .intro-sub {
+    font-family: "DM Sans", sans-serif;
+    font-size: 11pt;
+    font-weight: 500;
+    color: var(--graphite);
+    line-height: 1.4;
+    max-width: 150mm;
+  }
+
+  .terms {
+    background: var(--cream);
+    border-left: 3px solid var(--wine-red);
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    font-size: 9pt;
+    line-height: 1.5;
+  }
+  .terms-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 4px 16px;
+  }
+  .terms .label {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 8pt;
+    color: var(--wine-red);
+    margin-right: 6px;
+  }
+
+  /* ---------- Category section header ---------- */
+  .section {
+    margin-bottom: 14px;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    margin-bottom: 0;
+    border-top: 2px solid var(--black);
+    border-bottom: 1px solid var(--stone);
+    break-after: avoid-page;
+  }
+  .section-head .title {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 22pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    line-height: 1;
+    color: var(--black);
+  }
+  .section-head .title em {
+    font-style: normal;
+    color: var(--wine-red);
+  }
+  .section-head .meta {
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--amber);
+    text-transform: uppercase;
+  }
+
+  /* ---------- Product row ---------- */
+  .item {
+    display: grid;
+    grid-template-columns: 1fr 20mm 32mm 22mm;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    min-height: 22mm;
+    border-top: 1px dashed var(--stone);
+    break-inside: avoid;
+  }
+
+  /* ---------- Name + details column ---------- */
+  .name-block {
+    min-width: 0;
+  }
+  .producer {
+    font-family: "Inter", sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    color: var(--amber);
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+  .name {
+    font-family: "DM Sans", sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--black);
+    margin-bottom: 2px;
+  }
+  .details {
+    font-family: "Inter", sans-serif;
+    font-size: 8.5pt;
+    color: var(--graphite);
+    line-height: 1.35;
+  }
+  .details .sep { color: var(--stone); margin: 0 5px; }
+
+  /* ---------- Image column ---------- */
+  .img-block {
+    text-align: center;
+  }
+  .img-block img,
+  .img-block svg {
+    max-width: 18mm;
+    max-height: 20mm;
+    width: auto;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+  .img-placeholder {
+    opacity: 0.32;
+  }
+
+  /* ---------- Year + region column ---------- */
+  .meta-block {
+    text-align: left;
+    font-family: "Inter", sans-serif;
+    font-size: 9pt;
+    color: var(--graphite);
+    line-height: 1.3;
+  }
+  .meta-year {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 14pt;
+    letter-spacing: 1px;
+    color: var(--wine-red);
+    line-height: 1;
+    margin-bottom: 2px;
+    display: block;
+  }
+  .meta-year.nv {
+    font-size: 11pt;
+    color: var(--graphite);
+    letter-spacing: 0.5px;
+  }
+  .meta-region {
+    font-size: 9pt;
+    color: var(--black);
+    font-weight: 500;
+    line-height: 1.25;
+  }
+  .meta-abv {
+    font-size: 8pt;
+    color: var(--graphite);
+    margin-top: 1px;
+  }
+
+  /* ---------- Price column ---------- */
+  .price-block {
+    text-align: right;
+  }
+  .price {
+    font-family: "DM Sans", sans-serif;
+    font-size: 15pt;
+    font-weight: 700;
+    color: var(--wine-red);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .unit {
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    font-weight: 500;
+    color: var(--graphite);
+    margin-top: 3px;
+    letter-spacing: 0.3px;
+  }
+  .price-stack .row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    align-items: baseline;
+    line-height: 1.2;
+  }
+  .price-stack .vol {
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    font-weight: 600;
+    color: var(--graphite);
+  }
+  .price-stack .val {
+    font-family: "DM Sans", sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--wine-red);
+    min-width: 14mm;
+    text-align: right;
+  }
+
+  /* ---------- Footer ---------- */
+  .footer {
+    margin-top: 18px;
+    padding-top: 8px;
+    border-top: 1px solid var(--stone);
+    display: flex;
+    justify-content: space-between;
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    color: var(--graphite);
+    letter-spacing: 0.4px;
+  }
+  .footer .anchors {
+    color: var(--wine-red);
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  /* ---------- Print fixes ---------- */
+  @media print {
+    html, body { background: white; }
+    .page {
+      padding: 0;
+      margin: 0;
+      max-width: none;
+      box-shadow: none;
+      background: white;
+    }
+    .item { break-inside: avoid; }
+    .section-head { break-after: avoid-page; }
+    .section { break-inside: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <div class="wordmark">
+      <span class="red">WINE</span> &amp; WHISKEY
+    </div>
+    <div class="header-meta">
+      <span class="overline">B2B · HoReCa Phuket</span>
+      Price List<br>
+      May 2026
+    </div>
+  </header>
+
+  <div class="intro">
+    <div class="intro-overline">Russian wines &amp; spirits · Exclusive distribution</div>
+    <h1 class="intro-title">Our list. <em>Yours to add.</em></h1>
+    <div class="intro-sub">
+      Exclusive Russian wines, sparkling, and spirits — available on Phuket only through Wine &amp; Whiskey. An addition to your list, not a replacement: cocktail base or by-the-glass pours.
+    </div>
+  </div>
+
+  <div class="terms">
+    <div class="terms-grid">
+      <div><span class="label">Currency</span> Thai Baht (฿)</div>
+      <div><span class="label">VAT</span> 7% not included</div>
+      <div><span class="label">Volume</span> 750 ml unless noted</div>
+      <div><span class="label">Min. order</span> on request</div>
+    </div>
+  </div>
+
+  <!-- ==================== SPARKLING ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">Sparkling <em>Wines</em></div>
+      <div class="meta">10 SKU · Игристые · Abrau-Durso, Aristov</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Reserve Collection</div>
+        <div class="name">Reserve Brut</div>
+        <div class="details">Chardonnay, Riesling, Pinot Blanc <span class="sep">·</span> Charmat method <span class="sep">·</span> ≥90 days aging</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-reserve-brut.png" alt="Abrau-Durso Reserve Brut" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">11.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿570</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Reserve Collection</div>
+        <div class="name">Reserve Brut Rosé</div>
+        <div class="details">Pinot Noir, Pinot Franc, Cabernet Sauvignon <span class="sep">·</span> Charmat method</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-reserve-brut-rose.png" alt="Abrau-Durso Reserve Brut Rosé" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">11.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿570</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Aristov</div>
+        <div class="name">Cuvée Alexander Blanc de Blancs Brut</div>
+        <div class="details">100% Chardonnay <span class="sep">·</span> Méthode Classique</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/aristov-cuvee-alexander-brut.png" alt="Cuvée Alexander Blanc de Blancs Brut" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿830</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Victor Dravigny</div>
+        <div class="name">Victor Dravigny Brut</div>
+        <div class="details">Chardonnay, Riesling, Pinot Blanc <span class="sep">·</span> Méthode Classique <span class="sep">·</span> Bestseller</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-victor-dravigny-brut.png" alt="Abrau-Durso Victor Dravigny Brut" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿830</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Victor Dravigny</div>
+        <div class="name">Victor Dravigny Extra Brut</div>
+        <div class="details">Chardonnay, Riesling, Pinot Blanc <span class="sep">·</span> Méthode Classique</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-victor-dravigny-extra-brut.png" alt="Abrau-Durso Victor Dravigny Extra Brut" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿830</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Victor Dravigny</div>
+        <div class="name">Victor Dravigny Rosé Brut</div>
+        <div class="details">Pinot Noir, Pinot Franc, Cabernet Sauvignon <span class="sep">·</span> Méthode Classique</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-victor-dravigny-rose.png" alt="Abrau-Durso Victor Dravigny Rosé" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿830</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Brut d'Or</div>
+        <div class="name">Brut d'Or Blanc de Noir</div>
+        <div class="details">100% Pinot Noir <span class="sep">·</span> Single-origin, single-variety</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-brut-dor-blanc-de-noir.png" alt="Abrau-Durso Brut d'Or Blanc de Noir" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,030</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Brut d'Or</div>
+        <div class="name">Brut d'Or Riesling</div>
+        <div class="details">100% Riesling <span class="sep">·</span> Single-origin, single-variety</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-brut-dor-riesling.png" alt="Abrau-Durso Brut d'Or Riesling" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,030</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Alexander II</div>
+        <div class="name">Alexander II Brut Vintage</div>
+        <div class="details">Pinot Noir, Pinot Blanc, Chardonnay <span class="sep">·</span> 4 years aging in rock tunnels</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-alexander-ii-brut-vintage.png" alt="Alexander II Brut Vintage" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">VINTAGE</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,100</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Alexander II</div>
+        <div class="name">Alexander II Brut Rosé</div>
+        <div class="details">100% Pinot Noir <span class="sep">·</span> 4 years aging in rock tunnels</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-alexander-ii-brut-rose.png" alt="Alexander II Brut Rosé" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">VINTAGE</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,100</div><div class="unit">/ btl</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== WHITE ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">White <em>Wines</em></div>
+      <div class="meta">6 SKU · Белые</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne</div>
+        <div class="name">Grape Dance Blanc</div>
+        <div class="details">Bianca, Gurner <span class="sep">·</span> Bestseller</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-grape-dance-blanc.png" alt="Grape Dance Blanc" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿570</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Vedernikov · Don Valley</div>
+        <div class="name">Sibirkovyi</div>
+        <div class="details">Sibirkovyi (indigenous) <span class="sep">·</span> Acacia, lime, green apple, grapefruit finish</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/vedernikov-sibirkovyi.png" alt="Sibirkovyi" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Vedernikov, Don Valley</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿640</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Visokiy Bereg</div>
+        <div class="name">Grüner Veltliner</div>
+        <div class="details">100% Grüner Veltliner</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/visokiy-bereg-gruner-veltliner.png" alt="Grüner Veltliner" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">2021</span>
+        <div class="meta-region">Kuban, Russia</div>
+        <div class="meta-abv">12.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿660</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Aristov</div>
+        <div class="name">Aristov Riesling</div>
+        <div class="details">100% Riesling <span class="sep">·</span> Bestseller</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/aristov-riesling.png" alt="Aristov Riesling" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Kuban, Russia</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿680</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Still Collection</div>
+        <div class="name">Riesling Abrau-Durso</div>
+        <div class="details">100% Riesling <span class="sep">·</span> Premium still wine</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-riesling.png" alt="Riesling Abrau-Durso" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,010</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Still Collection</div>
+        <div class="name">Chardonnay Abrau-Durso</div>
+        <div class="details">100% Chardonnay <span class="sep">·</span> Premium still wine</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-chardonnay.png" alt="Chardonnay Abrau-Durso" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,010</div><div class="unit">/ btl</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== ROSÉ ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">Rosé <em>Wines</em></div>
+      <div class="meta">2 SKU · Розе</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Vedernikov · Don Valley</div>
+        <div class="name">Krasnostop Rosé</div>
+        <div class="details">100% Krasnostop Zolotovsky <span class="sep">·</span> Strawberry, marshmallow, berry sorbet</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/vedernikov-krasnostop-rose.png" alt="Krasnostop Rosé" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Vedernikov, Don Valley</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿690</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Visokiy Bereg</div>
+        <div class="name">Graphite Rosé</div>
+        <div class="details">100% Cabernet Sauvignon</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/visokiy-bereg-graphite-rose.png" alt="Graphite Rosé" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">2023</span>
+        <div class="meta-region">Kuban, Russia</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿720</div><div class="unit">/ btl</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== RED ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">Red <em>Wines</em></div>
+      <div class="meta">14 SKU · Красные</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne</div>
+        <div class="name">Krasnostop · Saperavi</div>
+        <div class="details">Krasnostop, Saperavi (indigenous blend)</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-krasnostop-saperavi.png" alt="Krasnostop · Saperavi" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Kuban, Russia</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿620</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Bestseller</div>
+        <div class="name">Nude Saperavi</div>
+        <div class="details">100% Saperavi <span class="sep">·</span> Unfiltered, natural style</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-nude-saperavi.png" alt="Nude Saperavi" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year">2022</span>
+        <div class="meta-region">Krasnodar Region, Russia</div>
+        <div class="meta-abv">13.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿640</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Aristov · Bestseller</div>
+        <div class="name">Aristov Cabernet Sauvignon</div>
+        <div class="details">100% Cabernet Sauvignon</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/aristov-cabernet-sauvignon.png" alt="Aristov Cabernet Sauvignon" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">2020</span>
+        <div class="meta-region">Kuban, Russia</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿680</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Vedernikov · Don Valley</div>
+        <div class="name">Krasnostop Zolotovsky</div>
+        <div class="details">100% Krasnostop Zolotovsky (indigenous) <span class="sep">·</span> Currant, chocolate, spices</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/vedernikov-krasnostop-zolotovsky.png" alt="Krasnostop Zolotovsky" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Vedernikov, Don Valley</div>
+        <div class="meta-abv">14.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿690</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Reserve · Bestseller</div>
+        <div class="name">Cabernet Reserve</div>
+        <div class="details">100% Cabernet Sauvignon <span class="sep">·</span> 12 months in oak barrels</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-cabernet-reserve.png" alt="Cabernet Reserve" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">12–14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿760</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Reserve · Bestseller</div>
+        <div class="name">Saperavi Reserve</div>
+        <div class="details">100% Saperavi <span class="sep">·</span> 12 months in oak barrels</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-saperavi-reserve.png" alt="Saperavi Reserve" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿760</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Reserve</div>
+        <div class="name">Krasnostop Reserve</div>
+        <div class="details">100% Krasnostop <span class="sep">·</span> 12 months in oak barrels</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-krasnostop-reserve.png" alt="Krasnostop Reserve" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">11.5–13.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿760</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Reserve</div>
+        <div class="name">Premier Rouge Reserve</div>
+        <div class="details">Merlot, Cabernet Sauvignon, Krasnostop, Saperavi <span class="sep">·</span> 12 months in oak</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-premier-rouge-reserve.png" alt="Premier Rouge Reserve" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">12–14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿760</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Aristov</div>
+        <div class="name">Cuvée Alexander Intenso Rosso</div>
+        <div class="details">100% Ancellotta <span class="sep">·</span> Dry red wine</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/aristov-cuvee-alexander-intenso-rosso.png" alt="Cuvée Alexander Intenso Rosso" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">2019</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">12% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿830</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Château Tamagne · Collection</div>
+        <div class="name">Krasnostop Reserve</div>
+        <div class="details">100% Krasnostop Anapskiy <span class="sep">·</span> 12 mo French/American oak + 48 mo bottle</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/chateau-tamagne-krasnostop-reserve-2016.png" alt="Krasnostop Reserve 2016" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year">2016</span>
+        <div class="meta-region">Tamagne Peninsula</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿970</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Abrau-Durso · Still Collection</div>
+        <div class="name">Pinot Noir Abrau-Durso</div>
+        <div class="details">100% Pinot Noir <span class="sep">·</span> Premium still wine</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/abrau-durso-pinot-noir.png" alt="Pinot Noir Abrau-Durso" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">Abrau-Durso, Tamagne Peninsula</div>
+        <div class="meta-abv">11.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,010</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Vedernikov · Don Valley</div>
+        <div class="name">Krasnostop Zolotovsky · Oak Aged</div>
+        <div class="details">100% Krasnostop Zolotovsky <span class="sep">·</span> 16 months French oak <span class="sep">·</span> Cherry jam, blackberry, smoke</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/vedernikov-krasnostop-zolotovsky-oak.png" alt="Krasnostop Zolotovsky Oak Aged" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year">2019</span>
+        <div class="meta-region">Vedernikov, Don Valley</div>
+        <div class="meta-abv">14.5% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,380</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Sikory · Semigorye</div>
+        <div class="name">Gertz Sikory</div>
+        <div class="details">Cabernet Sauvignon, Merlot, Cabernet Franc, Krasnostop</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/sikory-gertz.png" alt="Gertz Sikory" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year">2019</span>
+        <div class="meta-region">Semigorye, Russia</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,420</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Sikory · Family Reserve · Top</div>
+        <div class="name">Cabernet Sauvignon Family Reserve</div>
+        <div class="details">100% Cabernet Sauvignon <span class="sep">·</span> Flagship</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/sikory-cabernet-family-reserve.png" alt="Cabernet Sauvignon Family Reserve" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year">2016</span>
+        <div class="meta-region">Semigorye, Russia</div>
+        <div class="meta-abv">14% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,650</div><div class="unit">/ btl</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== GIN ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">Gin <em>· Barrister</em></div>
+      <div class="meta">3 SKU · Джин · 0.7 L · 40% ABV · St. Petersburg, Russia</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Barrister · Masterly Crafted</div>
+        <div class="name">Barrister Dry Gin</div>
+        <div class="details">Juniper-forward London dry style <span class="sep">·</span> Classic G&amp;T, Negroni, Martini</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/barrister-dry-gin.png" alt="Barrister Dry Gin" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">0.7 L · 40% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,010</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Barrister · Delicate Infusion</div>
+        <div class="name">Barrister Pink Gin</div>
+        <div class="details">Strawberry &amp; cardamom infusion <span class="sep">·</span> Spritz, signature serves</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/barrister-pink-gin.png" alt="Barrister Pink Gin" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">0.7 L · 40% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,090</div><div class="unit">/ btl</div></div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Barrister · Delicate Infusion</div>
+        <div class="name">Barrister Blue Gin</div>
+        <div class="details">Botanical blend with butterfly pea hue <span class="sep">·</span> Color-changing cocktails</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/barrister-blue-gin.png" alt="Barrister Blue Gin" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">0.7 L · 40% ABV</div>
+      </div>
+      <div class="price-block"><div class="price">฿1,090</div><div class="unit">/ btl</div></div>
+    </div>
+  </section>
+
+  <!-- ==================== VODKA ==================== -->
+  <section class="section">
+    <div class="section-head">
+      <div class="title">Vodka</div>
+      <div class="meta">3 brands · 2 volumes · Водка · 40% ABV · Ladoga Group, St. Petersburg</div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Ladoga · Premium</div>
+        <div class="name">Ladoga Vodka</div>
+        <div class="details">Triple-distilled, premium grain spirit</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/ladoga-vodka.png" alt="Ladoga Vodka" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">40% ABV</div>
+      </div>
+      <div class="price-block price-stack">
+        <div class="row"><span class="vol">0.7 L</span><span class="val">฿660</span></div>
+        <div class="row"><span class="vol">1.0 L</span><span class="val">฿830</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Ladoga · Super Premium</div>
+        <div class="name">Czar's Original</div>
+        <div class="details">Recreated from historical Peter the Great era recipe</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/czars-original.png" alt="Czar's Original Vodka" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">40% ABV</div>
+      </div>
+      <div class="price-block price-stack">
+        <div class="row"><span class="vol">0.7 L</span><span class="val">฿680</span></div>
+        <div class="row"><span class="vol">1.0 L</span><span class="val">฿900</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="name-block">
+        <div class="producer">Ladoga · Imperial Collection</div>
+        <div class="name">Czar's Gold</div>
+        <div class="details">Imperial Collection Gold <span class="sep">·</span> Winter wheat from Ladoga's own fields</div>
+      </div>
+      <div class="img-block">
+        <img src="../../04_brand/products/czars-gold.png" alt="Czar's Gold Vodka" />
+      </div>
+      <div class="meta-block">
+        <span class="meta-year nv">NV</span>
+        <div class="meta-region">St. Petersburg, Russia</div>
+        <div class="meta-abv">40% ABV</div>
+      </div>
+      <div class="price-block price-stack">
+        <div class="row"><span class="vol">0.7 L</span><span class="val">฿1,170</span></div>
+        <div class="row"><span class="vol">1.0 L</span><span class="val">฿1,310</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div>Wine &amp; Whiskey · Phuket · B2B Price List · May 2026 · 41 SKU</div>
+    <div class="anchors">Sparkling · White · Rosé · Red · Gin · Vodka</div>
+  </footer>
+
+</div>
+</body>
+</html>
