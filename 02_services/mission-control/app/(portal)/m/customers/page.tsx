@@ -47,7 +47,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const [custRes, groupRes] = await Promise.all([
     sbInventory
       .from('b2b_customer')
-      .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, group_id')
+      .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, group_id, loyverse_customer_id')
       .order('flowaccount_name'),
     sbInventory
       .from('b2b_customer_group')
@@ -69,6 +69,27 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     return <div className="p-6"><SchemaError error={invErr.message} /></div>
   }
 
+  // Loyverse receipts по B2B-клиентам — добавляем к YTD/Last year (но НЕ к Open/Overdue,
+  // там только FA-долги, потому что Loyverse платежи всегда мгновенные).
+  const { data: lvReceipts } = await sbInventory
+    .from('loyverse_receipt')
+    .select('customer_id, total, receipt_date, receipt_type')
+    .gte('receipt_date', `${lastYear}-01-01`)
+  const lvByCustomer = new Map<string, { ytd: number; ly: number; ytdCount: number; lyCount: number }>()
+  for (const r of (lvReceipts ?? []) as any[]) {
+    if (!r.customer_id) continue
+    const sign = r.receipt_type === 'REFUND' ? -1 : 1
+    const total = Number(r.total) * sign
+    const yr = String(r.receipt_date).slice(0, 4)
+    const cur = lvByCustomer.get(r.customer_id) ?? { ytd: 0, ly: 0, ytdCount: 0, lyCount: 0 }
+    if (yr === String(thisYear)) { cur.ytd += total; if (sign > 0) cur.ytdCount++ }
+    if (yr === String(lastYear)) { cur.ly  += total; if (sign > 0) cur.lyCount++ }
+    lvByCustomer.set(r.customer_id, cur)
+  }
+
+  // FA → b2b_customer.id (id b2b), Loyverse → loyverse_customer_id. Mapping:
+  const lvIdByCustomer = new Map<string, string>(all.filter(c => c.loyverse_customer_id).map(c => [c.id, c.loyverse_customer_id as string]))
+
   const stats = new Map<string, CustomerStats>()
   function bucket(id: string): CustomerStats {
     let s = stats.get(id)
@@ -88,6 +109,17 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     const isOverdue = !!dueAt && dueAt < todayISO
     b.openCount++
     if (isOverdue) b.overdue += total; else b.open += total
+  }
+  // Подмешиваем Loyverse-цифры по customer'ам с linked loyverse_customer_id
+  for (const c of all) {
+    if (!c.loyverse_customer_id) continue
+    const lv = lvByCustomer.get(c.loyverse_customer_id)
+    if (!lv) continue
+    const b = bucket(c.id)
+    b.thisYearTotal += lv.ytd
+    b.thisYearCount += lv.ytdCount
+    b.lastYearTotal += lv.ly
+    b.lastYearCount += lv.lyCount
   }
 
   let rows = all

@@ -18,7 +18,8 @@
     "accounting": "tsx 03_automation/sync_accounting.ts",
     "inv:loyverse": "tsx 03_automation/sync_inventory_loyverse.ts",
     "inv:flow": "tsx 03_automation/sync_inventory_flow.ts",
-    "inv:all": "tsx 03_automation/sync_inventory_loyverse.ts && tsx 03_automation/sync_inventory_flow.ts"
+    "inv:receipts": "tsx 03_automation/sync_loyverse_receipts.ts",
+    "inv:all": "tsx 03_automation/sync_inventory_loyverse.ts && tsx 03_automation/sync_inventory_flow.ts && tsx 03_automation/sync_loyverse_receipts.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

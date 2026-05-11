@@ -4,11 +4,12 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
+import { CustomerLoyverseCell } from '@/components/modules/customers/CustomerLoyverseCell'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
 
-type Tab = 'invoices' | 'deliveries' | 'balance'
+type Tab = 'invoices' | 'loyverse' | 'deliveries' | 'balance'
 type SearchParams = { tab?: Tab; sort?: string; dir?: string }
 
 export default async function CustomerDetail({
@@ -22,11 +23,22 @@ export default async function CustomerDetail({
 
   const { data: cust, error: custErr } = await sbInventory
     .from('b2b_customer')
-    .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes')
+    .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, loyverse_customer_id')
     .eq('id', id).maybeSingle()
   if (custErr) return <div className="p-6"><SchemaError error={custErr.message} /></div>
   if (!cust)   return <div className="p-6"><div className="text-graphite">Customer not found.</div></div>
   const c = cust as B2bCustomer
+
+  // Подгружаем имя linked Loyverse customer'а (для отображения в pill'е)
+  let lvName: string | null = null
+  if (c.loyverse_customer_id) {
+    const { data: lv } = await sbInventory
+      .from('loyverse_customer')
+      .select('name')
+      .eq('id', c.loyverse_customer_id)
+      .maybeSingle()
+    lvName = lv?.name ?? null
+  }
 
   // Self-heal: if customer is consignment but the location row never got
   // created (e.g. flipped before auto-provision was added), create it now.
@@ -41,7 +53,7 @@ export default async function CustomerDetail({
     }
   }
 
-  const tab: Tab = sp.tab && ['invoices','deliveries','balance'].includes(sp.tab) ? sp.tab : 'invoices'
+  const tab: Tab = sp.tab && ['invoices','loyverse','deliveries','balance'].includes(sp.tab) ? sp.tab : 'invoices'
 
   return (
     <>
@@ -49,8 +61,15 @@ export default async function CustomerDetail({
         <div>
           <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{c.flowaccount_name}</h2>
-          <div className="text-xs text-graphite mt-1 mb-5">
+          <div className="text-xs text-graphite mt-1 mb-1">
             {c.is_consignment ? 'Consignment' : 'Regular'} · Terms {c.payment_terms_days} days
+          </div>
+          <div className="mb-5">
+            <CustomerLoyverseCell
+              customerId={c.id}
+              initialLoyverseId={c.loyverse_customer_id}
+              initialLoyverseName={lvName}
+            />
           </div>
         </div>
         <DataFreshness sources={['flowaccount_invoices']} />
@@ -58,7 +77,8 @@ export default async function CustomerDetail({
 
           {/* Tabs */}
           <nav className="border-b border-pale-stone mb-5 flex gap-1 text-sm">
-            <TabLink href={`/m/customers/${id}`} active={tab==='invoices'}>Invoices</TabLink>
+            <TabLink href={`/m/customers/${id}`} active={tab==='invoices'}>Tax Invoices</TabLink>
+            <TabLink href={`/m/customers/${id}?tab=loyverse`} active={tab==='loyverse'}>Loyverse Sales</TabLink>
             {c.is_consignment && (
               <>
                 <TabLink href={`/m/customers/${id}?tab=deliveries`} active={tab==='deliveries'}>Deliveries</TabLink>
@@ -68,6 +88,7 @@ export default async function CustomerDetail({
           </nav>
 
           {tab === 'invoices'   && <InvoicesPanel   customerId={id} termsDays={c.payment_terms_days ?? 0} sp={sp} />}
+          {tab === 'loyverse'   && <LoyverseSalesPanel loyverseId={c.loyverse_customer_id} sp={sp} />}
           {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} sp={sp} />}
           {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} sp={sp} />}
 
@@ -151,6 +172,109 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
       </table>
     </div>
   )
+}
+
+// ─── Loyverse Sales panel ──────────────────────────────────────────────
+async function LoyverseSalesPanel({ loyverseId, sp }: { loyverseId: string | null; sp: SearchParams }) {
+  if (!loyverseId) {
+    return (
+      <div className="text-sm text-graphite">
+        Этот клиент не привязан к Loyverse. Жми <span className="text-deep-black">+ link Loyverse</span> в заголовке —
+        выбери, и список Loyverse-receipts появится здесь.
+      </div>
+    )
+  }
+  const { data, error } = await sbInventory
+    .from('loyverse_receipt')
+    .select('id, receipt_number, receipt_date, receipt_type, total, cost_total, is_b2b, is_bank_transfer')
+    .eq('customer_id', loyverseId)
+    .order('receipt_date', { ascending: false })
+    .limit(300)
+  if (error) return <SchemaError error={error.message} />
+  const rows = (data ?? []) as any[]
+  if (rows.length === 0) {
+    return <div className="text-sm text-graphite">Loyverse receipts по этому клиенту нет. Прогони <code className="font-mono text-xs">npm run inv:receipts</code> (или подожди ежедневного крона).</div>
+  }
+
+  const sort = parseSort(sp.sort, ['receipt_number','receipt_date','receipt_type','total','cost_total'] as const, 'receipt_date')
+  const dir: SortDir = parseDir(sp.dir, 'desc')
+  const sorted = [...rows].sort(cmpBy(r => {
+    if (sort === 'total')      return Number(r.total)
+    if (sort === 'cost_total') return Number(r.cost_total ?? 0)
+    return r[sort] as string
+  }, dir))
+
+  const sales   = rows.filter(r => r.receipt_type === 'SALE').reduce((s, r) => s + Number(r.total), 0)
+  const refunds = rows.filter(r => r.receipt_type === 'REFUND').reduce((s, r) => s + Number(r.total), 0)
+  const net     = sales - refunds
+  const cost    = rows.filter(r => r.receipt_type === 'SALE').reduce((s, r) => s + Number(r.cost_total ?? 0), 0)
+  const gp      = net - cost
+  const gpPct   = net > 0 ? (gp / net) * 100 : 0
+
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-3 mb-4 text-xs">
+        <KPI label="Sales"   value={`฿${fmt(sales)}`}   note={`${rows.filter(r => r.receipt_type === 'SALE').length} шт.`} highlight />
+        <KPI label="Refunds" value={`−฿${fmt(refunds)}`} note={`${rows.filter(r => r.receipt_type === 'REFUND').length} шт.`} muted />
+        <KPI label="Net"     value={`฿${fmt(net)}`} />
+        <KPI label="GP"      value={`฿${fmt(gp)}`} note={`${gpPct.toFixed(1)}%`} />
+      </div>
+      <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+            <tr>
+              <SortHeader col="receipt_number" label="Receipt" sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="receipt_date"   label="Date"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="receipt_type"   label="Type"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
+              <SortHeader col="total"          label="Total"   sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
+              <SortHeader col="cost_total"     label="Cost"    sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
+              <th className="text-left py-2 px-4 font-medium text-graphite text-[11px]">B2B</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(r => (
+              <tr key={r.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${r.receipt_type === 'REFUND' ? 'opacity-70' : ''}`}>
+                <td className="py-2 px-4 font-mono">{r.receipt_number}</td>
+                <td className="py-2 px-4 text-graphite text-xs">{fmtDate(r.receipt_date)}</td>
+                <td className="py-2 px-4">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-sm border ${
+                    r.receipt_type === 'REFUND'
+                      ? 'bg-wine-red/10 text-wine-red border-wine-red/40'
+                      : 'bg-cream text-graphite border-pale-stone'
+                  }`}>{r.receipt_type}</span>
+                </td>
+                <td className="py-2 px-4 text-right tabular-nums">{`฿${fmt(Number(r.total))}`}</td>
+                <td className="py-2 px-4 text-right tabular-nums text-graphite">{r.cost_total ? `฿${fmt(Number(r.cost_total))}` : '—'}</td>
+                <td className="py-2 px-4 text-[11px] text-graphite">
+                  {r.is_b2b
+                    ? (r.is_bank_transfer ? 'bank transfer' : 'name match')
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+function KPI({ label, value, note, highlight, muted }: { label: string; value: string; note?: string; highlight?: boolean; muted?: boolean }) {
+  return (
+    <div className={`px-3 py-2 rounded-md border ${
+      highlight ? 'bg-wine-red text-warm-white border-wine-red'
+                : muted ? 'bg-cream text-graphite border-pale-stone'
+                        : 'bg-warm-white border-pale-stone'
+    }`}>
+      <div className={`text-[10px] uppercase tracking-wide ${highlight ? 'opacity-80' : 'text-graphite'}`}>{label}</div>
+      <div className={`text-base font-medium tabular-nums ${highlight ? '' : 'text-deep-black'}`}>{value}</div>
+      {note && <div className={`text-[10px] ${highlight ? 'opacity-70' : 'text-graphite/70'}`}>{note}</div>}
+    </div>
+  )
+}
+
+function fmt(n: number): string {
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 }
 
 // ─── Deliveries panel (consignment only) ────────────────────────────────

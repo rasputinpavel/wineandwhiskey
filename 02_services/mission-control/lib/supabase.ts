@@ -88,6 +88,31 @@ export type B2bCustomerGroup = {
   updated_at: string
 }
 
+export type LoyverseCustomer = {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  total_spent: number
+  scraped_at: string
+}
+
+export type LoyverseReceipt = {
+  id: string
+  receipt_number: string
+  loyverse_receipt_id: string | null
+  receipt_date: string
+  receipt_type: 'SALE' | 'REFUND' | string
+  store: string | null
+  customer_id: string | null
+  customer_name: string | null
+  total: number
+  cost_total: number
+  is_b2b: boolean
+  is_bank_transfer: boolean
+  scraped_at: string
+}
+
 export type Sku = {
   id: string
   loyverse_variant_id: string
