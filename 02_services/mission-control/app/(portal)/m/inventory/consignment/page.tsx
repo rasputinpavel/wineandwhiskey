@@ -114,7 +114,7 @@ export default async function ConsignmentPage({ searchParams }: { searchParams: 
                           <td className="py-2 px-4 font-mono text-graphite">{r.sku?.loyverse_product_code ?? '—'}</td>
                           <td className="py-2 px-4">
                             {r.sku?.loyverse_product_code ? (
-                              <Link href={`/m/inventory/sku/${r.sku.loyverse_product_code}`} className="hover:text-wine-red">
+                              <Link href={`/m/inventory/sku/${encodeURIComponent(r.sku.loyverse_product_code)}`} className="hover:text-wine-red">
                                 {r.sku?.name}
                               </Link>
                             ) : r.sku?.name}

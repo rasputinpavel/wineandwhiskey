@@ -102,6 +102,7 @@ export type FlowInvoice = {
   total: number
   detail_url: string | null
   scraped_at: string
+  excluded: boolean
 }
 
 export type ConsignmentLocation = {

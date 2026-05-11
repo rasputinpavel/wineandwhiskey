@@ -16,10 +16,13 @@ type SearchParams = Record<string, string | undefined>
 export default async function SkuDetail({
   params, searchParams,
 }: {
-  params: Promise<{ code: string }>
+  // catch-all dynamic segment: SKU коды могут содержать слэш (e.g. 08081564/22).
+  // Next.js передаёт сегменты массивом, склеиваем обратно через '/'.
+  params: Promise<{ code: string[] }>
   searchParams: Promise<SearchParams>
 }) {
-  const { code } = await params
+  const { code: codeParts } = await params
+  const code = codeParts.join('/')
   const sp = await searchParams
 
   // Single fast query so the page header renders immediately on click.

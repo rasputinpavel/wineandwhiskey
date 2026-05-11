@@ -3,6 +3,7 @@ import { sbInventory, type B2bCustomer } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -97,7 +98,7 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string; termsDays: number; sp: SearchParams }) {
   const { data, error } = await sbInventory
     .from('flowaccount_invoice')
-    .select('id, number, issued_at, due_at, status, total, detail_url')
+    .select('id, number, issued_at, due_at, status, total, detail_url, excluded')
     .eq('customer_id', customerId)
     .limit(200)
   if (error) return <SchemaError error={error.message} />
@@ -128,11 +129,12 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
             <SortHeader col="due_at"    label="Due"    sort={sort} dir={dir} sp={sp} keep={['tab']} />
             <SortHeader col="status"    label="Status" sort={sort} dir={dir} sp={sp} keep={['tab']} />
             <SortHeader col="total"     label="Total"  sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
+            <th className="text-left py-2 px-4 font-medium text-graphite text-[11px]">Excluded</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={r.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
+            <tr key={r.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${r.excluded ? 'opacity-50' : ''}`}>
               <td className="py-2 px-4 font-mono">
                 {r.detail_url
                   ? <a href={r.detail_url} target="_blank" rel="noopener noreferrer" className="hover:text-wine-red">{r.number}</a>
@@ -142,6 +144,7 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
               <td className="py-2 px-4">{fmtDate(r.computedDue)}</td>
               <td className="py-2 px-4">{r.status}</td>
               <td className="py-2 px-4 text-right tabular-nums">฿{Number(r.total).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+              <td className="py-2 px-4"><InvoiceExcludeCell invoiceId={r.id} initial={r.excluded ?? false} /></td>
             </tr>
           ))}
         </tbody>
@@ -292,7 +295,7 @@ async function BalancePanel({ customerId, sp }: { customerId: string; sp: Search
                 <td className="py-2 px-4 font-mono text-graphite">{r.sku?.loyverse_product_code ?? '—'}</td>
                 <td className="py-2 px-4">
                   {r.sku?.loyverse_product_code ? (
-                    <Link href={`/m/inventory/sku/${r.sku.loyverse_product_code}`} className="hover:text-wine-red">{r.sku?.name}</Link>
+                    <Link href={`/m/inventory/sku/${encodeURIComponent(r.sku.loyverse_product_code)}`} className="hover:text-wine-red">{r.sku?.name}</Link>
                   ) : r.sku?.name}
                 </td>
                 <td className="py-2 px-4 text-graphite">{r.sku?.category ?? '—'}</td>

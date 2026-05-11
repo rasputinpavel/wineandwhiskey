@@ -61,8 +61,9 @@ export default async function B2bPage({
   const [invRes, custRes] = await Promise.all([
     sbInventory
       .from('flowaccount_invoice')
-      .select('id, number, customer_id, customer_name, issued_at, due_at, status, total, detail_url')
+      .select('id, number, customer_id, customer_name, issued_at, due_at, status, total, detail_url, excluded')
       .not('status', 'in', '(Paid,Cancelled)')
+      .eq('excluded', false)
       .limit(500),
     sbInventory
       .from('b2b_customer')
@@ -301,7 +302,7 @@ function InvoiceLines({ lines, detailUrl }: { lines: Line[]; detailUrl: string |
             <tr key={l.id} className="border-t border-pale-stone/30">
               <td className="py-1 pr-4 font-mono text-graphite">
                 {l.sku?.loyverse_product_code
-                  ? <Link href={`/m/inventory/sku/${l.sku.loyverse_product_code}`} className="hover:text-wine-red">{l.sku.loyverse_product_code}</Link>
+                  ? <Link href={`/m/inventory/sku/${encodeURIComponent(l.sku.loyverse_product_code)}`} className="hover:text-wine-red">{l.sku.loyverse_product_code}</Link>
                   : <span title="Unmapped" className="text-amber-gold">—</span>}
               </td>
               <td className="py-1 pr-4">{l.sku?.name ?? l.raw_text}</td>

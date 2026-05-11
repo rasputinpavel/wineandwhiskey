@@ -60,7 +60,7 @@ export function SkuSearchBox({
   function navigateTo(it: Candidate) {
     if (!it.loyverse_product_code) return
     setOpen(false)
-    router.push(`/m/inventory/sku/${it.loyverse_product_code}`)
+    router.push(`/m/inventory/sku/${encodeURIComponent(it.loyverse_product_code)}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

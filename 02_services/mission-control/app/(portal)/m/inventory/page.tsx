@@ -140,7 +140,7 @@ export default async function InventoryPage({
                   <td className="py-2 px-4 font-mono text-graphite">{r.loyverse_product_code ?? '—'}</td>
                   <td className="py-2 px-4">
                     {r.loyverse_product_code ? (
-                      <Link href={`/m/inventory/sku/${r.loyverse_product_code}`} className="hover:text-wine-red">
+                      <Link href={`/m/inventory/sku/${encodeURIComponent(r.loyverse_product_code)}`} className="hover:text-wine-red">
                         {r.name}
                       </Link>
                     ) : r.name}
