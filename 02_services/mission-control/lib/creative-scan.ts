@@ -77,6 +77,21 @@ export async function scanCreative(): Promise<Project[]> {
     if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue
     const abs = path.join(root, entry.name)
 
+    // `social/` is a mirror of 05_creative/social — each child dir is a Social campaign.
+    if (entry.isDirectory() && entry.name === 'social') {
+      const inner = await readdir(abs, { withFileTypes: true }).catch(() => [])
+      for (const e of inner) {
+        if (!e.isDirectory()) continue
+        if (e.name.startsWith('.') || e.name.startsWith('_')) continue
+        const project = await projectFromDir(e.name, path.join(abs, e.name), {
+          hrefPrefix: `/creative/social/${e.name}`,
+          forceCategory: 'Social',
+        })
+        if (project) dirProjects.push(project)
+      }
+      continue
+    }
+
     if (entry.isDirectory()) {
       const project = await projectFromDir(entry.name, abs)
       if (project) dirProjects.push(project)
@@ -133,7 +148,11 @@ export async function scanCreative(): Promise<Project[]> {
   })
 }
 
-async function projectFromDir(name: string, abs: string): Promise<Project | null> {
+async function projectFromDir(
+  name: string,
+  abs: string,
+  opts: { hrefPrefix?: string; forceCategory?: Category } = {},
+): Promise<Project | null> {
   let inner: import('node:fs').Dirent[] = []
   try {
     inner = await readdir(abs, { withFileTypes: true })
@@ -141,13 +160,14 @@ async function projectFromDir(name: string, abs: string): Promise<Project | null
     return null
   }
 
+  const hrefPrefix = opts.hrefPrefix ?? `/creative/${name}`
   const files: Asset[] = []
   let previewHref: string | null = null
   for (const e of inner) {
     if (!e.isFile()) continue
     if (e.name.startsWith('.')) continue
     const { ext } = basenameNoExt(e.name)
-    const href = `/creative/${name}/${e.name}`
+    const href = `${hrefPrefix}/${e.name}`
     const st = await stat(path.join(abs, e.name))
     if (!previewHref && /preview\.(png|jpg|jpeg|webp)$/i.test(e.name)) {
       previewHref = href
@@ -165,7 +185,7 @@ async function projectFromDir(name: string, abs: string): Promise<Project | null
     slug: `dir-${name}`,
     title: humanize(stem),
     date,
-    category: categorize(stem),
+    category: opts.forceCategory ?? categorize(stem),
     previewHref,
     files: files.sort((a, b) => orderExt(a.ext) - orderExt(b.ext)),
     isDirectory: true,

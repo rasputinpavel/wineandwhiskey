@@ -137,7 +137,7 @@ export const SECTIONS: Section[] = [
         slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
         description: 'Логотипы, визитки, референсы, фоны.',
         route: m('brand-assets'),
-        embed: { kind: 'external', href: `${REPO}/tree/main/04_brand` },
+        embed: { kind: 'native' },
       },
       {
         slug: 'creative-library', name: 'Creative Library', icon: '🗂', status: 'live',

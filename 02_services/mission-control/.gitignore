@@ -5,6 +5,8 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 
-# Synced from 04_brand/ and 05_creative/output/ by scripts/sync-brand-assets.mjs
-public/brand/
-public/creative/
+# public/brand/ and public/creative/ are refreshed from the monorepo by
+# scripts/sync-brand-assets.mjs on predev/prebuild. They are committed because
+# Railway builds the service from 02_services/mission-control/ in isolation and
+# cannot reach ../../04_brand/ or ../../05_creative/, so the committed mirror is
+# the fallback that ships in production.

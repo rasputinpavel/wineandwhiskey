@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pét-Nat · Post 4:5 · Wine & Whiskey</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --black:   #1A1A1A;
+  --red:     #8C1C1C;
+  --white:   #F5F0EB;
+  --cream:   #EDE0D0;
+  --amber:   #C9A84C;
+  --graphite:#3D3D3D;
+  --stone:   #D4C9BC;
+}
+
+body {
+  background: #0d0d0d;
+  padding: 40px 32px;
+  display: flex;
+  gap: 28px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  min-height: 100vh;
+  align-items: flex-start;
+}
+
+.wrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.num {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  color: #444;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* 4:5 preview at 360×450 → exports at 1080×1350 */
+.slide {
+  width: 360px;
+  height: 450px;
+  position: relative;
+  overflow: hidden;
+  background: var(--black);
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+}
+
+.scrim-bottom {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 30%,
+    rgba(26,26,26,0.55) 55%,
+    rgba(26,26,26,0.88) 75%,
+    #1A1A1A 100%
+  );
+}
+
+.scrim-top {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    transparent 0%,
+    transparent 45%,
+    rgba(26,26,26,0.5) 72%,
+    rgba(26,26,26,0.8) 100%
+  );
+}
+
+/* ── Type — slightly smaller for 4:5 ── */
+.ov {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 10px;
+}
+
+.d {
+  font-family: 'Bebas Neue', sans-serif;
+  text-transform: uppercase;
+  color: var(--white);
+  line-height: 0.92;
+  letter-spacing: 0.02em;
+}
+.d-xl { font-size: 62px; }
+.d-lg  { font-size: 48px; }
+.d-md  { font-size: 38px; }
+
+.h {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.2;
+}
+.h-lg { font-size: 17px; }
+
+.b {
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  color: var(--stone);
+  line-height: 1.55;
+}
+.b-lg { font-size: 12px; }
+.b-sm { font-size: 10px; color: var(--graphite); }
+
+.rule {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--red);
+  margin: 10px 0;
+}
+
+.badge {
+  display: inline-block;
+  background: var(--red);
+  color: var(--white);
+  font-family: 'Inter', sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  margin-bottom: 10px;
+}
+
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--white);
+  opacity: 0.4;
+}
+
+/* ── Zones ── */
+.bot {
+  position: absolute;
+  left: 32px; right: 32px; bottom: 32px;
+}
+.top {
+  position: absolute;
+  left: 32px; right: 32px; top: 32px;
+}
+.mid {
+  position: absolute;
+  left: 32px; right: 32px;
+  top: 50%; transform: translateY(-50%);
+}
+.logo-corner {
+  position: absolute;
+  bottom: 18px; right: 28px;
+}
+
+/* ── S4: Comparison ── */
+.cmp {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  grid-template-rows: repeat(5, auto);
+  margin-top: 14px;
+  row-gap: 10px;
+}
+.cmp-div {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  background: var(--graphite);
+}
+.cmp-left  { grid-column: 1; padding-right: 12px; }
+.cmp-right { grid-column: 3; padding-left: 12px; }
+
+.cmp-hd {
+  font-family: 'Inter', sans-serif;
+  font-size: 8px; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--stone);
+  align-self: center;
+}
+.cmp-hd.a { color: var(--amber); }
+
+.cmp-item {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px; font-weight: 600;
+  color: var(--stone);
+  line-height: 1.2;
+  align-self: center;
+}
+.cmp-item.a { color: var(--white); }
+
+.cmp-foot {
+  border-top: 1px solid var(--graphite);
+  margin-top: 12px; padding-top: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px; color: var(--graphite); font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<!-- 01 — HOOK -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back1.jpg'); background-position: center top;"></div>
+  <div class="scrim-bottom"></div>
+  <div style="position:absolute; top:20px; right:20px;
+              font-family:'Bebas Neue',sans-serif; font-size:150px;
+              color:var(--white); opacity:0.07; line-height:1;
+              pointer-events:none; user-select:none">?</div>
+  <div class="bot">
+    <span class="ov">Sparkling Wine</span>
+    <div class="d d-xl">Older than<br>Champagne.</div>
+    <span class="rule"></span>
+    <p class="b b-lg" style="color:var(--stone); font-style:italic">Guess what?</p>
+  </div>
+</div>
+<span class="num">01 — Hook</span>
+</div>
+
+<!-- 02 — HISTORY -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back2.jpg'); background-position: center top;"></div>
+  <div class="scrim-bottom"></div>
+  <div class="bot">
+    <span class="ov">1531 · France</span>
+    <div class="d d-lg">Born by<br>accident.</div>
+    <span class="rule"></span>
+    <p class="b b-lg">French monks bottled wine before fermentation finished. Cold put the yeast to sleep. Spring woke it back up.</p>
+    <p class="b b-sm" style="margin-top:7px">The result: spontaneous bubbles.</p>
+  </div>
+  <div class="logo-corner"><span class="logo">W&W</span></div>
+</div>
+<span class="num">02 — History</span>
+</div>
+
+<!-- 03 — BEER CAP -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back3.jpg'); background-position: center top;"></div>
+  <div class="scrim-bottom"></div>
+  <div class="bot">
+    <div class="badge">How to spot it</div>
+    <div class="d d-lg">Beer cap.<br>Not cork.</div>
+    <span class="rule"></span>
+    <p class="b b-lg">Bottled mid-fermentation. Dead yeast stays inside. Cloudy, raw, unfiltered — by design.</p>
+  </div>
+  <div class="logo-corner"><span class="logo">W&W</span></div>
+</div>
+<span class="num">03 — How to spot it</span>
+</div>
+
+<!-- 04 — COMPARISON -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back4.jpg'); background-position: center;"></div>
+  <div class="mid">
+    <span class="ov">Pét-Nat vs Champagne</span>
+    <div class="d d-md">Same bubbles.</div>
+    <div class="d d-md" style="color:var(--amber)">Different soul.</div>
+    <div class="cmp">
+      <span class="cmp-hd cmp-left">Champagne</span>
+      <div class="cmp-div"></div>
+      <span class="cmp-hd a cmp-right" style="font-size:14px; letter-spacing:0.05em">?</span>
+      <span class="cmp-item cmp-left">2 fermentations</span>
+      <span class="cmp-item a cmp-right">1 fermentation</span>
+      <span class="cmp-item cmp-left">5–6 atm</span>
+      <span class="cmp-item a cmp-right">2–3 atm</span>
+      <span class="cmp-item cmp-left">Clear &amp; precise</span>
+      <span class="cmp-item a cmp-right">Cloudy &amp; wild</span>
+    </div>
+    <p class="cmp-foot">Lower alcohol. Softer bubbles. Nothing added.</p>
+  </div>
+  <div class="logo-corner"><span class="logo">W&W</span></div>
+</div>
+<span class="num">04 — Comparison</span>
+</div>
+
+<!-- 05 — REVEAL -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back5.jpg'); background-position: center top;"></div>
+  <div class="scrim-top"></div>
+  <div class="scrim-bottom"></div>
+  <div class="top">
+    <span class="ov">Pétillant Naturel</span>
+    <div class="d d-xl">Pét-Nat.</div>
+  </div>
+  <div class="bot">
+    <p class="h h-lg">Natural. Unfiltered. Alive.</p>
+    <p class="b b-sm" style="margin-top:6px">We have it. Come try.</p>
+  </div>
+  <div class="logo-corner"><span class="logo">Wine & Whiskey · Phuket</span></div>
+</div>
+<span class="num">05 — Reveal</span>
+</div>
+
+<!-- 06 — CLOSING -->
+<div class="wrap">
+<div class="slide">
+  <div class="bg" style="background-image:url('back4.jpg'); background-position: center;"></div>
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: 0 40px;">
+    <div style="width:36px; height:1px; background:var(--red); margin-bottom:22px;"></div>
+    <div class="d d-xl" style="line-height:0.88; text-align:center">Wine<br><span style="color:var(--red)">&</span><br>Whiskey</div>
+    <div style="width:36px; height:1px; background:var(--graphite); margin: 16px 0;"></div>
+    <span style="font-family:'Inter',sans-serif; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:var(--amber)">Rawai · Phuket</span>
+    <p style="font-family:'DM Sans',sans-serif; font-size:15px; font-weight:500; color:var(--stone); margin-top:24px; line-height:1.5">See you soon.</p>
+  </div>
+  <div style="position:absolute; bottom:18px; right:0; left:0; text-align:center">
+    <span style="font-family:'Inter',sans-serif; font-size:9px; color:var(--graphite); letter-spacing:0.1em">Open daily 11:00 am – 10:00 pm</span>
+  </div>
+</div>
+<span class="num">06 — Closing</span>
+</div>
+
+</body>
+</html>
