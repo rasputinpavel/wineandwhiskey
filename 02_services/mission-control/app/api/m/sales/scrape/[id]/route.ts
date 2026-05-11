@@ -5,7 +5,9 @@
 import { NextResponse } from 'next/server'
 import { sbSales } from '@/lib/supabase'
 import { getScrapeRun } from '@/lib/sales/queries'
-import { getRunStatus, isTerminal, apifyConfigured } from '@/lib/sales/apify-places'
+import {
+  getRunStatus, getDatasetItemCount, isTerminal, apifyConfigured,
+} from '@/lib/sales/apify-places'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -13,9 +15,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const run = await getScrapeRun(id)
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  // If already in a terminal app-side state, skip the live poll.
-  const terminal: typeof run.status[] = ['succeeded', 'failed', 'aborted', 'imported']
-  if (terminal.includes(run.status) || !run.apify_run_id || !apifyConfigured()) {
+  // 'imported' is the only truly final state — no point polling after that.
+  // For 'succeeded' / 'failed' / 'aborted' we still backfill scraped_count if
+  // we never managed to capture it (race between status flip and stats latency).
+  if (run.status === 'imported' || !run.apify_run_id || !apifyConfigured()) {
+    return NextResponse.json({ run })
+  }
+
+  // For terminal-but-not-imported runs with scraped_count=0, fetch dataset size directly.
+  const terminal: typeof run.status[] = ['succeeded', 'failed', 'aborted']
+  if (terminal.includes(run.status)) {
+    if (run.status === 'succeeded' && run.scraped_count === 0 && run.apify_dataset_id) {
+      const count = await getDatasetItemCount(run.apify_dataset_id).catch(() => null)
+      if (count !== null) {
+        await sbSales.from('scrape_run').update({ scraped_count: count }).eq('id', id)
+        run.scraped_count = count
+      }
+    }
     return NextResponse.json({ run })
   }
 
@@ -25,15 +41,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const nextStatus =
         live.status === 'SUCCEEDED' ? 'succeeded' :
         live.status === 'ABORTED'   ? 'aborted'   : 'failed'
-      // Persist datasetItemCount as scraped_count so the UI can show "60 places
-      // ready to import" *before* the user clicks Import. The /import route
-      // will overwrite this with the actual post-filter count.
       const patch: Record<string, unknown> = {
         status: nextStatus,
         finished_at: new Date().toISOString(),
       }
-      if (nextStatus === 'succeeded' && live.stats?.datasetItemCount != null) {
-        patch.scraped_count = live.stats.datasetItemCount
+      // /datasets/{id} is authoritative — /actor-runs/{id}.stats lags briefly
+      // after status flips to SUCCEEDED, which is why scraped_count was 0 before.
+      if (nextStatus === 'succeeded' && run.apify_dataset_id) {
+        const count = await getDatasetItemCount(run.apify_dataset_id).catch(() => null)
+        if (count !== null) patch.scraped_count = count
       }
       const { error } = await sbSales.from('scrape_run').update(patch).eq('id', id)
       if (error) console.warn('[scrape status] patch failed:', error.message)

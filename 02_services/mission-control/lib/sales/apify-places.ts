@@ -97,6 +97,18 @@ export async function getRunStatus(runId: string): Promise<{ status: RunStatus; 
   return { status: json.data.status, stats: json.data.stats }
 }
 
+// Authoritative dataset size — /actor-runs/{id}.stats.datasetItemCount lags
+// briefly after the run flips to SUCCEEDED. /datasets/{id} is always current.
+export async function getDatasetItemCount(datasetId: string): Promise<number | null> {
+  if (!APIFY_TOKEN) throw new ApifyError('APIFY_TOKEN not configured', false)
+  const res = await fetch(`${BASE}/datasets/${datasetId}`, {
+    headers: { Authorization: `Bearer ${APIFY_TOKEN}` },
+  })
+  if (!res.ok) return null
+  const json = await res.json() as { data: { itemCount?: number } }
+  return json.data.itemCount ?? null
+}
+
 export async function fetchDatasetItems(datasetId: string): Promise<ApifyPlaceItem[]> {
   if (!APIFY_TOKEN) throw new ApifyError('APIFY_TOKEN not configured', false)
   const res = await fetch(`${BASE}/datasets/${datasetId}/items?clean=true`, {
