@@ -3,8 +3,18 @@
  *
  * Pulls Tax Invoices + Receipts from FlowAccount → inventory schema.
  *
- * Window: by default last 90 days (cover normal payment terms + buffer).
- * Override via FLOW_FROM=YYYY-MM-DD FLOW_TO=YYYY-MM-DD.
+ * Strategy (fast, low blast radius):
+ *   1. Listing — only the first few pages of FA's invoice/receipt grids
+ *      (sorted newest-first). Catches brand-new invoices and recent status
+ *      changes. We DO NOT walk the whole history every run.
+ *   2. Stragglers — read DB for invoices we still believe are outstanding
+ *      (status NOT IN Paid/Cancelled) but that weren't on the listing pages.
+ *      For each, open its detail page via the saved detail_url to refresh
+ *      status + line items. Typically ~10–15 rows for a stable B2B account.
+ *
+ * Window default: 30 days. Window only affects how the listing rows are
+ * filtered — straggler refresh ignores it. Override with
+ * FLOW_FROM=YYYY-MM-DD FLOW_TO=YYYY-MM-DD when you need a manual backfill.
  *
  * Matching:
  *   - Each invoice line item is matched to inventory.sku by the shared
@@ -40,10 +50,15 @@ const supabase = createClient(
 function defaultWindow(): { from: string; to: string } {
   const to = new Date();
   const from = new Date(to);
-  from.setDate(from.getDate() - 90);
+  from.setDate(from.getDate() - 30);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   return { from: iso(from), to: iso(to) };
 }
+
+// First N pages of FA's grid. Sorted newest-first; 3 pages × ~20 rows = ~60
+// most recent invoices. Older outstanding stuff is picked up via DB
+// stragglers, so we don't need to walk the whole history.
+const LISTING_PAGES = 3;
 
 async function logStart(source: string) {
   const { data } = await supabase
@@ -222,29 +237,51 @@ async function main() {
 
   const session = await openFlow();
   try {
-    const invoices = await listInvoices(session, fromIso, toIso);
+    // ─── Phase 1: recent listing ───────────────────────────────────────
+    // Just the first few pages — sorted newest-first, so this catches new
+    // invoices + any recent status changes. Walking 16 pages was making
+    // CI flaky and slow without buying us anything.
+    const listed = await listInvoices(session, fromIso, toIso, LISTING_PAGES);
+    console.log(`[inv-flow] ${listed.length} invoices on first ${LISTING_PAGES} listing page(s)`);
 
-    // Listing can return 0 rows for two reasons:
-    //   (a) genuinely no invoices in the window — rare but valid, e.g. a
-    //       narrow workflow_dispatch range.
-    //   (b) the page didn't render — session expired mid-run, DOM changed,
-    //       Angular still loading. CI used to silently log ok=true rows_in=0
-    //       in this case; we now fail loud so debug screenshots upload.
-    // (a) is hard to distinguish, so we trust the default 90-day window:
-    // there are always recent B2B invoices, so 0 rows in 90 days = (b).
+    // ─── Phase 2: stragglers from DB ───────────────────────────────────
+    // Anything we still believe is outstanding but wasn't on those pages.
+    // For each, we'll re-open its detail page below to refresh status + lines.
+    const listedNumbers = new Set(listed.map(i => i.number));
+    const { data: dbOutstanding } = await supabase
+      .from("flowaccount_invoice")
+      .select("number, customer_name, issued_at, status, total, detail_url")
+      .not("status", "in", '("Paid","Cancelled")');
+    const stragglers: FlowInvoice[] = (dbOutstanding ?? [])
+      .filter(r => !listedNumbers.has(r.number) && !!r.detail_url)
+      .map(r => ({
+        number:    r.number,
+        issueDate: r.issued_at,
+        client:    r.customer_name,
+        amount:    Number(r.total),
+        status:    r.status,
+        detailUrl: r.detail_url,
+        linkedReceipts: [],
+      }));
+    console.log(`[inv-flow] ${stragglers.length} outstanding stragglers from DB to refresh`);
+
+    const invoices = [...listed, ...stragglers];
+
+    // Empty-listing guard, but only if EVERY source is empty — auth/DOM
+    // failure rather than a quiet account. A stable account with the
+    // baseline already synced will have stragglers even when the listing
+    // is empty.
     const isDefaultWindow = !process.env.FLOW_FROM && !process.env.FLOW_TO;
     if (invoices.length === 0 && isDefaultWindow) {
       throw new Error(
-        "FlowAccount listing returned 0 invoices for the default 90-day window — " +
-        "DOM probably didn't render (session bounced through workspace picker, or ngx-datatable not yet loaded). " +
+        "FlowAccount sync turned up nothing — neither the recent listing nor the " +
+        "DB straggler set returned anything. Likely auth / DOM failure. " +
         "Check debug-*.png artifacts."
       );
     }
 
-    // Skip detail-page enrichment for invoices that were already Paid in our
-    // DB and are still Paid in the listing — they don't change, and detail
-    // scraping is the slow part (~30s per invoice). For the rest (new,
-    // outstanding, or status-changed) we fetch line items as before.
+    // ─── Phase 3: enrich only what needs it ────────────────────────────
+    // Skip Paid-in-DB-and-still-Paid invoices entirely — they don't change.
     const { data: existingRows } = await supabase
       .from("flowaccount_invoice")
       .select("number, status")
@@ -258,13 +295,17 @@ async function main() {
       if (i.status !== "Paid")   return true;   // was Paid, now not — refresh
       return false;                              // already Paid, still Paid → skip
     });
-    console.log(`[inv-flow] ${invoices.length} invoices listed, ${toEnrich.length} need detail-page enrichment`);
+    console.log(`[inv-flow] ${toEnrich.length} invoices need detail-page enrichment`);
 
     await enrichInvoicesWithItems(session, toEnrich);
-    const receipts = await listReceipts(session, fromIso, toIso);
+
+    // ─── Phase 4: receipts (capped) ────────────────────────────────────
+    const receipts = await listReceipts(session, fromIso, toIso, LISTING_PAGES);
+    console.log(`[inv-flow] ${receipts.length} receipts on first ${LISTING_PAGES} listing page(s)`);
+
     await syncInvoices(invoices, skus);
     await syncReceipts(invoices, receipts);
-    console.log(`[inv-flow] done — ${invoices.length} invoices, ${receipts.length} receipts`);
+    console.log(`[inv-flow] done — ${listed.length} listed + ${stragglers.length} stragglers, ${receipts.length} receipts`);
   } finally {
     await closeFlow(session);
   }

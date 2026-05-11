@@ -309,15 +309,21 @@ async function paginateAll(
 //   รอเก็บเงิน      = Awaiting payment (= Unpaid, just a different wording FA uses)
 //   ยกเลิก          = Cancelled
 //   เกินกำหนด       = Overdue (still unpaid, past due date)
-function normalizeFlowStatus(thai: string): string {
-  const s = thai.replace(/\s+/g, "");
+// Also accepts English strings the detail-page API may return.
+function normalizeFlowStatus(raw: string): string {
+  const s = String(raw ?? "").replace(/\s+/g, "");
   if (!s) return "";
   if (s.includes("เปิดใบเสร็จแล้ว")) return "Paid";
   if (s.includes("รอดำเนินการ"))    return "Unpaid";
   if (s.includes("รอเก็บเงิน"))     return "Unpaid";
   if (s.includes("เกินกำหนด"))      return "Overdue";
   if (s.includes("ยกเลิก"))         return "Cancelled";
-  return thai.trim();
+  const en = s.toLowerCase();
+  if (en === "paid" || en === "receiptissued")      return "Paid";
+  if (en === "void" || en === "cancelled" || en === "canceled") return "Cancelled";
+  if (en === "overdue")                              return "Overdue";
+  if (en === "open" || en === "pending" || en === "unpaid" || en === "awaitingpayment") return "Unpaid";
+  return String(raw).trim();
 }
 
 // Tax invoice grid columns (indexed by [role="cell"]):
@@ -330,8 +336,13 @@ function normalizeFlowStatus(thai: string): string {
 // (the numeric ID used in detail URLs, e.g. /invoices/87955256). We piggyback a
 // network listener to capture recordId-by-serial so that detailUrl can be
 // constructed without per-row click-through.
-export async function listInvoices(s: FlowSession, fromIso: string, toIso: string): Promise<FlowInvoice[]> {
-  console.log(`[flow] Listing invoices ${fromIso} → ${toIso}...`);
+export async function listInvoices(
+  s: FlowSession,
+  fromIso: string,
+  toIso: string,
+  maxPages = 60,
+): Promise<FlowInvoice[]> {
+  console.log(`[flow] Listing invoices ${fromIso} → ${toIso} (≤${maxPages} pages)...`);
 
   const recordIdBySerial = new Map<string, number>();
   const responseListener = async (resp: import("playwright").Response) => {
@@ -357,8 +368,12 @@ export async function listInvoices(s: FlowSession, fromIso: string, toIso: strin
     if (DEBUG) await s.page.screenshot({ path: dbgPath("flow-debug-invoice-list.png"), fullPage: true });
 
     const invoices: FlowInvoice[] = [];
+    // Walk every page. Previously we'd stop early when seeing rows older than
+    // fromIso, but that relied on the listing being sorted DESC by date. When
+    // FA's UI lands you anywhere else (e.g. last page from a persisted state)
+    // the early-stop fires on page 1 and we miss everything. Cheaper to just
+    // paginate all ~16 pages and filter in-memory.
     await paginateAll(s.page, (rows) => {
-      let pageHasOlder = false;
       for (const cells of rows) {
         if (cells.length < 8) continue;
         const issueDate = parseDate(cells[1]);
@@ -367,12 +382,12 @@ export async function listInvoices(s: FlowSession, fromIso: string, toIso: strin
         const amount    = parseAmount(cells[5]);
         const status    = normalizeFlowStatus(cells[7]);
         if (!number || !issueDate || amount <= 0) continue;
-        if (issueDate < fromIso) { pageHasOlder = true; continue; }
+        if (issueDate < fromIso) continue;
         if (issueDate > toIso) continue;
         invoices.push({ number, issueDate, client, amount, status, detailUrl: "", linkedReceipts: [] });
       }
-      return !pageHasOlder;
-    });
+      return true;
+    }, maxPages);
 
     // Resolve detailUrl from the API-captured map; falls back to "" if not seen.
     for (const inv of invoices) {
@@ -489,13 +504,29 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
     // Returns { data: { list: [{ productItems: [...] }, ...] } }.
     // Each productItem has: name (description), productQty, productTotal, productPricePerOne, ...
     let items: any[] = [];
+    let statusFromApi: string | null = null;
     for (const { url, body } of captured) {
       if (!/api-core-canary.*tax-invoices\/\d+/.test(url)) continue;
       const list: any[] = body?.data?.list ?? [];
       for (const doc of list) {
         if (Array.isArray(doc?.productItems)) items.push(...doc.productItems);
+        // Best-effort status extraction. Exact field name varies across FA
+        // API versions; try the common shapes and accept the first non-empty.
+        if (!statusFromApi) {
+          const cand =
+            doc?.paymentStatusName ?? doc?.paymentStatus ??
+            doc?.documentStatusName ?? doc?.documentStatus ??
+            doc?.statusName ?? doc?.status;
+          if (cand !== undefined && cand !== null && cand !== "") {
+            statusFromApi = String(cand);
+          }
+        }
       }
       if (items.length) break;
+    }
+    if (statusFromApi) {
+      const normalized = normalizeFlowStatus(statusFromApi);
+      if (normalized) inv.status = normalized;
     }
     if (DEBUG && items.length === 0) {
       console.warn(`[flow] items: no productItems for ${inv.number}; captured ${captured.length} responses`);
@@ -519,8 +550,13 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
 // receipt to the originating tax invoice. The popover content (with the
 // invoice number) is rendered into the row HTML, so we don't need to click
 // through to a detail page — just regex-scan innerHTML for `INV\d+`.
-export async function listReceipts(s: FlowSession, fromIso: string, toIso: string): Promise<FlowReceipt[]> {
-  console.log(`[flow] Listing receipts ${fromIso} → ${toIso}...`);
+export async function listReceipts(
+  s: FlowSession,
+  fromIso: string,
+  toIso: string,
+  maxPages = 60,
+): Promise<FlowReceipt[]> {
+  console.log(`[flow] Listing receipts ${fromIso} → ${toIso} (≤${maxPages} pages)...`);
   await gotoList(s.page, "/receipts");
   if (DEBUG) await s.page.screenshot({ path: dbgPath("flow-debug-receipt-list.png"), fullPage: true });
 
@@ -530,7 +566,6 @@ export async function listReceipts(s: FlowSession, fromIso: string, toIso: strin
   // `paginateAll(rows)` callback (which only sees text), so do the per-row
   // walk inline and call paginateAll just for page advancement.
   await paginateAll(s.page, async () => {
-    let pageHasOlder = false;
     const rowLocators = s.page.locator('[role="row"].datatable-body-row');
     const n = await rowLocators.count();
     for (let i = 0; i < n; i++) {
@@ -543,7 +578,7 @@ export async function listReceipts(s: FlowSession, fromIso: string, toIso: strin
       const client = cells[3].trim();
       const amount = parseAmount(cells[4]);
       if (!number || !date || amount <= 0) continue;
-      if (date < fromIso) { pageHasOlder = true; continue; }
+      if (date < fromIso) continue;
       if (date > toIso) continue;
       // Pull INV-numbered references from the row HTML, dedup, drop self.
       const html = await row.innerHTML();
@@ -551,8 +586,8 @@ export async function listReceipts(s: FlowSession, fromIso: string, toIso: strin
         .filter(inv => inv !== number);
       out.push({ number, date, client, amount, appliedInvoices: refs });
     }
-    return !pageHasOlder;
-  });
+    return true;
+  }, maxPages);
 
   const seen = new Set<string>();
   const dedup = out.filter(r => seen.has(r.number) ? false : (seen.add(r.number), true));
