@@ -90,7 +90,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         }
       />
       <div className="flex-1 overflow-y-auto bg-warm-white">
-        <div className="max-w-[1400px] mx-auto px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4">
 
           {staleCount > 0 && (
             <div className="text-xs bg-wine-red/8 border border-wine-red/30 text-wine-red rounded-sm px-3 py-2">
