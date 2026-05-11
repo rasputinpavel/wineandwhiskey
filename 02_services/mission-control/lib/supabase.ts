@@ -75,6 +75,7 @@ export type B2bCustomer = {
   credit_limit: number | null
   is_consignment: boolean
   notes: string | null
+  parent_id: string | null     // если задан — это branch, head office = customer с этим id
   created_at: string
   updated_at: string
 }
