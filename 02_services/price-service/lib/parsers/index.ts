@@ -23,6 +23,7 @@ import { isPhop, parsePhop } from './phop'
 import { isHarvest, parseHarvest } from './harvest'
 import { isUniversal, parseUniversal } from './universal'
 import { isVinumLector, parseVinumLector } from './vinum-lector'
+import { isIdeal, parseIdeal } from './ideal'
 import { isWineGarage, parseWineGarage } from './wine-garage'
 import {
   isWineGallery, parseWineGallery,
@@ -69,6 +70,15 @@ export const PARSERS: Parser[] = [
     fileTypes: ['pdf'],
     detect: (buf, fn) => isVinumLector(buf, fn),
     run: (buf, fn, _m, cb) => parseVinumLector(buf, fn, cb).then(async (r) => {
+      await cb(95, 'inserting')
+      return r
+    }),
+  },
+  {
+    id: 'ideal',
+    fileTypes: ['pdf'],
+    detect: (buf, fn) => isIdeal(buf, fn),
+    run: (buf, fn, _m, cb) => parseIdeal(buf, fn, cb).then(async (r) => {
       await cb(95, 'inserting')
       return r
     }),
