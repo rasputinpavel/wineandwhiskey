@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { sbInventory, type B2bCustomer } from '@/lib/supabase'
-import { PaneHeader } from '@/components/shell/PaneHeader'
-import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
 import { fmtDate } from '@/lib/fmt'
@@ -19,14 +17,13 @@ export default async function CustomerDetail({
 }) {
   const { id }   = await params
   const sp       = await searchParams
-  const item     = findItem('customers')!
 
   const { data: cust, error: custErr } = await sbInventory
     .from('b2b_customer')
     .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes')
     .eq('id', id).maybeSingle()
-  if (custErr) return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={custErr.message} /></div></>
-  if (!cust)   return <><PaneHeader item={item} /><div className="p-6"><div className="text-graphite">Customer not found.</div></div></>
+  if (custErr) return <div className="p-6"><SchemaError error={custErr.message} /></div>
+  if (!cust)   return <div className="p-6"><div className="text-graphite">Customer not found.</div></div>
   const c = cust as B2bCustomer
 
   // Self-heal: if customer is consignment but the location row never got
@@ -46,10 +43,7 @@ export default async function CustomerDetail({
 
   return (
     <>
-      <PaneHeader item={item} />
-      <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
+      <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{c.flowaccount_name}</h2>
           <div className="text-xs text-graphite mt-1 mb-5">
             {c.is_consignment ? 'Consignment' : 'Regular'} · Terms {c.payment_terms_days} days
@@ -66,18 +60,16 @@ export default async function CustomerDetail({
             )}
           </nav>
 
-          {tab === 'invoices'   && <InvoicesPanel   customerId={id} sp={sp} />}
+          {tab === 'invoices'   && <InvoicesPanel   customerId={id} termsDays={c.payment_terms_days ?? 0} sp={sp} />}
           {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} sp={sp} />}
           {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} sp={sp} />}
 
-          {!c.is_consignment && tab !== 'invoices' && (
-            <div className="text-sm text-graphite">
-              Этот клиент Regular. Чтобы появилась вкладка Deliveries — отметь его как Consignment в{' '}
-              <Link href="/m/customers" className="text-wine-red hover:underline">списке клиентов</Link>.
-            </div>
-          )}
+      {!c.is_consignment && tab !== 'invoices' && (
+        <div className="text-sm text-graphite">
+          Этот клиент Regular. Чтобы появилась вкладка Deliveries — отметь его как Consignment в{' '}
+          <Link href="/m/customers" className="text-wine-red hover:underline">списке клиентов</Link>.
         </div>
-      </div>
+      )}
     </>
   )
 }
@@ -96,20 +88,27 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 }
 
 // ─── Invoices panel (mirror of FA) ──────────────────────────────────────
-async function InvoicesPanel({ customerId, sp }: { customerId: string; sp: SearchParams }) {
+async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string; termsDays: number; sp: SearchParams }) {
   const { data, error } = await sbInventory
     .from('flowaccount_invoice')
     .select('id, number, issued_at, due_at, status, total, detail_url')
     .eq('customer_id', customerId)
     .limit(200)
   if (error) return <SchemaError error={error.message} />
-  let rows = (data ?? []) as any[]
+  // ВАЖНО: r.due_at от FlowAccount часто приходит пустой строкой '' (не null),
+  // поэтому используем || а не ?? — иначе computedDue остаётся '' и Due
+  // отрисовывается как «—».
+  let rows = ((data ?? []) as any[]).map(r => ({
+    ...r,
+    computedDue: r.due_at || (termsDays > 0 && r.issued_at ? addDays(r.issued_at, termsDays) : null),
+  }))
   if (rows.length === 0) return <div className="text-sm text-graphite">Инвойсов нет.</div>
 
   const sort = parseSort(sp.sort, ['number','issued_at','due_at','status','total'] as const, 'issued_at')
   const dir: SortDir = parseDir(sp.dir, 'desc')
   rows = [...rows].sort(cmpBy(r => {
-    if (sort === 'total') return Number(r.total ?? 0)
+    if (sort === 'total')  return Number(r.total ?? 0)
+    if (sort === 'due_at') return (r.computedDue as string | null) ?? '9999-12-31'
     return r[sort] as string
   }, dir))
 
@@ -134,7 +133,7 @@ async function InvoicesPanel({ customerId, sp }: { customerId: string; sp: Searc
                   : r.number}
               </td>
               <td className="py-2 px-4">{fmtDate(r.issued_at)}</td>
-              <td className="py-2 px-4">{fmtDate(r.due_at)}</td>
+              <td className="py-2 px-4">{fmtDate(r.computedDue)}</td>
               <td className="py-2 px-4">{r.status}</td>
               <td className="py-2 px-4 text-right tabular-nums">฿{Number(r.total).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
             </tr>
@@ -299,4 +298,10 @@ async function BalancePanel({ customerId, sp }: { customerId: string; sp: Search
       </div>
     </>
   )
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
 }

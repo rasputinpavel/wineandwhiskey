@@ -17,6 +17,8 @@ type SearchParams = {
   category?: string
   sort?: SortKey
   dir?: 'asc' | 'desc'
+  in_stock?: string      // 'on' если галка отмечена
+  _submitted?: string    // '1' маркер того, что форма submit-нута
 }
 
 export default async function InventoryPage({
@@ -29,6 +31,9 @@ export default async function InventoryPage({
   const dir = sp.dir === 'desc' ? 'desc' : DEFAULT_DIR
   const query = (sp.q ?? '').trim()
   const categoryFilter = (sp.category ?? '').trim()
+  // «Только в наличии» — дефолт ON. Если форма submit-нута и галка не пришла,
+  // значит пользователь её снял → показываем всё.
+  const inStockOnly = sp._submitted !== '1' || sp.in_stock === 'on'
 
   // Build the query — Postgres doesn't have a great way to fetch distinct
   // categories cheaply, so we do two passes: filtered breakdown for the
@@ -42,6 +47,9 @@ export default async function InventoryPage({
   }
   if (categoryFilter) {
     req = req.eq('category', categoryFilter)
+  }
+  if (inStockOnly) {
+    req = req.or('on_hand.gt.0,in_store.gt.0,b2b_in_transit.gt.0,on_consignment.gt.0')
   }
   const { data, error } = await req.limit(500)
   const rows = (data ?? []) as SkuBreakdown[]
@@ -71,7 +79,7 @@ export default async function InventoryPage({
 
       {/* Filters row */}
       <div className="flex items-end gap-3 mb-4 flex-wrap text-xs">
-        <form className="flex items-end gap-2">
+        <form className="flex items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="overline text-graphite">Category</span>
             <select
@@ -83,10 +91,21 @@ export default async function InventoryPage({
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
+          <label className="flex items-center gap-1.5 py-1.5 cursor-pointer" title="Скрыть SKU где все колонки = 0">
+            <input
+              type="checkbox"
+              name="in_stock"
+              defaultChecked={inStockOnly}
+              className="accent-wine-red"
+            />
+            <span className="text-deep-black">Только в наличии</span>
+          </label>
           {/* Preserve current query + sort when applying filter */}
           {query && <input type="hidden" name="q" value={query} />}
           <input type="hidden" name="sort" value={sort} />
           <input type="hidden" name="dir" value={dir} />
+          {/* Маркер submit'а — позволяет отличить «дефолт» от «снял галку» */}
+          <input type="hidden" name="_submitted" value="1" />
           <button className="px-3 py-1.5 bg-wine-red hover:bg-burgundy-deep text-warm-white rounded-sm">Apply</button>
         </form>
         {(categoryFilter || query) && (
@@ -106,13 +125,13 @@ export default async function InventoryPage({
           <table className="w-full text-[13px]">
             <thead className="text-graphite border-b border-pale-stone bg-cream/40">
               <tr>
-                <SortHeader col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
-                <SortHeader col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
-                <SortHeader col="category"              label="Category"       sort={sort} dir={dir} sp={sp} keep={['q','category']} firstDir="asc" />
-                <SortHeader col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
-                <SortHeader col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
-                <SortHeader col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
-                <SortHeader col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} keep={['q','category']} align="right" />
+                <SortHeader col="loyverse_product_code" label="Code"           sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} firstDir="asc" />
+                <SortHeader col="name"                  label="Name"           sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} firstDir="asc" />
+                <SortHeader col="category"              label="Category"       sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} firstDir="asc" />
+                <SortHeader col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
+                <SortHeader col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
+                <SortHeader col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
+                <SortHeader col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
               </tr>
             </thead>
             <tbody>

@@ -4,18 +4,17 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const TABS = [
-  { href: '/m/inventory',                label: 'Breakdown' },
-  { href: '/m/inventory/consignment',    label: 'Consignment' },
-  { href: '/m/inventory/admin/unmapped', label: 'Unmapped lines' },
+  { href: '/m/customers',             label: 'List' },
+  { href: '/m/customers/outstanding', label: 'Outstanding Invoices' },
 ]
 
-export function InventoryNav() {
+export function CustomersNav() {
   const pathname = usePathname() || ''
   return (
     <nav className="flex gap-1 px-6 py-2 bg-warm-white border-b border-pale-stone">
       {TABS.map(t => {
-        const active = t.href === '/m/inventory'
-          ? pathname === t.href
+        const active = t.href === '/m/customers'
+          ? pathname === t.href || /^\/m\/customers\/[^/]+$/.test(pathname)
           : pathname === t.href || pathname.startsWith(t.href + '/')
         return (
           <Link

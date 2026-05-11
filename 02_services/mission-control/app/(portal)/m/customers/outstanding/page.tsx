@@ -80,7 +80,8 @@ export default async function B2bPage({
   // Enrich each invoice with computed due-date and days-open.
   let invoices: Invoice[] = ((invRes.data ?? []) as any[]).map(inv => {
     const terms = inv.customer_id ? termsByCustomer[inv.customer_id] ?? 0 : 0
-    const computedDue = inv.due_at ?? (terms > 0 ? addDays(inv.issued_at, terms) : null)
+    // ВАЖНО: FlowAccount часто возвращает due_at = '' (не null), || ловит оба случая.
+    const computedDue = inv.due_at || (terms > 0 ? addDays(inv.issued_at, terms) : null)
     return {
       ...inv,
       computedDue,
@@ -169,7 +170,7 @@ export default async function B2bPage({
           <button type="submit" className="px-3 py-1.5 bg-wine-red hover:bg-burgundy-deep text-warm-white rounded-sm">
             Apply
           </button>
-          <Link href="/m/inventory/b2b" className="px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm">
+          <Link href="/m/customers/outstanding" className="px-3 py-1.5 border border-pale-stone hover:border-wine-red hover:text-wine-red text-graphite rounded-sm">
             Reset
           </Link>
         </div>

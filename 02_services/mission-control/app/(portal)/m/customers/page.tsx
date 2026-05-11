@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { sbInventory, type B2bCustomer } from '@/lib/supabase'
-import { PaneHeader } from '@/components/shell/PaneHeader'
-import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CustomerTermsCell, CustomerConsignmentCell } from '@/components/modules/customers/CustomerEditCell'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
@@ -41,7 +39,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const sort: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : 'name'
   const dir = sp.dir === 'desc' ? 'desc' : 'asc'
 
-  const item = findItem('customers')!
   const today = new Date()
   const todayISO = today.toISOString().slice(0, 10)
   const thisYear = today.getUTCFullYear()
@@ -52,7 +49,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes')
     .order('flowaccount_name')
   if (custErr) {
-    return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={custErr.message} /></div></>
+    return <div className="p-6"><SchemaError error={custErr.message} /></div>
   }
 
   const all = (customers ?? []) as B2bCustomer[]
@@ -63,7 +60,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     .select('customer_id, total, issued_at, status')
     .neq('status', 'Cancelled')
   if (invErr) {
-    return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={invErr.message} /></div></>
+    return <div className="p-6"><SchemaError error={invErr.message} /></div>
   }
 
   const stats = new Map<string, CustomerStats>()
@@ -118,20 +115,17 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PaneHeader item={item} />
-      <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-            <h2 className="font-heading text-xl text-deep-black">B2B Customers</h2>
-            <DataFreshness sources={['flowaccount_invoices']} />
-          </div>
-          <p className="text-graphite text-sm mb-4 max-w-3xl">
-            Условия оплаты и пометка «consignment» задаются здесь. Используются на странице{' '}
-            <a href="/m/inventory/b2b" className="text-wine-red hover:underline">B2B Outstanding</a>{' '}
-            для расчёта <code className="font-mono text-xs">due = issued + terms</code>.
-            Колонки <span className="text-deep-black">{thisYear} YTD</span> и{' '}
-            <span className="text-deep-black">{lastYear} total</span> — суммы всех инвойсов кроме Cancelled.
-          </p>
+      <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">B2B Customers</h2>
+        <DataFreshness sources={['flowaccount_invoices']} />
+      </div>
+      <p className="text-graphite text-sm mb-4 max-w-3xl">
+        Условия оплаты и пометка «consignment» задаются здесь. Используются на вкладке{' '}
+        <a href="/m/customers/outstanding" className="text-wine-red hover:underline">Outstanding Invoices</a>{' '}
+        для расчёта <code className="font-mono text-xs">due = issued + terms</code>.
+        Колонки <span className="text-deep-black">{thisYear} YTD</span> и{' '}
+        <span className="text-deep-black">{lastYear} total</span> — суммы всех инвойсов кроме Cancelled.
+      </p>
 
           <div className="flex items-center gap-3 mb-4 flex-wrap">
             <div className="flex gap-1 text-xs">
@@ -213,8 +207,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
     </>
   )
 }
