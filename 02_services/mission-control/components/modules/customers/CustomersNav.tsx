@@ -9,13 +9,19 @@ const TABS = [
   { href: '/m/customers/tax-invoices', label: 'Tax Invoices' },
 ]
 
+// Подмаршруты, которые не должны активировать таб «List» (drill-down [id] —
+// должен; названные секции — нет).
+const SUB_ROUTES = new Set(['outstanding', 'tax-invoices'])
+
 export function CustomersNav() {
   const pathname = usePathname() || ''
   return (
     <nav className="flex gap-1 px-6 py-2 bg-warm-white border-b border-pale-stone">
       {TABS.map(t => {
+        const detailMatch = pathname.match(/^\/m\/customers\/([^/]+)$/)
+        const isDetail = detailMatch && !SUB_ROUTES.has(detailMatch[1])
         const active = t.href === '/m/customers'
-          ? pathname === t.href || /^\/m\/customers\/[^/]+$/.test(pathname)
+          ? pathname === t.href || isDetail
           : pathname === t.href || pathname.startsWith(t.href + '/')
         return (
           <Link

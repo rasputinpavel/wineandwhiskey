@@ -21,26 +21,30 @@ function bangkokYM(): string {
 
 export default async function TaxInvoicesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
-  const month = (sp.month && /^\d{4}-\d{2}$/.test(sp.month)) ? sp.month : bangkokYM()
+  // month = 'all' → показывать все инвойсы, без срезки по дате
+  const monthRaw = sp.month ?? bangkokYM()
+  const allMonths = monthRaw === 'all'
+  const month = allMonths ? bangkokYM() : (/^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : bangkokYM())
   const statusFilter = sp.status   ?? 'all'
   const excFilter    = sp.excluded ?? 'no'    // дефолтом скрываем кривые
   const q = (sp.q ?? '').trim()
 
-  // Month bounds
+  // Month bounds (используются только если выбран конкретный месяц)
   const [y, m] = month.split('-').map(Number)
   const from = `${y}-${String(m).padStart(2, '0')}-01`
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-  // Fetch invoices issued in month + customer terms for due-date computation
+  // Fetch invoices + customer terms for due-date computation.
+  // При month=all берём всё подряд (cap 1000); иначе режем по месяцу.
+  let invQ = sbInventory
+    .from('flowaccount_invoice')
+    .select('id, number, customer_id, customer_name, issued_at, due_at, status, total, detail_url, excluded')
+    .order('issued_at', { ascending: false })
+    .limit(allMonths ? 1000 : 500)
+  if (!allMonths) invQ = invQ.gte('issued_at', from).lte('issued_at', to)
   const [invRes, custRes] = await Promise.all([
-    sbInventory
-      .from('flowaccount_invoice')
-      .select('id, number, customer_id, customer_name, issued_at, due_at, status, total, detail_url, excluded')
-      .gte('issued_at', from)
-      .lte('issued_at', to)
-      .order('issued_at', { ascending: false })
-      .limit(500),
+    invQ,
     sbInventory
       .from('b2b_customer')
       .select('id, payment_terms_days'),
@@ -101,7 +105,9 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
   return (
     <>
       <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-        <h2 className="font-heading text-xl text-deep-black">Tax Invoices — {monthLabel(month)}</h2>
+        <h2 className="font-heading text-xl text-deep-black">
+          Tax Invoices — {allMonths ? 'All months' : monthLabel(month)}
+        </h2>
         <DataFreshness sources={['flowaccount_invoices']} />
       </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
@@ -137,13 +143,22 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
               keep={{ month, q, status: statusFilter }} paramKey="excluded" />
           </div>
 
-          {/* Month link grid */}
+          {/* Month link grid + All */}
           <div className="flex gap-1 mb-4 text-[11px] flex-wrap">
+            <Link
+              href="/m/customers/tax-invoices?month=all"
+              className={`px-2 py-1 rounded-sm border transition-colors ${
+                allMonths
+                  ? 'bg-wine-red text-warm-white border-wine-red'
+                  : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
+              }`}>
+              All months
+            </Link>
             {months.slice(0, 12).map(mm => (
               <Link key={mm}
                 href={`/m/customers/tax-invoices?month=${mm}`}
                 className={`px-2 py-1 rounded-sm border transition-colors ${
-                  mm === month
+                  mm === month && !allMonths
                     ? 'bg-wine-red text-warm-white border-wine-red'
                     : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
                 }`}>
