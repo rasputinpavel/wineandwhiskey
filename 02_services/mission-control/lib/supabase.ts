@@ -9,6 +9,11 @@ const key = process.env.SUPABASE_SERVICE_KEY!
 
 export const sbInventory = createClient(url, key, { db: { schema: 'inventory' } })
 
+// Sales CRM — leads, scrape runs, activity log. See migration 013_sales_crm.sql.
+// Schema `sales` must be added to "Exposed schemas" in Supabase settings or
+// PostgREST returns 404.
+export const sbSales = createClient(url, key, { db: { schema: 'sales' } })
+
 // Default `public` schema client — used for tables that live outside our
 // custom inventory schema (today: purchase_orders + purchase_order_items
 // populated by 03_automation/scrape_purchase_orders.ts).
