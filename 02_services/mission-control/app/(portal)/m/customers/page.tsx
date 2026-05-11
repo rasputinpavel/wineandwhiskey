@@ -1,9 +1,8 @@
 import Link from 'next/link'
-import { sbInventory, type B2bCustomer } from '@/lib/supabase'
+import { sbInventory, type B2bCustomer, type B2bCustomerGroup } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { CustomerTermsCell, CustomerConsignmentCell } from '@/components/modules/customers/CustomerEditCell'
-import { CustomerParentCell } from '@/components/modules/customers/CustomerParentCell'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
+import { CustomersTableClient, type CustomerRow, type GroupRow, type Stats } from '@/components/modules/customers/CustomersTableClient'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { SortHeader } from '@/components/shell/SortHeader'
 
@@ -45,15 +44,21 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const thisYear = today.getUTCFullYear()
   const lastYear = thisYear - 1
 
-  const { data: customers, error: custErr } = await sbInventory
-    .from('b2b_customer')
-    .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, parent_id')
-    .order('flowaccount_name')
-  if (custErr) {
-    return <div className="p-6"><SchemaError error={custErr.message} /></div>
-  }
+  const [custRes, groupRes] = await Promise.all([
+    sbInventory
+      .from('b2b_customer')
+      .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, group_id')
+      .order('flowaccount_name'),
+    sbInventory
+      .from('b2b_customer_group')
+      .select('id, name, notes')
+      .order('name'),
+  ])
+  if (custRes.error)  return <div className="p-6"><SchemaError error={custRes.error.message} /></div>
+  if (groupRes.error) return <div className="p-6"><SchemaError error={groupRes.error.message} /></div>
 
-  const all = (customers ?? []) as B2bCustomer[]
+  const all = (custRes.data ?? []) as B2bCustomer[]
+  const allGroups = (groupRes.data ?? []) as B2bCustomerGroup[]
   const termsByCustomer = new Map(all.map(c => [c.id, c.payment_terms_days ?? 0]))
 
   const { data: allInv, error: invErr } = await sbInventory
@@ -89,62 +94,72 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   if (typeFilter === 'regular')     rows = rows.filter(c => !c.is_consignment)
   if (typeFilter === 'consignment') rows = rows.filter(c =>  c.is_consignment)
 
-  // ── Hierarchy: группировка branch'ей под head office ──────────────────────
-  // Heads = клиенты без parent_id. Branches = с parent_id.
-  // Каждый head получает aggregate-stats: его собственные + всех branch'ей.
-  const heads = rows.filter(c => !c.parent_id)
-  const branchesByParent = new Map<string, B2bCustomer[]>()
+  // ── Преобразование customer → CustomerRow (для клиентского компонента) ──
+  function toRow(c: B2bCustomer): CustomerRow {
+    const s = stats.get(c.id) ?? EMPTY_STATS
+    return {
+      id: c.id,
+      name: c.flowaccount_name,
+      isConsignment: c.is_consignment,
+      paymentTermsDays: c.payment_terms_days,
+      groupId: c.group_id,
+      stats: { ...s } as Stats,
+    }
+  }
+
+  // ── Сборка групп и standalone ──────────────────────────────────────────
+  const membersByGroup = new Map<string, B2bCustomer[]>()
   for (const c of rows) {
-    if (!c.parent_id) continue
-    const arr = branchesByParent.get(c.parent_id) ?? []
+    if (!c.group_id) continue
+    const arr = membersByGroup.get(c.group_id) ?? []
     arr.push(c)
-    branchesByParent.set(c.parent_id, arr)
+    membersByGroup.set(c.group_id, arr)
   }
 
-  // Aggregate stats: суммируем self + branches.
-  const aggStats = new Map<string, CustomerStats>()
-  for (const h of heads) {
-    const own = stats.get(h.id) ?? EMPTY_STATS
-    const branches = branchesByParent.get(h.id) ?? []
-    const agg: CustomerStats = { ...own }
-    for (const b of branches) {
-      const bs = stats.get(b.id) ?? EMPTY_STATS
-      agg.open          += bs.open
-      agg.overdue       += bs.overdue
-      agg.openCount     += bs.openCount
-      agg.thisYearTotal += bs.thisYearTotal
-      agg.thisYearCount += bs.thisYearCount
-      agg.lastYearTotal += bs.lastYearTotal
-      agg.lastYearCount += bs.lastYearCount
+  // Группа aggregate-stats = сумма stats её members.
+  function aggregateOver(customers: B2bCustomer[]): Stats {
+    const agg: Stats = { open: 0, overdue: 0, thisYearTotal: 0, thisYearCount: 0, lastYearTotal: 0, lastYearCount: 0 }
+    for (const c of customers) {
+      const s = stats.get(c.id) ?? EMPTY_STATS
+      agg.open          += s.open
+      agg.overdue       += s.overdue
+      agg.thisYearTotal += s.thisYearTotal
+      agg.thisYearCount += s.thisYearCount
+      agg.lastYearTotal += s.lastYearTotal
+      agg.lastYearCount += s.lastYearCount
     }
-    aggStats.set(h.id, agg)
+    return agg
   }
 
-  // Sort heads by chosen column (использует aggregate stats).
-  const sortedHeads = [...heads].sort((a, b) => {
-    const sa = aggStats.get(a.id) ?? EMPTY_STATS
-    const sb = aggStats.get(b.id) ?? EMPTY_STATS
-    let av: number | string, bv: number | string
+  const groupRows: GroupRow[] = allGroups
+    .map(g => {
+      const members = (membersByGroup.get(g.id) ?? [])
+        .slice()
+        .sort((a, b) => a.flowaccount_name.localeCompare(b.flowaccount_name))
+      return { id: g.id, name: g.name, members: members.map(toRow), agg: aggregateOver(members) }
+    })
+    .filter(g => g.members.length > 0) // не показываем пустые группы
+
+  const standalone = rows.filter(c => !c.group_id).map(toRow)
+
+  // Sort — общий порядок (группы и standalone сортируются по той же колонке).
+  // Группы используют aggregate stats, standalone — свои.
+  function sortKey(g: { name: string; agg?: Stats; row?: CustomerRow }): number | string {
+    const s = g.agg ?? g.row!.stats
     switch (sort) {
-      case 'name':      av = a.flowaccount_name.toLowerCase(); bv = b.flowaccount_name.toLowerCase(); break
-      case 'type':      av = a.is_consignment ? 1 : 0;          bv = b.is_consignment ? 1 : 0; break
-      case 'terms':     av = a.payment_terms_days;              bv = b.payment_terms_days; break
-      case 'open':      av = sa.open;                           bv = sb.open; break
-      case 'overdue':   av = sa.overdue;                        bv = sb.overdue; break
-      case 'this_year': av = sa.thisYearTotal;                  bv = sb.thisYearTotal; break
-      case 'last_year': av = sa.lastYearTotal;                  bv = sb.lastYearTotal; break
-      case 'invoices':  av = sa.thisYearCount + sa.lastYearCount; bv = sb.thisYearCount + sb.lastYearCount; break
+      case 'name':      return g.name.toLowerCase()
+      case 'type':      return g.row?.isConsignment ? 1 : 0
+      case 'terms':     return g.row?.paymentTermsDays ?? 0
+      case 'open':      return s.open
+      case 'overdue':   return s.overdue
+      case 'this_year': return s.thisYearTotal
+      case 'last_year': return s.lastYearTotal
+      case 'invoices':  return s.thisYearCount + s.lastYearCount
     }
-    if (av === bv) return 0
-    return ((av < bv ? -1 : 1) * (dir === 'asc' ? 1 : -1))
-  })
-
-  // Имя parent'а по id (для CustomerParentCell)
-  const headNameById = new Map(all.filter(c => !c.parent_id).map(c => [c.id, c.flowaccount_name]))
-  // Кандидаты в parent: top-level (parent_id=null), и не сам клиент. Передаём в каждую ячейку.
-  const headCandidates = all
-    .filter(c => !c.parent_id)
-    .map(c => ({ id: c.id, flowaccount_name: c.flowaccount_name }))
+  }
+  const cmp = (a: number | string, b: number | string) => (a < b ? -1 : a > b ? 1 : 0) * (dir === 'asc' ? 1 : -1)
+  groupRows.sort((a, b) => cmp(sortKey({ name: a.name, agg: a.agg }), sortKey({ name: b.name, agg: b.agg })))
+  standalone.sort((a, b) => cmp(sortKey({ name: a.name, row: a }), sortKey({ name: b.name, row: b })))
 
   const counts = {
     all: all.length,
@@ -194,115 +209,22 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <BulkTermsCell endpoint="/api/m/customers/bulk-terms" defaultDays={30} />
           </div>
 
-          <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead className="text-graphite border-b border-pale-stone bg-cream/40">
-                <tr>
-                  <SortHeader col="name"      label="Customer"            sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
-                  <SortHeader col="type"      label="Type"                sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
-                  <SortHeader col="terms"     label="Terms"               sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
-                  <th className="text-left py-2 px-4 font-medium text-graphite">Parent</th>
-                  <SortHeader col="open"      label="Open"                sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
-                  <SortHeader col="overdue"   label="Overdue"             sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
-                  <SortHeader col="this_year" label={`${thisYear} YTD`}   sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
-                  <SortHeader col="last_year" label={`${lastYear} total`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
-                  <SortHeader col="invoices"  label={`Inv (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
-                </tr>
-              </thead>
-              <tbody>
-                {sortedHeads.map(h => {
-                  const ownStats   = stats.get(h.id) ?? EMPTY_STATS
-                  const agg        = aggStats.get(h.id) ?? EMPTY_STATS
-                  const branches   = (branchesByParent.get(h.id) ?? [])
-                    .slice()
-                    .sort((a, b) => a.flowaccount_name.localeCompare(b.flowaccount_name))
-                  const hasBranches = branches.length > 0
-                  return (
-                    <>
-                      {/* HEAD row — показывает aggregate stats если есть branches, иначе свои */}
-                      <tr key={h.id} className={`border-b border-pale-stone/40 hover:bg-cream/40 ${hasBranches ? 'bg-cream/30' : ''}`}>
-                        <td className="py-2 px-4">
-                          <Link href={`/m/customers/${h.id}`} className={`hover:text-wine-red ${hasBranches ? 'font-medium text-deep-black' : ''}`}>
-                            {h.flowaccount_name}
-                          </Link>
-                          {hasBranches && (
-                            <span className="ml-2 text-[10px] text-graphite">↳ {branches.length} branch{branches.length === 1 ? '' : 'es'}</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-4">
-                          <CustomerConsignmentCell customerId={h.id} initial={h.is_consignment} />
-                        </td>
-                        <td className="py-2 px-4">
-                          <CustomerTermsCell customerId={h.id} initial={h.payment_terms_days} />
-                        </td>
-                        <td className="py-2 px-4">
-                          {/* head может стать branch только если у него самого нет branches */}
-                          {!hasBranches && (
-                            <CustomerParentCell
-                              customerId={h.id}
-                              initialParentId={null}
-                              initialParentName={null}
-                              candidates={headCandidates.filter(x => x.id !== h.id)}
-                            />
-                          )}
-                        </td>
-                        <td className="py-2 px-4 text-right tabular-nums">{agg.open ? `฿${fmt(agg.open)}` : '—'}</td>
-                        <td className={`py-2 px-4 text-right tabular-nums ${agg.overdue > 0 ? 'text-wine-red font-medium' : ''}`}>
-                          {agg.overdue ? `฿${fmt(agg.overdue)}` : '—'}
-                        </td>
-                        <td className="py-2 px-4 text-right tabular-nums">{agg.thisYearTotal ? `฿${fmt(agg.thisYearTotal)}` : '—'}</td>
-                        <td className="py-2 px-4 text-right tabular-nums">{agg.lastYearTotal ? `฿${fmt(agg.lastYearTotal)}` : '—'}</td>
-                        <td className="py-2 px-4 text-right tabular-nums text-graphite">
-                          {agg.thisYearCount}/{agg.lastYearCount}
-                        </td>
-                      </tr>
-                      {/* BRANCH rows — индент через padding-left, мелким шрифтом */}
-                      {branches.map(b => {
-                        const bs = stats.get(b.id) ?? EMPTY_STATS
-                        return (
-                          <tr key={b.id} className="border-b border-pale-stone/40 hover:bg-cream/40 text-[12px]">
-                            <td className="py-1.5 pl-10 pr-4 text-graphite">
-                              ↳ <Link href={`/m/customers/${b.id}`} className="hover:text-wine-red">{b.flowaccount_name}</Link>
-                            </td>
-                            <td className="py-1.5 px-4">
-                              <CustomerConsignmentCell customerId={b.id} initial={b.is_consignment} />
-                            </td>
-                            <td className="py-1.5 px-4">
-                              <CustomerTermsCell customerId={b.id} initial={b.payment_terms_days} />
-                            </td>
-                            <td className="py-1.5 px-4">
-                              <CustomerParentCell
-                                customerId={b.id}
-                                initialParentId={h.id}
-                                initialParentName={headNameById.get(h.id) ?? null}
-                                candidates={headCandidates.filter(x => x.id !== b.id)}
-                              />
-                            </td>
-                            <td className="py-1.5 px-4 text-right tabular-nums text-graphite">{bs.open ? `฿${fmt(bs.open)}` : '—'}</td>
-                            <td className={`py-1.5 px-4 text-right tabular-nums ${bs.overdue > 0 ? 'text-wine-red' : 'text-graphite'}`}>
-                              {bs.overdue ? `฿${fmt(bs.overdue)}` : '—'}
-                            </td>
-                            <td className="py-1.5 px-4 text-right tabular-nums text-graphite">{bs.thisYearTotal ? `฿${fmt(bs.thisYearTotal)}` : '—'}</td>
-                            <td className="py-1.5 px-4 text-right tabular-nums text-graphite">{bs.lastYearTotal ? `฿${fmt(bs.lastYearTotal)}` : '—'}</td>
-                            <td className="py-1.5 px-4 text-right tabular-nums text-graphite/70">
-                              {bs.thisYearCount}/{bs.lastYearCount}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </>
-                  )
-                })}
-                {sortedHeads.length === 0 && (
-                  <tr><td colSpan={9} className="py-6 text-center text-graphite text-sm">
-                    {typeFilter === 'all'
-                      ? <>Клиентов пока нет — наполни через <code className="font-mono text-xs">npm run inv:flow</code>.</>
-                      : <>Нет клиентов в категории <span className="text-deep-black">{typeFilter}</span>.</>}
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <CustomersTableClient
+            groups={groupRows}
+            standalone={standalone}
+            thisYear={thisYear}
+            lastYear={lastYear}
+            sortHeaders={<>
+              <SortHeader col="name"      label="Customer"            sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+              <SortHeader col="type"      label="Type"                sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+              <SortHeader col="terms"     label="Terms"               sort={sort} dir={dir} sp={sp} keep={['type']} firstDir="asc" />
+              <SortHeader col="open"      label="Open"                sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+              <SortHeader col="overdue"   label="Overdue"             sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+              <SortHeader col="this_year" label={`${thisYear} YTD`}   sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+              <SortHeader col="last_year" label={`${lastYear} total`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+              <SortHeader col="invoices"  label={`Inv (${thisYear}/${lastYear})`} sort={sort} dir={dir} sp={sp} keep={['type']} align="right" />
+            </>}
+          />
     </>
   )
 }

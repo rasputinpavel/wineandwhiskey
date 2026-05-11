@@ -75,7 +75,15 @@ export type B2bCustomer = {
   credit_limit: number | null
   is_consignment: boolean
   notes: string | null
-  parent_id: string | null     // если задан — это branch, head office = customer с этим id
+  group_id: string | null      // FK на b2b_customer_group; null = не в группе
+  created_at: string
+  updated_at: string
+}
+
+export type B2bCustomerGroup = {
+  id: string
+  name: string
+  notes: string | null
   created_at: string
   updated_at: string
 }
