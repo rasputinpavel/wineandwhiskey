@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   LEAD_STAGES, LEAD_STAGE_LABEL,
   type Lead, type LeadStage, staleDays, isStale,
@@ -82,7 +83,9 @@ export function LeadsTableClient({ leads }: { leads: Lead[] }) {
                   <div className="flex items-start gap-2">
                     {stale && <span className="text-wine-red text-base leading-none mt-0.5" title={`${dayCount}d since last contact`}>●</span>}
                     <div className="min-w-0">
-                      <div className="font-medium text-deep-black truncate">{lead.name}</div>
+                      <Link href={`/m/sales/${lead.id}`} className="font-medium text-deep-black truncate hover:text-wine-red block" title={lead.name}>
+                        {lead.name}
+                      </Link>
                       <div className="text-[11px] text-graphite flex flex-wrap gap-2 mt-0.5">
                         {lead.phone && <a href={`tel:${lead.phone}`} className="hover:text-wine-red">{lead.phone}</a>}
                         {lead.website && <a href={lead.website} target="_blank" rel="noopener" className="hover:text-wine-red truncate max-w-[180px]">site ↗</a>}
