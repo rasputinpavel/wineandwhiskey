@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { sbInventory, type FlowInvoice } from '@/lib/supabase'
-import { PaneHeader } from '@/components/shell/PaneHeader'
-import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
@@ -27,7 +25,6 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
   const statusFilter = sp.status   ?? 'all'
   const excFilter    = sp.excluded ?? 'no'    // дефолтом скрываем кривые
   const q = (sp.q ?? '').trim()
-  const item = findItem('tax_invoices')!
 
   // Month bounds
   const [y, m] = month.split('-').map(Number)
@@ -48,8 +45,8 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
       .from('b2b_customer')
       .select('id, payment_terms_days'),
   ])
-  if (invRes.error)  return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={invRes.error.message} /></div></>
-  if (custRes.error) return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={custRes.error.message} /></div></>
+  if (invRes.error)  return <div className="p-6"><SchemaError error={invRes.error.message} /></div>
+  if (custRes.error) return <div className="p-6"><SchemaError error={custRes.error.message} /></div>
 
   const termsByCustomer: Record<string, number> = {}
   for (const c of (custRes.data ?? []) as { id: string; payment_terms_days: number }[]) {
@@ -101,13 +98,10 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PaneHeader item={item} />
-      <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-            <h2 className="font-heading text-xl text-deep-black">Tax Invoices — {monthLabel(month)}</h2>
-            <DataFreshness sources={['flowaccount_invoices']} />
-          </div>
+      <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Tax Invoices — {monthLabel(month)}</h2>
+        <DataFreshness sources={['flowaccount_invoices']} />
+      </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
             Tax invoices от B2B клиентов за месяц (по дате выставления). Статусы — из FlowAccount;
             <span className="text-deep-black"> Overdue</span> вычисляется локально: due-date {'<'} сегодня и не Paid.
@@ -145,7 +139,7 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
           <div className="flex gap-1 mb-4 text-[11px] flex-wrap">
             {months.slice(0, 12).map(mm => (
               <Link key={mm}
-                href={`/m/tax-invoices?month=${mm}`}
+                href={`/m/customers/tax-invoices?month=${mm}`}
                 className={`px-2 py-1 rounded-sm border transition-colors ${
                   mm === month
                     ? 'bg-wine-red text-warm-white border-wine-red'
@@ -209,8 +203,6 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
     </>
   )
 }
@@ -272,7 +264,7 @@ function FilterPills({ label, current, options, keep, paramKey }: {
           const active = current === o
           return (
             <Link key={o}
-              href={qs ? `/m/tax-invoices?${qs}` : '/m/tax-invoices'}
+              href={qs ? `/m/customers/tax-invoices?${qs}` : '/m/customers/tax-invoices'}
               className={`px-2 py-0.5 rounded-sm border transition-colors ${
                 active
                   ? 'bg-wine-red text-warm-white border-wine-red'

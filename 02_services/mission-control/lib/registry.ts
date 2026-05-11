@@ -72,18 +72,8 @@ export const SECTIONS: Section[] = [
         route: '/m/suppliers',
         embed: { kind: 'native' },
       },
-      {
-        slug: 'purchases', name: 'Purchase Orders', icon: '🧾', status: 'building',
-        description: 'Закупки: PO из Loyverse помесячно, override для cashflow, отметка Paid + Docs.',
-        route: '/m/purchases',
-        embed: { kind: 'native' },
-      },
-      {
-        slug: 'tax_invoices', name: 'Tax Invoices', icon: '🧾', status: 'building',
-        description: 'Tax invoices от B2B клиентов (FlowAccount): помесячная нарезка, статусы, excluded для кривых.',
-        route: '/m/tax-invoices',
-        embed: { kind: 'native' },
-      },
+      // Purchase Orders живёт под Suppliers (вкладка), не отдельным пунктом сайдбара.
+      // Tax Invoices — под Customers (вкладка).
       {
         slug: 'price', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',

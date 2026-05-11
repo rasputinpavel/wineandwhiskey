@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { sbInventory, sbPublic, type PurchaseOrder, type Supplier } from '@/lib/supabase'
-import { PaneHeader } from '@/components/shell/PaneHeader'
-import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CashflowOverrideCell } from '@/components/modules/purchases/POExcludeCell'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
@@ -29,7 +27,6 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   const typeFilter   = sp.type     ?? 'all'
   const statusFilter = sp.status   ?? 'closed'
   const paidFilter   = sp.paid     ?? 'all'
-  const item = findItem('purchases')!
 
   // Month bounds
   const [y, m] = month.split('-').map(Number)
@@ -45,7 +42,7 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
     .lte('order_date', to)
     .order('order_date', { ascending: false })
   if (poErr) {
-    return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={poErr.message} /></div></>
+    return <div className="p-6"><SchemaError error={poErr.message} /></div>
   }
 
   // Fetch suppliers for type lookup
@@ -94,13 +91,10 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PaneHeader item={item} />
-      <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-            <h2 className="font-heading text-xl text-deep-black">Purchase Orders — {monthLabel(month)}</h2>
-            <DataFreshness sources={['purchase_orders']} />
-          </div>
+      <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Purchase Orders — {monthLabel(month)}</h2>
+        <DataFreshness sources={['purchase_orders']} />
+      </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
             Закрытые PO из Loyverse. По умолчанию <span className="text-deep-black">auto</span> следует типу поставщика
             (consignment не идёт в cashflow). <span className="text-deep-black">force include</span> — учесть несмотря на
@@ -146,7 +140,7 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
           <div className="flex gap-1 mb-4 text-[11px] flex-wrap">
             {months.slice(0, 12).map(mm => (
               <Link key={mm}
-                href={`/m/purchases?month=${mm}`}
+                href={`/m/suppliers/purchase-orders?month=${mm}`}
                 className={`px-2 py-1 rounded-sm border transition-colors ${
                   mm === month
                     ? 'bg-wine-red text-warm-white border-wine-red'
@@ -217,8 +211,6 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
     </>
   )
 }
@@ -266,7 +258,7 @@ function FilterPills({ label, current, options, keep, paramKey }: {
           const active = current === o
           return (
             <Link key={o}
-              href={qs ? `/m/purchases?${qs}` : '/m/purchases'}
+              href={qs ? `/m/suppliers/purchase-orders?${qs}` : '/m/suppliers/purchase-orders'}
               className={`px-2 py-0.5 rounded-sm border transition-colors ${
                 active
                   ? 'bg-wine-red text-warm-white border-wine-red'
