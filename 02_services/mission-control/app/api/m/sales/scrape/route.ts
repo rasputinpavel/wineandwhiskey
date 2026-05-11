@@ -9,7 +9,11 @@
 import { NextResponse } from 'next/server'
 import { startPlacesRun, apifyConfigured } from '@/lib/sales/apify-places'
 import { createScrapeRun, setRunStarted, setRunStatus } from '@/lib/sales/queries'
-import { BUSINESS_KINDS, MIN_STARS_OPTIONS, PHUKET_DISTRICTS } from '@/lib/sales/config'
+import {
+  BUSINESS_KINDS, MIN_STARS_OPTIONS,
+  PHUKET_DISTRICT_GEO, circleToPolygon,
+  type District,
+} from '@/lib/sales/config'
 import type { ScrapeFormPayload, ScrapeInput } from '@/lib/sales/types'
 
 export async function POST(req: Request) {
@@ -55,10 +59,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `db insert failed: ${(err as Error).message}` }, { status: 500 })
     }
 
+    const geo = PHUKET_DISTRICT_GEO[district as District]
     try {
       const { runId, datasetId } = await startPlacesRun({
         searchStringsArray:        input.search_terms,
-        locationQuery:             `${district}, Phuket, Thailand`,
+        // Hand-coded polygon per Phuket district — bypasses Nominatim, which
+        // misresolves short names. Falls back to locationQuery only if the
+        // district isn't in our map (free-text override path).
+        customGeolocation:         geo
+          ? { type: 'Polygon', coordinates: circleToPolygon(geo.lat, geo.lng, geo.radiusKm) }
+          : undefined,
+        locationQuery:             geo ? undefined : `${district}, Phuket, Thailand`,
         categoryFilterWords:       input.category_filter.length ? input.category_filter : undefined,
         placeMinimumStars:         input.min_stars || undefined,
         maxCrawledPlacesPerSearch: maxPerSearch,

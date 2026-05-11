@@ -28,7 +28,12 @@ export function apifyConfigured(): boolean {
 
 export type PlacesInput = {
   searchStringsArray:        string[]
-  locationQuery?:            string                  // single free-text location
+  // Either locationQuery (free-text — passed through Nominatim) or
+  // customGeolocation (explicit GeoJSON Polygon — bypasses Nominatim).
+  // Prefer customGeolocation: short location names ("Kata", "Surin") resolve
+  // to wrong places in Nominatim.
+  locationQuery?:            string
+  customGeolocation?:        { type: 'Polygon'; coordinates: number[][][] }
   categoryFilterWords?:      string[]
   placeMinimumStars?:        string                  // '' | 'two' | 'four' | 'fourAndHalf' ...
   maxCrawledPlacesPerSearch?: number
@@ -56,7 +61,10 @@ export async function startPlacesRun(input: PlacesInput): Promise<StartedRun> {
     maxReviews: input.maxReviews ?? 0,
     scrapeReviewsPersonalData: input.scrapeReviewsPersonalData ?? false,
   }
-  if (input.locationQuery)            body.locationQuery       = input.locationQuery
+  // customGeolocation wins over locationQuery — pass at most one to keep
+  // the actor's input deterministic.
+  if (input.customGeolocation)        body.customGeolocation   = input.customGeolocation
+  else if (input.locationQuery)       body.locationQuery       = input.locationQuery
   if (input.categoryFilterWords?.length) body.categoryFilterWords = input.categoryFilterWords
   if (input.placeMinimumStars)        body.placeMinimumStars   = input.placeMinimumStars
 

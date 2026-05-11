@@ -2,24 +2,47 @@
 // are codified here so the scrape form, table filters, and PostgREST enums
 // stay in sync.
 
-export const PHUKET_DISTRICTS = [
-  'Patong',
-  'Karon',
-  'Kata',
-  'Rawai',
-  'Nai Harn',
-  'Chalong',
-  'Phuket Town',
-  'Cape Panwa',
-  'Kamala',
-  'Surin',
-  'Bang Tao',
-  'Cherngtalay',
-  'Nai Yang',
-  'Mai Khao',
-  'Thalang',
-] as const
-export type District = (typeof PHUKET_DISTRICTS)[number]
+// Phuket districts with explicit centre+radius. We feed these to Apify via
+// `customGeolocation` (auto-built polygon below) instead of `locationQuery`,
+// because Nominatim mangles short names: "Kata, Phuket, Thailand" resolves
+// to "Ko Katha" — a 0.04 km² island with zero restaurants. Same for "Surin"
+// (a province in NE Thailand) etc. Hard-coded coords bypass that entirely.
+export const PHUKET_DISTRICT_GEO = {
+  'Patong':       { lat: 7.8961, lng: 98.2966, radiusKm: 3 },
+  'Karon':        { lat: 7.8475, lng: 98.2981, radiusKm: 3 },
+  'Kata':         { lat: 7.8167, lng: 98.2992, radiusKm: 2.5 },
+  'Rawai':        { lat: 7.7831, lng: 98.3261, radiusKm: 2 },
+  'Nai Harn':     { lat: 7.7806, lng: 98.3033, radiusKm: 1.5 },
+  'Chalong':      { lat: 7.8467, lng: 98.3417, radiusKm: 2 },
+  'Phuket Town':  { lat: 7.8845, lng: 98.3877, radiusKm: 3 },
+  'Cape Panwa':   { lat: 7.8047, lng: 98.4061, radiusKm: 2 },
+  'Kamala':       { lat: 7.9531, lng: 98.2845, radiusKm: 2 },
+  'Surin':        { lat: 7.9758, lng: 98.2789, radiusKm: 2 },
+  'Bang Tao':     { lat: 8.0093, lng: 98.2967, radiusKm: 2.5 },
+  'Cherngtalay':  { lat: 8.0028, lng: 98.3014, radiusKm: 3 },
+  'Nai Yang':     { lat: 8.0850, lng: 98.2934, radiusKm: 2 },
+  'Mai Khao':     { lat: 8.1583, lng: 98.3056, radiusKm: 3 },
+  'Thalang':      { lat: 8.0494, lng: 98.3567, radiusKm: 4 },
+} as const
+export const PHUKET_DISTRICTS = Object.keys(PHUKET_DISTRICT_GEO) as Array<keyof typeof PHUKET_DISTRICT_GEO>
+export type District = keyof typeof PHUKET_DISTRICT_GEO
+
+// Approximate a circle as a 16-vertex polygon (GeoJSON outer ring). Apify's
+// actor accepts customGeolocation as a Polygon — Point+radius isn't supported.
+// Equirectangular projection is fine for ≤5km circles at Phuket's latitude.
+export function circleToPolygon(lat: number, lng: number, radiusKm: number, vertices = 16): number[][][] {
+  const ring: number[][] = []
+  const dLatPerKm = 1 / 111.32
+  const dLngPerKm = 1 / (111.32 * Math.cos((lat * Math.PI) / 180))
+  for (let i = 0; i <= vertices; i++) {
+    const angle = (i / vertices) * 2 * Math.PI
+    ring.push([
+      lng + radiusKm * dLngPerKm * Math.sin(angle),
+      lat + radiusKm * dLatPerKm * Math.cos(angle),
+    ])
+  }
+  return [ring]
+}
 
 export const BUSINESS_KINDS = ['restaurant', 'bar', 'hotel', 'tour', 'event', 'other'] as const
 export type BusinessKind = (typeof BUSINESS_KINDS)[number]
