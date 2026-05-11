@@ -1,2 +1,2 @@
 [phases.setup]
-aptPkgs = []
+nixPkgs = ["nodejs_20", "poppler_utils"]
