@@ -236,6 +236,17 @@ async function gotoList(page: Page, listPath: string) {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await delay(3000);
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+
+  // Critical: wait for ngx-datatable to actually render rows. CI is fast
+  // enough that page.content() captures the populated DOM, but page.screenshot
+  // — and our readDatatableRows() call — were happening before the rows existed.
+  // We accept either a real row or an explicit empty-state indicator.
+  await page.waitForSelector(
+    'datatable-body-row, .datatable-row-wrapper, [class*="empty-row"], [class*="datatable-empty"]',
+    { timeout: 30_000 },
+  ).catch(() => {
+    console.warn(`[flow] gotoList(${listPath}): no rows or empty-state appeared within 30s`);
+  });
   await delay(500);
 }
 
