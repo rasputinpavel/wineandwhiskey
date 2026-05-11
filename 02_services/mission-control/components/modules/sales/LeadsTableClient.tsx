@@ -10,12 +10,13 @@ import {
 import { BUSINESS_KINDS, BUSINESS_KIND_LABEL, type BusinessKind } from '@/lib/sales/config'
 
 type SortDir = 'asc' | 'desc'
+type SpRecord = Record<string, string | string[] | undefined>
 
 export function LeadsTableClient({
   leads, sp, sort, dir,
 }: {
   leads: Lead[]
-  sp?: Record<string, string | undefined>
+  sp?: SpRecord
   sort?: string
   dir?: SortDir
 }) {
@@ -177,7 +178,7 @@ function SortableTh({
   label: string
   sort?: string
   dir?: SortDir
-  sp?: Record<string, string | undefined>
+  sp?: SpRecord
   firstDir?: SortDir
   className?: string
   align?: 'left' | 'right'
@@ -187,7 +188,11 @@ function SortableTh({
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(sp ?? {})) {
     if (!v || k === 'sort' || k === 'dir') continue
-    params.set(k, v)
+    if (Array.isArray(v)) {
+      for (const item of v) params.append(k, item)
+    } else {
+      params.set(k, v)
+    }
   }
   params.set('sort', col)
   params.set('dir', nextDir)

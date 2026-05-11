@@ -33,7 +33,12 @@ type SearchParams = {
   hasWebsite?: '1'
   hasPhone?: '1'
   hasMenu?: '1'
+  // Multiple checkboxes → Next.js gives us string | string[] depending on how
+  // many were checked.
+  priceLevel?: string | string[]
 }
+
+const PRICE_LEVELS = ['$', '$$', '$$$', '$$$$'] as const
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
@@ -71,6 +76,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (sp.hasWebsite === '1') query = query.not('website',  'is', null)
   if (sp.hasPhone   === '1') query = query.not('phone',    'is', null)
   if (sp.hasMenu    === '1') query = query.not('menu_url', 'is', null)
+
+  // Price level — exact-match on Google's $..$$$$ indicator. Apify also returns
+  // the rarer "$10-20"-style brackets; those won't match here, which is fine
+  // because the indicator-style ones are what the filter is meant to bucket.
+  const priceLevels = normalizePriceLevels(sp.priceLevel)
+  if (priceLevels.length > 0) query = query.in('price_level', priceLevels)
 
   const { data, error } = await query.limit(500)
   if (error) {
@@ -198,6 +209,20 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <input type="number" min="0" name="minReviews" defaultValue={sp.minReviews ?? ''}
               placeholder="—" className="w-16 border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5" />
 
+            <span className="text-graphite ml-2">Price</span>
+            {PRICE_LEVELS.map(p => (
+              <label key={p} className="flex items-center gap-1 text-graphite">
+                <input
+                  type="checkbox"
+                  name="priceLevel"
+                  value={p}
+                  defaultChecked={normalizePriceLevels(sp.priceLevel).includes(p)}
+                  className="accent-wine-red"
+                />
+                {p}
+              </label>
+            ))}
+
             <label className="flex items-center gap-1 ml-2 text-graphite">
               <input type="checkbox" name="stale" value="1" defaultChecked={sp.stale === '1'} className="accent-wine-red" />
               Stale &gt;5d
@@ -261,6 +286,13 @@ function hasActiveFilter(sp: SearchParams): boolean {
   return Boolean(
     sp.district || sp.q || sp.minRating || sp.minReviews
     || sp.stale === '1' || sp.hasWebsite === '1' || sp.hasPhone === '1' || sp.hasMenu === '1'
+    || normalizePriceLevels(sp.priceLevel).length > 0
   )
+}
+
+function normalizePriceLevels(raw: string | string[] | undefined): string[] {
+  if (!raw) return []
+  const arr = Array.isArray(raw) ? raw : [raw]
+  return arr.filter(v => (PRICE_LEVELS as readonly string[]).includes(v))
 }
 
