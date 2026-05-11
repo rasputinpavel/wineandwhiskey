@@ -1,7 +1,5 @@
 import Link from 'next/link'
 import { sbInventory, sbPublic, type Supplier, type PurchaseOrder } from '@/lib/supabase'
-import { PaneHeader } from '@/components/shell/PaneHeader'
-import { findItem } from '@/lib/registry'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SupplierTermsCell, SupplierTypeCell } from '@/components/modules/suppliers/SupplierEditCell'
 import { BulkTermsCell } from '@/components/modules/customers/BulkTermsCell'
@@ -37,7 +35,6 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const typeFilter: SearchParams['type'] = sp.type ?? 'all'
   const sort: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : 'name'
   const dir = sp.dir === 'desc' ? 'desc' : 'asc'
-  const item = findItem('suppliers')!
 
   const today = new Date()
   const thisYear = today.getUTCFullYear()
@@ -48,7 +45,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
     .select('id, name, type, payment_terms_days, notes')
     .order('name')
   if (supErr) {
-    return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={supErr.message} /></div></>
+    return <div className="p-6"><SchemaError error={supErr.message} /></div>
   }
   const all = (supRows ?? []) as Supplier[]
 
@@ -56,7 +53,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
     .from('purchase_orders')
     .select('supplier, total_thb, order_date')
   if (poErr) {
-    return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={poErr.message} /></div></>
+    return <div className="p-6"><SchemaError error={poErr.message} /></div>
   }
 
   const stats = new Map<string, SupplierStats>()
@@ -104,13 +101,10 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PaneHeader item={item} />
-      <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1280px] mx-auto px-6 py-6">
-          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-            <h2 className="font-heading text-xl text-deep-black">Suppliers</h2>
-            <DataFreshness sources={['purchase_orders']} />
-          </div>
+      <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Suppliers</h2>
+        <DataFreshness sources={['purchase_orders']} />
+      </div>
           <p className="text-graphite text-sm mb-4 max-w-3xl">
             Поставщики, у которых мы закупаем товар. <span className="text-deep-black">Regular</span> —
             tax invoice с отсрочкой <code className="font-mono text-xs">Terms</code> дней (0 = по факту, 30 = через месяц).
@@ -165,7 +159,9 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
                   const st = stats.get(s.name.trim().toLowerCase()) ?? EMPTY
                   return (
                     <tr key={s.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
-                      <td className="py-2 px-4">{s.name}</td>
+                      <td className="py-2 px-4">
+                        <Link href={`/m/suppliers/${s.id}`} className="hover:text-wine-red">{s.name}</Link>
+                      </td>
                       <td className="py-2 px-4"><SupplierTypeCell supplierId={s.id} initial={s.type} /></td>
                       <td className="py-2 px-4"><SupplierTermsCell supplierId={s.id} initial={s.payment_terms_days} /></td>
                       <td className="py-2 px-4 text-right tabular-nums">{st.thisYearTotal ? `฿${fmt(st.thisYearTotal)}` : '—'}</td>
@@ -187,8 +183,6 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
     </>
   )
 }

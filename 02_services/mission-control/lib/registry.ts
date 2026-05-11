@@ -73,9 +73,15 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
-        slug: 'purchases', name: 'Purchases', icon: '🧾', status: 'building',
-        description: 'Закупки: PO из Loyverse помесячно, исключение кривых записей из cashflow.',
+        slug: 'purchases', name: 'Purchase Orders', icon: '🧾', status: 'building',
+        description: 'Закупки: PO из Loyverse помесячно, override для cashflow, отметка Paid + Docs.',
         route: '/m/purchases',
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'tax_invoices', name: 'Tax Invoices', icon: '🧾', status: 'building',
+        description: 'Tax invoices от B2B клиентов (FlowAccount): помесячная нарезка, статусы, excluded для кривых.',
+        route: '/m/tax-invoices',
         embed: { kind: 'native' },
       },
       {
