@@ -8,6 +8,7 @@ import {
 } from '@/lib/sales/types'
 import { BUSINESS_KINDS, BUSINESS_KIND_LABEL, PHUKET_DISTRICTS, type BusinessKind } from '@/lib/sales/config'
 import { LeadsTableClient } from '@/components/modules/sales/LeadsTableClient'
+import { LeadsKanbanClient } from '@/components/modules/sales/LeadsKanbanClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ type SearchParams = {
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
   const item = findItem('sales-crm')!
+  const view: 'table' | 'kanban' = sp.view === 'kanban' ? 'kanban' : 'table'
 
   // Compose query.
   let query = sbSales
@@ -81,12 +83,24 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <PaneHeader
         item={item}
         rightSlot={
-          <Link
-            href="/m/sales/scrape"
-            className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep transition-colors"
-          >
-            New scrape ↗
-          </Link>
+          <div className="flex items-center gap-2">
+            <div className="flex border border-pale-stone rounded-sm overflow-hidden">
+              <Link
+                href={makeHref(sp, { view: undefined })}
+                className={view === 'table' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
+              >Table</Link>
+              <Link
+                href={makeHref(sp, { view: 'kanban' })}
+                className={view === 'kanban' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
+              >Kanban</Link>
+            </div>
+            <Link
+              href="/m/sales/scrape"
+              className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep transition-colors"
+            >
+              New scrape ↗
+            </Link>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto bg-warm-white">
@@ -135,7 +149,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </form>
           </div>
 
-          <LeadsTableClient leads={leads as Lead[]} />
+          {view === 'kanban'
+            ? <LeadsKanbanClient leads={leads as Lead[]} />
+            : <LeadsTableClient leads={leads as Lead[]} />}
         </div>
       </div>
     </>
