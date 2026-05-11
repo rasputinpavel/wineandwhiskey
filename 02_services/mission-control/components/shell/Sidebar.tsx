@@ -4,8 +4,18 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Item, Section, SECTIONS, statusDotClasses } from '@/lib/registry'
 
-export function Sidebar() {
+type Props = {
+  allowedSlugs: string[]
+  userLogin: string
+}
+
+export function Sidebar({ allowedSlugs, userLogin }: Props) {
   const pathname = usePathname() || ''
+  const allowed = new Set(allowedSlugs)
+
+  const visibleSections = SECTIONS
+    .map(s => ({ ...s, items: s.items.filter(i => allowed.has(i.slug)) }))
+    .filter(s => s.items.length > 0)
 
   return (
     <aside className="w-[260px] shrink-0 bg-warm-white border-r border-pale-stone overflow-y-auto h-screen sticky top-0">
@@ -18,12 +28,13 @@ export function Sidebar() {
       </div>
 
       <nav className="py-2">
-        {SECTIONS.map(section => (
+        {visibleSections.map(section => (
           <SectionBlock key={section.key} section={section} pathname={pathname} />
         ))}
       </nav>
 
-      <div className="px-5 py-4 border-t border-pale-stone mt-2">
+      <div className="px-5 py-4 border-t border-pale-stone mt-2 flex items-center justify-between">
+        {userLogin && <span className="text-xs text-graphite">{userLogin}</span>}
         <form action="/api/auth/logout" method="post">
           <button type="submit" className="text-xs text-graphite hover:text-wine-red transition-colors">
             Log out

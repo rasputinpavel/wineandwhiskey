@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
+  const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,11 +16,11 @@ export default function LoginPage() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ login, password }),
     })
     setLoading(false)
     if (res.ok) { router.push('/'); router.refresh() }
-    else { setError('Wrong password') }
+    else { setError('Wrong login or password') }
   }
 
   return (
@@ -35,12 +36,21 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
+            type="text"
+            placeholder="Login"
+            value={login}
+            onChange={e => setLogin(e.target.value)}
+            className="w-full px-4 py-3 bg-warm-white border border-pale-stone rounded-sm text-deep-black placeholder-graphite/60 focus:outline-none focus:border-wine-red"
+            autoFocus
+            autoComplete="username"
+          />
+          <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="w-full px-4 py-3 bg-warm-white border border-pale-stone rounded-sm text-deep-black placeholder-graphite/60 focus:outline-none focus:border-wine-red"
-            autoFocus
+            autoComplete="current-password"
           />
           {error && <p className="text-wine-red text-xs">{error}</p>}
           <button
