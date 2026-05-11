@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'operations' | 'agents' | 'analytics' | 'marketing' | 'brand' | 'knowledge' | 'tech'
+export type SectionKey = 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -90,28 +90,6 @@ export const SECTIONS: Section[] = [
     ],
   },
 
-  // ═══ AGENTS ═══════════════════════════════════════════════════════════
-  {
-    key: 'agents', label: 'Agents',
-    description: 'Telegram-боты: ops, secretary',
-    items: [
-      {
-        slug: 'ops-bot', name: 'Chip & Dale (ops bot)', icon: '🐿', status: 'live',
-        description: 'Telegram-бот: продажи, остатки, утренний брифинг 9:30 BKK.',
-        route: m('ops-bot'),
-        embed: { kind: 'external', href: 'https://t.me/',
-          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/01_agents/bot` }] },
-      },
-      {
-        slug: 'barrymore', name: 'Бэрримор (secretary)', icon: '🎩', status: 'building',
-        description: 'Бот-секретарь: задачи, летопись, голосовые. 9:00 / 13:00 / 20:00 BKK.',
-        route: m('barrymore'),
-        embed: { kind: 'external', href: 'https://t.me/',
-          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/01_agents/barrymore` }] },
-      },
-    ],
-  },
-
   // ═══ ANALYTICS ════════════════════════════════════════════════════════
   {
     key: 'analytics', label: 'Аналитика',
@@ -140,6 +118,32 @@ export const SECTIONS: Section[] = [
         description: 'Папка с месячными отчётами: Sales · Tax Invoices · Expenses.',
         route: m('accounting-folder'),
         embed: { kind: 'iframe', src: folderEmbed(FOLDER_ACC), openHref: folderOpen(FOLDER_ACC) },
+      },
+    ],
+  },
+
+  // ═══ BRAND & DESIGN ═══════════════════════════════════════════════════
+  {
+    key: 'brand', label: 'Brand & Design',
+    description: 'Айдентика, дизайн-система, готовый дизайн',
+    items: [
+      {
+        slug: 'design-system', name: 'Design System', icon: '🎨', status: 'live',
+        description: 'Живая дизайн-система: палитра, типографика, компоненты, TOV.',
+        route: m('design-system'),
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
+        description: 'Логотипы, визитки, референсы, фоны.',
+        route: m('brand-assets'),
+        embed: { kind: 'external', href: `${REPO}/tree/main/04_brand` },
+      },
+      {
+        slug: 'creative-library', name: 'Creative Library', icon: '🗂', status: 'live',
+        description: 'Архив готового дизайна: посты, прайс-теги, sales-kit, отчёты.',
+        route: m('creative-library'),
+        embed: { kind: 'native' },
       },
     ],
   },
@@ -177,28 +181,33 @@ export const SECTIONS: Section[] = [
     ],
   },
 
-  // ═══ BRAND & DESIGN ═══════════════════════════════════════════════════
+  // ═══ SALES ════════════════════════════════════════════════════════════
   {
-    key: 'brand', label: 'Brand & Design',
-    description: 'Айдентика, дизайн-система, готовый дизайн',
+    key: 'sales', label: 'Sales',
+    description: 'B2B и розница: воронка, отчёты, активности',
+    items: [
+      // TBD — заполняется отдельно
+    ],
+  },
+
+  // ═══ AGENTS ═══════════════════════════════════════════════════════════
+  {
+    key: 'agents', label: 'Agents',
+    description: 'Telegram-боты: ops, secretary',
     items: [
       {
-        slug: 'design-system', name: 'Design System', icon: '🎨', status: 'live',
-        description: 'Живая дизайн-система: палитра, типографика, компоненты, TOV.',
-        route: m('design-system'),
-        embed: { kind: 'native' },
+        slug: 'ops-bot', name: 'Chip & Dale (ops bot)', icon: '🐿', status: 'live',
+        description: 'Telegram-бот: продажи, остатки, утренний брифинг 9:30 BKK.',
+        route: m('ops-bot'),
+        embed: { kind: 'external', href: 'https://t.me/',
+          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/01_agents/bot` }] },
       },
       {
-        slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
-        description: 'Логотипы, визитки, референсы, фоны.',
-        route: m('brand-assets'),
-        embed: { kind: 'external', href: `${REPO}/tree/main/04_brand` },
-      },
-      {
-        slug: 'creative-library', name: 'Creative Library', icon: '🗂', status: 'live',
-        description: 'Архив готового дизайна: посты, прайс-теги, sales-kit, отчёты.',
-        route: m('creative-library'),
-        embed: { kind: 'native' },
+        slug: 'barrymore', name: 'Бэрримор (secretary)', icon: '🎩', status: 'building',
+        description: 'Бот-секретарь: задачи, летопись, голосовые. 9:00 / 13:00 / 20:00 BKK.',
+        route: m('barrymore'),
+        embed: { kind: 'external', href: 'https://t.me/',
+          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/01_agents/barrymore` }] },
       },
     ],
   },
