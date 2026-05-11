@@ -88,9 +88,11 @@ export default async function TaxInvoicesPage({ searchParams }: { searchParams: 
   const overdueSum= invoices.filter(i => i.overdue).reduce((s, i) => s + Number(i.total ?? 0), 0)
   const unpaidSum = grand - paidSum
 
-  // Month picker — 18 months back
+  // Month picker — 18 месяцев назад от ТЕКУЩЕГО (Bangkok), а не от выбранного,
+  // иначе при переключении в прошлый месяц текущий уезжает за край ленты.
   const months: string[] = []
-  let py = y, pm = m
+  const [curY, curM] = bangkokYM().split('-').map(Number)
+  let py = curY, pm = curM
   for (let i = 0; i < 18; i++) {
     months.push(`${py}-${String(pm).padStart(2, '0')}`)
     pm--; if (pm < 1) { pm = 12; py-- }

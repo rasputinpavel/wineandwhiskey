@@ -81,9 +81,11 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   const outflow  = grand - inflow
   const paidSum  = pos.filter(p => p.paid_at != null).reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
 
-  // Month picker — 18 months back
+  // Month picker — 18 месяцев назад от ТЕКУЩЕГО (Bangkok), а не от выбранного,
+  // иначе при переключении в прошлый месяц текущий уезжает за край ленты.
   const months: string[] = []
-  let py = y, pm = m
+  const [curY, curM] = bangkokYM().split('-').map(Number)
+  let py = curY, pm = curM
   for (let i = 0; i < 18; i++) {
     months.push(`${py}-${String(pm).padStart(2, '0')}`)
     pm--; if (pm < 1) { pm = 12; py-- }
