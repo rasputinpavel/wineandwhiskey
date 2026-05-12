@@ -188,8 +188,8 @@ async function syncReceipts(fromIso: string, toIso: string) {
 
 async function main() {
   const { from, to } = defaultWindow();
-  const fromIso = process.env.LOYVERSE_FROM ?? from;
-  const toIso   = process.env.LOYVERSE_TO   ?? to;
+  const fromIso = process.env.LOYVERSE_FROM || from;
+  const toIso   = process.env.LOYVERSE_TO   || to;
   console.log(`[receipts] window ${fromIso} → ${toIso}`);
 
   console.log("[receipts] step 1: customers ...");
