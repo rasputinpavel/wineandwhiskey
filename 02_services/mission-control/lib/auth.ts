@@ -1,8 +1,12 @@
+import { findSectionForItem } from './registry'
+
 const SECRET = process.env.MC_SECRET || 'change-me-in-production'
 
 export type User = {
   login: string
   password: string
+  // '*' = full access. Otherwise: a mix of section keys (grants all items in that section)
+  // and item slugs (granular grant for a single item). Both are matched by hasAccess.
   allowed: '*' | string[]
 }
 
@@ -86,5 +90,8 @@ export async function verifyToken(token: string): Promise<User | null> {
 
 export function hasAccess(user: User, slug: string): boolean {
   if (user.allowed === '*') return true
-  return Array.isArray(user.allowed) && user.allowed.includes(slug)
+  if (!Array.isArray(user.allowed)) return false
+  if (user.allowed.includes(slug)) return true
+  const section = findSectionForItem(slug)
+  return !!section && user.allowed.includes(section.key)
 }
