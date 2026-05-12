@@ -29,12 +29,12 @@ export default async function CreativeLibraryPage({
 
           <header className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="overline text-graphite">Архив готового дизайна</div>
+              <div className="overline text-graphite">Finished design archive</div>
               <h1 className="font-display text-deep-black uppercase tracking-display" style={{ fontSize: 36, lineHeight: 1 }}>
                 Creative Library
               </h1>
               <p className="text-sm text-graphite mt-1">
-                {projects.length} проектов · auto-scan <code className="text-xs">05_creative/output/</code>
+                {projects.length} projects · auto-scan of <code className="text-xs">05_creative/output/</code>
               </p>
             </div>
           </header>
@@ -48,7 +48,7 @@ export default async function CreativeLibraryPage({
 
           {visible.length === 0 ? (
             <div className="text-center py-12 text-graphite text-sm">
-              Здесь пока пусто — кладите готовый дизайн в <code>05_creative/output/</code>.
+              Nothing here yet — drop finished design into <code>05_creative/output/</code>.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -89,7 +89,7 @@ function ProjectCard({ project }: { project: Project }) {
         ) : (
           <div className="text-center p-4">
             <span className="font-display text-pale-stone text-4xl uppercase tracking-display">W&amp;W</span>
-            <div className="text-[11px] text-graphite mt-2">нет превью</div>
+            <div className="text-[11px] text-graphite mt-2">no preview</div>
           </div>
         )}
       </a>
@@ -128,22 +128,22 @@ function ConventionNote() {
   return (
     <details className="border border-pale-stone rounded-md bg-cream/30 mt-6">
       <summary className="px-4 py-3 cursor-pointer text-sm font-heading font-semibold text-deep-black">
-        Как сохранять дизайн, чтобы он попал в архив
+        How to save design so it shows up here
       </summary>
       <div className="px-4 pb-4 text-sm text-graphite space-y-2">
         <p>
-          Файлы кладём в <code>05_creative/output/</code>. Имя — <code>&lt;topic&gt;_YYYY-MM-DD.&lt;ext&gt;</code>
-          {' '}(или папка с тем же именем для многофайловых проектов).
+          Drop files into <code>05_creative/output/</code>. Name them <code>&lt;topic&gt;_YYYY-MM-DD.&lt;ext&gt;</code>
+          {' '}(or a folder with the same name for multi-file projects).
         </p>
         <p>
-          Для превью на карточке — рядом файл <code>&lt;topic&gt;_YYYY-MM-DD_preview.png</code>
-          {' '}(квадрат или 4:3, 800–1200px). Без него карточка покажет монограмму W&amp;W.
+          For a card preview, add <code>&lt;topic&gt;_YYYY-MM-DD_preview.png</code>
+          {' '}next to it (square or 4:3, 800–1200px). Without it the card shows the W&amp;W monogram.
         </p>
         <p>
-          Категория определяется автоматически по имени (sales-kit / price-tag / welcome-offer / dashboard / sales). Если попадает в «Other» — переименуй или допиши правило в <code>lib/creative-scan.ts</code>.
+          Category is auto-detected by name (sales-kit / price-tag / welcome-offer / dashboard / sales). If it lands in &laquo;Other&raquo;, rename the file or add a rule in <code>lib/creative-scan.ts</code>.
         </p>
         <p>
-          Архив синхронизируется в <code>public/creative/</code> при <code>npm run build</code> или <code>npm run dev</code>.
+          The archive syncs into <code>public/creative/</code> on <code>npm run build</code> or <code>npm run dev</code>.
         </p>
       </div>
     </details>

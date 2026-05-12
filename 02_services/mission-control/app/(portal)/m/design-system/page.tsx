@@ -35,14 +35,14 @@ type Tokens = {
 const REPO = 'https://github.com/rasputinpavel/wineandwhiskey'
 
 const PALETTE_USAGE: Record<string, { title: string; usage: string }> = {
-  wineRed:      { title: 'Wine Red',      usage: 'Акцент, заголовки, CTA' },
-  burgundyDeep: { title: 'Burgundy Deep', usage: 'Тени на красном, тёмные акценты' },
-  deepBlack:    { title: 'Deep Black',    usage: 'Основной текст, тёмный фон' },
-  warmWhite:    { title: 'Warm White',    usage: 'Светлый фон, отступы' },
-  cream:        { title: 'Cream',         usage: 'Карточки, подложки' },
-  amberGold:    { title: 'Amber Gold',    usage: 'Стекло, премиум, цены' },
-  graphite:     { title: 'Graphite',      usage: 'Вторичный текст, подписи' },
-  paleStone:    { title: 'Pale Stone',    usage: 'Разделители, неактивное' },
+  wineRed:      { title: 'Wine Red',      usage: 'Accent, headings, CTAs' },
+  burgundyDeep: { title: 'Burgundy Deep', usage: 'Shadows on red, dark accents' },
+  deepBlack:    { title: 'Deep Black',    usage: 'Body text, dark background' },
+  warmWhite:    { title: 'Warm White',    usage: 'Light background, padding' },
+  cream:        { title: 'Cream',         usage: 'Cards, surfaces' },
+  amberGold:    { title: 'Amber Gold',    usage: 'Glass, premium, prices' },
+  graphite:     { title: 'Graphite',      usage: 'Secondary text, captions' },
+  paleStone:    { title: 'Pale Stone',    usage: 'Dividers, inactive' },
 }
 
 const TYPE_TOKEN_ORDER = [
@@ -53,14 +53,14 @@ const TYPE_TOKEN_ORDER = [
 ] as const
 
 const LOGO_FILES = [
-  { file: 'logo_black.png',              label: 'Чёрный, фон' },
-  { file: 'logo_black_transparent.png',  label: 'Чёрный, прозрачный' },
-  { file: 'logo_white.png',              label: 'Белый, фон' },
-  { file: 'logo_color.png',              label: 'Цветной, фон' },
-  { file: 'logo_color_transparent.png',  label: 'Цветной, прозрачный' },
-  { file: 'logo_sq_color.png',           label: 'Квадрат, цветной' },
-  { file: 'logo_sq_black.png',           label: 'Квадрат, чёрный' },
-  { file: 'logo_sq_white.png',           label: 'Квадрат, белый' },
+  { file: 'logo_black.png',              label: 'Black, solid' },
+  { file: 'logo_black_transparent.png',  label: 'Black, transparent' },
+  { file: 'logo_white.png',              label: 'White, solid' },
+  { file: 'logo_color.png',              label: 'Color, solid' },
+  { file: 'logo_color_transparent.png',  label: 'Color, transparent' },
+  { file: 'logo_sq_color.png',           label: 'Square, color' },
+  { file: 'logo_sq_black.png',           label: 'Square, black' },
+  { file: 'logo_sq_white.png',           label: 'Square, white' },
 ]
 
 function rgbFromHex(hex: string): string {
@@ -116,7 +116,7 @@ export default async function DesignSystemPage() {
 
           {/* PALETTE */}
           <section className="space-y-4">
-            <SectionHeader eyebrow="01" title="Палитра" />
+            <SectionHeader eyebrow="01" title="Palette" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Object.entries(tokens.palette.extended).map(([key, hex]) => {
                 const meta = PALETTE_USAGE[key] ?? { title: key, usage: '' }
@@ -137,12 +137,12 @@ export default async function DesignSystemPage() {
                 )
               })}
             </div>
-            <Rules title="Правила" items={tokens.palette.rules} />
+            <Rules title="Rules" items={tokens.palette.rules} />
           </section>
 
           {/* TYPOGRAPHY */}
           <section className="space-y-4">
-            <SectionHeader eyebrow="02" title="Типографика" />
+            <SectionHeader eyebrow="02" title="Typography" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {(['display', 'headline', 'body'] as const).map(role => (
                 <div key={role} className="bg-cream/50 border border-pale-stone rounded-md p-4">
@@ -192,12 +192,12 @@ export default async function DesignSystemPage() {
                 )
               })}
             </div>
-            <Rules title="Правила" items={tokens.typography.rules} />
+            <Rules title="Rules" items={tokens.typography.rules} />
           </section>
 
           {/* LOGO */}
           <section className="space-y-4">
-            <SectionHeader eyebrow="03" title="Логотип" />
+            <SectionHeader eyebrow="03" title="Logo" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {LOGO_FILES.map(({ file, label }) => {
                 const isDarkBg = file.includes('white')
@@ -224,7 +224,7 @@ export default async function DesignSystemPage() {
 
           {/* COMPONENTS */}
           <section className="space-y-4">
-            <SectionHeader eyebrow="04" title="Компоненты" />
+            <SectionHeader eyebrow="04" title="Components" />
             <div className="bg-warm-white border border-pale-stone rounded-md p-6 space-y-6">
               <ComponentRow title="Buttons">
                 <button className="bg-wine-red text-warm-white px-6 py-3 rounded-sm font-medium text-sm hover:bg-burgundy-deep transition-colors">Primary</button>
@@ -298,26 +298,26 @@ export default async function DesignSystemPage() {
 
           {/* SOURCE FILES */}
           <section className="space-y-4">
-            <SectionHeader eyebrow="07" title="Файлы" />
+            <SectionHeader eyebrow="07" title="Files" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <DownloadCard
                 href="/brand/design-system.md"
                 title="design-system.md"
-                meta={updatedAt ? `Markdown · обновлено ${updatedAt}` : 'Markdown · полная спецификация'}
-                description="Полная спецификация: токены, правила, примеры."
+                meta={updatedAt ? `Markdown · updated ${updatedAt}` : 'Markdown · full spec'}
+                description="Full spec: tokens, rules, examples."
               />
               <DownloadCard
                 href="/brand/design-tokens.json"
                 title="design-tokens.json"
                 meta="JSON · machine-readable"
-                description="Тот же набор, но для скриптов и AI-промптов."
+                description="Same tokens, formatted for scripts and AI prompts."
               />
               <DownloadCard
                 href={`${REPO}/tree/main/04_brand`}
                 external
-                title="04_brand/ на GitHub"
-                meta="История изменений · PR"
-                description="Логотипы, визитки, референсы в репо."
+                title="04_brand/ on GitHub"
+                meta="Change history · PR"
+                description="Logos, business cards, references in the repo."
               />
             </div>
           </section>

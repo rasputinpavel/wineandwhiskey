@@ -9,14 +9,14 @@ const REPO = 'https://github.com/rasputinpavel/wineandwhiskey'
 
 // Logo order mirrors the Design System grid — light-bg variants first, then square marks.
 const LOGO_FILES = [
-  { file: 'logo_black.png',              label: 'Чёрный, фон' },
-  { file: 'logo_black_transparent.png',  label: 'Чёрный, прозрачный' },
-  { file: 'logo_white.png',              label: 'Белый, фон' },
-  { file: 'logo_color.png',              label: 'Цветной, фон' },
-  { file: 'logo_color_transparent.png',  label: 'Цветной, прозрачный' },
-  { file: 'logo_sq_color.png',           label: 'Квадрат, цветной' },
-  { file: 'logo_sq_black.png',           label: 'Квадрат, чёрный' },
-  { file: 'logo_sq_white.png',           label: 'Квадрат, белый' },
+  { file: 'logo_black.png',              label: 'Black, solid' },
+  { file: 'logo_black_transparent.png',  label: 'Black, transparent' },
+  { file: 'logo_white.png',              label: 'White, solid' },
+  { file: 'logo_color.png',              label: 'Color, solid' },
+  { file: 'logo_color_transparent.png',  label: 'Color, transparent' },
+  { file: 'logo_sq_color.png',           label: 'Square, color' },
+  { file: 'logo_sq_black.png',           label: 'Square, black' },
+  { file: 'logo_sq_white.png',           label: 'Square, white' },
 ]
 
 type FileEntry = { name: string; href: string; size: number; ext: string }
@@ -74,14 +74,14 @@ export default async function BrandAssetsPage() {
               Brand Assets
             </h1>
             <p className="text-sm text-graphite max-w-2xl">
-              Скачиваемые файлы из <code className="text-[12px]">04_brand/</code>. Правила использования —
-              на странице{' '}
-              <a href="/m/design-system" className="text-wine-red hover:underline">Design System</a>.
+              Downloadable files from <code className="text-[12px]">04_brand/</code>. Usage rules
+              live on the{' '}
+              <a href="/m/design-system" className="text-wine-red hover:underline">Design System</a> page.
             </p>
           </section>
 
           {/* LOGOS */}
-          <Section eyebrow="01" title="Логотип" subtitle="PNG, для соцсетей и презентаций. Если нужен SVG — попроси в чате, пересоберём.">
+          <Section eyebrow="01" title="Logo" subtitle="PNG for social and decks. Need an SVG? Ask in chat — we'll re-export.">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {LOGO_FILES.map(({ file, label }) => {
                 const isDarkBg = file.includes('white')
@@ -107,7 +107,7 @@ export default async function BrandAssetsPage() {
           </Section>
 
           {/* BUSINESS CARDS */}
-          <Section eyebrow="02" title="Визитки" subtitle="Двусторонняя визитка, light- и dark-варианты. PDF готовы к печати.">
+          <Section eyebrow="02" title="Business Cards" subtitle="Double-sided card, light and dark variants. PDFs ready for print.">
             {cardPreview || cardPdfs.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 {cardPreview && (
@@ -123,7 +123,7 @@ export default async function BrandAssetsPage() {
                 )}
                 <div className="space-y-3">
                   <div className="text-sm text-graphite">
-                    Карточка 85×55 mm. Bleed готов, шрифты embedded. Перед печатью — проверь у типографии.
+                    85×55 mm card. Bleed in place, fonts embedded. Double-check with the print shop before sending to press.
                   </div>
                   <div className="space-y-2">
                     {cardPdfs.map(f => (
@@ -146,7 +146,7 @@ export default async function BrandAssetsPage() {
           </Section>
 
           {/* REFERENCES */}
-          <Section eyebrow="03" title="Референсы" subtitle="Mood-доска: руки, свет, тени, фоны 1904 Maps.">
+          <Section eyebrow="03" title="References" subtitle="Mood board: hands, light, shadows, 1904 Maps backgrounds.">
             {references.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {references.map(f => (
@@ -173,10 +173,10 @@ export default async function BrandAssetsPage() {
 
           {/* PRODUCT PHOTOS */}
           {products.length > 0 && (
-            <Section eyebrow="04" title="Фото товаров" subtitle={`${products.length} бутылок на прозрачном фоне. Используются витриной и контентом.`}>
+            <Section eyebrow="04" title="Product Photos" subtitle={`${products.length} bottles on transparent background. Used by the storefront and social content.`}>
               <details className="border border-pale-stone rounded-md bg-cream/30">
                 <summary className="px-4 py-3 cursor-pointer text-sm font-heading font-semibold text-deep-black">
-                  Показать все
+                  Show all
                 </summary>
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-2 p-3 pt-0">
                   {products.map(f => (
@@ -218,7 +218,7 @@ function Section({ eyebrow, title, subtitle, children }: { eyebrow: string; titl
 function Empty({ hint }: { hint: string }) {
   return (
     <div className="text-center py-8 text-graphite text-sm border border-dashed border-pale-stone rounded-md">
-      Пусто — положи файлы в <code className="text-xs">{hint}</code> и пересобери (<code className="text-xs">npm run dev</code>).
+      Empty — drop files into <code className="text-xs">{hint}</code> and rebuild (<code className="text-xs">npm run dev</code>).
     </div>
   )
 }

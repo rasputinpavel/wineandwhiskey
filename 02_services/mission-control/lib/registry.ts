@@ -125,23 +125,23 @@ export const SECTIONS: Section[] = [
   // ═══ BRAND & DESIGN ═══════════════════════════════════════════════════
   {
     key: 'brand', label: 'Brand & Design',
-    description: 'Айдентика, дизайн-система, готовый дизайн',
+    description: 'Identity, design system, finished design',
     items: [
       {
         slug: 'design-system', name: 'Design System', icon: '🎨', status: 'live',
-        description: 'Живая дизайн-система: палитра, типографика, компоненты, TOV.',
+        description: 'Living design system: palette, typography, components, tone of voice.',
         route: m('design-system'),
         embed: { kind: 'native' },
       },
       {
         slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
-        description: 'Логотипы, визитки, референсы, фоны.',
+        description: 'Logos, business cards, references, backgrounds.',
         route: m('brand-assets'),
         embed: { kind: 'native' },
       },
       {
         slug: 'creative-library', name: 'Creative Library', icon: '🗂', status: 'live',
-        description: 'Архив готового дизайна: посты, прайс-теги, sales-kit, отчёты.',
+        description: 'Archive of finished design: posts, price tags, sales kit, reports.',
         route: m('creative-library'),
         embed: { kind: 'native' },
       },
