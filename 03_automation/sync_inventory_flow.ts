@@ -267,16 +267,19 @@ async function main() {
 
     const invoices = [...listed, ...stragglers];
 
-    // Empty-listing guard, but only if EVERY source is empty — auth/DOM
-    // failure rather than a quiet account. A stable account with the
-    // baseline already synced will have stragglers even when the listing
-    // is empty.
+    // Empty-listing guard. We expect Phase 1 to ALWAYS return at least one row
+    // for an active account in the default 30-day window — there is always
+    // something issued. If listing comes back empty, it's a DOM/auth failure
+    // even when stragglers still populate (Phase 2 walks saved detail_url's
+    // and won't surface anything FA changed under us). Failing here gives us a
+    // red dot in the portal + flow-debug-empty-list.* artefacts in the repo
+    // root, instead of silently masking a broken scraper.
     const isDefaultWindow = !process.env.FLOW_FROM && !process.env.FLOW_TO;
-    if (invoices.length === 0 && isDefaultWindow) {
+    if (listed.length === 0 && isDefaultWindow) {
       throw new Error(
-        "FlowAccount sync turned up nothing — neither the recent listing nor the " +
-        "DB straggler set returned anything. Likely auth / DOM failure. " +
-        "Check debug-*.png artifacts."
+        "FlowAccount listing scrape returned 0 rows. Likely auth / DOM failure — " +
+        "FA may have changed the /invoices grid markup. Check flow-debug-empty-list.{png,html}. " +
+        `(Phase 2 stragglers found ${stragglers.length}, but those don't surface new invoices.)`
       );
     }
 

@@ -518,13 +518,17 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
     // Each productItem has: name (description), productQty, productTotal, productPricePerOne, ...
     let items: any[] = [];
     let statusFromApi: string | null = null;
+    let hasReceipt = false;
     for (const { url, body } of captured) {
       if (!/api-core-canary.*tax-invoices\/\d+/.test(url)) continue;
       const list: any[] = body?.data?.list ?? [];
       for (const doc of list) {
         if (Array.isArray(doc?.productItems)) items.push(...doc.productItems);
-        // Best-effort status extraction. Exact field name varies across FA
-        // API versions; try the common shapes and accept the first non-empty.
+        // A linked receipt is the most reliable "this is paid" signal — FA's
+        // numeric status enum is unstable (status=9 used to mean "partial",
+        // now also used for "Receipt Created" which is fully paid), but if
+        // receiptId is populated then by definition a receipt exists.
+        if (typeof doc?.receiptId === "number" && doc.receiptId > 0) hasReceipt = true;
         if (!statusFromApi) {
           const cand =
             doc?.paymentStatusName ?? doc?.paymentStatus ??
@@ -541,6 +545,10 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
       const normalized = normalizeFlowStatus(statusFromApi);
       if (normalized) inv.status = normalized;
     }
+    // Receipt presence trumps the numeric status — except for Cancelled, which
+    // wins regardless (a cancelled invoice may have an old receiptId from
+    // before cancellation).
+    if (hasReceipt && inv.status !== "Cancelled") inv.status = "Paid";
     if (DEBUG && items.length === 0) {
       console.warn(`[flow] items: no productItems for ${inv.number}; captured ${captured.length} responses`);
     }
