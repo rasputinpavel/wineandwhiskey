@@ -66,6 +66,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     .from('flowaccount_invoice')
     .select('customer_id, total, issued_at, status')
     .neq('status', 'Cancelled')
+    .eq('excluded', false)
   if (invErr) {
     return <div className="p-6"><SchemaError error={invErr.message} /></div>
   }
