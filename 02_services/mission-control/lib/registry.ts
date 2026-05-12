@@ -194,7 +194,7 @@ export const SECTIONS: Section[] = [
       },
       {
         slug: 'sales-playbook', name: 'Playbook', icon: '📘', status: 'live',
-        description: 'Питч-материалы для холодных встреч: call-script, прайс, шаблон сообщения.',
+        description: 'Cold-outreach materials: call script, B2B price list, messenger pitch template.',
         route: m('sales-playbook'),
         embed: { kind: 'native' },
       },

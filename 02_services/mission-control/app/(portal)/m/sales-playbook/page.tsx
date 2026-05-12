@@ -26,27 +26,27 @@ export default async function SalesPlaybookPage() {
         <div className="max-w-[1100px] mx-auto px-6 py-6 space-y-6">
 
           <header>
-            <div className="overline text-graphite">Материалы для B2B-питча</div>
+            <div className="overline text-graphite">B2B outreach materials</div>
             <h1 className="font-display text-deep-black uppercase tracking-display" style={{ fontSize: 36, lineHeight: 1 }}>
               Sales Playbook
             </h1>
             <p className="text-sm text-graphite mt-1">
-              Всё, что нужно менеджеру для первой встречи: call-script с якорями, прайс и шаблон сообщения.
+              Everything a rep needs for a first meeting: call script with memory anchors, price list, and a copy-paste pitch.
             </p>
           </header>
 
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <DocCard
               title="Call Script"
-              subtitle="15–20-минутный intro по телефону"
+              subtitle="15–20 min phone intro"
               href="/sales-playbook/sales_playbook.html"
-              hint="Открыть playbook"
+              hint="Open playbook"
             />
             <DocCard
               title="B2B Price List"
-              subtitle="Прайс 2026-05 — Sparkling / Gin / Wines"
+              subtitle="May 2026 — Sparkling / Gin / Wines"
               href="/sales-playbook/price_list.html"
-              hint="Открыть прайс"
+              hint="Open price list"
             />
           </section>
 
@@ -59,7 +59,7 @@ export default async function SalesPlaybookPage() {
                 rel="noopener"
                 className="text-xs text-graphite hover:text-wine-red transition-colors"
               >
-                Скачать .md ↗
+                Download .md ↗
               </a>
             </div>
             {pitch ? (
@@ -68,8 +68,8 @@ export default async function SalesPlaybookPage() {
               </pre>
             ) : (
               <div className="text-sm text-graphite border border-pale-stone rounded-md p-4 bg-cream/30">
-                Файл <code>10_sales/sales_playbook/messenger_pitch.md</code> не нашёлся. Проверь, что
-                <code> npm run sync-brand-assets</code> отработал.
+                <code>10_sales/sales_playbook/messenger_pitch.md</code> not found. Make sure
+                <code> npm run sync-brand-assets</code> has run.
               </div>
             )}
           </section>
