@@ -152,9 +152,22 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       continue;
     }
 
-    const onLogin =
+    // FA's tenant OIDC login lives at the *host root* of auth.flowaccount.com
+    // (path `/`, query `?returnurl=/connect/authorize/callback…`), so the old
+    // path-based check missed it and we'd silently fall through to scraping a
+    // login form. Cover both: any URL signal AND the actual presence of a
+    // password input on the page — the latter is the ground truth.
+    const urlLikeLogin =
       u.includes("/login") || u.includes("/Login") ||
-      u.includes("/sign-in") || u.includes("/SignIn");
+      u.includes("/sign-in") || u.includes("/SignIn") ||
+      u.includes("auth.flowaccount.com") ||
+      u.includes("connect/authorize");
+    const hasPasswordField = await page
+      .locator('input[type="password"]')
+      .first()
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
+    const onLogin = urlLikeLogin || hasPasswordField;
     if (!onLogin) break;
     console.log(`[flow] Login form at ${u.slice(0, 90)}…`);
     if (DEBUG) await page.screenshot({ path: dbgPath(`flow-debug-login-${attempt}.png`) });
@@ -194,9 +207,19 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     }
   }
 
-  if (/login|Login|sign-?in|SignIn|SelectCompany|select-company/.test(page.url())) {
+  const finalUrl = page.url();
+  const stillOnAuth =
+    /login|Login|sign-?in|SignIn|SelectCompany|select-company/.test(finalUrl) ||
+    finalUrl.includes("auth.flowaccount.com") ||
+    finalUrl.includes("connect/authorize");
+  const stillHasPasswordField = await page
+    .locator('input[type="password"]')
+    .first()
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+  if (stillOnAuth || stillHasPasswordField) {
     if (DEBUG) await page.screenshot({ path: dbgPath("flow-debug-postlogin.png") });
-    throw new Error(`FlowAccount login failed — still at ${page.url()}. Check creds / 2FA.`);
+    throw new Error(`FlowAccount login failed — still at ${finalUrl}. Check creds / 2FA.`);
   }
 
   await context.storageState({ path: AUTH_STATE_PATH });
