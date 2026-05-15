@@ -61,6 +61,31 @@ async function main() {
   await page.screenshot({ path: pngOut, fullPage: true });
   console.log(`wrote ${pngOut}`);
 
+  // Override any page-break rules the source HTML defined for paginated print —
+  // we want ONE tall page, not 8 pre-styled A5-ish pages with gaps.
+  await page.addStyleTag({
+    content: `
+      @page { size: auto !important; margin: 0 !important; }
+      @media print {
+        html, body, article, section { width: auto !important; }
+        section { padding: 36px 22px !important; }
+        *, *::before, *::after {
+          page-break-after: avoid !important;
+          page-break-before: avoid !important;
+          page-break-inside: avoid !important;
+          break-after: avoid !important;
+          break-before: avoid !important;
+          break-inside: avoid !important;
+        }
+        .cover {
+          min-height: 0 !important;
+          page-break-after: avoid !important;
+          break-after: avoid !important;
+        }
+      }
+    `,
+  });
+
   // PDF — pass explicit pixel dimensions in inches. 1in = 96px in CSS.
   const widthIn = widthPx / 96;
   const heightIn = heightPx / 96;
