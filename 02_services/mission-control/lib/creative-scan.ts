@@ -12,13 +12,10 @@ export type Project = {
   slug: string             // stem, e.g. "welcome-offer"
   title: string            // human title derived from stem
   date: string | null      // YYYY-MM-DD or YYYY-MM if found in filename / dir name
-  category: Category
   previewHref: string | null
   files: Asset[]
   isDirectory: boolean
 }
-
-export type Category = 'Print' | 'Social' | 'Sales kit' | 'Report' | 'Photos' | 'Other'
 
 const DATE_FULL = /_(\d{4}-\d{2}-\d{2})(?:_to_\d{4}-\d{2}-\d{2})?$/
 const DATE_YM   = /_(\d{4}-\d{2})$/
@@ -26,16 +23,6 @@ const DATE_YM   = /_(\d{4}-\d{2})$/
 const EXT_LABELS: Record<string, string> = {
   html: 'HTML', pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP',
   csv: 'CSV', md: 'MD', json: 'JSON',
-}
-
-function categorize(stem: string): Category {
-  const s = stem.toLowerCase()
-  if (s.startsWith('sales-kit')) return 'Sales kit'
-  if (s.startsWith('bottle_photos') || s.includes('photo')) return 'Photos'
-  if (s.includes('sales_') || s.includes('russia_sales') || s.includes('purchases')) return 'Report'
-  if (s.includes('price-tag') || s.includes('welcome-offer') || s.includes('aviasales')) return 'Print'
-  if (s.includes('dashboard')) return 'Report'
-  return 'Other'
 }
 
 function humanize(stem: string): string {
@@ -85,7 +72,6 @@ export async function scanCreative(): Promise<Project[]> {
         if (e.name.startsWith('.') || e.name.startsWith('_')) continue
         const project = await projectFromDir(e.name, path.join(abs, e.name), {
           hrefPrefix: `/creative/social/${e.name}`,
-          forceCategory: 'Social',
         })
         if (project) dirProjects.push(project)
       }
@@ -133,7 +119,6 @@ export async function scanCreative(): Promise<Project[]> {
       slug: `${groupStem}-${g.date ?? 'undated'}`,
       title: humanize(groupStem),
       date: g.date,
-      category: categorize(groupStem),
       previewHref: g.previewFile ?? null,
       files: g.files.sort((a, b) => orderExt(a.ext) - orderExt(b.ext)),
       isDirectory: false,
@@ -151,7 +136,7 @@ export async function scanCreative(): Promise<Project[]> {
 async function projectFromDir(
   name: string,
   abs: string,
-  opts: { hrefPrefix?: string; forceCategory?: Category } = {},
+  opts: { hrefPrefix?: string } = {},
 ): Promise<Project | null> {
   let inner: import('node:fs').Dirent[] = []
   try {
@@ -185,7 +170,6 @@ async function projectFromDir(
     slug: `dir-${name}`,
     title: humanize(stem),
     date,
-    category: opts.forceCategory ?? categorize(stem),
     previewHref,
     files: files.sort((a, b) => orderExt(a.ext) - orderExt(b.ext)),
     isDirectory: true,
