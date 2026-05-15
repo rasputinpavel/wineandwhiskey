@@ -96,16 +96,19 @@ export async function closeFlow(s: FlowSession) {
 // Race-wait for one of three known post-navigation states. Returns the
 // first signal that fires, or 'unknown' on timeout. Used to avoid the
 // skeleton-vs-redirect race in FA's SPA (see ensureLoggedIn).
+//
+// IMPORTANT: "table" matches ONLY a real data row (datatable-body-row) — NOT
+// empty-state or skeleton placeholders. FA's SPA mounts an empty ngx-datatable
+// with [class*="datatable-empty"] BEFORE its auth-check fires the redirect to
+// login; matching those was a false positive that caused us to return "table"
+// for a skeleton that was about to become a login page.
 async function waitForKnownState(
   page: Page,
   timeoutMs: number,
 ): Promise<"table" | "login" | "picker" | "unknown"> {
   const result = await Promise.race([
     page
-      .waitForSelector(
-        'datatable-body-row, .datatable-row-wrapper, [class*="datatable-empty"], [class*="empty-row"]',
-        { timeout: timeoutMs },
-      )
+      .waitForSelector('datatable-body-row, .datatable-row-wrapper', { timeout: timeoutMs })
       .then(() => "table" as const)
       .catch(() => null),
     page
@@ -204,10 +207,14 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       u.includes("/sign-in") || u.includes("/SignIn") ||
       u.includes("auth.flowaccount.com") ||
       u.includes("connect/authorize");
+    // Wait 5s here, not 1s: FA's SPA can render the skeleton on /invoices
+    // and only redirect to login a couple of seconds later (auth-check is
+    // async). A short timeout was the race that let us return "logged in"
+    // for what was about to become a login page.
     const hasPasswordField = await page
       .locator('input[type="password"]')
       .first()
-      .isVisible({ timeout: 1000 })
+      .isVisible({ timeout: 5000 })
       .catch(() => false);
     const onLogin = urlLikeLogin || hasPasswordField;
     if (!onLogin) break;
@@ -258,7 +265,7 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   const stillHasPasswordField = await page
     .locator('input[type="password"]')
     .first()
-    .isVisible({ timeout: 1000 })
+    .isVisible({ timeout: 5000 })
     .catch(() => false);
   if (stillOnAuth || stillHasPasswordField) {
     if (DEBUG) await page.screenshot({ path: dbgPath("flow-debug-postlogin.png") });
