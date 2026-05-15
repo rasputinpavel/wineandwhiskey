@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1A1A1A" />
+  <title>Wine &amp; Whiskey — Spirits for the smoke room · Shisha Bar</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    @font-face {
+      font-family: 'Bebas Neue';
+      src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+           url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    :root {
+      --bg:        #F5F0EB;
+      --cream:     #EDE0D0;
+      --primary:   #8C1C1C;
+      --burgundy:  #5C1010;
+      --gold:      #C9A84C;
+      --green:     #4A7C4A;
+      --text:      #1A1A1A;
+      --text2:     #3D3D3D;
+      --text3:     #6E6E6E;
+      --border:    #D4C9BC;
+      --black:     #1A1A1A;
+      --white:     #F5F0EB;
+      --stone:     #D4C9BC;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--stone);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    @page {
+      size: 109mm 238mm;
+      margin: 0;
+    }
+    @media print {
+      html, body { background: var(--bg); width: 109mm; }
+      article { max-width: 100%; width: 100%; margin: 0; box-shadow: none; }
+      section { padding: 28px 8mm; }
+      .cover { page-break-after: always; break-after: page; min-height: 220mm; display: flex; flex-direction: column; justify-content: space-between; }
+      .pillar, .price-strip, .vodka-card, .gin-band, .contact, .terms-block, .closing-slogan, .stat {
+        page-break-inside: avoid; break-inside: avoid;
+      }
+      section > h2, .overline, .sub-h { page-break-after: avoid; break-after: avoid; }
+      section > h2 + .lede { page-break-before: avoid; break-before: avoid; }
+    }
+
+    article {
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    section {
+      padding: 36px 22px;
+      position: relative;
+    }
+
+    /* Headings */
+    .overline {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin: 0 0 14px 0;
+    }
+    section > h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px;
+      line-height: 0.96;
+      letter-spacing: 0.02em;
+      margin: 0 0 14px 0;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    section > h2 .accent { color: var(--primary); }
+
+    .lede {
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--text2);
+      margin: 0 0 18px 0;
+    }
+    .lede strong { color: var(--text); font-weight: 600; }
+
+    .sub-h {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 26px 0 10px 0;
+      line-height: 1;
+    }
+
+    /* ======================================================
+       SECTION: COVER (dark, framed hero)
+       ====================================================== */
+    .cover {
+      background: #1A1A1A;
+      color: #F5F0EB;
+      padding: 44px 24px 36px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 60%);
+      pointer-events: none;
+    }
+    .cover > * { position: relative; z-index: 1; }
+
+    .cover .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 26px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #3D3D3D;
+    }
+    .cover .top-row img.logo {
+      height: 96px;
+      width: auto;
+    }
+    .cover .meta {
+      text-align: right;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #D4C9BC;
+      line-height: 1.5;
+    }
+    .cover .meta .accent { color: var(--gold); }
+
+    .cover .hero-frame {
+      margin: 6px 0 26px 0;
+      padding: 6px;
+      border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 6px;
+      background: #0E0E0E;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(245,240,235,0.04);
+    }
+    .cover .hero-frame .hero-img {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background-image: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-shishabar_2026-05-15/assets/interior.png');
+      background-size: cover;
+      background-position: center;
+      border-radius: 3px;
+      display: block;
+    }
+
+    .cover .overline { color: var(--gold); margin-bottom: 12px; }
+    .cover h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 52px;
+      line-height: 0.94;
+      letter-spacing: 0.02em;
+      color: #F5F0EB;
+      margin: 0 0 14px 0;
+      text-transform: uppercase;
+    }
+    .cover h1 .accent { color: var(--gold); }
+    .cover .tagline {
+      font-size: 14px;
+      line-height: 1.55;
+      color: #D4C9BC;
+      max-width: 320px;
+      margin: 14px auto 26px;
+    }
+    .cover .bottom-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 16px;
+      border-top: 1px solid #3D3D3D;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #D4C9BC;
+      font-weight: 600;
+    }
+    .cover .bottom-row .right { color: var(--gold); }
+
+    /* ======================================================
+       SECTION: ABOUT
+       ====================================================== */
+    .about { background: var(--bg); }
+    .about .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 18px 0 22px 0;
+    }
+    .about .stat {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 14px;
+    }
+    .about .stat .v {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 30px;
+      color: var(--primary);
+      line-height: 1;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+    .about .stat .k {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text2);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      line-height: 1.3;
+    }
+    .about .pillars {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .about .pillar {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .about .pillar.feature {
+      border: 1.5px solid var(--primary);
+      background: linear-gradient(180deg, var(--cream) 0%, #E5D5C0 100%);
+    }
+    .about .pillar h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin: 0 0 6px 0;
+    }
+    .about .pillar p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+    .about .pillar p b { color: var(--text); font-weight: 600; }
+
+    /* ======================================================
+       SECTION: GIN
+       ====================================================== */
+    .gin-band {
+      background: var(--black);
+      color: var(--white);
+      border-radius: 12px;
+      padding: 22px 18px;
+      margin: 16px 0 14px 0;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .gin-band::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(201,168,76,0.14) 0%, rgba(201,168,76,0) 65%);
+      pointer-events: none;
+    }
+    .gin-band > * { position: relative; z-index: 1; }
+    .gin-band .gk {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+    }
+    .gin-band .bottles {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .gin-band .bottles img {
+      max-height: 150px;
+      max-width: 28%;
+      width: auto;
+      filter: drop-shadow(0 3px 7px rgba(0,0,0,0.5));
+    }
+    .gin-band .mark {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 72px;
+      line-height: 0.9;
+      color: var(--white);
+      letter-spacing: 0.04em;
+      margin: 8px 0 4px 0;
+    }
+    .gin-band .mark .plus { color: var(--gold); }
+    .gin-band .deal-line {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .gin-band .sub {
+      font-size: 11px;
+      color: var(--stone);
+      letter-spacing: 0.04em;
+      max-width: 280px;
+      margin: 0 auto;
+    }
+
+    .price-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: stretch;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+    }
+    .price-strip .ps-left .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 2px;
+    }
+    .price-strip .ps-left .name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .price-strip .ps-right {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .price-strip .ps-right .price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 30px;
+      color: var(--primary);
+      letter-spacing: 0.03em;
+      line-height: 1;
+    }
+    .price-strip .ps-right .unit {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-top: 2px;
+    }
+
+    .why-list {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 12px;
+    }
+    .why-list h4 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin: 0 0 10px 0;
+    }
+    .why-list ul { margin: 0; padding: 0; list-style: none; }
+    .why-list li {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text2);
+      padding-left: 14px;
+      position: relative;
+      margin-bottom: 8px;
+    }
+    .why-list li:last-child { margin-bottom: 0; }
+    .why-list li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--text3);
+    }
+    .why-list li b { color: var(--text); font-weight: 600; }
+
+    /* ======================================================
+       VODKA CARDS
+       ====================================================== */
+    .vodka-card {
+      display: grid;
+      grid-template-columns: 80px 1fr auto;
+      gap: 14px;
+      align-items: center;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px 14px 12px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .vodka-card.house { border: 1.5px solid var(--primary); }
+    .vodka-card.house::after {
+      content: "House pour";
+      position: absolute;
+      top: -9px;
+      left: 14px;
+      background: var(--primary);
+      color: var(--white);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .vodka-card.premium { border: 1.5px solid var(--gold); }
+    .vodka-card.premium::after {
+      content: "Top shelf";
+      position: absolute;
+      top: -9px;
+      left: 14px;
+      background: var(--gold);
+      color: var(--text);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .vodka-card .tasted {
+      position: absolute;
+      top: -9px;
+      right: 14px;
+      background: var(--bg);
+      color: var(--green);
+      border: 1px solid var(--green);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      z-index: 1;
+    }
+    .vodka-card .tasted::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      background: var(--green);
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .vodka-card .vimg {
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .vodka-card .vimg img {
+      max-height: 120px;
+      max-width: 68px;
+      width: auto;
+      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.18));
+    }
+    .vodka-card .vi .origin {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 4px;
+    }
+    .vodka-card .vi .name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .vodka-card .vi .note {
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.4;
+    }
+    .vodka-card .vp {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .vodka-card .vp .vp-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .vodka-card .vp .vol {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text3);
+      min-width: 28px;
+      text-align: right;
+    }
+    .vodka-card .vp .price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      color: var(--primary);
+      letter-spacing: 0.03em;
+      line-height: 1;
+      min-width: 64px;
+      text-align: right;
+    }
+
+    /* ======================================================
+       CLOSING
+       ====================================================== */
+    .closing .terms-block,
+    .closing .contact {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    .closing h4 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin: 0 0 10px 0;
+    }
+    .closing .terms-block p {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+    .closing .terms-block p:last-child { margin-bottom: 0; }
+    .closing .terms-block p b { color: var(--text); font-weight: 600; }
+
+    .closing .contact .row {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 8px;
+      padding: 10px 0;
+      font-size: 13px;
+      border-bottom: 1px dashed var(--border);
+      align-items: start;
+    }
+    .closing .contact .row:last-child { border-bottom: none; }
+    .closing .contact .lbl {
+      color: var(--text3);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 10px;
+      padding-top: 2px;
+    }
+    .closing .contact .val {
+      color: var(--text);
+      font-weight: 600;
+      line-height: 1.55;
+    }
+    .closing .contact .val a {
+      color: var(--primary);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(140,28,28,0.3);
+    }
+
+    .closing-slogan {
+      background: #1A1A1A;
+      color: #F5F0EB;
+      border-radius: 12px;
+      padding: 28px 20px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .closing-slogan::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0) 60%);
+      pointer-events: none;
+    }
+    .closing-slogan > * { position: relative; z-index: 1; }
+    .closing-slogan .ovl {
+      font-size: 10px;
+      color: var(--gold);
+      letter-spacing: 0.30em;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .closing-slogan h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px;
+      letter-spacing: 0.02em;
+      color: #F5F0EB;
+      margin: 0;
+      line-height: 0.96;
+      text-transform: uppercase;
+    }
+    .closing-slogan h2 .accent { color: var(--gold); }
+  </style>
+</head>
+<body>
+
+<article>
+
+  <!-- =================== COVER =================== -->
+  <section class="cover">
+    <div class="top-row">
+      <img class="logo" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_white.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="accent">B2B Proposal</div>
+        <div>Prepared for Shisha Bar</div>
+        <div>Phuket · May 2026</div>
+      </div>
+    </div>
+
+    <div class="hero-frame" aria-hidden="true">
+      <div class="hero-img" role="img" aria-label="Shisha Bar interior"></div>
+    </div>
+
+    <div class="overline">A spirits proposal for Shisha Bar</div>
+    <h1>Spirits for the<br/><span class="accent">smoke room.</span></h1>
+    <p class="tagline">A short bar list, picked for the lounge. Gin to open the night, vodka for the long pull.</p>
+
+    <div class="bottom-row">
+      <div>Wine &amp; Whiskey · Phuket</div>
+      <div class="right">May 2026</div>
+    </div>
+  </section>
+
+  <!-- =================== ABOUT =================== -->
+  <section class="about">
+    <div class="overline">01 · Who&rsquo;s stocking your back bar</div>
+    <h2>A wine boutique,<br/><span class="accent">with a sharper side.</span></h2>
+    <p class="lede">By day we&rsquo;re a wine boutique &mdash; 70+ direct importer accounts, 220+ SKUs, every bottle tasted before it hits the shelf. But we also carry an <strong>exclusive distribution line of premium Russian spirits</strong>: Barrister gin and the Czars / Ladoga vodka range. Names you won&rsquo;t see on other bar lists on Phuket. That&rsquo;s the side of the house we&rsquo;re bringing to your back bar.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="v">3 yrs</div><div class="k">on Phuket</div></div>
+      <div class="stat"><div class="v">70+</div><div class="k">importer accounts</div></div>
+      <div class="stat"><div class="v">Exclusive</div><div class="k">on Russian spirits</div></div>
+      <div class="stat"><div class="v">24h</div><div class="k">reorder turnaround</div></div>
+    </div>
+
+    <div class="pillars">
+      <div class="pillar feature">
+        <h4>Exclusive Russian spirits</h4>
+        <p>We&rsquo;re the only importer on the island carrying the <b>Barrister</b> gin range and the <b>Czars / Ladoga</b> vodka portfolio. Guests asking for &ldquo;something Russian, neat&rdquo; have a real answer.</p>
+      </div>
+      <div class="pillar">
+        <h4>One window</h4>
+        <p>Spirits, mixers, wine if you want it later &mdash; single PO, single delivery, single invoice. No spreadsheet of vendors to chase.</p>
+      </div>
+      <div class="pillar">
+        <h4>Lounge-tuned pricing</h4>
+        <p>Anchor SKUs priced to pour profitably on a long sit. 5+1 case promo on the full gin range; vodka in both 0.7&nbsp;L and 1.0&nbsp;L formats.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== GIN =================== -->
+  <section class="spirits">
+    <div class="overline">02 · Gin · the lift-off pour</div>
+    <h2>Gin that<br/><span class="accent">opens the night.</span></h2>
+    <p class="lede">Barrister is a premium Russian gin built for cocktails the lounge will run all night &mdash; G&amp;T, Negroni, French 75. Three expressions, one case deal: <strong>buy five, take six</strong>. Mix any combination of Dry, Pink and Blue.</p>
+
+    <div class="gin-band">
+      <div class="gk">Premium Russian gin · full range</div>
+      <div class="bottles">
+        <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="Barrister Dry" />
+        <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-pink-gin.png" alt="Barrister Pink" />
+        <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-blue-gin.png" alt="Barrister Blue" />
+      </div>
+      <div class="mark">5<span class="plus">+</span>1</div>
+      <div class="deal-line">Pay for 5. Take 6.</div>
+      <div class="sub">Dry · Pink · Blue &mdash; mix any expression · 40% ABV · 700&nbsp;ml</div>
+    </div>
+
+    <div class="price-strip">
+      <div class="ps-left">
+        <div class="label">Barrister Dry · 6&nbsp;btl case</div>
+        <div class="name">฿910 / btl</div>
+      </div>
+      <div class="ps-right">
+        <div class="price">5 + 1</div>
+        <div class="unit">pay for 5, take 6</div>
+      </div>
+    </div>
+
+    <div class="price-strip">
+      <div class="ps-left">
+        <div class="label">Barrister Pink / Blue · 6&nbsp;btl case</div>
+        <div class="name">฿990 / btl</div>
+      </div>
+      <div class="ps-right">
+        <div class="price">5 + 1</div>
+        <div class="unit">pay for 5, take 6</div>
+      </div>
+    </div>
+
+    <div class="why-list">
+      <h4>Why this works for a shisha lounge</h4>
+      <ul>
+        <li><b>Dry</b> &mdash; the workhorse. G&amp;T, Negroni, neat over ice between sessions.</li>
+        <li><b>Pink</b> &mdash; the photo pour. Pairs naturally with fruit-forward tobaccos (berry, melon, peach).</li>
+        <li><b>Blue</b> &mdash; the talking point. Colour-change with tonic; works the room without a cocktail program.</li>
+        <li>The case mix lets you stock all three without committing to three full cases &mdash; one delivery, no dead inventory.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =================== VODKA =================== -->
+  <section class="spirits">
+    <div class="overline">03 · Vodka · the long-pull pour</div>
+    <h2>Vodka for<br/><span class="accent">the long pull.</span></h2>
+    <p class="lede">The shisha sit-down asks for clean, cold, neutral spirits between rounds. Three brands, two formats each &mdash; from the friendly opener to the top-shelf pour for a long table. <strong>0.7&nbsp;L for the standard table, 1&nbsp;L for the long sit.</strong></p>
+
+    <div class="sub-h">The line-up</div>
+
+    <div class="vodka-card">
+      <div class="vimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/ladoga-vodka.png" alt="Ladoga Vodka" /></div>
+      <div class="vi">
+        <div class="origin">Russia · Grain · 40%</div>
+        <div class="name">Ladoga</div>
+        <div class="note">Soft, neutral, easy. The opening pour &mdash; chilled shots, vodka tonic, long drinks.</div>
+      </div>
+      <div class="vp">
+        <div class="vp-row"><span class="vol">0.7 L</span><span class="price">฿599</span></div>
+        <div class="vp-row"><span class="vol">1 L</span><span class="price">฿749</span></div>
+      </div>
+    </div>
+
+    <div class="vodka-card house">
+      <span class="tasted">Tasting done</span>
+      <div class="vimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/czars-original.png" alt="Czars Original" /></div>
+      <div class="vi">
+        <div class="origin">Russia · Premium wheat · 40%</div>
+        <div class="name">Czars Original</div>
+        <div class="note">Wheat-grain spirit, clean finish. The house anchor &mdash; Martini, Moscow Mule, neat between sessions.</div>
+      </div>
+      <div class="vp">
+        <div class="vp-row"><span class="vol">0.7 L</span><span class="price">฿610</span></div>
+        <div class="vp-row"><span class="vol">1 L</span><span class="price">฿810</span></div>
+      </div>
+    </div>
+
+    <div class="vodka-card premium">
+      <div class="vimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/czars-gold.png" alt="Czars Gold" /></div>
+      <div class="vi">
+        <div class="origin">Russia · Царская · 40%</div>
+        <div class="name">Czars Gold</div>
+        <div class="note">The top-shelf step-up. Slow, soft, premium &mdash; for the table that orders the second hookah and stays till close.</div>
+      </div>
+      <div class="vp">
+        <div class="vp-row"><span class="vol">0.7 L</span><span class="price">฿1,060</span></div>
+        <div class="vp-row"><span class="vol">1 L</span><span class="price">฿1,185</span></div>
+      </div>
+    </div>
+
+    <div class="why-list">
+      <h4>Why this curve</h4>
+      <ul>
+        <li><b>Ladoga</b> opens the night &mdash; friendly price, easy to mix.</li>
+        <li><b>Czars Original</b> is the house pour: a clean wheat vodka the room can lean on for cocktails or shots.</li>
+        <li><b>Czars Gold &ldquo;Царская&rdquo;</b> is the upsell when the table asks &ldquo;what&rsquo;s your best vodka?&rdquo; &mdash; a real premium pour without leaving the portfolio.</li>
+        <li><b>1&nbsp;L format</b> on every brand &mdash; for the long-sit table. Better unit cost, one bottle on the table instead of two.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =================== CLOSING =================== -->
+  <section class="closing">
+    <div class="overline">Terms · contact · next step</div>
+    <h2>How we<br/><span class="accent">move forward.</span></h2>
+    <p class="lede">Promo pricing across this document holds through May 2026; standard B2B rates apply thereafter. First order on delivery, terms after.</p>
+
+    <div class="terms-block">
+      <h4>Logistics</h4>
+      <p><b>Delivery:</b> free, island-wide across Phuket. Single PO, single drop.</p>
+      <p><b>Lead time:</b> 1&ndash;2 working days from confirmed PO.</p>
+      <p><b>Reorder:</b> 24-hour turnaround on stocked SKUs. No monthly minimum.</p>
+      <p><b>MOQ:</b> Gin &mdash; from 6 bottles (case). Vodka &mdash; from 1 bottle.</p>
+    </div>
+
+    <div class="terms-block">
+      <h4>Commercial</h4>
+      <p><b>Pricing:</b> wholesale, per bottle, excl. 7% VAT.</p>
+      <p><b>Gin promo:</b> 5+1 on full Barrister range, mix any expression.</p>
+      <p><b>Promo validity:</b> May 2026 window; regular B2B pricing applies thereafter.</p>
+      <p><b>Payment:</b> 15-day deferred terms (Net 15) from delivery.</p>
+    </div>
+
+    <div class="contact">
+      <h4>Contact</h4>
+      <div class="row">
+        <div class="lbl">Account Manager</div>
+        <div class="val">
+          Benz<br/>
+          <a href="mailto:benz@wine-whiskey.com">benz@wine-whiskey.com</a><br/>
+          WA: <a href="https://wa.me/66835345969">+66 83 534 5969</a>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl">CEO</div>
+        <div class="val">
+          Pavel<br/>
+          <a href="mailto:p@wine-whiskey.com">p@wine-whiskey.com</a><br/>
+          WA: <a href="https://wa.me/66809020550">+66 80 902 0550</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="closing-slogan">
+      <div class="ovl">Wine &amp; Whiskey · Phuket</div>
+      <h2>Pours that match<br/><span class="accent">your smoke.</span></h2>
+    </div>
+  </section>
+
+</article>
+
+</body>
+</html>
