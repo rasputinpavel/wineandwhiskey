@@ -135,7 +135,9 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // navigate to the tenant URL and fill every login form we land on, until
   // we end up on a real /business path.
   const target = `${BASE_URL}${WORKSPACE_PATH}/invoices`;
+  console.log(`[flow] ensureLoggedIn: goto ${target}`);
   await page.goto(target, { waitUntil: "domcontentloaded" });
+  console.log(`[flow] ensureLoggedIn: post-goto url=${page.url().slice(0, 100)}`);
 
   // Race three signals to settle the page deterministically. A fixed delay
   // here was a race: FA's SPA renders a skeleton FIRST, then its auth-check
@@ -144,13 +146,22 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // skeleton URL — "looks like /invoices, no password input yet" — and
   // returned "logged in" while the real redirect was about to happen, so
   // listInvoices() then scraped the login page as an empty list.
-  await waitForKnownState(page, 25_000);
+  const initialState = await waitForKnownState(page, 25_000);
+  console.log(`[flow] ensureLoggedIn: initial state=${initialState}, url=${page.url().slice(0, 100)}`);
   await delay(500);
 
   for (let attempt = 0; attempt < 4; attempt++) {
     const u = page.url();
+    console.log(`[flow] attempt ${attempt}: url=${u.slice(0, 100)}`);
     // Always capture per-attempt state — invaluable when CI fails silently.
-    await page.screenshot({ path: dbgPath(`flow-debug-attempt-${attempt}.png`), fullPage: true }).catch(() => {});
+    // Log the result of the screenshot attempt so we can tell from CI logs
+    // whether the file was created or silently swallowed by .catch().
+    try {
+      await page.screenshot({ path: dbgPath(`flow-debug-attempt-${attempt}.png`), fullPage: true });
+      console.log(`[flow] attempt ${attempt}: screenshot saved`);
+    } catch (e) {
+      console.warn(`[flow] attempt ${attempt}: screenshot FAILED: ${e}`);
+    }
 
     // Workspace/tenant selector — click the company that matches our baked-in id.
     // FlowAccount uses several different URLs for this picker over time:
@@ -217,7 +228,11 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       .isVisible({ timeout: 5000 })
       .catch(() => false);
     const onLogin = urlLikeLogin || hasPasswordField;
-    if (!onLogin) break;
+    console.log(`[flow] attempt ${attempt}: urlLikeLogin=${urlLikeLogin}, hasPasswordField=${hasPasswordField}, onLogin=${onLogin}`);
+    if (!onLogin) {
+      console.log(`[flow] attempt ${attempt}: not on login — breaking out of loop`);
+      break;
+    }
     console.log(`[flow] Login form at ${u.slice(0, 90)}…`);
     if (DEBUG) await page.screenshot({ path: dbgPath(`flow-debug-login-${attempt}.png`) });
 
@@ -307,19 +322,29 @@ function parseDate(s: string): string {
 async function gotoList(page: Page, listPath: string) {
   const url = `${BASE_URL}${WORKSPACE_PATH}${listPath}`;
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await delay(3000);
-  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
 
-  // Critical: wait for ngx-datatable to actually render rows. CI is fast
-  // enough that page.content() captures the populated DOM, but page.screenshot
-  // — and our readDatatableRows() call — were happening before the rows existed.
-  // We accept either a real row or an explicit empty-state indicator.
-  await page.waitForSelector(
-    'datatable-body-row, .datatable-row-wrapper, [class*="empty-row"], [class*="datatable-empty"]',
-    { timeout: 30_000 },
-  ).catch(() => {
-    console.warn(`[flow] gotoList(${listPath}): no rows or empty-state appeared within 30s`);
-  });
+  // Use the same race-wait as ensureLoggedIn so we never silently scrape a
+  // login page as an "empty list". If FA's auth-check redirects us mid-flight
+  // (rate limit, IP-binding revocation, etc.) we want to see it here, not
+  // pretend there were 0 invoices.
+  const state = await waitForKnownState(page, 25_000);
+  console.log(`[flow] gotoList(${listPath}): state=${state}, url=${page.url().slice(0, 90)}`);
+
+  if (state === "login" || state === "picker") {
+    // The session died between ensureLoggedIn and now. Surface this loudly
+    // rather than letting readDatatableRows return 0 and look like an empty
+    // list. The caller's only sensible response is to fail the run; CI
+    // operator can then refresh FA_SESSION_B64_GZ or check FLOW_* creds.
+    try {
+      await page.screenshot({ path: dbgPath(`flow-debug-gotolist-${state}.png`), fullPage: true });
+    } catch {}
+    throw new Error(
+      `gotoList(${listPath}): session became invalid mid-flow — page is on '${state}' (${page.url()})`,
+    );
+  }
+
+  // Even on 'table' or 'unknown' state, give the datatable an extra moment
+  // to paint actual rows. ('unknown' might mean a legit empty list — accept.)
   await delay(500);
 }
 
