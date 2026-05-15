@@ -1,0 +1,2694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wine &amp; Whiskey — Selection for FlyO</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    @font-face {
+      font-family: 'Bebas Neue';
+      src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+           url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    :root {
+      --bg:        #F5F0EB;
+      --cream:     #EDE0D0;
+      --primary:   #8C1C1C;
+      --burgundy:  #5C1010;
+      --gold:      #C9A84C;
+      --text:      #1A1A1A;
+      --text2:     #3D3D3D;
+      --text3:     #6E6E6E;
+      --border:    #D4C9BC;
+      --black:     #1A1A1A;
+      --white:     #F5F0EB;
+      --stone:     #D4C9BC;
+    }
+
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      line-height: 1.45;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .sheet, .cover {
+      width: 210mm;
+      height: 297mm;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+    }
+    .sheet:last-child, .cover:last-child {
+      page-break-after: auto;
+    }
+
+    /* ============================================================
+       COVER (DARK THEME — hero)
+       Title centered, cream bottle silhouettes frame above & below
+       ============================================================ */
+    .cover {
+      background: #1A1A1A;
+      color: #F5F0EB;
+      display: flex;
+      flex-direction: column;
+      padding: 14mm 16mm 12mm 16mm;
+    }
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0) 60%);
+      pointer-events: none;
+    }
+    .cover .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid #3D3D3D;
+      z-index: 2;
+    }
+    .cover .top-bar img { height: 28mm; width: auto; }
+    .cover .top-bar .meta {
+      font-size: 8pt;
+      color: #D4C9BC;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      text-align: right;
+    }
+    .cover .top-bar .meta .accent { color: #C9A84C; }
+
+    .cover .stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1;
+      padding: 8mm 0 6mm 0;
+      width: 100%;
+      position: relative;
+    }
+
+    .cover .silhouettes {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      width: 100%;
+    }
+    .cover .silhouettes img {
+      width: auto;
+      object-fit: contain;
+      filter: brightness(0) invert(1);
+      opacity: 0.08;
+    }
+    .cover .silhouettes.wines { gap: 8mm; height: 75mm; }
+    .cover .silhouettes.wines img.b2 { max-height: 58mm; }
+    .cover .silhouettes.wines img.b3 { max-height: 66mm; }
+    .cover .silhouettes.wines img.b4 { max-height: 75mm; }
+    .cover .silhouettes.wines img.b5 { max-height: 66mm; }
+    .cover .silhouettes.wines img.b6 { max-height: 58mm; }
+    .cover .silhouettes.spirits { gap: 14mm; height: 50mm; }
+    .cover .silhouettes.spirits img.s-gin { max-height: 50mm; }
+
+    .cover .title-block {
+      text-align: center;
+      z-index: 2;
+      position: relative;
+    }
+    .cover .overline {
+      font-size: 9pt;
+      color: #C9A84C;
+      letter-spacing: 0.30em;
+      margin-bottom: 6mm;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .cover h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 56pt;
+      line-height: 0.92;
+      letter-spacing: 0.03em;
+      color: #F5F0EB;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    .cover h1 .accent { color: #8C1C1C; }
+
+    .cover .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4mm;
+      border-top: 1px solid #3D3D3D;
+      font-size: 8pt;
+      color: #D4C9BC;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      z-index: 2;
+    }
+    .cover .bottom-bar .right { color: #C9A84C; font-weight: 700; }
+
+    /* ============================================================
+       SHEET (LIGHT MODE)
+       ============================================================ */
+    .sheet {
+      padding: 12mm 16mm 10mm 16mm;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 6mm;
+      flex-shrink: 0;
+    }
+    .header img { height: 14mm; width: auto; }
+    .header .meta {
+      font-size: 8pt;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-weight: 600;
+      text-align: right;
+    }
+    .header .meta .category { color: var(--primary); font-size: 9pt; }
+
+    .hero h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 30pt;
+      line-height: 0.95;
+      letter-spacing: 0.03em;
+      color: var(--text);
+      margin: 0 0 2.5mm 0;
+      text-transform: uppercase;
+    }
+    .hero h1 .accent { color: var(--primary); }
+    .hero .lede {
+      font-size: 9.5pt;
+      color: var(--text2);
+      font-weight: 400;
+      line-height: 1.45;
+      margin: 0 0 4mm 0;
+      max-width: 170mm;
+    }
+
+    .overline-section {
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--primary);
+      margin-bottom: 2.5mm;
+    }
+
+    /* Footer (sheet) */
+    .sheet-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 3mm;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7.5pt;
+      color: var(--text3);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .sheet-footer .right { color: var(--primary); font-weight: 600; }
+
+    /* ============================================================
+       INTRO PAGE
+       ============================================================ */
+    .pillars {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5mm;
+      margin: 6mm 0 6mm 0;
+    }
+    .pillar {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5mm;
+    }
+    .pillar .num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 32pt;
+      color: var(--primary);
+      line-height: 1;
+      letter-spacing: 0.03em;
+      margin-bottom: 2mm;
+    }
+    .pillar h4 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 11pt;
+      color: var(--text);
+      margin: 0 0 2mm 0;
+    }
+    .pillar p {
+      margin: 0;
+      font-size: 9pt;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+
+    .intro-numbers {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5mm;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 5mm 0;
+      margin-top: 4mm;
+    }
+    .intro-numbers .stat .v {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28pt;
+      letter-spacing: 0.03em;
+      color: var(--primary);
+      line-height: 1;
+      margin-bottom: 1.5mm;
+    }
+    .intro-numbers .stat .k {
+      font-size: 8.5pt;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+
+    .toc {
+      margin-top: 6mm;
+    }
+    .toc h3 {
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin: 0 0 3mm 0;
+    }
+    .toc ol {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      counter-reset: toc 1;
+    }
+    .toc li {
+      counter-increment: toc;
+      display: flex;
+      align-items: baseline;
+      gap: 4mm;
+      padding: 2.5mm 0;
+      border-top: 1px solid var(--border);
+      font-size: 10pt;
+      color: var(--text);
+    }
+    .toc li:last-child { border-bottom: 1px solid var(--border); }
+    .toc li::before {
+      content: counter(toc, decimal-leading-zero);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16pt;
+      color: var(--primary);
+      letter-spacing: 0.05em;
+      width: 14mm;
+      flex-shrink: 0;
+    }
+    .toc li .title {
+      flex: 1;
+      font-weight: 600;
+    }
+    .toc li .note {
+      color: var(--text3);
+      font-size: 9pt;
+      font-weight: 400;
+    }
+
+    /* ============================================================
+       SPIRITS / DEAL SECTION
+       ============================================================ */
+    .deals {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 6mm;
+      margin-bottom: 5mm;
+    }
+    .deal-hero {
+      background: var(--black);
+      color: var(--white);
+      border-radius: 6px;
+      padding: 6mm 6mm 5mm 6mm;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .deal-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 75% 40%, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0) 60%);
+    }
+    .deal-hero .row {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 5mm;
+      align-items: center;
+      flex: 1;
+      z-index: 1;
+    }
+    .deal-hero .row .bottles {
+      display: flex;
+      gap: 1mm;
+      justify-content: center;
+      align-items: flex-end;
+      height: 78mm;
+    }
+    .deal-hero .row .bottles img {
+      max-height: 75mm;
+      max-width: 32%;
+      flex: 0 1 auto;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 4mm 8mm rgba(0,0,0,0.6));
+    }
+    .deal-hero .kicker {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 2mm;
+    }
+    .deal-hero .name {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 14pt;
+      line-height: 1.1;
+      margin: 0 0 1mm 0;
+    }
+    .deal-hero .sub {
+      font-size: 8.5pt;
+      color: var(--stone);
+      margin-bottom: 4mm;
+      line-height: 1.4;
+    }
+    .deal-hero .deal-mark {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 60pt;
+      line-height: 1;
+      color: var(--white);
+      letter-spacing: 0.04em;
+      margin-bottom: 1mm;
+    }
+    .deal-hero .deal-mark .plus { color: var(--primary); }
+    .deal-hero .deal-line {
+      font-size: 9.5pt;
+      color: var(--white);
+      font-weight: 600;
+      margin-bottom: 4mm;
+    }
+    .deal-hero .pgrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1mm 5mm;
+      padding-top: 3mm;
+      border-top: 1px solid #3D3D3D;
+      font-size: 8pt;
+    }
+    .deal-hero .pgrid .l {
+      color: var(--stone);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 7pt;
+      font-weight: 600;
+    }
+    .deal-hero .pgrid .v {
+      color: var(--white);
+      font-weight: 600;
+      font-size: 10pt;
+    }
+    .deal-hero .pgrid .v.gold { color: var(--gold); }
+
+    .deal-side {
+      display: flex;
+      flex-direction: column;
+      gap: 4mm;
+    }
+    .deal-card {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5mm;
+    }
+    .deal-card h5 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 10pt;
+      margin: 0 0 1.5mm 0;
+      color: var(--text);
+    }
+    .deal-card p {
+      margin: 0;
+      font-size: 9pt;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+    .terms-card {
+      flex: 1;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5mm;
+    }
+    .terms-card ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .terms-card li {
+      font-size: 8.5pt;
+      color: var(--text2);
+      padding: 1mm 0;
+      line-height: 1.45;
+    }
+    .terms-card li b {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .deal-card h5 .kicker-inline {
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      display: block;
+      margin-bottom: 1mm;
+    }
+
+    /* ============================================================
+       SPIRITS PAGE v2 — gin hero band + effective price + vodka row
+       ============================================================ */
+    .spirit-block { margin-bottom: 5mm; }
+    .spirit-block:last-of-type { margin-bottom: 3mm; }
+
+    .gin-hero {
+      background: var(--black);
+      color: var(--white);
+      border-radius: 6px;
+      padding: 4mm 6mm 4mm 6mm;
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 5mm;
+      align-items: center;
+      margin-bottom: 4mm;
+      position: relative;
+      overflow: hidden;
+    }
+    .gin-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 28% 55%, rgba(201,168,76,0.16) 0%, rgba(201,168,76,0) 65%);
+      pointer-events: none;
+    }
+    .gin-hero > * { position: relative; z-index: 1; }
+    .gin-hero .gh-kicker {
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 2.5mm;
+    }
+    .gin-hero .gh-bottles {
+      display: flex;
+      gap: 5mm;
+      align-items: flex-end;
+      justify-content: center;
+      height: 44mm;
+    }
+    .gin-hero .gh-bottles img {
+      max-height: 44mm;
+      max-width: 30%;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 3mm 6mm rgba(0,0,0,0.55));
+    }
+    .gin-hero .gh-right { text-align: center; }
+    .gin-hero .gh-deal-mark {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 68pt;
+      line-height: 0.9;
+      color: var(--white);
+      letter-spacing: 0.04em;
+      margin: 0 0 1mm 0;
+    }
+    .gin-hero .gh-deal-mark .plus { color: var(--primary); }
+    .gin-hero .gh-deal-line {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 11pt;
+      color: var(--white);
+      margin: 0 0 3mm 0;
+    }
+    .gin-hero .gh-sub {
+      font-size: 8pt;
+      color: var(--stone);
+      letter-spacing: 0.04em;
+      max-width: 70mm;
+      margin: 0 auto;
+      line-height: 1.4;
+    }
+
+    /* Two-pack offer row */
+    .packs-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4mm;
+    }
+    .pack-card {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4mm;
+      display: flex;
+      flex-direction: column;
+    }
+    .pack-card .pc-kicker {
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin-bottom: 1.5mm;
+    }
+    .pack-card .pc-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22pt;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin: 0 0 1mm 0;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .pack-card .pc-meta {
+      font-size: 7.5pt;
+      color: var(--text2);
+      margin-bottom: 3mm;
+      letter-spacing: 0.03em;
+      line-height: 1.35;
+    }
+    .pack-card .pc-eff {
+      background: var(--primary);
+      color: var(--white);
+      border-radius: 4px;
+      padding: 3mm 3mm;
+      text-align: center;
+      margin-bottom: 3mm;
+    }
+    .pack-card .pc-eff .ep-label {
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-bottom: 1mm;
+    }
+    .pack-card .pc-eff .ep-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36pt;
+      line-height: 0.9;
+      color: var(--white);
+      letter-spacing: 0.02em;
+    }
+    .pack-card .pc-eff .ep-unit {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-top: 1mm;
+    }
+    .pack-card .pc-calc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5mm 4mm;
+    }
+    .pack-card .pc-calc .cl {
+      font-size: 6.5pt;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 0.3mm;
+    }
+    .pack-card .pc-calc .cv {
+      font-family: 'Inter', sans-serif;
+      font-size: 10pt;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .price-row {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      gap: 4mm;
+    }
+    .effective-block {
+      background: var(--primary);
+      color: var(--white);
+      border-radius: 6px;
+      padding: 5mm 4mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .effective-block .ep-label {
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-bottom: 2mm;
+    }
+    .effective-block .ep-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 54pt;
+      line-height: 0.9;
+      color: var(--white);
+      letter-spacing: 0.02em;
+    }
+    .effective-block .ep-unit {
+      font-size: 8pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin: 1mm 0 3mm 0;
+    }
+    .effective-block .ep-compare {
+      font-size: 7.5pt;
+      color: var(--cream);
+      border-top: 1px solid rgba(245,240,235,0.3);
+      padding-top: 2.5mm;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      width: 100%;
+    }
+
+    .calc-block {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4mm 5mm;
+    }
+    .calc-block h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin: 0 0 3mm 0;
+    }
+    .calc-block .calc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 3mm 5mm;
+    }
+    .calc-block .cl {
+      font-size: 6.5pt;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 0.5mm;
+    }
+    .calc-block .cv {
+      font-family: 'Inter', sans-serif;
+      font-size: 11pt;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    /* Vodka row */
+    .vodka-row {
+      display: grid;
+      grid-template-columns: 32mm 1fr 48mm;
+      gap: 5mm;
+      align-items: center;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4mm 5mm;
+    }
+    .vodka-row .vd-img {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      height: 44mm;
+    }
+    .vodka-row .vd-img img {
+      max-height: 44mm;
+      max-width: 100%;
+      width: auto;
+      filter: drop-shadow(0 2mm 4mm rgba(0,0,0,0.20));
+    }
+    .vodka-row .vd-info h4 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22pt;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin: 0 0 1mm 0;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .vodka-row .vd-info .vd-meta-top {
+      font-size: 7pt;
+      color: var(--text3);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 2.5mm;
+    }
+    .vodka-row .vd-info p {
+      font-size: 9pt;
+      line-height: 1.45;
+      color: var(--text2);
+      margin: 0 0 2mm 0;
+    }
+    .vodka-row .vd-info .vd-meta {
+      font-size: 7.5pt;
+      color: var(--text3);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .vodka-row .vd-price {
+      background: var(--primary);
+      color: var(--white);
+      border-radius: 6px;
+      padding: 5mm 4mm;
+      text-align: center;
+    }
+    .vodka-row .vd-price .ep-label {
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-bottom: 2mm;
+    }
+    .vodka-row .vd-price .ep-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 32pt;
+      line-height: 0.9;
+      color: var(--white);
+      letter-spacing: 0.02em;
+    }
+    .vodka-row .vd-price .ep-unit {
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--cream);
+      margin-top: 1mm;
+    }
+
+    /* ============================================================
+       WINE EXPANSION (grid of bottles per category)
+       ============================================================ */
+    .cat-block {
+      margin-bottom: 4mm;
+    }
+    .cat-block h3 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22pt;
+      letter-spacing: 0.06em;
+      color: var(--text);
+      margin: 0 0 1mm 0;
+      text-transform: uppercase;
+      display: flex;
+      align-items: baseline;
+      gap: 4mm;
+    }
+    .cat-block h3 .pos {
+      font-family: 'Inter', sans-serif;
+      font-size: 8pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      color: var(--primary);
+      text-transform: uppercase;
+    }
+    .cat-block .blurb {
+      font-size: 9pt;
+      color: var(--text2);
+      margin: 0 0 3mm 0;
+      max-width: 170mm;
+      line-height: 1.45;
+    }
+
+    .bottle-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4mm;
+    }
+    .bottle-grid.three { grid-template-columns: repeat(3, 1fr); }
+    .bottle-grid.two   { grid-template-columns: repeat(2, 1fr); }
+    .bottle-grid.five  { grid-template-columns: repeat(5, 1fr); gap: 3mm; }
+    .bcard {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2.5mm 2.5mm 2mm 2.5mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      min-height: 64mm;
+    }
+    .bcard .bimg {
+      height: 36mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 1mm;
+    }
+    .bcard .bimg img {
+      max-height: 36mm;
+      max-width: 100%;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2mm 4mm rgba(0,0,0,0.20));
+    }
+    /* Tighter cards for 5-column rows so the bottom ladder fits on the page */
+    .bottle-grid.five .bcard       { min-height: 70mm; padding: 2.5mm 2mm 2mm 2mm; }
+    .bottle-grid.five .bcard .bimg     { height: 36mm; margin-bottom: 1mm; }
+    .bottle-grid.five .bcard .bimg img { max-height: 36mm; }
+    .bottle-grid.five .bcard .origin   { font-size: 6.5pt; margin-bottom: 0.5mm; }
+    .bottle-grid.five .bcard .bname    { font-size: 7.5pt; min-height: 7mm; }
+    .bottle-grid.five .bcard .bnote    {
+      font-size: 7pt;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-height: 11mm;
+    }
+    .bottle-grid.five .bcard .price    { font-size: 15pt; }
+    .bottle-grid.five .bcard .price-unit { font-size: 6pt; }
+    .bottle-grid.five .bcard .badge    { font-size: 6pt; }
+    .bcard .origin {
+      font-size: 7pt;
+      color: var(--text3);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 1mm;
+    }
+    .bcard .bname {
+      font-family: 'Inter', sans-serif;
+      font-size: 8.5pt;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 1mm;
+      min-height: 8mm;
+    }
+    .bcard .bnote {
+      font-size: 7.5pt;
+      color: var(--text2);
+      line-height: 1.35;
+      margin-bottom: auto;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .bcard .price-row {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      gap: 2mm;
+      padding-top: 2mm;
+      margin-top: 2mm;
+      border-top: 1px solid var(--border);
+      width: 100%;
+    }
+    .bcard .price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18pt;
+      color: var(--primary);
+      line-height: 1;
+      letter-spacing: 0.03em;
+    }
+    .bcard .price-strike {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 13pt;
+      color: var(--text3);
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+
+    /* Promo card highlight — visible frame + tag */
+    .bcard.promo {
+      border: 1.5px solid var(--primary);
+      position: relative;
+      padding-top: 6mm;
+    }
+    .bcard.promo::before {
+      content: "Promo";
+      position: absolute;
+      top: -3mm;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: var(--white);
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 1.2mm 3.5mm;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+
+    /* ============================================================
+       MONTGRAS · MIX-AND-MATCH 60+ BOX
+       ============================================================ */
+    .montgras-box {
+      background: var(--cream);
+      border: 1.5px solid var(--primary);
+      border-radius: 6px;
+      padding: 6mm 6mm 5mm 6mm;
+      margin-bottom: 6mm;
+      position: relative;
+    }
+    .montgras-box::before {
+      content: "Special offer · 60+ mixed case";
+      position: absolute;
+      top: -3mm;
+      left: 6mm;
+      background: var(--primary);
+      color: var(--white);
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 1.5mm 4mm;
+      border-radius: 3px;
+    }
+    .montgras-box .mg-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6mm;
+      align-items: end;
+      margin-bottom: 4mm;
+      padding-bottom: 3mm;
+      border-bottom: 1px solid var(--border);
+    }
+    .montgras-box .mg-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22pt;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text);
+      margin: 0;
+      line-height: 1;
+    }
+    .montgras-box .mg-desc {
+      font-size: 9pt;
+      color: var(--text2);
+      margin: 1.5mm 0 0 0;
+      line-height: 1.4;
+      max-width: 110mm;
+    }
+    .montgras-box .mg-condition {
+      text-align: right;
+      font-size: 9pt;
+      color: var(--text);
+    }
+    .montgras-box .mg-condition .mg-cond-label {
+      font-size: 7pt;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      margin-bottom: 1mm;
+    }
+    .montgras-box .mg-condition .mg-cond-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22pt;
+      color: var(--primary);
+      letter-spacing: 0.03em;
+      line-height: 1;
+    }
+    .montgras-box .mg-condition .mg-cond-sub {
+      font-size: 7pt;
+      color: var(--text3);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-top: 1mm;
+    }
+    .montgras-box .mg-wines {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4mm;
+    }
+    .montgras-box .mg-wine {
+      display: grid;
+      grid-template-columns: 24mm 1fr;
+      gap: 3mm;
+      align-items: stretch;
+    }
+    .montgras-box .mg-wine > div:last-child {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 1mm 0;
+    }
+    .montgras-box .mg-wine .mg-img {
+      height: 40mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .montgras-box .mg-wine .mg-img img {
+      max-height: 40mm;
+      max-width: 100%;
+      width: auto;
+      filter: drop-shadow(0 2mm 4mm rgba(0,0,0,0.20));
+    }
+    .montgras-box .mg-wine .mg-origin {
+      font-size: 6.5pt;
+      color: var(--text3);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.5mm;
+    }
+    .montgras-box .mg-wine .mg-name {
+      font-size: 8.5pt;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 2mm;
+    }
+    .montgras-box .mg-wine .mg-prices {
+      display: flex;
+      align-items: baseline;
+      gap: 2mm;
+    }
+    .montgras-box .mg-wine .mg-strike {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 12pt;
+      color: var(--text3);
+      text-decoration: line-through;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+    .montgras-box .mg-wine .mg-price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20pt;
+      color: var(--primary);
+      letter-spacing: 0.03em;
+      line-height: 1;
+    }
+    .bcard .price-unit {
+      font-size: 7pt;
+      color: var(--text3);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       IDEAL PAIRINGS
+       ============================================================ */
+    .pair-intro {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 8mm;
+      margin-bottom: 3mm;
+      align-items: flex-start;
+    }
+    .pair-intro .lede { margin-bottom: 0; }
+    .pair-key {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4mm;
+      font-size: 8pt;
+      color: var(--text2);
+      line-height: 1.5;
+    }
+    .pair-key b { color: var(--text); display: block; margin-bottom: 1mm; font-size: 8pt; letter-spacing: 0.1em; text-transform: uppercase; }
+
+    .pair-row {
+      display: grid;
+      grid-template-columns: 58mm 1fr;
+      gap: 6mm;
+      padding: 3mm 0;
+      border-top: 1px solid var(--border);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .pair-row:last-of-type { border-bottom: 1px solid var(--border); }
+    .pair-row .menu-img {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: #FFFFFF;
+      box-shadow: 0 2mm 5mm rgba(0,0,0,0.08);
+      align-self: flex-start;
+      height: 58mm;
+    }
+    .pair-row .menu-img img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: center top;
+    }
+    .pair-row .pair-content { padding-top: 1mm; }
+    .pair-row .section-tag {
+      display: inline-block;
+      background: var(--primary);
+      color: var(--white);
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 1.5mm 3mm;
+      border-radius: 3px;
+      margin-bottom: 2.5mm;
+    }
+    .pair-row h4 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20pt;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      margin: 0 0 2.5mm 0;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .pair-row .pair-note {
+      font-size: 8.5pt;
+      color: var(--text2);
+      margin: 0 0 3mm 0;
+      line-height: 1.5;
+      max-width: 95mm;
+    }
+    .pair-wines {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3mm;
+    }
+    .pair-wines.two { grid-template-columns: repeat(2, 1fr); }
+    .pair-wines.four { grid-template-columns: repeat(4, 1fr); }
+    .pair-wines.five { grid-template-columns: repeat(5, 1fr); }
+    .pair-mini {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 1mm;
+    }
+    .pair-mini .pimg {
+      height: 24mm;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 1mm;
+    }
+    .pair-mini .pimg img {
+      max-height: 24mm;
+      max-width: 100%;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 1.5mm 3mm rgba(0,0,0,0.18));
+    }
+    .pair-mini .pname {
+      font-family: 'Inter', sans-serif;
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.2;
+    }
+    .pair-mini .porigin {
+      font-size: 6.5pt;
+      color: var(--text3);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .pair-mini .pprice {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 12pt;
+      color: var(--primary);
+      line-height: 1;
+      margin-top: 0.5mm;
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================================
+       PAIRING PAGES v2 — one page per menu spread
+       Layout: menu image LEFT (dominant), bottles RIGHT (vertical list)
+       ============================================================ */
+    .pair-page-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 90mm 1fr;
+      gap: 10mm;
+      margin-top: 2mm;
+    }
+    .pair-menu-side {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+    }
+    .pair-menu-side .pb-tag {
+      display: inline-flex;
+      align-items: center;
+      background: var(--primary);
+      color: var(--white);
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      padding: 2mm 4mm;
+      border-radius: 3px;
+      margin-bottom: 3mm;
+      align-self: flex-start;
+    }
+    .pair-menu-side .pb-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28pt;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin: 0 0 3mm 0;
+      text-transform: uppercase;
+      line-height: 0.95;
+    }
+    .pair-menu-side .pb-title .accent { color: var(--primary); }
+    .pair-menu-side .pb-desc {
+      font-size: 10pt;
+      color: var(--text2);
+      line-height: 1.5;
+      margin: 0 0 6mm 0;
+    }
+    .pair-menu-side .pm-img {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--cream);
+      box-shadow: 0 3mm 8mm rgba(0,0,0,0.12);
+      width: 100%;
+    }
+    .pair-menu-side .pm-img img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .pair-bottles-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .pair-bottles-side .pb-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3mm;
+    }
+    .pair-bottles-side .pb-item {
+      display: grid;
+      grid-template-columns: 26mm 1fr auto;
+      gap: 4mm;
+      align-items: center;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3mm 5mm 3mm 3mm;
+      min-height: 38mm;
+    }
+    .pair-bottles-side .pb-item .pb-img {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 32mm;
+    }
+    .pair-bottles-side .pb-item .pb-img img {
+      max-height: 32mm;
+      max-width: 100%;
+      width: auto;
+      filter: drop-shadow(0 2mm 4mm rgba(0,0,0,0.22));
+    }
+    .pair-bottles-side .pb-item .pb-origin {
+      font-size: 7pt;
+      color: var(--text3);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 1mm;
+    }
+    .pair-bottles-side .pb-item .pb-name {
+      font-family: 'Inter', sans-serif;
+      font-size: 10pt;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.25;
+    }
+    .pair-bottles-side .pb-item .pb-price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26pt;
+      color: var(--primary);
+      letter-spacing: 0.03em;
+      line-height: 1;
+    }
+    .pair-bottles-side .pb-house {
+      font-size: 7pt;
+      color: var(--primary);
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      margin-top: 1mm;
+    }
+
+    /* ============================================================
+       CLOSING / CONTACT PAGE
+       ============================================================ */
+    .closing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm;
+      margin-top: 4mm;
+    }
+    .closing-grid .block h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      font-weight: 600;
+      margin: 0 0 3mm 0;
+    }
+    .closing-grid p {
+      margin: 0 0 3mm 0;
+      font-size: 9.5pt;
+      line-height: 1.55;
+      color: var(--text2);
+    }
+    .closing-grid .contact-line {
+      font-size: 10pt;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 1.5mm;
+    }
+    .closing-grid .contact-line .lbl {
+      display: inline-block;
+      width: 22mm;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 7.5pt;
+      font-weight: 600;
+    }
+
+    .next-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5mm;
+      margin-top: 6mm;
+    }
+    .step {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5mm;
+    }
+    .step .stepnum {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 30pt;
+      color: var(--primary);
+      line-height: 1;
+      letter-spacing: 0.04em;
+      margin-bottom: 2mm;
+    }
+    .step h5 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 10pt;
+      margin: 0 0 1.5mm 0;
+      color: var(--text);
+    }
+    .step p {
+      margin: 0;
+      font-size: 8.5pt;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+
+    /* Closing slogan band — dark callback to the cover */
+    .closing-slogan {
+      background: #1A1A1A;
+      color: #F5F0EB;
+      border-radius: 6px;
+      padding: 10mm 8mm;
+      text-align: center;
+      margin-top: 8mm;
+      position: relative;
+      overflow: hidden;
+    }
+    .closing-slogan::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 60%);
+      pointer-events: none;
+    }
+    .closing-slogan .cs-overline {
+      font-size: 9pt;
+      color: #C9A84C;
+      letter-spacing: 0.30em;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 5mm;
+      position: relative;
+      z-index: 1;
+    }
+    .closing-slogan .cs-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36pt;
+      letter-spacing: 0.03em;
+      color: #F5F0EB;
+      margin: 0;
+      line-height: 0.95;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+    }
+    .closing-slogan .cs-title .accent { color: #8C1C1C; }
+
+    /* Print/screen tweaks */
+    @media print {
+      .sheet, .cover { box-shadow: none; }
+    }
+    @media screen {
+      body { background: var(--stone); padding: 10mm 0; }
+      .sheet, .cover {
+        margin: 0 auto 10mm auto;
+        box-shadow: 0 3mm 10mm rgba(140,28,28,0.10), 0 1mm 3mm rgba(0,0,0,0.06);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============== COVER ============== -->
+  <div class="cover">
+    <div class="top-bar">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_white.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="accent">B2B Selection</div>
+        <div>Prepared for FlyO · Phuket</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="silhouettes wines" aria-hidden="true">
+        <img class="b2" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/montgras-antu-cabernet-carmenere.png" alt="" />
+        <img class="b3" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-petit-chablis.png" alt="" />
+        <img class="b4" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/abrau-durso-rose-reserve-brut.png" alt="" />
+        <img class="b5" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/bella-storia-chardonnay.png" alt="" />
+        <img class="b6" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/alamos-malbec.png" alt="" />
+      </div>
+
+      <div class="title-block">
+        <div class="overline">A Selection for the Rooftop · May 2026</div>
+        <h1>A Wine List<br/><span class="accent">Your Sunset Deserves.</span></h1>
+      </div>
+
+      <div class="silhouettes spirits" aria-hidden="true">
+        <img class="s-gin" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="" />
+        <img class="s-gin" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="" />
+        <img class="s-gin" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="" />
+        <img class="s-gin" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="" />
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div>Wine &amp; Whiskey · Phuket</div>
+      <div class="right">Ref: WW-FLYO-2026-05-13</div>
+    </div>
+  </div>
+
+  <!-- ============== INTRO ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">01 · Intro</div>
+        <div>B2B · For FlyO · Phuket</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Who we are.<br/><span class="accent">Why this list works.</span></h1>
+      <p class="lede">Wine &amp; Whiskey is a Phuket wine boutique. We curate every bottle we sell — small-producer wines, premium spirits, the categories that hold a rooftop floor. Our list is built around producers we&rsquo;ve tasted and importers we work with directly. For FlyO we drafted a focused selection: rooftop-friendly whites and sparklings, anchor reds for the meat side of the menu, a tight spirits program, and a pairing map for your current dishes.</p>
+    </section>
+
+    <section>
+      <div class="overline-section">By the numbers</div>
+      <div class="intro-numbers">
+        <div class="stat"><div class="v">3 yrs</div><div class="k">On Phuket</div></div>
+        <div class="stat"><div class="v">220+</div><div class="k">SKUs on the list</div></div>
+        <div class="stat"><div class="v">12</div><div class="k">Producing countries</div></div>
+        <div class="stat"><div class="v">70+</div><div class="k">Direct importer &amp; distributor contracts</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="overline-section">Why work with us</div>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="num">01</div>
+          <h4>We taste before we sell.</h4>
+          <p>Every bottle on our shelf is one we&rsquo;d open at home. If a wine doesn&rsquo;t earn its spot in the boutique, it doesn&rsquo;t make it onto your list either.</p>
+        </div>
+        <div class="pillar">
+          <div class="num">02</div>
+          <h4>One supplier, full range.</h4>
+          <p>Wines, sparklings, spirits — one supplier, one delivery, one invoice. No spreadsheet of vendors, no five-truck Tuesday.</p>
+        </div>
+        <div class="pillar">
+          <div class="num">03</div>
+          <h4>Direct lines to every importer.</h4>
+          <p>Active accounts with every key importer and distributor in Thailand. Off-list bottles, allocation wines, special orders — we can get them because we already know who has them.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="toc">
+      <h3>What&rsquo;s inside this document</h3>
+      <ol start="2">
+        <li><span class="title">Spirits anchor &mdash; Barrister gin range</span><span class="note">a working back-bar deal</span></li>
+        <li><span class="title">Wine list expansion &mdash; whites, reds, sparkling</span><span class="note">specific positions to add</span></li>
+        <li><span class="title">Ideal pairings for your menu</span><span class="note">your March menu, mapped page-by-page</span></li>
+      </ol>
+    </section>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 01 of 09</div>
+      <div class="right">Quote ref: WW-FLYO-2026-05-13</div>
+    </div>
+  </div>
+
+  <!-- ============== SPIRITS ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">02 · Spirits</div>
+        <div>Barrister gin &amp; Czars vodka</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Two anchor SKUs<br/><span class="accent">for your back bar.</span></h1>
+      <p class="lede">A premium gin range out of St.&nbsp;Petersburg for the G&amp;T side, and a clean Russian vodka for everything else — Martini, vodka tonic, chilled shots. Both single-supplier, both with stories bartenders can actually tell. The gin ships on a 5+1 case promo; vodka holds standard B2B pricing.</p>
+    </section>
+
+    <!-- Barrister gin block -->
+    <section class="spirit-block">
+      <div class="overline-section">Barrister Gin · 5 + 1 case deal</div>
+
+      <div class="gin-hero">
+        <div class="gh-left">
+          <div class="gh-kicker">Premium gin · full range</div>
+          <div class="gh-bottles">
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="Barrister Dry" />
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-pink-gin.png" alt="Barrister Pink" />
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-blue-gin.png" alt="Barrister Blue" />
+          </div>
+        </div>
+        <div class="gh-right">
+          <div class="gh-deal-mark">5<span class="plus">+</span>1</div>
+          <div class="gh-deal-line">Pay for 5. Take 6.</div>
+          <div class="gh-sub">Two case formats — pick the one that fits your back-bar.</div>
+        </div>
+      </div>
+
+      <div class="packs-row">
+        <div class="pack-card">
+          <div class="pc-kicker">Pack A · 5 + 1</div>
+          <div class="pc-title">Dry-only case</div>
+          <div class="pc-meta">6 × Barrister Dry · 40% ABV · 700&nbsp;ml<br/>Standard B2B: ฿910 / btl</div>
+          <div class="pc-eff">
+            <div class="ep-label">Effective price</div>
+            <div class="ep-value">฿758</div>
+            <div class="ep-unit">per bottle</div>
+          </div>
+          <div class="pc-calc">
+            <div><div class="cl">Paid bottles</div><div class="cv">5 × ฿910</div></div>
+            <div><div class="cl">Bonus</div><div class="cv">+1 free</div></div>
+            <div><div class="cl">Case price</div><div class="cv">฿4,550</div></div>
+            <div><div class="cl">You save</div><div class="cv">฿910 / case</div></div>
+          </div>
+        </div>
+
+        <div class="pack-card">
+          <div class="pc-kicker">Pack B · 5 + 1</div>
+          <div class="pc-title">Coloured mix case</div>
+          <div class="pc-meta">6 × Pink / Blue, any combo · 40% ABV · 700&nbsp;ml<br/>Standard B2B: ฿990 / btl</div>
+          <div class="pc-eff">
+            <div class="ep-label">Effective price</div>
+            <div class="ep-value">฿825</div>
+            <div class="ep-unit">per bottle</div>
+          </div>
+          <div class="pc-calc">
+            <div><div class="cl">Paid bottles</div><div class="cv">5 × ฿990</div></div>
+            <div><div class="cl">Bonus</div><div class="cv">+1 free</div></div>
+            <div><div class="cl">Case price</div><div class="cv">฿4,950</div></div>
+            <div><div class="cl">You save</div><div class="cv">฿990 / case</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Czars vodka block -->
+    <section class="spirit-block">
+      <div class="overline-section">Czars Vodka · Russian premium</div>
+      <div class="vodka-row">
+        <div class="vd-img">
+          <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/czars-original.png" alt="Czars Original Vodka" />
+        </div>
+        <div class="vd-info">
+          <div class="vd-meta-top">Russia · Premium vodka</div>
+          <h4>Czars Original</h4>
+          <p>Wheat-grain spirit out of St.&nbsp;Petersburg. Neutral, clean, no rough edges &mdash; the safe pour for vodka tonics, Martini side of the menu, and chilled shots. The Russian back-bar story your bartenders can lean on.</p>
+          <div class="vd-meta">40% ABV · 700&nbsp;ml · MOQ 1 case (6&nbsp;btl)</div>
+        </div>
+        <div class="vd-price">
+          <div class="ep-label">B2B price</div>
+          <div class="ep-value">฿650</div>
+          <div class="ep-unit">per bottle</div>
+        </div>
+      </div>
+    </section>
+
+    <p style="font-size:7.5pt;color:var(--text2);margin:0 0 2mm 0;">All prices excl. VAT. Delivery free island-wide · Lead time 1&ndash;2 working days · First PO by 30 June 2026.</p>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 02 of 09</div>
+      <div class="right">02 · Spirits</div>
+    </div>
+  </div>
+
+  <!-- ============== WHITES ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">03 · Wine expansion</div>
+        <div>Whites</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Whites that<br/><span class="accent">earn a glass pour.</span></h1>
+      <p class="lede">Your current white page is a short list anchored on a single Australian shelf. Phuket guests order whites first &mdash; especially with the seafood and sashimi sides of your menu. Below is a working glass-bottle layer (฿520&ndash;฿680) plus a Chablis ladder to give the bottle page somewhere to go.</p>
+    </section>
+
+    <section class="cat-block">
+      <h3>By the glass &amp; bottle <span class="pos">light, easy, sells fast</span></h3>
+      <p class="blurb">Italy and France in the ฿520&ndash;฿680 band. All four pour cleanly by 150&nbsp;ml glass, work as aperitivo and carry across appetizers, salads and seafood. Replaces Frontera Chardonnay on the by-the-glass slot.</p>
+      <div class="bottle-grid">
+
+        <div class="bcard promo">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/bella-storia-chardonnay.png" alt="Bella Storia Chardonnay"></div>
+          <div class="origin">Italy · Chardonnay</div>
+          <div class="bname">Bella Storia Chardonnay 2024</div>
+          <div class="bnote">Soft, ripe pear, light vanilla. The friendliest by-the-glass white.</div>
+          <div class="price-row"><span class="price-strike">฿590</span><div class="price">฿520</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/tenuta-santanna-pinot-grigio.png" alt="Tenuta Sant'Anna Pinot Grigio"></div>
+          <div class="origin">Italy · Pinot Grigio</div>
+          <div class="bname">Tenuta Sant&rsquo;Anna Pinot Grigio Venezia DOC</div>
+          <div class="bnote">Crisp citrus, dry, neutral &mdash; the safe answer to &ldquo;something light, dry, white.&rdquo;</div>
+          <div class="price-row"><div class="price">฿520</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard promo">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/cantina-di-negrar-soave.png" alt="Cantina di Negrar Soave"></div>
+          <div class="origin">Italy · Garganega</div>
+          <div class="bname">Cantina di Negrar Soave Classico 2024</div>
+          <div class="bnote">White flowers, almond, soft mouthfeel. Pasta and pizza counter.</div>
+          <div class="price-row"><span class="price-strike">฿630</span><div class="price">฿520</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/pierre-chainier-sauvignon-blanc.png" alt="Pierre Chainier Sauvignon Blanc"></div>
+          <div class="origin">France · Loire SB</div>
+          <div class="bname">Pierre Chainier Sauvignon Blanc</div>
+          <div class="bnote">Citrus, cut grass, a hint of grapefruit. Cleans up everything seafood.</div>
+          <div class="price-row"><div class="price">฿570</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="cat-block">
+      <h3>Bottle-only &mdash; the ladder <span class="pos">for the wine guests</span></h3>
+      <p class="blurb">Two Rieslings and three Chablis at three price points. The Riesling pair carries the spice and umami in your Asian dishes; the Chablis ladder gives sommeliers and regulars somewhere to go beyond the ฿700 band.</p>
+      <div class="bottle-grid five">
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/nollen-erben-mosel-riesling.png" alt="Nollen Erben Mosel Riesling"></div>
+          <div class="origin">Germany · Mosel</div>
+          <div class="bname">Nollen Erben Riesling Sp&auml;tlese</div>
+          <div class="bnote">Off-dry, peach, slate. The Asian-food specialist.</div>
+          <div class="price-row"><div class="price">฿600</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/calrossie-dry-riesling.png" alt="Calrossie Dry Riesling"></div>
+          <div class="origin">Australia · Riesling</div>
+          <div class="bname">Calrossie Vineyard Dry Riesling</div>
+          <div class="bnote">Bone-dry, lime, mineral. For guests who want bracing.</div>
+          <div class="price-row"><div class="price">฿680</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-petit-chablis.png" alt="Château de Maligny Petit Chablis"></div>
+          <div class="origin">France · Chablis</div>
+          <div class="bname">Ch&acirc;teau de Maligny Petit Chablis</div>
+          <div class="bnote">Lemon zest, oyster shell. The entry-Chablis the menu needs.</div>
+          <div class="price-row"><div class="price">฿990</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/dampt-chablis-aoc.png" alt="Domaine Dampt Chablis"></div>
+          <div class="origin">France · Chablis</div>
+          <div class="bname">Domaine Daniel Dampt &amp; Fils Chablis AOC</div>
+          <div class="bnote">Stone fruit, salinity, length. The everyday-Chablis tier.</div>
+          <div class="price-row"><div class="price">฿1,350</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-chablis-1er-cru.png" alt="Maligny Chablis 1er Cru Fourchaume"></div>
+          <div class="origin">France · 1er Cru</div>
+          <div class="bname">Ch&acirc;teau de Maligny Chablis 1er Cru &ldquo;Fourchaume&rdquo;</div>
+          <div class="bnote">Tight, mineral, age-worthy. The high-check anchor.</div>
+          <div class="price-row"><div class="price">฿1,650</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 03 of 09</div>
+      <div class="right">03 · Wine expansion · Whites</div>
+    </div>
+  </div>
+
+  <!-- ============== REDS ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">03 · Wine expansion</div>
+        <div>Reds</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Reds for<br/><span class="accent">the BBQ side of the menu.</span></h1>
+      <p class="lede">The current red page leans heavy and Australian &mdash; great on the bottle, harder to drink a second glass of. We open with a single-supplier mixed-case offer from MontGras (Chile), then add two glass-friendly entries to round out the variety.</p>
+    </section>
+
+    <div class="montgras-box">
+      <div class="mg-header">
+        <div>
+          <h3 class="mg-title">MontGras · three reds, one supplier.</h3>
+          <p class="mg-desc">Three Chilean reds from MontGras &mdash; an entry Cabernet to replace Frontera, a soft Day One Merlot, and the high-check ANTU Cabernet&ndash;Carmenère. Mix any combination at the case total to unlock promo pricing.</p>
+        </div>
+        <div class="mg-condition">
+          <div class="mg-cond-label">Min. order</div>
+          <div class="mg-cond-value">60 btl</div>
+          <div class="mg-cond-sub">mix &amp; match</div>
+        </div>
+      </div>
+      <div class="mg-wines">
+        <div class="mg-wine">
+          <div class="mg-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/mg-estate-cabernet.png" alt="MG Estate by MontGras Cabernet"></div>
+          <div>
+            <div class="mg-origin">Chile · Cabernet</div>
+            <div class="mg-name">MG Estate by MontGras Cabernet Sauvignon</div>
+            <div class="mg-prices">
+              <span class="mg-strike">฿650</span>
+              <span class="mg-price">฿450</span>
+            </div>
+          </div>
+        </div>
+        <div class="mg-wine">
+          <div class="mg-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/montgras-gran-reserva-merlot.png" alt="MontGras Gran Reserva Day One Merlot"></div>
+          <div>
+            <div class="mg-origin">Chile · Merlot</div>
+            <div class="mg-name">MontGras Gran Reserva Day One Merlot</div>
+            <div class="mg-prices">
+              <span class="mg-strike">฿730</span>
+              <span class="mg-price">฿590</span>
+            </div>
+          </div>
+        </div>
+        <div class="mg-wine">
+          <div class="mg-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/montgras-antu-cabernet-carmenere.png" alt="MontGras ANTU Cabernet-Carmenère"></div>
+          <div>
+            <div class="mg-origin">Chile · Single VYD</div>
+            <div class="mg-name">MontGras ANTU Cabernet&ndash;Carmen&egrave;re</div>
+            <div class="mg-prices">
+              <span class="mg-strike">฿890</span>
+              <span class="mg-price">฿700</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="cat-block">
+      <h3>By the glass <span class="pos">supporting variety</span></h3>
+      <p class="blurb">Two reds priced for a 150&nbsp;ml pour, alongside the MontGras Cabernet. Montepulciano and Shiraz round out the variety so a table doesn&rsquo;t see only Cabernet on the menu.</p>
+      <div class="bottle-grid two">
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/hidden-cellar-shiraz.png" alt="The Hidden Cellar Shiraz"></div>
+          <div class="origin">Australia · Shiraz</div>
+          <div class="bname">The Hidden Cellar Shiraz 2023</div>
+          <div class="bnote">Plum, pepper, easy mouthfeel. Drinks well by the glass, doesn&rsquo;t tire.</div>
+          <div class="price-row"><div class="price">฿490</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/terre-di-mario-montepulciano.png" alt="Terre di Mario Montepulciano"></div>
+          <div class="origin">Italy · Abruzzo</div>
+          <div class="bname">Terre di Mario Montepulciano d&rsquo;Abruzzo DOP</div>
+          <div class="bnote">Cherry, rosemary, medium body. The pasta-and-pizza red.</div>
+          <div class="price-row"><div class="price">฿550</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 04 of 10</div>
+      <div class="right">03 · Wine expansion · Reds</div>
+    </div>
+  </div>
+
+  <!-- ============== REDS — BOTTLE-ONLY ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">03 · Wine expansion</div>
+        <div>Reds &mdash; bottle-only</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>The muscle reds.<br/><span class="accent">For steak, lamb, ribs.</span></h1>
+      <p class="lede">Four reds for the bottle page, each with a dish. Patriarche Pinot Noir for poultry and lighter meats. Andeluna and Alamos cover the Malbec slot &mdash; one bottle on the list, not two. 1924 Double Black is the high-check Cabernet for your lamb chops and ribs page.</p>
+    </section>
+
+    <section class="cat-block">
+      <div class="bottle-grid">
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/patriarche-endless-summer-pinot-noir.png" alt="Patriarche Endless Summer Pinot Noir"></div>
+          <div class="origin">France · Pinot Noir</div>
+          <div class="bname">Patriarche Endless Summer Pinot Noir</div>
+          <div class="bnote">Light, fruity French Pinot. The universal red &mdash; chicken to wagyu.</div>
+          <div class="price-row"><div class="price">฿690</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/andeluna-anduco-malbec.png" alt="Andeluna Anduco Malbec"></div>
+          <div class="origin">Argentina · Malbec</div>
+          <div class="bname">Andeluna Anduco Malbec</div>
+          <div class="bnote">Plum, soft tannin, medium body. The smarter Malbec pick of the two.</div>
+          <div class="price-row"><div class="price">฿590</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/alamos-malbec.png" alt="Alamos Malbec Mendoza"></div>
+          <div class="origin">Argentina · Mendoza</div>
+          <div class="bname">Alamos Malbec Mendoza</div>
+          <div class="bnote">Dense fruit, soft oak. The recognisable name on the page.</div>
+          <div class="price-row"><div class="price">฿690</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard promo">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/1924-double-black.png" alt="1924 Double Black Cabernet"></div>
+          <div class="origin">USA · Cabernet</div>
+          <div class="bname">1924 Double Black Cabernet Sauvignon 2023</div>
+          <div class="bnote">Big, oak-driven, ripe. The high-check trade-up for the steak page.</div>
+          <div class="price-row"><span class="price-strike">฿850</span><div class="price">฿790</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 05 of 10</div>
+      <div class="right">03 · Wine expansion · Reds</div>
+    </div>
+  </div>
+
+  <!-- ============== SPARKLING ROSÉ CHAMPAGNE ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">03 · Wine expansion</div>
+        <div>Sparkling, rosé, champagne</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Sparkling is<br/><span class="accent">the sunset menu.</span></h1>
+      <p class="lede">A Patong rooftop sells more sparkling than anything else at golden hour. Today your page reads Chandon-or-Frontera. Below: a Prosecco trio, a rosé pair for the spritz crowd, and a champagne pair for celebrations.</p>
+    </section>
+
+    <section class="cat-block">
+      <h3>Prosecco &amp; light sparkling <span class="pos">for the spritz hour</span></h3>
+      <p class="blurb">Three Proseccos, three price points. Genesi by the glass, Astoria steps up, Palazzo Grimani extra dry for the pizza page.</p>
+      <div class="bottle-grid three">
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/genesi-prosecco-pitars.png" alt="Genesi Prosecco"></div>
+          <div class="origin">Italy · Veneto</div>
+          <div class="bname">Genesi Prosecco &mdash; Pitars</div>
+          <div class="bnote">Classic dry Prosecco, green apple and pear. The spritz-hour staple.</div>
+          <div class="price-row"><div class="price">฿530</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/astoria-ventus-prosecco.png" alt="Astoria Ventus Prosecco"></div>
+          <div class="origin">Italy · DOC</div>
+          <div class="bname">Astoria Ventus Prosecco Brut DOC</div>
+          <div class="bnote">Tighter, drier than entry Prosecco. Step-up by the bottle.</div>
+          <div class="price-row"><div class="price">฿590</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/palazzo-grimani-prosecco.png" alt="Palazzo Grimani Prosecco"></div>
+          <div class="origin">Italy · Extra Dry</div>
+          <div class="bname">Palazzo Grimani Prosecco Millesimato Extra Dry DOC</div>
+          <div class="bnote">A touch of residual sugar. The pizza-and-aperitivo pour.</div>
+          <div class="price-row"><div class="price">฿610</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="cat-block">
+      <h3>Rosé &amp; champagne <span class="pos">for sunset and celebrations</span></h3>
+      <p class="blurb">Two rosés &mdash; dry Abrau Durso for oysters, semi-sweet Ceci Verdi Lambrusco for pizza &mdash; plus two champagnes: Delot Blanc de Noirs as the page anchor, Marcel Pierre for the everyday Brut tier.</p>
+      <div class="bottle-grid">
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/abrau-durso-rose-reserve-brut.png" alt="Abrau Durso Reserve Rosé Brut"></div>
+          <div class="origin">Russia · Rosé Brut</div>
+          <div class="bname">Abrau Durso Reserve Ros&eacute; Brut</div>
+          <div class="bnote">Méthode classique, dry, berry &amp; cream. Oysters, tartar, prawn salad.</div>
+          <div class="price-row"><div class="price">฿510</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/ceci-verdi-lambrusco-rosato.png" alt="Ceci Giuseppe Verdi Lambrusco Rosato"></div>
+          <div class="origin">Italy · Lambrusco</div>
+          <div class="bname">Ceci Verdi Lambrusco Rosato</div>
+          <div class="bnote">Soft strawberry, light fizz, gastronomic. Pizza and spicy Asian.</div>
+          <div class="price-row"><div class="price">฿560</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/champagne-delot-blanc-de-noirs.png" alt="Champagne Delot Blanc de Noirs"></div>
+          <div class="origin">France · Champagne</div>
+          <div class="bname">Champagne Delot Blanc de Noirs Brut</div>
+          <div class="bnote">Pinot-driven, structured, brioche. The champagne page anchor.</div>
+          <div class="price-row"><div class="price">฿1,550</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+        <div class="bcard promo">
+          <div class="bimg"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/marcel-pierre-champagne.png" alt="Marcel Pierre Champagne Brut"></div>
+          <div class="origin">France · Champagne</div>
+          <div class="bname">Marcel Pierre Champagne Brut</div>
+          <div class="bnote">Classic Brut, citrus and almond. The everyday-champagne tier.</div>
+          <div class="price-row"><span class="price-strike">฿1,550</span><div class="price">฿1,350</div><div class="price-unit">/ btl</div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 05 of 09</div>
+      <div class="right">03 · Wine expansion · Sparkling</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Premium Wagyu ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Premium Wagyu</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Premium Wagyu</div>
+        <h2 class="pb-title">Beef, fat, umami.</h2>
+        <p class="pb-desc">A5 Wagyu has buttery fat &mdash; you want lift, not weight. A light French Pinot keeps the palate clean for the next bite; a dry sparkling ros&eacute; makes it a moment.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-04.png" alt="Premium Wagyu menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/patriarche-endless-summer-pinot-noir.png" alt="Patriarche Endless Summer Pinot Noir" /></div>
+            <div>
+              <div class="pb-origin">France · Pinot Noir</div>
+              <div class="pb-name">Patriarche Endless Summer Pinot Noir</div>
+            </div>
+            <div class="pb-price">฿690</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/abrau-durso-rose-reserve-brut.png" alt="Abrau Durso Reserve Rosé Brut" /></div>
+            <div>
+              <div class="pb-origin">Russia · Rosé Brut</div>
+              <div class="pb-name">Abrau Durso Reserve Rosé Brut</div>
+            </div>
+            <div class="pb-price">฿510</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 07 of 16</div>
+      <div class="right">04 · Pairings · Premium Wagyu</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Appetizer · Oysters ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Appetizer · Oysters</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Appetizer · Oysters</div>
+        <h2 class="pb-title">Brine meets bubble.</h2>
+        <p class="pb-desc">Oysters with red onion and vinegar need cut, not weight. A Soave or Petit Chablis for the classical play; a Prosecco for the spritz crowd.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-05.png" alt="Appetizer · Oysters menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/cantina-di-negrar-soave.png" alt="Cantina di Negrar Soave Classico 2024" /></div>
+            <div>
+              <div class="pb-origin">Italy · Soave</div>
+              <div class="pb-name">Cantina di Negrar Soave Classico 2024</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-petit-chablis.png" alt="Château de Maligny Petit Chablis" /></div>
+            <div>
+              <div class="pb-origin">France · Chablis</div>
+              <div class="pb-name">Château de Maligny Petit Chablis</div>
+            </div>
+            <div class="pb-price">฿990</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/astoria-ventus-prosecco.png" alt="Astoria Ventus Prosecco Brut DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · Prosecco</div>
+              <div class="pb-name">Astoria Ventus Prosecco Brut DOC</div>
+            </div>
+            <div class="pb-price">฿590</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/genesi-prosecco-pitars.png" alt="Genesi Prosecco — Pitars" /></div>
+            <div>
+              <div class="pb-origin">Italy · Veneto</div>
+              <div class="pb-name">Genesi Prosecco — Pitars</div>
+            </div>
+            <div class="pb-price">฿530</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 08 of 16</div>
+      <div class="right">04 · Pairings · Appetizer · Oysters</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Mediterranean Pans ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Mediterranean Pans</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Mediterranean Pans</div>
+        <h2 class="pb-title">Garlic, olive oil, herbs.</h2>
+        <p class="pb-desc">Shrimp al ajillo, seared scallops, calamari, pan-fried salmon &mdash; all want aromatic whites with acid. Mosel Riesling and dry Australian Riesling are the natural pair; Sauvignon Blanc covers the salmon belly.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-06.png" alt="Mediterranean Pans menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/nollen-erben-mosel-riesling.png" alt="Nollen Erben Riesling Spätlese" /></div>
+            <div>
+              <div class="pb-origin">Germany · Mosel</div>
+              <div class="pb-name">Nollen Erben Riesling Spätlese</div>
+            </div>
+            <div class="pb-price">฿600</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/calrossie-dry-riesling.png" alt="Calrossie Vineyard Dry Riesling" /></div>
+            <div>
+              <div class="pb-origin">Australia · Riesling</div>
+              <div class="pb-name">Calrossie Vineyard Dry Riesling</div>
+            </div>
+            <div class="pb-price">฿680</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/pierre-chainier-sauvignon-blanc.png" alt="Pierre Chainier Sauvignon Blanc" /></div>
+            <div>
+              <div class="pb-origin">France · Loire SB</div>
+              <div class="pb-name">Pierre Chainier Sauvignon Blanc</div>
+            </div>
+            <div class="pb-price">฿570</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 09 of 16</div>
+      <div class="right">04 · Pairings · Mediterranean Pans</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Bites, Dipping &amp; Salmon Toast ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Bites, Dipping &amp; Salmon Toast</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Bites, Dipping &amp; Salmon Toast</div>
+        <h2 class="pb-title">The sharing-board page.</h2>
+        <p class="pb-desc">A page that mixes flavours &mdash; salty, creamy, herbal. The widest pairing window of the menu. Ros&eacute; Brut for celebrations, Riesling for the salmon toast, Prosecco for the dipping plates.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-07.png" alt="Bites, Dipping &amp; Salmon Toast menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/abrau-durso-rose-reserve-brut.png" alt="Abrau Durso Reserve Rosé Brut" /></div>
+            <div>
+              <div class="pb-origin">Russia · Rosé Brut</div>
+              <div class="pb-name">Abrau Durso Reserve Rosé Brut</div>
+            </div>
+            <div class="pb-price">฿510</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/nollen-erben-mosel-riesling.png" alt="Nollen Erben Riesling Spätlese" /></div>
+            <div>
+              <div class="pb-origin">Germany · Mosel</div>
+              <div class="pb-name">Nollen Erben Riesling Spätlese</div>
+            </div>
+            <div class="pb-price">฿600</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/calrossie-dry-riesling.png" alt="Calrossie Vineyard Dry Riesling" /></div>
+            <div>
+              <div class="pb-origin">Australia · Riesling</div>
+              <div class="pb-name">Calrossie Vineyard Dry Riesling</div>
+            </div>
+            <div class="pb-price">฿680</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/genesi-prosecco-pitars.png" alt="Genesi Prosecco — Pitars" /></div>
+            <div>
+              <div class="pb-origin">Italy · Veneto</div>
+              <div class="pb-name">Genesi Prosecco — Pitars</div>
+            </div>
+            <div class="pb-price">฿530</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 10 of 16</div>
+      <div class="right">04 · Pairings · Bites, Dipping &amp; Salmon Toast</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Pasta ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Pasta</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Pasta</div>
+        <h2 class="pb-title">Two pasta directions.</h2>
+        <p class="pb-desc">Bolognese wants Montepulciano. The scallop and tom yum shrimp pastas want Italian whites with structure &mdash; Chardonnay, Pinot Grigio, Soave or Loire SB.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-11.png" alt="Pasta menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/terre-di-mario-montepulciano.png" alt="Terre di Mario Montepulciano d'Abruzzo" /></div>
+            <div>
+              <div class="pb-origin">Italy · for meat</div>
+              <div class="pb-name">Terre di Mario Montepulciano d'Abruzzo</div>
+            </div>
+            <div class="pb-price">฿550</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/bella-storia-chardonnay.png" alt="Bella Storia Chardonnay 2024" /></div>
+            <div>
+              <div class="pb-origin">Italy · seafood</div>
+              <div class="pb-name">Bella Storia Chardonnay 2024</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/tenuta-santanna-pinot-grigio.png" alt="Tenuta Sant'Anna Pinot Grigio Venezia DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · seafood</div>
+              <div class="pb-name">Tenuta Sant'Anna Pinot Grigio Venezia DOC</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/cantina-di-negrar-soave.png" alt="Cantina di Negrar Soave Classico 2024" /></div>
+            <div>
+              <div class="pb-origin">Italy · seafood</div>
+              <div class="pb-name">Cantina di Negrar Soave Classico 2024</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/pierre-chainier-sauvignon-blanc.png" alt="Pierre Chainier Sauvignon Blanc" /></div>
+            <div>
+              <div class="pb-origin">France · seafood</div>
+              <div class="pb-name">Pierre Chainier Sauvignon Blanc</div>
+            </div>
+            <div class="pb-price">฿570</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 11 of 16</div>
+      <div class="right">04 · Pairings · Pasta</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Sizzling Lamb &amp; BBQ Chicken ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Sizzling Lamb &amp; BBQ Chicken</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Sizzling Lamb &amp; BBQ Chicken</div>
+        <h2 class="pb-title">The grill page.</h2>
+        <p class="pb-desc">Sizzling lamb wants tannin and dark fruit &mdash; Malbec or Cabernet&ndash;Carmen&egrave;re. BBQ chicken sits between worlds: Malbec works, but a Pinot Noir gives it lift.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-13.png" alt="Sizzling Lamb &amp; BBQ Chicken menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/alamos-malbec.png" alt="Alamos Malbec Mendoza" /></div>
+            <div>
+              <div class="pb-origin">Argentina · for lamb</div>
+              <div class="pb-name">Alamos Malbec Mendoza</div>
+            </div>
+            <div class="pb-price">฿690</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/montgras-antu-cabernet-carmenere.png" alt="MontGras ANTU Cabernet–Carmenère" /></div>
+            <div>
+              <div class="pb-origin">Chile · for lamb</div>
+              <div class="pb-name">MontGras ANTU Cabernet–Carmenère</div>
+            </div>
+            <div class="pb-price">฿700</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/1924-double-black.png" alt="1924 Double Black Cabernet Sauvignon 2023" /></div>
+            <div>
+              <div class="pb-origin">USA · for lamb</div>
+              <div class="pb-name">1924 Double Black Cabernet Sauvignon 2023</div>
+            </div>
+            <div class="pb-price">฿790</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/patriarche-endless-summer-pinot-noir.png" alt="Patriarche Endless Summer Pinot Noir" /></div>
+            <div>
+              <div class="pb-origin">France · for chicken</div>
+              <div class="pb-name">Patriarche Endless Summer Pinot Noir</div>
+            </div>
+            <div class="pb-price">฿690</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 12 of 16</div>
+      <div class="right">04 · Pairings · Sizzling Lamb &amp; BBQ Chicken</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Pizza ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Pizza</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Pizza</div>
+        <h2 class="pb-title">Tomato, mozzarella, smoke.</h2>
+        <p class="pb-desc">Pizza wants a touch of sugar in the sparkling, or a soft acidic white. Extra Dry Prosecco is the classic Italian pair; Soave and Pinot Grigio cover the vegetarian and seafood-leaning slices.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-15.png" alt="Pizza menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/palazzo-grimani-prosecco.png" alt="Palazzo Grimani Prosecco Extra Dry DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · Extra Dry</div>
+              <div class="pb-name">Palazzo Grimani Prosecco Extra Dry DOC</div>
+            </div>
+            <div class="pb-price">฿610</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/tenuta-santanna-pinot-grigio.png" alt="Tenuta Sant'Anna Pinot Grigio Venezia DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · Pinot Grigio</div>
+              <div class="pb-name">Tenuta Sant'Anna Pinot Grigio Venezia DOC</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/cantina-di-negrar-soave.png" alt="Cantina di Negrar Soave Classico 2024" /></div>
+            <div>
+              <div class="pb-origin">Italy · Soave</div>
+              <div class="pb-name">Cantina di Negrar Soave Classico 2024</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 13 of 16</div>
+      <div class="right">04 · Pairings · Pizza</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Sashimi ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Sashimi</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Sashimi</div>
+        <h2 class="pb-title">The wine answer to soy and ginger.</h2>
+        <p class="pb-desc">Sashimi wants whites that are aromatic but not floral &mdash; you need to read the fish under the soy and wasabi. Pinot Grigio for tuna, off-dry Riesling for salmon, Chablis for the chef's sets.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-16.png" alt="Sashimi menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/tenuta-santanna-pinot-grigio.png" alt="Tenuta Sant'Anna Pinot Grigio Venezia DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · Pinot Grigio</div>
+              <div class="pb-name">Tenuta Sant'Anna Pinot Grigio Venezia DOC</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/nollen-erben-mosel-riesling.png" alt="Nollen Erben Riesling Spätlese" /></div>
+            <div>
+              <div class="pb-origin">Germany · Mosel</div>
+              <div class="pb-name">Nollen Erben Riesling Spätlese</div>
+            </div>
+            <div class="pb-price">฿600</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/calrossie-dry-riesling.png" alt="Calrossie Vineyard Dry Riesling" /></div>
+            <div>
+              <div class="pb-origin">Australia · Riesling</div>
+              <div class="pb-name">Calrossie Vineyard Dry Riesling</div>
+            </div>
+            <div class="pb-price">฿680</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-petit-chablis.png" alt="Château de Maligny Petit Chablis" /></div>
+            <div>
+              <div class="pb-origin">France · Chablis</div>
+              <div class="pb-name">Château de Maligny Petit Chablis</div>
+            </div>
+            <div class="pb-price">฿990</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 14 of 16</div>
+      <div class="right">04 · Pairings · Sashimi</div>
+    </div>
+  </div>
+
+  <!-- ============== PAIRING · Sashimi Sets ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">04 · Pairings</div>
+        <div>Sashimi Sets</div>
+      </div>
+    </header>
+
+    <div class="pair-page-layout">
+      <div class="pair-menu-side">
+        <div class="pb-tag">Sashimi Sets</div>
+        <h2 class="pb-title">The boat platter page.</h2>
+        <p class="pb-desc">Sashimi Set-A is ฿1,699 &mdash; the table that orders it is in bottle mode. Pinot Grigio for the easy choice, Petit Chablis or Mosel Riesling for the sommelier-tier table.</p>
+        <div class="pm-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/b2b-flyowl_2026-05-13/menu-pages/page-17.png" alt="Sashimi Sets menu page" /></div>
+      </div>
+
+      <div class="pair-bottles-side">
+        <div class="pb-list">
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/tenuta-santanna-pinot-grigio.png" alt="Tenuta Sant'Anna Pinot Grigio Venezia DOC" /></div>
+            <div>
+              <div class="pb-origin">Italy · Pinot Grigio</div>
+              <div class="pb-name">Tenuta Sant'Anna Pinot Grigio Venezia DOC</div>
+            </div>
+            <div class="pb-price">฿520</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/maligny-petit-chablis.png" alt="Château de Maligny Petit Chablis" /></div>
+            <div>
+              <div class="pb-origin">France · Chablis</div>
+              <div class="pb-name">Château de Maligny Petit Chablis</div>
+            </div>
+            <div class="pb-price">฿990</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/nollen-erben-mosel-riesling.png" alt="Nollen Erben Riesling Spätlese" /></div>
+            <div>
+              <div class="pb-origin">Germany · Mosel</div>
+              <div class="pb-name">Nollen Erben Riesling Spätlese</div>
+            </div>
+            <div class="pb-price">฿600</div>
+          </div>
+          <div class="pb-item">
+            <div class="pb-img"><img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/calrossie-dry-riesling.png" alt="Calrossie Vineyard Dry Riesling" /></div>
+            <div>
+              <div class="pb-origin">Australia · Riesling</div>
+              <div class="pb-name">Calrossie Vineyard Dry Riesling</div>
+            </div>
+            <div class="pb-price">฿680</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 15 of 16</div>
+      <div class="right">04 · Pairings · Sashimi Sets</div>
+    </div>
+  </div>
+
+  <!-- ============== CLOSING ============== -->
+  <div class="sheet">
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_sq_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">Next steps</div>
+        <div>How we move forward</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Promo terms<br/><span class="accent">&amp; how to get in touch.</span></h1>
+      <p class="lede">Everything you need to put us on. Promo pricing across this document holds through May 2026; standard B2B rates apply thereafter. First order on delivery, terms after.</p>
+    </section>
+
+    <section>
+      <div class="overline-section">Standard terms</div>
+      <div class="closing-grid">
+        <div class="block">
+          <h4>Logistics</h4>
+          <p><b>Delivery:</b> free, island-wide across Phuket. Single PO, single drop.</p>
+          <p><b>Lead time:</b> 1&ndash;2 working days from confirmed PO.</p>
+          <p><b>Reorder:</b> 24-hour turnaround on stocked SKUs. No monthly minimum.</p>
+          <p><b>MOQ:</b> 1 case per SKU.</p>
+        </div>
+        <div class="block">
+          <h4>Commercial</h4>
+          <p><b>Pricing:</b> wholesale, per bottle, excl. 7% VAT.</p>
+          <p><b>Promo validity:</b> May 2026 window; regular B2B pricing applies thereafter.</p>
+          <p><b>Payment:</b> on delivery for first PO; terms after that.</p>
+          <p><b>Exclusivity:</b> none requested.</p>
+        </div>
+      </div>
+    </section>
+
+    <section style="margin-top:7mm;">
+      <div class="overline-section">Contact</div>
+      <div class="closing-grid">
+        <div class="block">
+          <div class="contact-line"><span class="lbl">Account</span> Wine &amp; Whiskey · Phuket</div>
+          <div class="contact-line"><span class="lbl">Sales</span> [TBD rep] · [TBD phone]</div>
+          <div class="contact-line"><span class="lbl">Email</span> [TBD email]</div>
+          <div class="contact-line"><span class="lbl">Hours</span> Open daily 11:00 &ndash; 22:00</div>
+        </div>
+        <div class="block">
+          <div class="contact-line"><span class="lbl">Tasting</span> On-site, full range, by appointment.</div>
+          <div class="contact-line"><span class="lbl">Validity</span> First PO by 30 June 2026.</div>
+          <div class="contact-line"><span class="lbl">Quote ref</span> WW-FLYO-2026-05-13</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="closing-slogan">
+      <div class="cs-overline">Wine &amp; Whiskey · Phuket</div>
+      <h2 class="cs-title">Open the account.<br/><span class="accent">We open the bottles.</span></h2>
+    </div>
+
+    <div class="sheet-footer">
+      <div>Wine &amp; Whiskey · Phuket · Page 09 of 09</div>
+      <div class="right">Thank you, FlyO.</div>
+    </div>
+  </div>
+
+</body>
+</html>
