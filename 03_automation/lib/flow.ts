@@ -93,6 +93,36 @@ export async function closeFlow(s: FlowSession) {
   await s.browser.close();
 }
 
+// Race-wait for one of three known post-navigation states. Returns the
+// first signal that fires, or 'unknown' on timeout. Used to avoid the
+// skeleton-vs-redirect race in FA's SPA (see ensureLoggedIn).
+async function waitForKnownState(
+  page: Page,
+  timeoutMs: number,
+): Promise<"table" | "login" | "picker" | "unknown"> {
+  const result = await Promise.race([
+    page
+      .waitForSelector(
+        'datatable-body-row, .datatable-row-wrapper, [class*="datatable-empty"], [class*="empty-row"]',
+        { timeout: timeoutMs },
+      )
+      .then(() => "table" as const)
+      .catch(() => null),
+    page
+      .waitForSelector('input[type="password"]', { state: "visible", timeout: timeoutMs })
+      .then(() => "login" as const)
+      .catch(() => null),
+    page
+      .waitForFunction(
+        () => /SelectCompany|select-company|workspaces|\/select|\/companies/i.test(window.location.href),
+        { timeout: timeoutMs },
+      )
+      .then(() => "picker" as const)
+      .catch(() => null),
+  ]);
+  return result ?? "unknown";
+}
+
 async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // FlowAccount has two login layers:
   //   1. main flowaccount.com / advance.flowaccount.com login
@@ -103,7 +133,16 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // we end up on a real /business path.
   const target = `${BASE_URL}${WORKSPACE_PATH}/invoices`;
   await page.goto(target, { waitUntil: "domcontentloaded" });
-  await delay(3000);
+
+  // Race three signals to settle the page deterministically. A fixed delay
+  // here was a race: FA's SPA renders a skeleton FIRST, then its auth-check
+  // fires the redirect to /login (in CI with partially-stale cookies, this
+  // happens ~3-5s after goto). With a 3s delay we sometimes captured the
+  // skeleton URL — "looks like /invoices, no password input yet" — and
+  // returned "logged in" while the real redirect was about to happen, so
+  // listInvoices() then scraped the login page as an empty list.
+  await waitForKnownState(page, 25_000);
+  await delay(500);
 
   for (let attempt = 0; attempt < 4; attempt++) {
     const u = page.url();
@@ -147,8 +186,11 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       if (!clicked) {
         console.warn(`[flow] could not click any workspace picker element at ${u}`);
       }
-      await delay(4000);
-      await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+      // Wait for the post-click navigation to actually settle into a known
+      // state — table (we landed in the workspace), login (auth expired
+      // mid-flow), or another picker (rare). A fixed delay here also raced
+      // FA's SPA auth-check.
+      await waitForKnownState(page, 20_000);
       continue;
     }
 
@@ -195,9 +237,10 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     await page.locator(
       'button[type="submit"], input[type="submit"], button:has-text("เข้าสู่ระบบ"), button:has-text("Sign in"), button:has-text("Login"), button:has-text("Log in")'
     ).first().click();
-    await delay(5000);
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-    await delay(1500);
+    // Wait for the post-submit page to settle to a known state. Replaces
+    // the old fixed 5s+networkidle wait which raced FA's SPA auth-check.
+    await waitForKnownState(page, 25_000);
+    await delay(500);
 
     if (page.url().includes("/select") || page.url().includes("workspaces")) {
       try {
