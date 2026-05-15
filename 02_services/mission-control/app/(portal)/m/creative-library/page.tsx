@@ -73,19 +73,22 @@ function ProjectRow({ project }: { project: Project }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5 shrink-0">
-        {project.files.map(f => (
-          <a
-            key={f.href}
-            href={f.href}
-            target={f.ext === 'html' || f.ext === 'pdf' ? '_blank' : undefined}
-            rel="noopener"
-            download={f.ext !== 'html' && f.ext !== 'pdf'}
-            className="text-[11px] px-2 py-1 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red transition-colors"
-            title={formatSize(f.size)}
-          >
-            {f.label}
-          </a>
-        ))}
+        {project.files.map(f => {
+          const viewable = ['html', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'svg'].includes(f.ext)
+          return (
+            <a
+              key={f.href}
+              href={f.href}
+              target={viewable ? '_blank' : undefined}
+              rel="noopener"
+              download={!viewable}
+              className="text-[11px] px-2 py-1 border border-pale-stone rounded-sm text-graphite hover:border-wine-red hover:text-wine-red transition-colors"
+              title={formatSize(f.size)}
+            >
+              {f.label}
+            </a>
+          )
+        })}
       </div>
     </li>
   )

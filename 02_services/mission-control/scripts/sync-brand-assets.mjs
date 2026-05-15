@@ -27,9 +27,9 @@ const SKIP_NAMES = [
   /^fonts$/,                 // logo/fonts/: source TTFs for generate_logos.mjs
 ]
 
-// PDFs balloon the committed mirror; html + preview is enough for the library.
-// Source PDFs stay in 05_creative/output/ locally.
-const CREATIVE_SKIP_EXT = new Set(['.pdf'])
+// PDFs are now mirrored so the Creative Library can offer them as a download
+// button next to HTML/PNG. Keep this set in case we need to skip something later.
+const CREATIVE_SKIP_EXT = new Set()
 
 // Extra skips for 05_creative/social/ — campaign folders contain build sources
 // (background JPGs at multi-MB each) and pre-rendered exports (post/, stories/)

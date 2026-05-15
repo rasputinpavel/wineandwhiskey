@@ -1,0 +1,446 @@
+/* Wine & Whiskey — Sales Kit tear-sheet styles
+   Light mode. Tokens from 04_brand/design-tokens.json. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+       url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  --bg:        #F5F0EB;
+  --cream:     #EDE0D0;
+  --primary:   #8C1C1C;
+  --burgundy:  #5C1010;
+  --gold:      #C9A84C;
+  --text:      #1A1A1A;
+  --text2:     #3D3D3D;
+  --border:    #D4C9BC;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;
+  line-height: 1.4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.sheet {
+  width: 210mm;
+  height: 296mm;
+  padding: 10mm 15mm 9mm 15mm;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 5mm;
+  flex-shrink: 0;
+}
+
+.header img {
+  height: 7.5mm;
+  width: auto;
+}
+
+.header .meta {
+  font-size: 8pt;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  text-align: right;
+}
+
+.header .meta .category {
+  color: var(--primary);
+  font-size: 9pt;
+}
+
+/* Hero block */
+.hero h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-weight: 400;
+  font-size: 30pt;
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  margin: 0 0 2.5mm 0;
+  text-transform: uppercase;
+}
+
+.hero h1 .accent {
+  color: var(--primary);
+}
+
+.hero .lede {
+  font-size: 10pt;
+  color: var(--text2);
+  font-weight: 400;
+  line-height: 1.35;
+  margin: 0 0 3mm 0;
+  max-width: 165mm;
+}
+
+.hero .body {
+  font-size: 9pt;
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 178mm;
+  margin: 0 0 5mm 0;
+}
+
+/* Section overline */
+.overline {
+  font-size: 8pt;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--primary);
+  margin-bottom: 1.8mm;
+}
+
+/* Range table */
+table.range {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 4mm;
+  font-size: 8.5pt;
+}
+table.range thead th {
+  text-align: left;
+  font-size: 7.5pt;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text2);
+  padding: 1.6mm 3mm;
+  border-bottom: 1px solid var(--border);
+  background: var(--cream);
+}
+table.range tbody td {
+  padding: 1.3mm 3mm;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.range tbody tr:last-child td {
+  border-bottom: none;
+}
+table.range td.sku {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Two-col block (why it works) */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm 7mm;
+  margin-bottom: 4mm;
+}
+.two-col .item h4 {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.8mm 0;
+}
+.two-col .item p {
+  margin: 0;
+  font-size: 8.5pt;
+  line-height: 1.4;
+  color: var(--text2);
+}
+
+/* Fits table */
+table.fits {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 4mm;
+  font-size: 8.5pt;
+}
+table.fits td {
+  padding: 1.3mm 3mm;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.fits tr:last-child td { border-bottom: none; }
+table.fits td.venue {
+  font-weight: 600;
+  color: var(--text);
+  width: 38%;
+  white-space: nowrap;
+}
+table.fits td.use {
+  color: var(--text2);
+}
+
+/* Serves */
+.serves {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2.5mm;
+  margin-bottom: 4mm;
+}
+.serves .card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3mm 3.5mm;
+}
+.serves .card h5 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-weight: 400;
+  font-size: 12pt;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+  margin: 0 0 1mm 0;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.serves .card p {
+  margin: 0;
+  font-size: 8pt;
+  line-height: 1.35;
+  color: var(--text2);
+}
+
+/* Trade terms */
+.terms {
+  list-style: none;
+  margin: 0 0 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 7mm;
+}
+.terms li {
+  font-size: 8.5pt;
+  color: var(--text2);
+  line-height: 1.35;
+}
+.terms li b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Footer */
+.footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 3mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8mm;
+  flex-shrink: 0;
+}
+.footer .contact {
+  font-size: 8.5pt;
+  color: var(--text);
+  line-height: 1.45;
+}
+.footer .contact b {
+  color: var(--primary);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 8.5pt;
+  display: block;
+  margin-bottom: 0.5mm;
+}
+.footer .origin {
+  font-size: 6.5pt;
+  color: var(--text2);
+  text-align: right;
+  max-width: 80mm;
+  line-height: 1.3;
+  font-style: italic;
+}
+
+/* Spacing helpers */
+.section { margin-bottom: 3.5mm; }
+
+/* ============================================================
+   COVER PAGE (dark mode hero — per design tokens, hero product
+   visuals default to dark mode)
+   ============================================================ */
+.cover {
+  width: 210mm;
+  height: 296mm;
+  background: #1A1A1A;
+  color: #F5F0EB;
+  display: flex;
+  flex-direction: column;
+  padding: 14mm 16mm 12mm 16mm;
+  page-break-after: always;
+  break-after: page;
+  position: relative;
+  overflow: hidden;
+}
+
+/* radial-style amber glow behind bottles, subtle */
+.cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 55%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 55%);
+  pointer-events: none;
+}
+
+.cover .top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #3D3D3D;
+  z-index: 1;
+}
+.cover .top-bar img {
+  height: 8mm;
+  width: auto;
+}
+.cover .top-bar .meta {
+  font-size: 8pt;
+  color: #D4C9BC;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  text-align: right;
+}
+.cover .top-bar .meta .accent {
+  color: #C9A84C;
+}
+
+.cover .stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+  padding: 6mm 0;
+}
+
+.cover .bottles {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8mm;
+  margin-bottom: 8mm;
+  height: 130mm;
+}
+
+.cover .bottle-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4mm;
+  flex: 0 0 auto;
+}
+
+.cover .bottle-block svg {
+  height: 110mm;
+  width: auto;
+  filter: drop-shadow(0 4mm 8mm rgba(0,0,0,0.6));
+}
+
+.cover .bottle-block .caption {
+  text-align: center;
+  max-width: 38mm;
+}
+.cover .bottle-block .caption .name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-weight: 400;
+  font-size: 11pt;
+  letter-spacing: 0.06em;
+  color: #C9A84C;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 1mm;
+}
+.cover .bottle-block .caption .profile {
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;
+  color: #D4C9BC;
+  line-height: 1.3;
+}
+
+.cover .title-block {
+  text-align: center;
+  z-index: 1;
+  padding-bottom: 4mm;
+}
+
+.cover .title-block .overline {
+  font-size: 8pt;
+  color: #C9A84C;
+  letter-spacing: 0.25em;
+  margin-bottom: 4mm;
+  font-weight: 600;
+}
+
+.cover h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-weight: 400;
+  font-size: 56pt;
+  line-height: 0.92;
+  letter-spacing: 0.03em;
+  color: #F5F0EB;
+  margin: 0 0 4mm 0;
+  text-transform: uppercase;
+}
+.cover h1 .accent {
+  color: #8C1C1C;
+}
+
+.cover .lede {
+  font-family: 'Inter', sans-serif;
+  font-size: 11pt;
+  font-weight: 400;
+  color: #D4C9BC;
+  line-height: 1.4;
+  max-width: 150mm;
+  margin: 0 auto;
+}
+
+.cover .bottom-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 4mm;
+  border-top: 1px solid #3D3D3D;
+  font-size: 8pt;
+  color: #D4C9BC;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  z-index: 1;
+}
+.cover .bottom-bar .right {
+  color: #C9A84C;
+  font-weight: 600;
+}

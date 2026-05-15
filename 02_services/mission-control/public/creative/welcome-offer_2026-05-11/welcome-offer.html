@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wine &amp; Whiskey — Welcome Offer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    @font-face {
+      font-family: 'Bebas Neue';
+      src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+           url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    :root {
+      --bg:        #F5F0EB;
+      --cream:     #EDE0D0;
+      --primary:   #8C1C1C;
+      --burgundy:  #5C1010;
+      --gold:      #C9A84C;
+      --text:      #1A1A1A;
+      --text2:     #3D3D3D;
+      --border:    #D4C9BC;
+    }
+
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ============================================================
+       COVER (DARK MODE — hero)
+       ============================================================ */
+    .cover {
+      width: 210mm;
+      height: 296mm;
+      background: #1A1A1A;
+      color: #F5F0EB;
+      display: flex;
+      flex-direction: column;
+      padding: 14mm 16mm 12mm 16mm;
+      page-break-after: always;
+      break-after: page;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 55%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 55%);
+      pointer-events: none;
+    }
+    .cover .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid #3D3D3D;
+      z-index: 1;
+    }
+    .cover .top-bar img { height: 8mm; width: auto; }
+    .cover .top-bar .meta {
+      font-size: 8pt;
+      color: #D4C9BC;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      text-align: right;
+    }
+    .cover .top-bar .meta .accent { color: #C9A84C; }
+
+    .cover .stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1;
+      padding: 6mm 0;
+    }
+
+    .cover .bottles {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 12mm;
+      margin-bottom: 8mm;
+    }
+    .cover .group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .cover .group-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 3mm;
+      height: 130mm;
+      margin-bottom: 5mm;
+    }
+    .cover .group-row img {
+      height: 95mm;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 5mm 10mm rgba(0,0,0,0.65));
+    }
+    .cover .group-row.solo img {
+      height: 128mm;
+    }
+    .cover .group .caption {
+      text-align: center;
+      max-width: 95mm;
+    }
+    .cover .group .caption .name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 13pt;
+      letter-spacing: 0.08em;
+      color: #C9A84C;
+      text-transform: uppercase;
+      line-height: 1;
+      margin-bottom: 2mm;
+    }
+    .cover .group .caption .deal {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 28pt;
+      letter-spacing: 0.04em;
+      color: #F5F0EB;
+      line-height: 1;
+      margin-bottom: 2mm;
+    }
+    .cover .group .caption .profile {
+      font-family: 'Inter', sans-serif;
+      font-size: 8pt;
+      color: #D4C9BC;
+      line-height: 1.3;
+    }
+
+    .cover .title-block {
+      text-align: center;
+      z-index: 1;
+      padding-bottom: 4mm;
+    }
+    .cover .title-block .overline {
+      font-size: 8pt;
+      color: #C9A84C;
+      letter-spacing: 0.25em;
+      margin-bottom: 4mm;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .cover h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 56pt;
+      line-height: 0.92;
+      letter-spacing: 0.03em;
+      color: #F5F0EB;
+      margin: 0 0 4mm 0;
+      text-transform: uppercase;
+    }
+    .cover h1 .accent { color: #8C1C1C; }
+    .cover .lede {
+      font-family: 'Inter', sans-serif;
+      font-size: 11pt;
+      font-weight: 400;
+      color: #D4C9BC;
+      line-height: 1.4;
+      max-width: 150mm;
+      margin: 0 auto;
+    }
+    .cover .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4mm;
+      border-top: 1px solid #3D3D3D;
+      font-size: 8pt;
+      color: #D4C9BC;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      z-index: 1;
+    }
+    .cover .bottom-bar .right { color: #C9A84C; font-weight: 600; }
+
+    /* ============================================================
+       SHEET (LIGHT MODE)
+       ============================================================ */
+    .sheet {
+      width: 210mm;
+      height: 296mm;
+      padding: 12mm 16mm 10mm 16mm;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 6mm;
+      flex-shrink: 0;
+    }
+    .header img { height: 8mm; width: auto; }
+    .header .meta {
+      font-size: 8pt;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-weight: 600;
+      text-align: right;
+    }
+    .header .meta .category { color: var(--primary); font-size: 9pt; }
+
+    .hero h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 32pt;
+      line-height: 0.95;
+      letter-spacing: 0.03em;
+      color: var(--text);
+      margin: 0 0 3mm 0;
+      text-transform: uppercase;
+    }
+    .hero h1 .accent { color: var(--primary); }
+    .hero .lede {
+      font-size: 10.5pt;
+      color: var(--text2);
+      font-weight: 400;
+      line-height: 1.4;
+      margin: 0 0 6mm 0;
+      max-width: 170mm;
+    }
+
+    .overline {
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--primary);
+      margin-bottom: 2mm;
+    }
+
+    /* Deal cards — two big offer panels */
+    .deals {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5mm;
+      margin-bottom: 6mm;
+    }
+    .deal-card {
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5mm 5mm 4.5mm 5mm;
+      display: flex;
+      flex-direction: column;
+    }
+    .deal-card .kicker {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin-bottom: 1.5mm;
+    }
+    .deal-card .name {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 12pt;
+      color: var(--text);
+      margin: 0 0 0.5mm 0;
+      line-height: 1.2;
+    }
+    .deal-card .sub {
+      font-size: 8.5pt;
+      color: var(--text2);
+      margin-bottom: 4mm;
+      line-height: 1.3;
+    }
+    .deal-card .deal-mark {
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      font-size: 44pt;
+      color: var(--primary);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      margin-bottom: 1mm;
+    }
+    .deal-card .deal-line {
+      font-size: 9pt;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 4mm;
+    }
+    .deal-card .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1mm 4mm;
+      padding-top: 3mm;
+      border-top: 1px solid var(--border);
+      font-size: 8pt;
+    }
+    .deal-card .price-grid .label {
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 7pt;
+      font-weight: 600;
+    }
+    .deal-card .price-grid .value {
+      color: var(--text);
+      font-weight: 600;
+      font-size: 10pt;
+      font-family: 'Inter', sans-serif;
+    }
+    .deal-card .price-grid .value.gold { color: var(--burgundy); }
+
+    /* Why-it-works */
+    .why {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4mm;
+      margin-bottom: 6mm;
+    }
+    .why .item h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0 0 1mm 0;
+    }
+    .why .item p {
+      margin: 0;
+      font-size: 8.5pt;
+      line-height: 1.4;
+      color: var(--text2);
+    }
+
+    /* Terms */
+    .terms {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5mm 7mm;
+      margin-bottom: 6mm;
+    }
+    .terms li {
+      font-size: 8.5pt;
+      color: var(--text2);
+      line-height: 1.4;
+    }
+    .terms li b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 4mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8mm;
+      flex-shrink: 0;
+    }
+    .footer .contact {
+      font-size: 8.5pt;
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .footer .contact b {
+      color: var(--primary);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      display: block;
+      margin-bottom: 0.5mm;
+    }
+    .footer .validity {
+      font-size: 8.5pt;
+      color: var(--text);
+      text-align: right;
+      line-height: 1.4;
+    }
+    .footer .validity b {
+      color: var(--primary);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      display: block;
+      margin-bottom: 0.5mm;
+    }
+
+    .section { margin-bottom: 4mm; }
+  </style>
+</head>
+<body>
+
+  <!-- ============== COVER ============== -->
+  <div class="cover">
+    <div class="top-bar">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_white.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="accent">Welcome Offer</div>
+        <div>Phuket · 2026</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="bottles">
+
+        <!-- Group A: Abrau Durso (solo) -->
+        <div class="group">
+          <div class="group-row solo">
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/abrau-durso-1870-brut.png" alt="Abrau Durso Reserve Rosé Brut" />
+          </div>
+          <div class="caption">
+            <div class="name">Abrau Durso · Reserve Rosé Brut</div>
+            <div class="deal">11&nbsp;+&nbsp;1</div>
+            <div class="profile">Méthode classique · dry · 750 ml</div>
+          </div>
+        </div>
+
+        <!-- Group B: Barrister Gin range -->
+        <div class="group">
+          <div class="group-row">
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-dry-gin.png" alt="Barrister Dry Gin" />
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-pink-gin.png" alt="Barrister Pink Gin" />
+            <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/products/barrister-blue-gin.png" alt="Barrister Blue Gin" />
+          </div>
+          <div class="caption">
+            <div class="name">Barrister · Gin Range</div>
+            <div class="deal">5&nbsp;+&nbsp;1</div>
+            <div class="profile">Dry · Pink · Blue — mix any · 500 / 700 ml</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="title-block">
+      <div class="overline">Introductory offer · For new accounts</div>
+      <h1>Open the account.<br/><span class="accent">We open the bottles.</span></h1>
+      <p class="lede">Two anchor SKUs to put us on your back-bar. Limited window. No quota beyond the first delivery.</p>
+    </div>
+
+    <div class="bottom-bar">
+      <div>Wine &amp; Whiskey · Phuket</div>
+      <div class="right">Valid through 30 June 2026</div>
+    </div>
+  </div>
+  <!-- ============== END COVER ============== -->
+
+
+  <!-- ============== SHEET ============== -->
+  <div class="sheet">
+
+    <header class="header">
+      <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/logo_black_transparent.png" alt="Wine &amp; Whiskey" />
+      <div class="meta">
+        <div class="category">Welcome Offer</div>
+        <div>B2B · Phuket · May 2026</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Two SKUs.<br/><span class="accent">One handshake.</span></h1>
+      <p class="lede">A clean way to put Wine &amp; Whiskey on your list. One sparkling rosé that earns its place by the glass; a gin range that runs your G&amp;T program without locking you into the global majors.</p>
+    </section>
+
+    <section class="section">
+      <div class="overline">The offer</div>
+      <div class="deals">
+
+        <!-- DEAL 1: Abrau Rosé Brut -->
+        <div class="deal-card">
+          <div class="kicker">Sparkling rosé · Russia</div>
+          <div class="name">Abrau Durso Reserve Rosé Brut</div>
+          <div class="sub">Méthode classique · dry · 750 ml · 12.5% ABV</div>
+
+          <div class="deal-mark">11&nbsp;+&nbsp;1</div>
+          <div class="deal-line">Pay for 11 bottles. Take 12.</div>
+
+          <div class="price-grid">
+            <div>
+              <div class="label">Standard B2B</div>
+              <div class="value">฿510 / btl</div>
+            </div>
+            <div>
+              <div class="label">Effective</div>
+              <div class="value gold">฿467 / btl</div>
+            </div>
+            <div>
+              <div class="label">Case format</div>
+              <div class="value">12 btl</div>
+            </div>
+            <div>
+              <div class="label">Per case</div>
+              <div class="value gold">฿5,610</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DEAL 2: Barrister Gin -->
+        <div class="deal-card">
+          <div class="kicker">Premium gin · full range</div>
+          <div class="name">Barrister Gin</div>
+          <div class="sub">Dry · Pink · Blue — mix any expression · 40% ABV</div>
+
+          <div class="deal-mark">5&nbsp;+&nbsp;1</div>
+          <div class="deal-line">Pay for 5 bottles. Take 6.</div>
+
+          <div class="price-grid">
+            <div>
+              <div class="label">Standard B2B</div>
+              <div class="value">฿990 / btl</div>
+            </div>
+            <div>
+              <div class="label">Effective</div>
+              <div class="value gold">฿825 / btl</div>
+            </div>
+            <div>
+              <div class="label">Case format</div>
+              <div class="value">6 btl mixed</div>
+            </div>
+            <div>
+              <div class="label">Per case</div>
+              <div class="value gold">฿4,950</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <p style="font-size:7.5pt;color:var(--text2);margin:0 0 2mm 0;">All prices excl. VAT. Effective price = standard price spread across paid + bonus bottles.</p>
+    </section>
+
+    <section class="section">
+      <div class="overline">Why this works</div>
+      <div class="why">
+        <div class="item">
+          <h4>Two cocktail-program anchors</h4>
+          <p>One rosé bubbles SKU for spritz, by-the-glass and welcome pours. One gin family for the G&amp;T menu and signature serves.</p>
+        </div>
+        <div class="item">
+          <h4>Bonus, not discount</h4>
+          <p>Bonus bottles instead of a price cut — protects your menu pricing and our standard B2B rate when the promo ends.</p>
+        </div>
+        <div class="item">
+          <h4>One supplier, no commitment</h4>
+          <p>Single PO, single delivery, no monthly minimum. If the first case lands well, we talk about the rest of the list.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="overline">Terms</div>
+      <ul class="terms">
+        <li><b>Validity:</b> first order placed by 30 June 2026.</li>
+        <li><b>MOQ:</b> 1 case of either SKU to qualify.</li>
+        <li><b>Mix:</b> Barrister case can mix any expressions.</li>
+        <li><b>Delivery:</b> free island-wide.</li>
+        <li><b>Lead time:</b> 1–2 working days from PO.</li>
+        <li><b>Payment:</b> on delivery, first order.</li>
+        <li><b>After the offer:</b> standard B2B pricing applies.</li>
+        <li><b>Tasting:</b> on-site, full range, by appointment.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <div class="contact">
+        <b>Wine &amp; Whiskey · Phuket</b>
+        Sales: [TBD rep] · [TBD phone] · [TBD email]<br/>
+        Open daily 11:00 – 22:00
+      </div>
+      <div class="validity">
+        <b>Offer window</b>
+        Valid until 30 June 2026<br/>
+        Quote ref: WO-2026-05-11
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
