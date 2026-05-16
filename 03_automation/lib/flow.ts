@@ -298,14 +298,27 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
       'input:not([type="password"]):not([type="hidden"]):not([type="checkbox"]):not([type="submit"]):not([type="button"])',
     ].join(", ");
     const passSel = 'input[type="password"], input[name="Password"]';
-    const { email: e, password: p } = flowCreds();
-    if (!e || !p) {
+    const { email: rawE, password: rawP } = flowCreds();
+    if (!rawE || !rawP) {
       throw new Error(`FlowAccount session expired and FLOW_EMAIL / FLOW_PASSWORD are not set — cannot re-login. Refresh .flow-session.json (or FA_SESSION_B64_GZ in CI).`);
     }
+    // Trim whitespace — a stray space in a GitHub Secret (easy to paste in
+    // by accident) would cause the email validator to reject the field and
+    // the form to silently re-render itself.
+    const e = rawE.trim();
+    const p = rawP.trim();
+    console.log(`[flow] login fill: email_len=${e.length} (raw_len=${rawE.length}), password_len=${p.length} (raw_len=${rawP.length})`);
     await page.locator(emailSel).first().fill(e);
     await delay(300);
     await page.locator(passSel).first().fill(p);
     await delay(300);
+    // Read back the email field to confirm fill actually landed. Some sites
+    // intercept paste / autofill events and clear the value.
+    const filledEmail = await page.locator(emailSel).first().inputValue().catch(() => "");
+    const filledPasswordLen = await page.locator(passSel).first().inputValue().then(v => v.length).catch(() => 0);
+    console.log(`[flow] login fill verify: email_value="${filledEmail}", password_len=${filledPasswordLen}`);
+    await page.screenshot({ path: dbgPath(`flow-debug-prefill-${attempt}.png`), fullPage: true }).catch(() => {});
+
     await page.locator(
       'button[type="submit"], input[type="submit"], button:has-text("เข้าสู่ระบบ"), button:has-text("Sign in"), button:has-text("Login"), button:has-text("Log in")'
     ).first().click();
@@ -313,6 +326,15 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     // the old fixed 5s+networkidle wait which raced FA's SPA auth-check.
     await waitForKnownState(page, 25_000);
     await delay(500);
+    await page.screenshot({ path: dbgPath(`flow-debug-postsubmit-${attempt}.png`), fullPage: true }).catch(() => {});
+    // Pull any visible error message from the page so we can see what FA
+    // is complaining about (wrong password, blocked IP, captcha, 2FA…).
+    const errText = await page
+      .locator('.field-validation-error, .text-danger, [class*="error"], [class*="alert"]')
+      .allInnerTexts()
+      .then(arr => arr.map(s => s.trim()).filter(Boolean).join(" | "))
+      .catch(() => "");
+    console.log(`[flow] post-submit attempt ${attempt}: url=${page.url().slice(0, 100)}, error="${errText.slice(0, 200)}"`);
 
     if (page.url().includes("/select") || page.url().includes("workspaces")) {
       try {
