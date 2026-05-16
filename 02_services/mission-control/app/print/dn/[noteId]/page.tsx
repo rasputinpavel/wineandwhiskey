@@ -52,7 +52,7 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
               <span className="font-display text-[36px] tracking-display text-deep-black">&amp; WHISKEY</span>
             </div>
             <div className="text-[10px] text-graphite mt-2 leading-snug">
-              Phuket, Thailand · Open daily 10:00 – 22:00
+              Phuket, Thailand · Open daily 11:00 – 22:00
             </div>
           </div>
           <div className="text-right leading-tight">

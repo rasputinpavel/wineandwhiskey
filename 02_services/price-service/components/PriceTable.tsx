@@ -165,10 +165,15 @@ export default function PriceTable({ items: initialItems, total: initialTotal, p
   )
 }
 
+function hasTextSelection() {
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null
+  return !!sel && sel.toString().trim().length > 0
+}
+
 function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => void; selected: boolean }) {
   return (
     <tr
-      onClick={onClick}
+      onClick={() => { if (!hasTextSelection()) onClick() }}
       className={`cursor-pointer transition-colors ${selected ? 'bg-wine-50' : 'hover:bg-gray-50'}`}
     >
       <td className="px-4 py-3">
@@ -227,7 +232,7 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
 
 function MobileCard({ item, onClick }: { item: WineItem; onClick: () => void }) {
   return (
-    <div onClick={onClick} className="bg-white rounded-xl border border-gray-100 p-4 cursor-pointer hover:border-wine-200 transition-colors">
+    <div onClick={() => { if (!hasTextSelection()) onClick() }} className="bg-white rounded-xl border border-gray-100 p-4 cursor-pointer hover:border-wine-200 transition-colors">
       <div className="flex gap-3">
         {(item.image_url || item.vivino_image_url) ? (
           <div className="w-10 h-14 relative rounded-lg overflow-hidden flex-shrink-0">
