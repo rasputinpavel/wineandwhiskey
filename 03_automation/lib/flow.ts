@@ -175,6 +175,31 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   console.log(`[flow] ensureLoggedIn: initial state=${initialState}, url=${page.url().slice(0, 100)}`);
   await delay(500);
 
+  // If our cookies got rejected, FA may bounce us to its public marketing
+  // page (flowaccount.com/) instead of /login. The race-wait then returns
+  // 'unknown' (no datatable, no password field, no picker URL), the URL
+  // doesn't contain any of our login keywords, and the for-loop below
+  // breaks out thinking we're logged in. Detect this and force-navigate
+  // to the tenant login URL so the for-loop's login flow actually fires.
+  const currentUrl = page.url();
+  const isAdvanceUrl = currentUrl.includes("advance.flowaccount.com");
+  const isAuthUrl = currentUrl.includes("auth.flowaccount.com");
+  if (!isAdvanceUrl && !isAuthUrl) {
+    console.log(`[flow] ensureLoggedIn: bounced off-advance (url=${currentUrl.slice(0, 80)}), forcing tenant login URL`);
+    const tenantId = WORKSPACE_PATH.split("/").filter(Boolean)[0];
+    const returnUrl =
+      "/connect/authorize/callback?client_id=flowaccount-front-server" +
+      "&scope=openid%20flowaccount-api%20offline_access%20tenant" +
+      "&response_type=code&redirect_uri=https%3A%2F%2Fadvance.flowaccount.com%2Fcallback" +
+      "&response_mode=form_post" +
+      `&state=${tenantId}&acr_values=tenant%3A${tenantId}`;
+    const loginUrl = `https://auth.flowaccount.com/Account/Login?returnUrl=${encodeURIComponent(returnUrl)}`;
+    await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
+    const forcedState = await waitForKnownState(page, 25_000);
+    console.log(`[flow] ensureLoggedIn: after forced login goto, state=${forcedState}, url=${page.url().slice(0, 100)}`);
+    await delay(500);
+  }
+
   for (let attempt = 0; attempt < 4; attempt++) {
     const u = page.url();
     console.log(`[flow] attempt ${attempt}: url=${u.slice(0, 100)}`);

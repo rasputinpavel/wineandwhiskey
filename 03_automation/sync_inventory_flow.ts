@@ -228,8 +228,10 @@ async function syncReceipts(invoices: FlowInvoice[], receipts: FlowReceipt[]) {
 
 async function main() {
   const { from, to } = defaultWindow();
-  const fromIso = process.env.FLOW_FROM ?? from;
-  const toIso   = process.env.FLOW_TO   ?? to;
+  // `??` doesn't catch empty strings, but workflow_dispatch passes blanks as
+  // "" not undefined. Use `||` so blank inputs fall back to the default window.
+  const fromIso = process.env.FLOW_FROM || from;
+  const toIso   = process.env.FLOW_TO   || to;
   console.log(`[inv-flow] window ${fromIso} → ${toIso}`);
 
   const skus = await loadSkus();
