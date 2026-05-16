@@ -6,6 +6,9 @@
 # Dependencies
 node_modules/
 
+# Python venvs
+**/.venv*/
+
 # Build outputs
 .next/
 dist/

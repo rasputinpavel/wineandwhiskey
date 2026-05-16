@@ -18,7 +18,10 @@ This is the operating system for managing the Wine & Whiskey retail store.
   - `output/` — Generated exports (HTML, CSV) with date in filename.
 - **06_knowledge/** — Store knowledge base.
   - `wine/` — Wine concepts, regions, styles.
-- **07_skills/** — Claude Code custom slash commands.
+- **07_contacts/** — Партнёры и команда (профили, договоры, бонусные программы).
+  - `partners/<slug>/` — внешние партнёры (поставщики, бренды, B2B, медиа).
+  - `team/<slug>/` — сотрудники.
+  - `templates/` — шаблоны карточек.
 - **08_config/** — Store settings and thresholds.
 - **09_data/** — Local data store: inventory, sales, products, suppliers.
 
@@ -37,7 +40,8 @@ These rules apply to all work in this repo. Follow them strictly. If a new file 
 | Product photography | `05_creative/catalog/` | |
 | Generated exports | `05_creative/output/` | Filename must include date: `topic_YYYY-MM.ext` |
 | Wine knowledge notes | `06_knowledge/wine/` | Concepts, regions, styles in markdown |
-| Claude Code skills | `07_skills/` | |
+| Партнёры | `07_contacts/partners/<slug>/` | profile.md + contracts/ + programs.md + notes/ |
+| Сотрудники | `07_contacts/team/<slug>/` | profile.md + compensation.md + notes/ |
 | Store config & thresholds | `08_config/` | |
 | Local data store | `09_data/` | Inventory, sales, products, suppliers |
 

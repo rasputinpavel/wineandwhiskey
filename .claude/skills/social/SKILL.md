@@ -167,7 +167,7 @@ For review responses (type 6), output only the reply text — no hashtags, no vi
 
 ## Store details (use when relevant)
 
-- Hours: Open daily 10:00 am – 10:00 pm
+- Hours: Open daily 11:00 am – 10:00 pm
 - Location: Wine & Whiskey · Phuket
 
 ---
