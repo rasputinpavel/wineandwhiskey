@@ -1,0 +1,21 @@
+{
+  "_doc": "Per-receipt overrides for the bookkeeping B2B/B2C split. Used by sync_accounting.ts only — management-accounting tools (sync_b2b, b2b_reserve) keep the default classifier.",
+  "force_b2c_receipts": [
+    {
+      "receipt_number": "5-8402",
+      "date": "2026-04-10",
+      "amount": 2482.40,
+      "client": "Jetradar (Thailand) Co., Ltd.",
+      "reason": "Walk-in purchase, paid in person — Loyverse recorded as Bank Transfer but no FlowAccount tax invoice was issued. Booked as B2C for accounting; remains B2B for management/CRM purposes."
+    }
+  ],
+  "exclude_flow_receipts": [
+    {
+      "receipt_number": "RE202604140003",
+      "date": "2026-04-14",
+      "amount": 1706.65,
+      "client": "Tbilisi Co.,Ltd",
+      "reason": "Phantom FlowAccount receipt issued to close stale INV202603230004 (a debt-reminder invoice); no actual money moved. The real April Tbilisi payment was 4,782.90 ฿ via Loyverse 5-8429 → FlowAccount RE202604290001."
+    }
+  ]
+}
