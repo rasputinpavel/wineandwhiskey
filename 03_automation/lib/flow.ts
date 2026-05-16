@@ -80,10 +80,35 @@ export async function openFlow(): Promise<FlowSession> {
   if (!hasSession && (!email || !password)) {
     throw new Error("FLOW_EMAIL / FLOW_PASSWORD not set and no .flow-session.json present");
   }
-  const browser = await chromium.launch({ headless: HEADLESS });
-  const context = hasSession
-    ? await browser.newContext({ storageState: AUTH_STATE_PATH })
-    : await browser.newContext();
+
+  // Stealth baseline: FA's auth flow appears to fingerprint headless
+  // Chromium on datacenter IPs and revoke the session within seconds of
+  // landing on /invoices. Same cookies work fine locally from a real Mac,
+  // so the differentiators are (a) headless flag, (b) navigator.webdriver,
+  // (c) AutomationControlled, (d) default User-Agent. We mask all four.
+  const browser = await chromium.launch({
+    headless: HEADLESS,
+    args: [
+      "--disable-blink-features=AutomationControlled",
+      "--no-sandbox",
+    ],
+  });
+  const contextOpts: Parameters<typeof browser.newContext>[0] = {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    viewport: { width: 1440, height: 900 },
+    locale: "en-US",
+    timezoneId: "Asia/Bangkok",
+  };
+  if (hasSession) contextOpts.storageState = AUTH_STATE_PATH;
+  const context = await browser.newContext(contextOpts);
+  await context.addInitScript(() => {
+    // Hide the webdriver flag. Some sites read this directly to detect
+    // automation; others read CDP indicators that --disable-blink-features
+    // takes care of.
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
   const page = await context.newPage();
   await ensureLoggedIn(context, page);
   return { browser, context, page };
