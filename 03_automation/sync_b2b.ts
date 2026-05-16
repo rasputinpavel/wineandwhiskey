@@ -12,6 +12,7 @@
  */
 
 import dotenv from "dotenv";
+import { BANK_TRANSFER_TYPE_ID, isB2BCustomerName } from "./lib/b2b.js";
 dotenv.config({ path: ".env.local" });
 
 import { createClient } from "@supabase/supabase-js";
@@ -23,20 +24,6 @@ const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN!;
-
-const BANK_TRANSFER_TYPE_ID = "6bafa324-92d9-45c9-80d8-0539a65de4cc";
-
-const B2B_PATTERNS = [
-  "karon par", "milimon", "fine cuis", "great glory", "golden brew",
-  "jetradar", "fifth element", "next real", "layan paradise", "seaview",
-  "tbilisi", "q-squad", "kusnakafe", "lazy avocado", "pinzerai",
-  "arthouse", "crepes", "french home", "secret spot", "shaman phuket",
-];
-
-function isB2BCustomer(name: string): boolean {
-  const n = name.toLowerCase();
-  return B2B_PATTERNS.some(p => n.includes(p));
-}
 
 const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
@@ -190,7 +177,7 @@ interface B2BData { clients: ClientStats[]; orders: OrderLine[]; }
 async function fetchB2BData(): Promise<B2BData> {
   console.log("  Fetching Loyverse customers...");
   const customers = await loyverseFetch<any>("/customers", "customers");
-  const b2bCustomers = customers.filter((c: any) => isB2BCustomer(c.name ?? ""));
+  const b2bCustomers = customers.filter((c: any) => isB2BCustomerName(c.name ?? ""));
   console.log(`  B2B customers matched: ${b2bCustomers.length}`);
   if (b2bCustomers.length === 0) {
     console.log("  Names found:", customers.slice(0, 10).map((c: any) => c.name).join(", "));

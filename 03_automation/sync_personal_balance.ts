@@ -1,12 +1,16 @@
 /**
- * Writes a running-balance formula to "Income structure " col N, rows 8–46.
+ * Writes a running-balance formula to "Income structure " col O, rows 8–46.
  *
  * Logic:
- *   N8 = N7 (baseline 22.04) – cumulative expenses in "Расходы" from 23.04 up to and
- *        including the date in col A of that row.
+ *   O8 = O7 (baseline 22.04 = ฿66 000) – cumulative expenses in "Expenses"
+ *        from 23.04 up to and including the date in col A of that row,
+ *        excluding rows where F=TRUE (paid from company account).
  *
- * Расходы!A = date serial, Расходы!B = amount (positive = expense).
- * Formula is re-evaluated by Sheets whenever Расходы changes — fully dynamic.
+ * Expenses!A = date serial, Expenses!B = amount (positive = expense),
+ * Expenses!F = "со счёта компании" flag (TRUE = skip — that money never came
+ *             out of the personal balance).
+ *
+ * Formula is re-evaluated by Sheets whenever Expenses changes — fully dynamic.
  */
 
 import dotenv from "dotenv";
@@ -55,28 +59,29 @@ async function main() {
   for (let i = 7; i < colA.length; i++) {
     if (typeof colA[i] === "number" && colA[i] > 40000) lastRow = i + 1;
   }
-  console.log(`Writing formulas to N8:N${lastRow} (${lastRow - 7} rows)`);
+  console.log(`Writing formulas to O8:O${lastRow} (${lastRow - 7} rows)`);
 
   // Build formula values: one row per date, referencing the date in col A of that row
   const values: string[][] = [];
   for (let row = 8; row <= lastRow; row++) {
     const formula =
-      `=N$7-SUMPRODUCT(` +
-      `('Расходы'!A$2:A$500>=DATE(2026${S}4${S}23))*` +
-      `('Расходы'!A$2:A$500<=A${row})*` +
-      `IFERROR(1*'Расходы'!B$2:B$500${S}0)` +
+      `=O$7-SUMPRODUCT(` +
+      `('Expenses'!A$2:A$500>=DATE(2026${S}4${S}23))*` +
+      `('Expenses'!A$2:A$500<=A${row})*` +
+      `('Expenses'!F$2:F$500<>TRUE)*` +
+      `IFERROR(1*'Expenses'!B$2:B$500${S}0)` +
       `)`;
     values.push([formula]);
   }
 
-  const range = `${SHEET_NAME}!N8:N${lastRow}`;
+  const range = `${SHEET_NAME}!O8:O${lastRow}`;
   await sheetsReq(token, "PUT",
     `/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     { range, majorDimension: "ROWS", values }
   );
 
-  console.log(`✓ Personal balance formulas written to N8:N${lastRow}`);
-  console.log(`  Each row = ฿66,000 (22.04 baseline) – cumulative Расходы up to that date`);
+  console.log(`✓ Personal balance formulas written to O8:O${lastRow}`);
+  console.log(`  Each row = ฿66,000 (22.04 baseline) – cumulative личные Expenses (F<>TRUE)`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

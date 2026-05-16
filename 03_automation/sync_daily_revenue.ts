@@ -17,6 +17,7 @@
  */
 
 import dotenv from "dotenv";
+import { BANK_TRANSFER_TYPE_ID, isB2BCustomerName } from "./lib/b2b.js";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
@@ -155,7 +156,23 @@ async function readExistingRows(): Promise<Array<[string, number, number, number
 // ─── Loyverse ──────────────────────────────────────────────────────────────
 
 function isBankTransfer(receipt: any): boolean {
-  return (receipt.payments ?? []).some((p: any) => /bank.?transfer/i.test(p.name ?? ""));
+  return (receipt.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID);
+}
+
+let _b2bIdsPromise: Promise<Set<string>> | null = null;
+function getB2BCustomerIds(): Promise<Set<string>> {
+  if (_b2bIdsPromise) return _b2bIdsPromise;
+  _b2bIdsPromise = (async () => {
+    const customers = await loyverseFetch<any>("/customers", "customers");
+    const ids = new Set<string>();
+    for (const c of customers) if (isB2BCustomerName(c.name ?? "")) ids.add(c.id);
+    return ids;
+  })();
+  return _b2bIdsPromise;
+}
+
+function isB2BReceipt(r: any, b2bIds: Set<string>): boolean {
+  return isBankTransfer(r) || (!!r.customer_id && b2bIds.has(r.customer_id));
 }
 
 async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
@@ -181,10 +198,13 @@ interface DayStats { revenue: number; gp: number; b2c: number; b2b: number; }
 async function fetchRange(fromYMD: string, toYMD: string): Promise<Map<string, DayStats>> {
   const fromUTC = new Date(`${fromYMD}T00:00:00+07:00`).toISOString();
   const toUTC   = new Date(`${toYMD}T23:59:59+07:00`).toISOString();
-  const receipts: any[] = await loyverseFetch(
-    `/receipts?receipt_type=SALE&created_at_min=${fromUTC}&created_at_max=${toUTC}`,
-    "receipts",
-  );
+  const [receipts, b2bIds] = await Promise.all([
+    loyverseFetch<any>(
+      `/receipts?receipt_type=SALE&created_at_min=${fromUTC}&created_at_max=${toUTC}`,
+      "receipts",
+    ),
+    getB2BCustomerIds(),
+  ]);
   const byDay = new Map<string, DayStats>();
   for (const r of receipts) {
     const bkk = new Date(new Date(r.receipt_date).getTime() + 7 * 3600_000);
@@ -196,7 +216,7 @@ async function fetchRange(fromYMD: string, toYMD: string): Promise<Map<string, D
     const cur = byDay.get(day) ?? { revenue: 0, gp: 0, b2c: 0, b2b: 0 };
     cur.revenue += rev;
     cur.gp      += gp;
-    if (isBankTransfer(r)) cur.b2b += rev; else cur.b2c += rev;
+    if (isB2BReceipt(r, b2bIds)) cur.b2b += rev; else cur.b2c += rev;
     byDay.set(day, cur);
   }
   return byDay;

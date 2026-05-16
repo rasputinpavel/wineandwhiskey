@@ -46,12 +46,11 @@ interface MatrixParams {
   enforce_type_caps: number;       // 1 = hard cap per type (red/white/sparkling), 0 = free pool
   enforce_country_caps: number;    // 1 = hard cap per (type, subgroup) — country/grape, 0 = no cap
   min_margin_pct: number;          // skip items with margin below this % (0 = no filter)
-  // Core / Probe split
-  probe_budget_pct: number;        // % of total budget reserved for "probe" experimental SKUs
-  core_min_velocity: number;       // min bottles/month to enter the core matrix
-  core_min_target_units: number;   // min order qty per SKU in core (for supplier negotiation leverage)
-  core_min_unit_retail: number;    // min avg retail price (฿) — cuts off bottom-shelf SKUs
-  probe_min_margin_pct: number;    // min margin % for a probe candidate (filter weak experiments)
+  probe_budget_pct: number;
+  core_min_velocity: number;
+  core_min_target_units: number;
+  core_min_unit_retail: number;
+  probe_min_margin_pct: number;
 }
 
 const DEFAULTS: MatrixParams = {
@@ -476,7 +475,7 @@ async function main() {
   const totalWineStock = [...wineItemIds].reduce((s, id) => s + (itemStock.get(id) ?? 0), 0);
   console.log(`  ${invLevels.length} inventory levels · ${Math.round(totalWineStock)} винных бутылок на складе`);
 
-  // 3. Receipts
+  // 3. Receipts (with B2C/B2B classification — matrix uses B2C-only velocity)
   const minUtc = new Date(`${fromIso}T00:00:00+07:00`).toISOString();
   const maxUtc = new Date(`${toIso}T23:59:59+07:00`).toISOString();
   const receipts: any[] = await loyverseFetch(
@@ -485,16 +484,38 @@ async function main() {
   );
   console.log(`  ${receipts.length} receipts.`);
 
-  // 4. Aggregate by item
-  console.log("\n[2/4] Aggregating sales...");
+  // Resolve customer names so we can run B2B classifier per receipt.
+  const custIds = new Set<string>();
+  for (const r of receipts) if (r.customer_id) custIds.add(r.customer_id);
+  const custNames = new Map<string, string>();
+  await Promise.all([...custIds].map(async id => {
+    try {
+      const r = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
+        headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` },
+      });
+      if (!r.ok) return;
+      const c = await r.json();
+      custNames.set(id, ((c.name ?? "").trim() || c.email || id.slice(0, 8)));
+    } catch {}
+  }));
+  // Lazy-load B2B classifier
+  const { classifyReceipt } = await import("./lib/b2b.js");
+
+  // 4. Aggregate by item — B2C-only (B2B feeds the separate "B2B-резерв" sheet)
+  console.log("\n[2/4] Aggregating B2C sales (B2B excluded)...");
   interface Agg { units: number; revenue: number; cost: number; }
   const acc = new Map<string, Agg>();
+  let b2cReceipts = 0, b2bReceipts = 0, droppedItems = 0;
   for (const r of receipts) {
+    const customerName = r.customer_id ? (custNames.get(r.customer_id) ?? "") : "";
+    const cls = classifyReceipt({ payments: r.payments, customerName });
+    if (cls.isB2B) { b2bReceipts++; continue; }   // skip B2B receipts entirely
+    b2cReceipts++;
     for (const li of r.line_items ?? []) {
       const id = li.item_id as string;
       if (!id) continue;
       const meta = itemMeta.get(id);
-      if (!meta) continue;
+      if (!meta) { droppedItems++; continue; }
       if (meta.cat !== whiteCatId && meta.cat !== redCatId && meta.cat !== sparklingCatId) continue;
       const cur = acc.get(id) ?? { units: 0, revenue: 0, cost: 0 };
       cur.units   += li.quantity ?? 0;
@@ -503,7 +524,8 @@ async function main() {
       acc.set(id, cur);
     }
   }
-  console.log(`  ${acc.size} wine items with sales.`);
+  console.log(`  ${b2cReceipts} B2C receipts used, ${b2bReceipts} B2B excluded.`);
+  console.log(`  ${acc.size} wine items with B2C sales.`);
 
   // 5. Build raw candidates (everything that passes basic filters)
   const weeksFactor = params.target_weeks_of_stock / 4.345;
