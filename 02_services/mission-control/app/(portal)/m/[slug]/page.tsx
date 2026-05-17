@@ -3,7 +3,6 @@ import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { IframeEmbed } from '@/components/embeds/IframeEmbed'
 import { ExternalCard } from '@/components/embeds/ExternalCard'
-import { PulsePanel } from '@/components/embeds/PulsePanel'
 import { EnvPanel } from '@/components/embeds/EnvPanel'
 import { PlaceholderPanel } from '@/components/embeds/PlaceholderPanel'
 
@@ -29,7 +28,6 @@ export default async function ItemPage({ params }: { params: Promise<{ slug: str
       <div className="flex-1 overflow-hidden bg-cream">
         {item.embed.kind === 'iframe'   && <IframeEmbed src={item.embed.src} title={item.name} />}
         {item.embed.kind === 'external' && <ExternalCard item={item} />}
-        {item.embed.kind === 'builtin'  && item.embed.component === 'pulse'       && <PulsePanel />}
         {item.embed.kind === 'builtin'  && item.embed.component === 'env'         && <EnvPanel />}
         {item.embed.kind === 'builtin'  && item.embed.component === 'placeholder' && <PlaceholderPanel item={item} />}
       </div>

@@ -12,7 +12,7 @@ export type Embed =
   | { kind: 'native' }
   | { kind: 'iframe';   src: string; openHref?: string }
   | { kind: 'external'; href: string; mirrors?: { label: string; href: string }[] }
-  | { kind: 'builtin';  component: 'pulse' | 'env' | 'placeholder' }
+  | { kind: 'builtin';  component: 'env' | 'placeholder' }
 
 export type Item = {
   slug: string
@@ -96,10 +96,10 @@ export const SECTIONS: Section[] = [
     description: 'Дашборды, метрики, отчёты',
     items: [
       {
-        slug: 'pulse', name: 'KPI Pulse', icon: '❤', status: 'planned',
-        description: 'Revenue, gross profit, turnover, cash, stock health — всё на одном экране.',
+        slug: 'pulse', name: 'KPI Pulse', icon: '❤', status: 'building',
+        description: 'Sales, gross profit, B2B AR, supplier AP — single screen reconciled from Loyverse + FlowAccount.',
         route: m('pulse'),
-        embed: { kind: 'builtin', component: 'pulse' },
+        embed: { kind: 'native' },
       },
       {
         slug: 'dashboard-sheet', name: 'Главный Dashboard', icon: '📊', status: 'live',
