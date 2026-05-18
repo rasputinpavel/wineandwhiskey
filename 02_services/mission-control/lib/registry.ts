@@ -207,6 +207,12 @@ export const SECTIONS: Section[] = [
     description: 'Telegram-боты: ops, secretary',
     items: [
       {
+        slug: 'promo', name: 'Promo Pulse', icon: '📣', status: 'building',
+        description: 'Weekly promo campaigns: brief → copy → 6 assets → Creative Library.',
+        route: m('promo'),
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'ops-bot', name: 'Chip & Dale (ops bot)', icon: '🐿', status: 'live',
         description: 'Telegram-бот: продажи, остатки, утренний брифинг 9:30 BKK.',
         route: m('ops-bot'),

@@ -14,6 +14,10 @@ export const sbInventory = createClient(url, key, { db: { schema: 'inventory' } 
 // PostgREST returns 404.
 export const sbSales = createClient(url, key, { db: { schema: 'sales' } })
 
+// Promo Pulse — weekly promo campaigns. See migration 014_promo_campaigns.sql.
+// Schema `promo` must also be added to "Exposed schemas".
+export const sbPromo = createClient(url, key, { db: { schema: 'promo' } })
+
 // Default `public` schema client — used for tables that live outside our
 // custom inventory schema (today: purchase_orders + purchase_order_items
 // populated by 03_automation/scrape_purchase_orders.ts).
