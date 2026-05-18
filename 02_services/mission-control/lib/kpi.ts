@@ -159,3 +159,91 @@ export function isoNDaysAgo(n: number, now = new Date()): string {
   const { y, m, d } = bkkParts(now)
   return isoDate(bkkUtc(y, m, d - n))
 }
+
+// Same kind of range as periodRange but for the period immediately before
+// the current one. Used to compute "vs last period" deltas.
+export function previousPeriodRange(key: Period, now = new Date()): PeriodRange {
+  const { y, m, d, weekday } = bkkParts(now)
+  let fromUtc: Date
+  let toUtc: Date
+  let label: string
+
+  switch (key) {
+    case 'today': {
+      fromUtc = bkkUtc(y, m, d - 1)
+      toUtc   = bkkUtc(y, m, d)
+      label   = 'Yesterday'
+      break
+    }
+    case 'wtd': {
+      const daysSinceMonday = (weekday + 6) % 7
+      const thisMonday = d - daysSinceMonday
+      fromUtc = bkkUtc(y, m, thisMonday - 7)
+      toUtc   = bkkUtc(y, m, thisMonday)
+      label   = 'Previous week'
+      break
+    }
+    case 'mtd': {
+      // Same MTD slice of the previous month (1st → same day-of-month).
+      // If the previous month is shorter, clamp to its last day.
+      const prevMonthStart = bkkUtc(y, m - 1, 1)
+      const daysInPrevMonth = new Date(Date.UTC(y, m, 0)).getUTCDate()
+      const cutoffDay = Math.min(d, daysInPrevMonth)
+      fromUtc = prevMonthStart
+      toUtc   = bkkUtc(y, m - 1, cutoffDay + 1)
+      label   = 'Last month MTD'
+      break
+    }
+    case 'last_month': {
+      fromUtc = bkkUtc(y, m - 2, 1)
+      toUtc   = bkkUtc(y, m - 1, 1)
+      label   = '2 months ago'
+      break
+    }
+  }
+  return {
+    key,
+    label,
+    fromISO:  fromUtc.toISOString(),
+    toISO:    toUtc.toISOString(),
+    fromDate: isoDate(fromUtc),
+    toDate:   isoDate(toUtc),
+  }
+}
+
+// Signed delta formatters. Sign always prefixed so the eye locks onto direction.
+export function fmtDeltaPct(curr: number, prev: number, digits = 0): string {
+  if (!prev) return curr === 0 ? '0%' : 'new'
+  const pct = ((curr - prev) / Math.abs(prev)) * 100
+  const sign = pct > 0 ? '+' : ''
+  return `${sign}${pct.toFixed(digits)}%`
+}
+
+export function fmtDeltaPp(currPct: number, prevPct: number, digits = 1): string {
+  const delta = currPct - prevPct
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${delta.toFixed(digits)} pp`
+}
+
+// 'good' = up is good (sales, GP). 'bad' = up is bad (AR overdue, cash pressure).
+export function deltaTone(curr: number, prev: number, direction: 'good' | 'bad' = 'good'): 'pos' | 'neg' | 'flat' {
+  if (curr === prev) return 'flat'
+  const isUp = curr > prev
+  if (direction === 'good') return isUp ? 'pos' : 'neg'
+  return isUp ? 'neg' : 'pos'
+}
+
+// SVG polyline points for a sparkline. Returns "x,y x,y ..." string.
+// Output domain: [0, w] × [paddingY, h - paddingY], y inverted (0 = top).
+export function sparkPoints(values: number[], w: number, h: number, paddingY = 2): string {
+  if (values.length < 2) return ''
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const stepX = w / (values.length - 1)
+  return values.map((v, i) => {
+    const x = i * stepX
+    const y = h - paddingY - ((v - min) / range) * (h - 2 * paddingY)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}

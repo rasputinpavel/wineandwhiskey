@@ -96,7 +96,7 @@ export const SECTIONS: Section[] = [
     description: 'Дашборды, метрики, отчёты',
     items: [
       {
-        slug: 'pulse', name: 'KPI Pulse', icon: '❤', status: 'building',
+        slug: 'pulse', name: 'Finance Pulse', icon: '❤', status: 'building',
         description: 'Sales, gross profit, B2B AR, supplier AP — single screen reconciled from Loyverse + FlowAccount.',
         route: m('pulse'),
         embed: { kind: 'native' },
