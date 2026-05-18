@@ -66,6 +66,7 @@ export type PromoCampaign = {
   caption_tg:   string | null
   visual_mode:  PromoVisualMode | null
   composition:  PromoComposition | null
+  nbp_prompt:   string | null
   assets:       PromoAssets | null
   created_at:   string
   generated_at: string | null

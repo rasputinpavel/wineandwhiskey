@@ -34,6 +34,7 @@ export async function POST(_req: Request, { params }: Ctx) {
         caption_tg:  copy.caption_tg,
         visual_mode: copy.visual_mode,
         composition: copy.composition,
+        nbp_prompt:  copy.nbp_prompt,
       })
       .eq('id', id)
       .select()

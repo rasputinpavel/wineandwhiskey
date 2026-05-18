@@ -92,6 +92,14 @@ export default async function PromoDetailPage({ params }: Ctx) {
                 {c.caption_tg && <div><strong>TG caption:</strong>  <p className="whitespace-pre-wrap">{c.caption_tg}</p></div>}
                 {c.visual_mode && <div><strong>Visual mode:</strong> {c.visual_mode}</div>}
                 {c.composition && <div><strong>Composition:</strong> {c.composition}</div>}
+                {c.nbp_prompt && (
+                  <details className="border-t border-pale-stone pt-2 mt-3">
+                    <summary className="cursor-pointer text-xs text-graphite uppercase tracking-wide font-semibold">
+                      NBP image prompt
+                    </summary>
+                    <pre className="text-[11px] text-graphite font-mono whitespace-pre-wrap mt-2 leading-relaxed">{c.nbp_prompt}</pre>
+                  </details>
+                )}
               </div>
             ) : (
               <p className="text-sm text-graphite italic">
