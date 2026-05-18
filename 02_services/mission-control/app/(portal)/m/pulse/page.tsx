@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder } from '@/lib/supabase'
+import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import {
@@ -46,6 +46,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     customersRes,
     suppliersRes,
     posOpenRes,
+    fixedCostsRes,
   ] = await Promise.all([
     sbInventory
       .from('loyverse_receipt')
@@ -96,12 +97,16 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
       .from('purchase_orders')
       .select('id, po_number, supplier, total_thb, order_date, cashflow_override, url')
       .gte('order_date', isoNDaysAgo(90)),
+    sbInventory
+      .from('fixed_cost')
+      .select('amount_thb, active'),
   ])
 
   for (const r of [receiptsPeriodRes, receiptsPrevRes, receiptsTrendRes, invoicesOpenRes, invoicesPeriodRes, invoicesPrevRes, receiptsFaPeriodRes, customersRes, suppliersRes]) {
     if (r.error) return <div className="p-6"><SchemaError error={r.error.message} /></div>
   }
   if (posOpenRes.error) return <div className="p-6"><SchemaError error={posOpenRes.error.message} /></div>
+  // fixed_cost is allowed to be missing (migration not applied yet) — treat as empty list.
 
   // ─── Sales / COGS / GP (Loyverse receipts) ────────────────────────────────
   const receipts = (receiptsPeriodRes.data ?? []) as LoyverseReceipt[]
@@ -233,6 +238,40 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     return t > 0 ? ((t - d.cost) / t) * 100 : 0
   })
 
+  // ─── Operating health: break-even + COGS coverage ────────────────────────
+  // Monthly fixed costs are user-edited on /m/pulse/settings. Daily break-even
+  // is monthly / 30 / trailing-30d GM%. Using trailing GM% (not period GM%)
+  // keeps BE stable when the user switches the period filter.
+  const fixedCostRows = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
+  const monthlyFixed  = fixedCostRows.filter(r => r.active).reduce((s, r) => s + Number(r.amount_thb), 0)
+
+  const trend30Sales  = trendData.reduce((s, d) => s + d.b2c + d.b2b, 0)
+  const trend30Cost   = trendData.reduce((s, d) => s + d.cost, 0)
+  const trend30GMPct  = trend30Sales > 0 ? ((trend30Sales - trend30Cost) / trend30Sales) * 100 : 0
+  const dailyBE: number | null = (monthlyFixed > 0 && trend30GMPct > 0)
+    ? monthlyFixed / 30 / (trend30GMPct / 100)
+    : null
+
+  const todayRevenue = trendData[trendData.length - 1] ? (trendData[trendData.length - 1].b2c + trendData[trendData.length - 1].b2b) : 0
+  const mtdDays      = trendData.filter(d => d.day >= todayBkk().slice(0, 8) + '01')   // YYYY-MM-01 → today
+  const daysAboveBE  = dailyBE != null ? mtdDays.filter(d => (d.b2c + d.b2b) >= dailyBE).length : 0
+
+  // COGS coverage: project current-month COGS at MTD pace to a full month, then
+  // compare to previous calendar month PO total (regular suppliers only).
+  // > 1.0 = selling faster than purchasing; < 1.0 = cash burn flag.
+  const todayD       = new Date(today + 'T00:00:00Z')
+  const daysInMonth  = new Date(Date.UTC(todayD.getUTCFullYear(), todayD.getUTCMonth() + 1, 0)).getUTCDate()
+  const daysPassed   = todayD.getUTCDate()
+  const mtdCOGS      = mtdDays.reduce((s, d) => s + d.cost, 0)
+  const projectedCOGS = daysPassed > 0 ? (mtdCOGS / daysPassed) * daysInMonth : 0
+
+  const pmFrom = new Date(Date.UTC(todayD.getUTCFullYear(), todayD.getUTCMonth() - 1, 1)).toISOString().slice(0, 10)
+  const pmTo   = new Date(Date.UTC(todayD.getUTCFullYear(), todayD.getUTCMonth(),     1)).toISOString().slice(0, 10)
+  const prevMonthPOTotal = allPOs
+    .filter(p => p.order_date && p.order_date >= pmFrom && p.order_date < pmTo)
+    .reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  const coverage: number | null = prevMonthPOTotal > 0 ? projectedCOGS / prevMonthPOTotal : null
+
   // ─── Cash Pressure 7D (proxy) ─────────────────────────────────────────────
   // Cash in (next 7d) ≈ trailing-7d Loyverse revenue (run-rate continues) +
   // AR due in next 7d (assumes 100% on-time collection). Cash out = AP due in
@@ -256,7 +295,16 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     <>
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-3">
         <h2 className="font-heading text-xl text-deep-black">Finance Pulse · {range.label}</h2>
-        <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'flowaccount_receipts', 'purchase_orders']} />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/m/pulse/settings"
+            className="text-[11px] text-graphite hover:text-wine-red font-mono"
+            title="Edit monthly fixed costs"
+          >
+            ⚙ Settings
+          </Link>
+          <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'flowaccount_receipts', 'purchase_orders']} />
+        </div>
       </div>
 
       {/* Period filter */}
@@ -346,6 +394,18 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
         />
       </div>
 
+      {/* ─── Operating Health row: break-even + coverage ─────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+        <BreakEvenTodayCard dailyBE={dailyBE} todayRevenue={todayRevenue} monthlyFixed={monthlyFixed} />
+        <DaysAboveBECard dailyBE={dailyBE} daysAboveBE={daysAboveBE} daysPassed={Math.max(1, mtdDays.length)} />
+        <CoverageCard
+          coverage={coverage}
+          mtdCOGS={mtdCOGS}
+          projectedCOGS={projectedCOGS}
+          prevMonthPOTotal={prevMonthPOTotal}
+        />
+      </div>
+
       {/* ─── Row 2: B2B / obligations breakdown ─────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <MiniKpi label="B2B Sales"      value={fmtThbCompact(agg.b2bSales)}  sub={fmtPct(agg.b2bSales, agg.netSales) + ' of total'} />
@@ -361,12 +421,14 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
         <div className="lg:col-span-6">
           <Card
             title="Sales + Gross Profit · last 30 days"
-            right={<div className="flex gap-3 text-[10px] text-graphite">
-              <LegendDot color="#D4C9BC" label="Daily sales" />
+            right={<div className="flex gap-3 text-[10px] text-graphite flex-wrap">
+              <LegendDot color="#3D3D3D" label="≥ BE" />
+              <LegendDot color="#8C1C1C" label="< BE" />
               <LegendDot color="#8C1C1C" label="GP" line />
+              {dailyBE != null && <LegendDot color="#C9A84C" label="BE line" line dashed />}
             </div>}
           >
-            <ComboChart days={trend.days} sales={trendTotals} gp={trendGP} />
+            <ComboChart days={trend.days} sales={trendTotals} gp={trendGP} breakEven={dailyBE} />
             <div className="flex justify-between mt-2 text-[10px] text-graphite font-mono">
               <span>{trend.days[0]?.slice(5)}</span>
               <span>Total: {fmtThb(trendTotals.reduce((s, v) => s + v, 0))} · avg/day {fmtThb(trendTotals.reduce((s, v) => s + v, 0) / Math.max(1, trendTotals.length))}</span>
@@ -673,15 +735,102 @@ function PhaseBadge() {
   )
 }
 
-function LegendDot({ color, label, line }: { color: string; label: string; line?: boolean }) {
+function LegendDot({ color, label, line, dashed }: { color: string; label: string; line?: boolean; dashed?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1">
       {line
-        ? <span className="inline-block w-3 h-[2px]" style={{ backgroundColor: color }} />
+        ? <span className="inline-block w-3 h-[2px]" style={{ backgroundColor: dashed ? 'transparent' : color, backgroundImage: dashed ? `linear-gradient(to right, ${color} 50%, transparent 50%)` : undefined, backgroundSize: dashed ? '3px 2px' : undefined }} />
         : <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
       }
       {label}
     </span>
+  )
+}
+
+function BreakEvenTodayCard({ dailyBE, todayRevenue, monthlyFixed }: {
+  dailyBE: number | null; todayRevenue: number; monthlyFixed: number
+}) {
+  if (dailyBE == null) {
+    return (
+      <div className="bg-warm-white border border-dashed border-pale-stone rounded-md p-3 shadow-card">
+        <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">Break-even today</div>
+        <div className="font-display text-xl tracking-display text-graphite leading-none">Not configured</div>
+        <Link href="/m/pulse/settings" className="text-[11px] text-wine-red hover:underline mt-2 inline-block">
+          {monthlyFixed === 0 ? 'Set monthly fixed costs →' : 'Fix GM% (no sales last 30d) →'}
+        </Link>
+      </div>
+    )
+  }
+  const diff = todayRevenue - dailyBE
+  const above = diff >= 0
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md p-3 shadow-card">
+      <div className="flex items-baseline justify-between mb-1">
+        <div className="text-[10px] uppercase tracking-overline text-graphite truncate">Break-even today</div>
+        <span className="text-[9px] font-mono uppercase text-amber-gold">proxy</span>
+      </div>
+      <div className={`font-display text-2xl tracking-display leading-none ${above ? 'text-deep-black' : 'text-wine-red'}`}>
+        {fmtThbCompact(dailyBE)}
+      </div>
+      <div className="text-[10px] text-graphite mt-1 truncate">
+        Today {fmtThbCompact(todayRevenue)} · {above ? 'above by ' : 'below by '}
+        <span className={above ? 'text-deep-black' : 'text-wine-red'}>{fmtThbCompact(Math.abs(diff))}</span>
+      </div>
+    </div>
+  )
+}
+
+function DaysAboveBECard({ dailyBE, daysAboveBE, daysPassed }: {
+  dailyBE: number | null; daysAboveBE: number; daysPassed: number
+}) {
+  if (dailyBE == null) {
+    return (
+      <div className="bg-warm-white border border-dashed border-pale-stone rounded-md p-3 shadow-card">
+        <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">Days above BE</div>
+        <div className="font-display text-xl tracking-display text-graphite leading-none">—</div>
+        <div className="text-[10px] text-graphite mt-1">Requires fixed costs</div>
+      </div>
+    )
+  }
+  const pct = daysPassed > 0 ? (daysAboveBE / daysPassed) * 100 : 0
+  const tone = pct >= 70 ? 'text-deep-black' : pct >= 40 ? 'text-amber-gold' : 'text-wine-red'
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md p-3 shadow-card">
+      <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">Days above BE · MTD</div>
+      <div className={`font-display text-2xl tracking-display leading-none ${tone}`}>
+        {daysAboveBE} / {daysPassed}
+      </div>
+      <div className="text-[10px] text-graphite mt-1">{pct.toFixed(0)}% of MTD days covered fixed costs</div>
+    </div>
+  )
+}
+
+function CoverageCard({ coverage, mtdCOGS, projectedCOGS, prevMonthPOTotal }: {
+  coverage: number | null; mtdCOGS: number; projectedCOGS: number; prevMonthPOTotal: number
+}) {
+  if (coverage == null) {
+    return (
+      <div className="bg-warm-white border border-dashed border-pale-stone rounded-md p-3 shadow-card">
+        <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">COGS coverage</div>
+        <div className="font-display text-xl tracking-display text-graphite leading-none">No prev-month PO</div>
+        <div className="text-[10px] text-graphite mt-1">Nothing was ordered last month (regular suppliers)</div>
+      </div>
+    )
+  }
+  const tone = coverage >= 1.0 ? 'text-deep-black' : coverage >= 0.7 ? 'text-amber-gold' : 'text-wine-red'
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md p-3 shadow-card" title="Projected current-month COGS ÷ previous-month PO total (regular suppliers, excludes consignment). > 1.0 = selling faster than purchasing.">
+      <div className="flex items-baseline justify-between mb-1">
+        <div className="text-[10px] uppercase tracking-overline text-graphite truncate">COGS coverage</div>
+        <span className="text-[9px] font-mono uppercase text-amber-gold">proxy</span>
+      </div>
+      <div className={`font-display text-2xl tracking-display leading-none ${tone}`}>
+        {coverage.toFixed(2)}×
+      </div>
+      <div className="text-[10px] text-graphite mt-1 truncate">
+        proj {fmtThbCompact(projectedCOGS)} / prev-month PO {fmtThbCompact(prevMonthPOTotal)}
+      </div>
+    </div>
   )
 }
 
@@ -699,11 +848,13 @@ function Sparkline({ values, w, h, color }: { values: number[]; w: number; h: nu
   )
 }
 
-function ComboChart({ days, sales, gp }: { days: string[]; sales: number[]; gp: number[] }) {
+function ComboChart({ days, sales, gp, breakEven }: {
+  days: string[]; sales: number[]; gp: number[]; breakEven?: number | null
+}) {
   const w = 600, h = 160, padX = 4, padY = 10
   const innerW = w - 2 * padX
   const innerH = h - 2 * padY
-  const max = Math.max(1, ...sales, ...gp)
+  const max = Math.max(1, ...sales, ...gp, breakEven ?? 0)
   const stepX = innerW / Math.max(1, days.length)
   const barW = stepX * 0.7
 
@@ -713,18 +864,27 @@ function ComboChart({ days, sales, gp }: { days: string[]; sales: number[]; gp: 
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
 
+  const beY = breakEven != null && breakEven > 0
+    ? padY + innerH - (breakEven / max) * innerH
+    : null
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-32" preserveAspectRatio="none">
       {/* baseline */}
       <line x1={padX} y1={padY + innerH} x2={w - padX} y2={padY + innerH} stroke="#D4C9BC" strokeWidth={0.5} />
-      {/* sales bars */}
+      {/* sales bars — coloured by BE comparison when BE is set */}
       {sales.map((v, i) => {
         if (v <= 0) return null
         const bh = (v / max) * innerH
         const x = padX + i * stepX + (stepX - barW) / 2
         const y = padY + innerH - bh
-        return <rect key={i} x={x} y={y} width={barW} height={bh} fill="#D4C9BC" />
+        const fill = breakEven == null ? '#D4C9BC' : (v >= breakEven ? '#3D3D3D' : '#8C1C1C')
+        return <rect key={i} x={x} y={y} width={barW} height={bh} fill={fill} opacity={breakEven == null ? 1 : 0.85} />
       })}
+      {/* break-even reference line */}
+      {beY != null && (
+        <line x1={padX} y1={beY} x2={w - padX} y2={beY} stroke="#C9A84C" strokeWidth={1} strokeDasharray="4 3" />
+      )}
       {/* gp line */}
       <polyline points={linePoints} stroke="#8C1C1C" strokeWidth={1.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
