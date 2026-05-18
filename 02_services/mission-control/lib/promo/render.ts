@@ -10,6 +10,7 @@ import chromium from '@sparticuz/chromium'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { FORMAT_SPECS, buildHtml, type FormatSpec, type PromoFormatKey } from './visuals'
+import { generateAllBackgrounds, type BgAspect } from './nbp'
 import type { PromoCampaign } from './types'
 
 export type RenderedAsset = {
@@ -82,13 +83,20 @@ async function launchBrowser(): Promise<Browser> {
 
 // ─── Main entry ────────────────────────────────────────────────────────────
 export async function renderPromoVisuals(c: PromoCampaign): Promise<RenderedAsset[]> {
-  const productDataUrls = await loadProductDataUrls(c.sku_slugs)
+  // Step 1: AI backgrounds (one per aspect family). Parallel ~5-10s each.
+  // Step 2: Puppeteer composites each format on top of the right background.
+  const [productDataUrls, backgrounds] = await Promise.all([
+    loadProductDataUrls(c.sku_slugs),
+    generateAllBackgrounds(c),
+  ])
+
   const browser = await launchBrowser()
   const assets: RenderedAsset[] = []
 
   try {
     for (const format of FORMAT_SPECS) {
-      const html = buildHtml({ campaign: c, format, productDataUrls })
+      const backgroundDataUrl = backgrounds[format.axis as BgAspect]
+      const html = buildHtml({ campaign: c, format, productDataUrls, backgroundDataUrl })
       const buffer = await renderOne(browser, format, html)
       assets.push({ key: format.key, ext: format.ext, buffer })
     }

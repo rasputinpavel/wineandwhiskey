@@ -19,7 +19,7 @@ const ENV = [
   },
   {
     service: 'mission-control (this)',
-    vars: ['MC_PASSWORD', 'MC_SECRET'],
+    vars: ['MC_PASSWORD', 'MC_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY'],
   },
   {
     service: 'automation scripts (root)',

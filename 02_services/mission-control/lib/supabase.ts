@@ -97,6 +97,17 @@ export type B2bCustomerGroup = {
   updated_at: string
 }
 
+export type FixedCost = {
+  id: string
+  category: string
+  amount_thb: number
+  active: boolean
+  notes: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type LoyverseCustomer = {
   id: string
   name: string

@@ -1,10 +1,10 @@
-// Promo Pulse — Phase 3 visual templates.
+// Promo Pulse — Phase 3.5 visual templates.
 //
-// Each format renders the SAME composition (chosen by the model in Phase 2)
-// adapted to its aspect ratio. CSS uses design tokens from §2/§3 of the
-// design system. Layout switches by `composition`; palette switches by
-// `visual_mode`. Text scales via vmin so the template auto-fits every
-// canvas without per-format size tables.
+// Each format = AI-generated atmospheric photo (Nano Banana Pro) as canvas
+// background + product PNG composited centered + design-system text overlay.
+// Layout switches by composition (3 variants: product-hero / text-hero /
+// moment), aspect picks which AI background to use, palette adapts to
+// visual_mode so text stays readable.
 
 import type { PromoCampaign, PromoComposition, PromoVisualMode } from './types'
 
@@ -19,24 +19,19 @@ export type PromoFormatKey =
   | 'web_banner_mobile'
 
 export type FormatSpec = {
-  key:       PromoFormatKey
-  label:     string
-  // px viewport (also drives the PDF page size when ext='pdf' since we set
-  // page.pdf({ width: w + 'px', height: h + 'px' })).
-  width:     number
-  height:    number
-  ext:       'png' | 'pdf'
-  // Image rotation used by composition: how heavy a photo zone we want.
-  // 'wide' lays out photos in a row, 'portrait' stacks them.
-  axis:      'square' | 'portrait' | 'landscape'
+  key:    PromoFormatKey
+  label:  string
+  width:  number
+  height: number
+  ext:    'png' | 'pdf'
+  // Maps to one of the three NBP-generated backgrounds.
+  axis:   'square' | 'portrait' | 'landscape'
 }
 
 export const FORMAT_SPECS: FormatSpec[] = [
   { key: 'ig_post',            label: 'IG Post',         width: 1080, height: 1080, ext: 'png', axis: 'square' },
   { key: 'ig_story',           label: 'IG Story',        width: 1080, height: 1920, ext: 'png', axis: 'portrait' },
   { key: 'tg_post',            label: 'TG / WA Post',    width: 1080, height: 1080, ext: 'png', axis: 'square' },
-  // A2 portrait at 150 DPI-equivalent — same px count as 300 DPI / 2.
-  // Puppeteer renders the HTML viewport then exports to PDF at exact px sizes.
   { key: 'poster_a2',          label: 'A2 Poster',       width: 2480, height: 3508, ext: 'pdf', axis: 'portrait' },
   { key: 'stand_a3',           label: 'A3 In-store',     width: 1748, height: 2480, ext: 'pdf', axis: 'portrait' },
   { key: 'web_banner_desktop', label: 'Web Banner (D)',  width: 1920, height: 600,  ext: 'png', axis: 'landscape' },
@@ -58,33 +53,41 @@ const TOKENS = {
 function palette(mode: PromoVisualMode) {
   if (mode === 'dark') {
     return {
-      bg:       TOKENS.deepBlack,
       text:     TOKENS.warmWhite,
       muted:    TOKENS.paleStone,
       accent:   TOKENS.amberGold,
-      logoFill: TOKENS.warmWhite,
+      chip:     TOKENS.amberGold,
+      chipText: TOKENS.deepBlack,
       logoRed:  TOKENS.wineRed,
+      logoFill: TOKENS.warmWhite,
+      // Bottom gradient overlay for text legibility.
+      veil:     'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 40%, transparent 60%)',
     }
   }
   return {
-    bg:       TOKENS.warmWhite,
     text:     TOKENS.deepBlack,
     muted:    TOKENS.graphite,
     accent:   TOKENS.wineRed,
-    logoFill: TOKENS.deepBlack,
+    chip:     TOKENS.wineRed,
+    chipText: TOKENS.warmWhite,
     logoRed:  TOKENS.wineRed,
+    logoFill: TOKENS.deepBlack,
+    veil:     'linear-gradient(to top, rgba(245,240,235,0.92) 0%, rgba(245,240,235,0.55) 40%, transparent 60%)',
   }
 }
 
 // ─── Template ──────────────────────────────────────────────────────────────
-type BuildArgs = {
+export type BuildArgs = {
   campaign:           PromoCampaign
   format:             FormatSpec
   // base64 data URLs keyed by SKU slug.
   productDataUrls:    Map<string, string>
+  // base64 data URL of the AI-generated background for this format's aspect.
+  backgroundDataUrl:  string
 }
 
-export function buildHtml({ campaign, format, productDataUrls }: BuildArgs): string {
+export function buildHtml(args: BuildArgs): string {
+  const { campaign, format, productDataUrls, backgroundDataUrl } = args
   const mode = campaign.visual_mode ?? 'dark'
   const composition = campaign.composition ?? 'vitrina'
   const pal = palette(mode)
@@ -110,43 +113,74 @@ export function buildHtml({ campaign, format, productDataUrls }: BuildArgs): str
 <style>
   @page { size: ${format.width}px ${format.height}px; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: ${format.width}px; height: ${format.height}px; background: ${pal.bg}; color: ${pal.text}; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+  html, body {
+    width: ${format.width}px;
+    height: ${format.height}px;
+    background-image: url("${backgroundDataUrl}");
+    background-size: cover;
+    background-position: center;
+    color: ${pal.text};
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    position: relative;
+  }
+  .veil {
+    position: absolute; inset: 0;
+    background: ${pal.veil};
+    pointer-events: none;
+    z-index: 1;
+  }
+  .stage {
+    position: relative; z-index: 2;
+    width: 100%; height: 100%;
+    padding: 6vmin;
+    display: flex; flex-direction: column;
+  }
 
-  /* Type scale — vmin so it adapts across formats */
-  .t-display-xl { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; line-height: 0.9; }
-  .t-display-lg { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; line-height: 0.95; }
+  /* Typography (Bebas Neue display + DM Sans headline + Inter body) */
+  .t-display-xl { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; line-height: 0.9; }
+  .t-display-lg { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; line-height: 0.95; }
   .t-headline   { font-family: 'DM Sans', sans-serif; font-weight: 600; line-height: 1.15; }
   .t-body       { font-family: 'Inter', sans-serif; font-weight: 400; line-height: 1.4; }
   .t-overline   { font-family: 'Inter', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.15em; }
-  .t-label      { font-family: 'Inter', sans-serif; font-weight: 500; }
 
   .accent { color: ${pal.accent}; }
   .muted  { color: ${pal.muted}; }
 
-  .stage { width: 100%; height: 100%; padding: 6vmin; position: relative; display: flex; flex-direction: column; }
-
   /* Logo */
   .logo { display: inline-flex; align-items: baseline; gap: 0.2em; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1; }
   .logo .red { color: ${pal.logoRed}; }
-  .logo .blk { color: ${pal.logoFill}; }
+  .logo .blk { color: ${pal.logoFill}; text-shadow: 0 0 12px ${mode === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.4)'}; }
 
-  /* Product cards */
+  /* Products */
   .product-row { display: flex; gap: 4vmin; align-items: flex-end; justify-content: center; }
-  .product { display: flex; flex-direction: column; align-items: center; gap: 1.5vmin; }
-  .product img { object-fit: contain; filter: drop-shadow(0 1.5vmin 2vmin rgba(0,0,0,0.35)); }
-  .product .name { font-size: 1.6vmin; opacity: 0.7; max-width: 14vmin; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .product img { object-fit: contain; filter: drop-shadow(0 2vmin 3vmin rgba(0,0,0,0.55)); }
 
   /* Mechanic chip */
-  .chip { display: inline-block; padding: 1.2vmin 2.4vmin; background: ${pal.accent}; color: ${mode === 'dark' ? TOKENS.deepBlack : TOKENS.warmWhite}; font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-size: 2.2vmin; }
+  .chip {
+    display: inline-block;
+    padding: 1.2vmin 2.4vmin;
+    background: ${pal.chip};
+    color: ${pal.chipText};
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    font-size: 2.2vmin;
+    box-shadow: 0 0.8vmin 2vmin rgba(0,0,0,0.3);
+  }
+
+  /* Text-zone helper — used by zayavka and tsena layouts */
+  .text-zone { position: relative; }
 </style>
 </head>
 <body>
-${stage}
+  <div class="veil"></div>
+  ${stage}
 </body>
 </html>`
 }
 
-// ─── Composition renderers ─────────────────────────────────────────────────
+// ─── Layouts ───────────────────────────────────────────────────────────────
 type StageArgs = {
   composition: PromoComposition
   products:    { slug: string; src: string }[]
@@ -159,133 +193,103 @@ type StageArgs = {
 }
 
 function renderStage(a: StageArgs): string {
+  // Group 5 compositions into 3 actual layout strategies. Honors the model's
+  // choice while keeping templates manageable.
   switch (a.composition) {
-    case 'vitrina':   return renderVitrina(a)
-    case 'tsena':     return renderTsena(a)
-    case 'zayavka':   return renderZayavka(a)
-    case 'moment':    return renderMoment(a)
-    case 'kartochka': return renderKartochka(a)
+    case 'moment':
+      return layoutMoment(a)
+    case 'zayavka':
+      return layoutTextHero(a)
+    case 'vitrina':
+    case 'tsena':
+    case 'kartochka':
+    default:
+      return layoutProductHero(a)
   }
 }
 
-// Witrina — product hero, photo dominates (80%), text band at bottom
-function renderVitrina(a: StageArgs): string {
-  const productHeight = a.format.axis === 'landscape' ? '70%' : '60%'
+// PRODUCT HERO — product PNG dominates center, text band at bottom over veil.
+// Default for vitrina / tsena / kartochka.
+function layoutProductHero(a: StageArgs): string {
+  const productHeight = a.format.axis === 'landscape' ? '70%' : '55%'
+  const headlineSize  = headlineSizeFor(a.format, a.headline.length)
   return `
 <div class="stage">
-  <div style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;">
+  <header style="display: flex; justify-content: space-between; align-items: flex-start;">
     ${logoMark()}
     <div class="chip">${escape(a.mechanic)}</div>
-  </div>
-  <div style="flex: 1 1 auto; display: flex; align-items: center; justify-content: center;">
+  </header>
+  <main style="flex: 1; display: flex; align-items: center; justify-content: center;">
     <div class="product-row">
       ${productsHtml(a.products, productHeight)}
     </div>
-  </div>
-  <div style="flex: 0 0 auto;">
-    <div class="t-overline accent" style="font-size: 2vmin; margin-bottom: 1.5vmin;">${escape(a.dates)}</div>
-    <div class="t-display-lg" style="font-size: 9vmin;">${escape(a.headline)}</div>
-    <div class="t-body muted" style="font-size: 2.4vmin; margin-top: 1vmin;">${escape(a.subhead)}</div>
-  </div>
+  </main>
+  <footer>
+    <div class="t-overline accent" style="font-size: 1.8vmin; margin-bottom: 1.2vmin;">${escape(a.dates)}</div>
+    <div class="t-display-lg" style="font-size: ${headlineSize};">${escape(a.headline)}</div>
+    <div class="t-body" style="font-size: 2.2vmin; margin-top: 1.2vmin; max-width: 80%; color: ${a.pal.text};">${escape(a.subhead)}</div>
+  </footer>
 </div>`
 }
 
-// Tsena — big number (mechanic) center, product secondary
-function renderTsena(a: StageArgs): string {
-  return `
-<div class="stage" style="justify-content: space-between;">
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    ${logoMark()}
-    <div class="t-overline accent" style="font-size: 2vmin;">${escape(a.dates)}</div>
-  </div>
-  <div style="text-align: center;">
-    <div class="t-overline muted" style="font-size: 2.2vmin; margin-bottom: 2vmin;">${escape(a.headline)}</div>
-    <div class="t-display-xl accent" style="font-size: 18vmin;">${escape(a.mechanic)}</div>
-    <div class="t-headline" style="font-size: 3vmin; margin-top: 2vmin;">${escape(a.subhead)}</div>
-  </div>
-  <div class="product-row" style="margin-bottom: 2vmin;">
-    ${productsHtml(a.products, '32%')}
-  </div>
-</div>`
-}
-
-// Zayavka — text-driven statement, product as small corner detail
-function renderZayavka(a: StageArgs): string {
-  return `
-<div class="stage" style="justify-content: space-between;">
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    ${logoMark()}
-    <div class="chip">${escape(a.mechanic)}</div>
-  </div>
-  <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-    <div class="t-overline accent" style="font-size: 2.2vmin; margin-bottom: 2vmin;">${escape(a.dates)}</div>
-    <div class="t-display-xl" style="font-size: 13vmin; max-width: 85%;">${escape(a.headline)}</div>
-    <div class="t-body muted" style="font-size: 2.6vmin; margin-top: 3vmin; max-width: 60%;">${escape(a.subhead)}</div>
-  </div>
-  <div style="position: absolute; bottom: 6vmin; right: 6vmin; display: flex; gap: 2vmin; align-items: flex-end;">
-    ${productsHtml(a.products.slice(0, 2), '28%')}
-  </div>
-</div>`
-}
-
-// Moment — full-bleed, minimal text. Single product front and center.
-function renderMoment(a: StageArgs): string {
-  return `
-<div class="stage" style="padding: 0; position: relative;">
-  <div style="position: absolute; inset: 6vmin 6vmin auto 6vmin; display: flex; justify-content: space-between; align-items: center; z-index: 2;">
-    ${logoMark()}
-    <div class="t-overline" style="color: ${a.pal.text}; font-size: 1.8vmin;">${escape(a.dates)}</div>
-  </div>
-  <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
-    <div class="product-row">
-      ${productsHtml(a.products.slice(0, 1), '70%')}
-    </div>
-  </div>
-  <div style="position: absolute; bottom: 6vmin; left: 6vmin; right: 6vmin; z-index: 2; text-align: center;">
-    <div class="t-display-lg" style="font-size: 7vmin;">${escape(a.headline)}</div>
-  </div>
-</div>`
-}
-
-// Kartochka — 2-column for square/landscape, 2-row for portrait
-function renderKartochka(a: StageArgs): string {
-  const isPortrait = a.format.axis === 'portrait'
-  const grid = isPortrait
-    ? 'grid-template-rows: 1fr 1fr;'
-    : 'grid-template-columns: 1fr 1fr;'
+// TEXT HERO — headline dominates center, product small bottom-right, full AI
+// background visible behind type. For zayavka.
+function layoutTextHero(a: StageArgs): string {
+  const headlineSize = headlineSizeFor(a.format, a.headline.length, 1.4)
   return `
 <div class="stage">
-  <div style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4vmin;">
+  <header style="display: flex; justify-content: space-between; align-items: flex-start;">
     ${logoMark()}
     <div class="chip">${escape(a.mechanic)}</div>
-  </div>
-  <div style="flex: 1; display: grid; ${grid} gap: 4vmin; align-items: center;">
-    <div style="display: flex; align-items: center; justify-content: center;">
-      <div class="product-row">${productsHtml(a.products, '60%')}</div>
+  </header>
+  <main style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+    <div class="t-overline accent" style="font-size: 2vmin; margin-bottom: 1.5vmin;">${escape(a.dates)}</div>
+    <div class="t-display-xl" style="font-size: ${headlineSize}; max-width: 90%; text-shadow: 0 0.4vmin 1.5vmin rgba(0,0,0,0.5);">${escape(a.headline)}</div>
+    <div class="t-body" style="font-size: 2.4vmin; margin-top: 2.5vmin; max-width: 65%; color: ${a.pal.text};">${escape(a.subhead)}</div>
+  </main>
+  <footer style="display: flex; justify-content: flex-end; align-items: flex-end;">
+    <div class="product-row">
+      ${productsHtml(a.products.slice(0, 2), '32%')}
     </div>
-    <div>
-      <div class="t-overline accent" style="font-size: 2vmin; margin-bottom: 2vmin;">${escape(a.dates)}</div>
-      <div class="t-display-lg" style="font-size: 8vmin; margin-bottom: 3vmin;">${escape(a.headline)}</div>
-      <div class="t-body" style="font-size: 2.6vmin;">${escape(a.subhead)}</div>
-    </div>
-  </div>
+  </footer>
+</div>`
+}
+
+// MOMENT — atmospheric photo speaks for itself. Just logo + dates corner.
+// No product overlay so the photo composition isn't interrupted.
+function layoutMoment(a: StageArgs): string {
+  const headlineSize = headlineSizeFor(a.format, a.headline.length)
+  return `
+<div class="stage" style="padding: 5vmin;">
+  <header style="display: flex; justify-content: space-between; align-items: flex-start;">
+    ${logoMark()}
+    <div class="t-overline" style="color: ${a.pal.text}; font-size: 1.6vmin; text-shadow: 0 0 1vmin rgba(0,0,0,0.6);">${escape(a.dates)}</div>
+  </header>
+  <main style="flex: 1;"></main>
+  <footer style="text-align: center;">
+    <div class="t-display-lg" style="font-size: ${headlineSize}; text-shadow: 0 0.4vmin 1.5vmin rgba(0,0,0,0.6);">${escape(a.headline)}</div>
+    <div class="chip" style="margin-top: 2vmin;">${escape(a.mechanic)}</div>
+  </footer>
 </div>`
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+function headlineSizeFor(format: FormatSpec, chars: number, scale = 1): string {
+  // Scale headline font-size by character count — short headlines like
+  // "2 FOR 1" should fill the canvas, long ones like "BRUNELLO WEEK" sit lower.
+  const baseVmin = format.axis === 'landscape' ? 7 : 11
+  const fit = chars <= 8 ? 1.2 : chars <= 14 ? 1.0 : chars <= 20 ? 0.8 : 0.65
+  return (baseVmin * fit * scale).toFixed(1) + 'vmin'
+}
+
 function logoMark(): string {
-  // SVG-free logo mark — uses Bebas Neue web font. Big and unmissable, per
-  // the memory: "лого W&W должно быть крупным и заметным".
-  return `<div class="logo" style="font-size: 4.5vmin;"><span class="red">WINE</span><span class="blk">&amp; WHISKEY</span></div>`
+  return `<div class="logo" style="font-size: 4vmin;"><span class="red">WINE</span><span class="blk">&amp; WHISKEY</span></div>`
 }
 
 function productsHtml(products: { slug: string; src: string }[], heightCss: string): string {
   if (products.length === 0) return ''
   return products
-    .map(p => `
-      <div class="product">
-        <img src="${p.src}" style="height: ${heightCss}; max-height: ${heightCss};" />
-      </div>`)
+    .map(p => `<div class="product"><img src="${p.src}" style="height: ${heightCss}; max-height: ${heightCss};" /></div>`)
     .join('')
 }
 
@@ -295,7 +299,7 @@ function formatDateRange(starts: string, ends: string): string {
 }
 
 function formatDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
+  const [, m, d] = iso.split('-').map(Number)
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   return `${months[m - 1]} ${d}`
 }

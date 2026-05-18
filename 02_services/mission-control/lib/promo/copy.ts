@@ -19,14 +19,17 @@ import {
 } from './types'
 
 // ─── Output schema ─────────────────────────────────────────────────────────
+// HARD constraints — schema validation rejects long output. The headline slot
+// renders in display-xl Bebas Neue at ~120px, so 4 words / 24 chars is the
+// absolute ceiling before it overflows the canvas.
 const PromoCopySchema = z.object({
-  headline:    z.string().describe('1–4 words, will render in Bebas Neue Display. English. Punchy and concrete.'),
-  subhead:     z.string().describe('One short line (≤ 60 chars). DM Sans tone. English.'),
-  caption_ig:  z.string().describe('Instagram caption — 1–3 short sentences, 0–1 emoji max, optional 3–5 thematic hashtags at end. English.'),
-  caption_tg:  z.string().describe('Telegram/WhatsApp caption — 1–3 short sentences, no hashtags, no emoji. English.'),
+  headline:    z.string().max(24).describe('STRICT 1–4 words, ≤24 characters total. Examples: "BRUNELLO WEEK", "PROSECCO -10%", "PINK FRIDAY", "2 FOR 1", "BAROLO 2019". Will render UPPERCASE in Bebas Neue display font. Punchy, concrete, English. NEVER a full sentence.'),
+  subhead:     z.string().max(80).describe('ONE short line, ≤80 characters. Describes the offer concretely. Example: "Tuscany, 2018. Buy two, third on us."'),
+  caption_ig:  z.string().max(500).describe('Instagram caption — 1–3 short sentences, 0–1 emoji max, optional 3–5 thematic hashtags at end. English.'),
+  caption_tg:  z.string().max(400).describe('Telegram/WhatsApp caption — 1–3 short sentences, no hashtags, no emoji. English.'),
   visual_mode: z.enum(PROMO_VISUAL_MODES).describe('"dark" = cinematic hero / single SKU / price; "light" = atmosphere / multi-glass / hands / Friday mood.'),
   composition: z.enum(PROMO_COMPOSITIONS).describe(
-    'Pick one of 5 templates: vitrina (product hero), zayavka (text statement), moment (full-bleed action, no text), kartochka (info card 2-col), tsena (price drop with big number).'
+    'Pick one of 5 templates: vitrina (product hero), zayavka (text statement), moment (full-bleed action), kartochka (info card 2-col), tsena (price drop with big number).'
   ),
 })
 
@@ -66,9 +69,14 @@ Rules — non-negotiable:
 
 Output fields:
 
-• headline — 1–4 words. Examples: "BRUNELLO WEEK", "PINK FRIDAY",
-  "BAROLO 2019", "2 FOR 1", "OPEN: ROSÉ FRIDAY". One concrete idea.
-• subhead — single line ≤ 60 chars. One concrete thing.
+• headline — STRICT 1–4 words, ≤24 characters TOTAL. This is non-negotiable.
+  Examples that fit: "BRUNELLO WEEK", "PROSECCO -10%", "PINK FRIDAY",
+  "BAROLO 2019", "2 FOR 1", "ROSÉ FRIDAY", "NEW: PIEDMONT".
+  Examples that FAIL: "-10% for the 3rd bottle of prosecco" (too long, that
+  belongs in subhead), "Discount on Prosecco bottles this week" (sentence).
+  The headline must fit on one line in 100px display type.
+• subhead — single line ≤ 80 chars. One concrete sentence. This is where the
+  mechanic explanation lives, NOT in the headline.
 • caption_ig — 1–3 short sentences + optional 3–5 thematic hashtags.
 • caption_tg — 1–3 short sentences, no hashtags, no emoji.
 • visual_mode + composition — be opinionated. Pick the pair that best
