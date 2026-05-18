@@ -48,6 +48,7 @@ export default async function PromoDetailPage({ params }: Ctx) {
             <PromoActionsClient
               id={c.id}
               status={c.status}
+              hasCopy={!!c.headline}
             />
           </header>
 

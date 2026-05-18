@@ -7,11 +7,14 @@ import { PROMO_STATUSES, PROMO_STATUS_LABEL, type PromoStatus } from '@/lib/prom
 // Phase 1 actions: flip status (draft ↔ ready) and delete. Phase 2 and 3 will
 // add "Generate copy" and "Generate visuals" buttons here.
 
-export function PromoActionsClient({ id, status: initialStatus }: { id: string; status: PromoStatus }) {
+export function PromoActionsClient({
+  id, status: initialStatus, hasCopy,
+}: { id: string; status: PromoStatus; hasCopy: boolean }) {
   const router = useRouter()
-  const [status, setStatus] = useState<PromoStatus>(initialStatus)
-  const [busy, setBusy]   = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus]   = useState<PromoStatus>(initialStatus)
+  const [busy, setBusy]       = useState(false)
+  const [generating, setGen]  = useState(false)
+  const [error, setError]     = useState<string | null>(null)
 
   async function setStatusTo(next: PromoStatus) {
     if (next === status) return
@@ -32,6 +35,21 @@ export function PromoActionsClient({ id, status: initialStatus }: { id: string; 
     }
   }
 
+  async function generateCopy() {
+    if (hasCopy && !confirm('Regenerate copy? Current text will be overwritten.')) return
+    setGen(true); setError(null)
+    try {
+      const res = await fetch(`/api/m/promo/${id}/generate-copy`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to generate')
+      router.refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setGen(false)
+    }
+  }
+
   async function remove() {
     if (!confirm('Delete this promo? This cannot be undone.')) return
     setBusy(true); setError(null)
@@ -48,22 +66,30 @@ export function PromoActionsClient({ id, status: initialStatus }: { id: string; 
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <select
-        value={status}
-        onChange={e => setStatusTo(e.target.value as PromoStatus)}
-        disabled={busy}
-        className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-1.5"
-      >
-        {PROMO_STATUSES.map(s => (
-          <option key={s} value={s}>{PROMO_STATUS_LABEL[s]}</option>
-        ))}
-      </select>
-      <button onClick={remove} disabled={busy}
-        className="text-xs px-2 py-1.5 border border-pale-stone text-graphite rounded-sm hover:border-wine-red hover:text-wine-red disabled:opacity-50">
-        Delete
-      </button>
-      {error && <span className="text-[11px] text-wine-red">{error}</span>}
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2">
+        <button onClick={generateCopy} disabled={busy || generating}
+          className="text-xs px-3 py-1.5 bg-deep-black text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
+          {generating ? 'Generating…' : hasCopy ? 'Regenerate copy' : 'Generate copy'}
+        </button>
+        <select
+          value={status}
+          onChange={e => setStatusTo(e.target.value as PromoStatus)}
+          disabled={busy || generating}
+          className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-1.5"
+        >
+          {PROMO_STATUSES.map(s => (
+            <option key={s} value={s}>{PROMO_STATUS_LABEL[s]}</option>
+          ))}
+        </select>
+        <button onClick={remove} disabled={busy || generating}
+          className="text-xs px-2 py-1.5 border border-pale-stone text-graphite rounded-sm hover:border-wine-red hover:text-wine-red disabled:opacity-50">
+          Delete
+        </button>
+      </div>
+      {error && (
+        <span className="text-[11px] text-wine-red max-w-sm text-right">{error}</span>
+      )}
     </div>
   )
 }
