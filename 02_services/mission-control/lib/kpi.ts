@@ -153,3 +153,9 @@ export function todayBkk(now = new Date()): string {
   const { y, m, d } = bkkParts(now)
   return isoDate(bkkUtc(y, m, d))
 }
+
+// YYYY-MM-DD in BKK for N days ago.
+export function isoNDaysAgo(n: number, now = new Date()): string {
+  const { y, m, d } = bkkParts(now)
+  return isoDate(bkkUtc(y, m, d - n))
+}

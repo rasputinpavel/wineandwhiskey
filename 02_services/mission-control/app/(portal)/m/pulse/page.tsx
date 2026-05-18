@@ -5,7 +5,7 @@ import { DataFreshness } from '@/components/shell/DataFreshness'
 import {
   periodRange, trailingDays, type Period,
   AGING_BUCKETS, AGING_LABELS, type AgingBucket, agingBucket,
-  computeDueDate, daysBetween, fmtThb, fmtThbCompact, fmtPct, todayBkk,
+  computeDueDate, daysBetween, fmtThb, fmtThbCompact, fmtPct, todayBkk, isoNDaysAgo,
 } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
@@ -70,10 +70,15 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     sbInventory
       .from('supplier')
       .select('name, type, payment_terms_days'),
+    // AP estimation: PO.paid_at is a manual field that's rarely filled, so we
+    // can't trust it. Instead we assume supplier invoices land at order_date +
+    // supplier_term (default 30d) and that we pay within ~AP_GRACE_DAYS of
+    // invoice. Anything older than that is considered settled. Window of 90d
+    // covers max realistic term (60d) + grace + buffer.
     sbPublic
       .from('purchase_orders')
-      .select('id, po_number, supplier, total_thb, order_date, paid_at, cashflow_override, url')
-      .is('paid_at', null),
+      .select('id, po_number, supplier, total_thb, order_date, cashflow_override, url')
+      .gte('order_date', isoNDaysAgo(90)),
   ])
 
   for (const r of [receiptsPeriodRes, receiptsTrendRes, invoicesOpenRes, invoicesPeriodRes, receiptsFaPeriodRes, customersRes, suppliersRes]) {
@@ -152,6 +157,12 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     .slice(0, 5)
 
   // ─── Supplier AP ────────────────────────────────────────────────────────
+  // payment_due = order_date + supplier.payment_terms_days (default AP_TERM_DEFAULT).
+  // AP Open = sum of POs whose due date is within AP_GRACE_DAYS of today or
+  // in the future. Older POs are assumed paid (we don't track paid_at reliably).
+  const AP_TERM_DEFAULT = 30
+  const AP_GRACE_DAYS   = 14
+
   type SupRow = Pick<Supplier, 'name' | 'type' | 'payment_terms_days'>
   const suppliers = (suppliersRes.data ?? []) as SupRow[]
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
@@ -164,39 +175,40 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     return (supFor(p.supplier)?.type ?? 'regular') !== 'consignment'
   }
 
-  const openPOs = ((posOpenRes.data ?? []) as PurchaseOrder[]).filter(includedInCashflow)
-  const apOpen = openPOs.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  const allPOs = ((posOpenRes.data ?? []) as PurchaseOrder[]).filter(includedInCashflow)
 
   type DueRow = { id: number; po: string; supplier: string; total: number; dueAt: string; daysUntilDue: number; url: string | null }
-  const dueRows: DueRow[] = openPOs
+  const dueRows: DueRow[] = allPOs
     .filter(p => p.order_date)
     .map(p => {
-      const terms = supFor(p.supplier)?.payment_terms_days ?? 0
-      const dueAt = computeDueDate(p.order_date!, terms)
+      const term = supFor(p.supplier)?.payment_terms_days || AP_TERM_DEFAULT
+      const dueAt = computeDueDate(p.order_date!, term)
       return {
         id: p.id, po: p.po_number, supplier: p.supplier ?? '(unknown)',
         total: Number(p.total_thb ?? 0),
         dueAt,
-        daysUntilDue: daysBetween(dueAt, today),  // positive = future, negative = overdue
+        daysUntilDue: daysBetween(dueAt, today),  // positive = future, negative = invoice already issued
         url: p.url,
       }
     })
+    .filter(d => d.daysUntilDue >= -AP_GRACE_DAYS)  // older = assumed paid
 
-  const apDue7  = dueRows.filter(d => d.daysUntilDue <= 7  && d.daysUntilDue >= -365).reduce((s, d) => s + d.total, 0)
-  const apDue30 = dueRows.filter(d => d.daysUntilDue <= 30 && d.daysUntilDue >= -365).reduce((s, d) => s + d.total, 0)
+  const apOpen  = dueRows.reduce((s, d) => s + d.total, 0)
+  const apDue7  = dueRows.filter(d => d.daysUntilDue <= 7).reduce((s, d) => s + d.total, 0)
+  const apDue30 = dueRows.filter(d => d.daysUntilDue <= 30).reduce((s, d) => s + d.total, 0)
 
   const topSuppliersDue = [...dueRows]
     .sort((a, b) => a.daysUntilDue - b.daysUntilDue)
     .slice(0, 5)
 
-  // AP timeline buckets: overdue, this week (≤7d), this month (8-30d), later (>30d)
-  type ApBucket = 'Overdue' | 'Due ≤ 7d' | 'Due 8-30d' | 'Due > 30d'
-  const apBuckets: Record<ApBucket, number> = { 'Overdue': 0, 'Due ≤ 7d': 0, 'Due 8-30d': 0, 'Due > 30d': 0 }
+  // AP timeline buckets — invoice already issued (within grace) vs upcoming.
+  type ApBucket = 'Invoice issued' | 'Due ≤ 7d' | 'Due 8-30d' | 'Due > 30d'
+  const apBuckets: Record<ApBucket, number> = { 'Invoice issued': 0, 'Due ≤ 7d': 0, 'Due 8-30d': 0, 'Due > 30d': 0 }
   for (const d of dueRows) {
-    if (d.daysUntilDue < 0)        apBuckets['Overdue']    += d.total
-    else if (d.daysUntilDue <= 7)  apBuckets['Due ≤ 7d']   += d.total
-    else if (d.daysUntilDue <= 30) apBuckets['Due 8-30d']  += d.total
-    else                            apBuckets['Due > 30d']  += d.total
+    if (d.daysUntilDue < 0)         apBuckets['Invoice issued'] += d.total
+    else if (d.daysUntilDue <= 7)   apBuckets['Due ≤ 7d']       += d.total
+    else if (d.daysUntilDue <= 30)  apBuckets['Due 8-30d']      += d.total
+    else                             apBuckets['Due > 30d']      += d.total
   }
 
   // ─── Sales trend (30 days) ──────────────────────────────────────────────
@@ -222,8 +234,10 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
       </div>
       <p className="text-graphite text-sm mb-4 max-w-3xl">
         Loyverse — source of truth for sales &amp; cost. FlowAccount — source of truth for B2B receivables.
-        Numbers reconciled without double-counting cash. <span className="text-deep-black">B2B Cash Sales</span> is
-        approximate until the payment-to-invoice matcher ships (Phase 2).
+        Numbers reconciled without double-counting cash. <span className="text-deep-black">B2B Cash Sales</span> approximate
+        until payment-to-invoice matcher ships (Phase 2). <span className="text-deep-black">Supplier AP</span> estimated:
+        invoice date = order date + 30d (or supplier term); POs older than invoice date + 14d assumed paid (manual
+        paid_at field is unreliable).
       </p>
 
       {/* Period filter */}
@@ -254,7 +268,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
         <Kpi label="Gross Profit" value={fmtThbCompact(grossProfit)} sub={fmtPct(grossProfit, netSales) + ' margin'} highlight />
         <Kpi label="Gross Margin %" value={fmtPct(grossProfit, netSales)} sub="GP / Net Sales" />
         <Kpi label="B2B Sales" value={fmtThbCompact(b2bSales)} sub={fmtPct(b2bSales, netSales) + ' of total'} />
-        <Kpi label="Supplier AP Open" value={fmtThbCompact(apOpen)} sub={`${openPOs.length} unpaid PO`} muted />
+        <Kpi label="Supplier AP Open" value={fmtThbCompact(apOpen)} sub={`${dueRows.length} active PO`} muted />
       </div>
 
       {/* Row 2: B2B / AR / AP detail */}
