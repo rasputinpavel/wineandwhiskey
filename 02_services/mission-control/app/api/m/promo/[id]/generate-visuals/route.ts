@@ -62,6 +62,23 @@ export async function POST(_req: Request, { params }: Ctx) {
   } catch (e) {
     // Restore status on failure so the UI doesn't get stuck.
     await sbPromo.from('campaign').update({ status: c.status }).eq('id', id)
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    const msg = friendlyError((e as Error).message)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
+
+// Strip the Google API JSON dumps to a human-readable message.
+function friendlyError(raw: string): string {
+  // Try to extract a JSON error blob if Google's SDK serialized it into the message.
+  const m = raw.match(/"message"\s*:\s*"([^"]+)"/)
+  const inner = m?.[1] ?? raw
+  // Status hint.
+  const status = raw.match(/\b(503|429|500|RESOURCE_EXHAUSTED|UNAVAILABLE)\b/)?.[1]
+  if (status === '503' || /UNAVAILABLE|high demand|overloaded/i.test(inner)) {
+    return 'Gemini is overloaded right now — try again in 30–60 seconds.'
+  }
+  if (status === '429' || /RESOURCE_EXHAUSTED|quota/i.test(inner)) {
+    return 'Gemini quota exceeded — check billing or wait for daily reset.'
+  }
+  return inner.slice(0, 240)
 }
