@@ -104,35 +104,19 @@ Style: Photorealistic. Editorial lifestyle photography.
 `.trim()
 }
 
-// ─── Models ────────────────────────────────────────────────────────────────
-// Primary: Nano Banana Pro (Gemini 3 Pro Image) — paid tier only, best quality.
-// Fallback: original Nano Banana (Gemini 2.5 Flash Image) — has free tier,
-// slightly lower fidelity but same SDK shape.
-const MODEL_PRIMARY  = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview'
-const MODEL_FALLBACK = 'gemini-2.5-flash-image-preview'
+// ─── Model ─────────────────────────────────────────────────────────────────
+// Nano Banana Pro (Gemini 3 Pro Image). Paid tier — no silent fallback to
+// other models on failure (lower-tier models produce noticeably different
+// imagery and shouldn't replace NBP without the user's say-so).
+const MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview'
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 function isTransient(err: unknown): boolean {
   const msg = (err as Error)?.message ?? ''
-  // 503 = UNAVAILABLE, 429 = quota, 500 = generic server fault — all retryable.
-  return /\b(503|429|500|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand)\b/i.test(msg)
-}
-
-async function callModel(model: string, prompt: string, aspect: BgAspect): Promise<Buffer | null> {
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseModalities: ['Image'],
-      imageConfig: { aspectRatio: ASPECT_TO_NBP[aspect] },
-    },
-  })
-  const parts = response.candidates?.[0]?.content?.parts ?? []
-  for (const part of parts) {
-    if (part.inlineData?.data) return Buffer.from(part.inlineData.data, 'base64')
-  }
-  return null  // no image bytes — likely a safety block
+  // 503 = UNAVAILABLE, 500 = generic server fault — retryable.
+  // 429 quotas are NOT retried automatically — caller learns about the limit.
+  return /\b(503|500|UNAVAILABLE|overloaded|high demand)\b/i.test(msg)
 }
 
 // ─── Main entry ────────────────────────────────────────────────────────────
@@ -141,32 +125,32 @@ export async function generateBackground(
   aspect: BgAspect,
 ): Promise<Buffer> {
   const prompt = mode === 'dark' ? darkPrompt() : lightPrompt()
-
-  // Try primary model 3× with backoff, then fallback once.
   const delays = [2000, 5000, 10000]
   let lastErr: unknown
+
   for (let attempt = 0; attempt < delays.length; attempt++) {
     try {
-      const buf = await callModel(MODEL_PRIMARY, prompt, aspect)
-      if (buf) return buf
-      throw new Error('No image bytes returned (safety block?)')
+      const response = await ai.models.generateContent({
+        model: MODEL,
+        contents: prompt,
+        config: {
+          responseModalities: ['Image'],
+          imageConfig: { aspectRatio: ASPECT_TO_NBP[aspect] },
+        },
+      })
+      const parts = response.candidates?.[0]?.content?.parts ?? []
+      for (const part of parts) {
+        if (part.inlineData?.data) return Buffer.from(part.inlineData.data, 'base64')
+      }
+      throw new Error('No image bytes returned — likely a safety block')
     } catch (e) {
       lastErr = e
-      if (!isTransient(e)) break  // Permanent error — don't retry, just fallback.
+      if (!isTransient(e)) break  // Permanent error — surface immediately.
       if (attempt < delays.length - 1) await sleep(delays[attempt])
     }
   }
 
-  // Primary exhausted — try free-tier fallback once.
-  try {
-    const buf = await callModel(MODEL_FALLBACK, prompt, aspect)
-    if (buf) return buf
-  } catch (e) {
-    lastErr = e
-  }
-
-  const msg = (lastErr as Error)?.message ?? 'unknown error'
-  throw new Error(`Image generation failed (tried ${MODEL_PRIMARY} 3× and ${MODEL_FALLBACK}): ${msg}`)
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
 // Generate all three aspect ratios for a campaign. Returns a map of aspect
