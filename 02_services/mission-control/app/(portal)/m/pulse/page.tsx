@@ -234,14 +234,19 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   })
 
   // ─── Cash Pressure 7D (proxy) ─────────────────────────────────────────────
-  const cashPressure7d = apDue7 - arDue7
+  // Cash in (next 7d) ≈ trailing-7d Loyverse revenue (run-rate continues) +
+  // AR due in next 7d (assumes 100% on-time collection). Cash out = AP due in
+  // next 7d. Pressure = out − in.
+  const runRate7d         = trendData.slice(-7).reduce((s, d) => s + d.b2c + d.b2b, 0)
+  const expectedCashIn7d  = runRate7d + arDue7
+  const cashPressure7d    = apDue7 - expectedCashIn7d
 
   // ─── Auto-generated insight banner ────────────────────────────────────────
   const arOverduePct = arOpen > 0 ? (arOverdue / arOpen) * 100 : 0
   const insight = buildInsight({
     netSales: agg.netSales, netSalesPrev: prevAgg.netSales,
     grossMarginPct, prevGrossMarginPct,
-    cashPressure7d, apDue7, arDue7,
+    cashPressure7d, apDue7, expectedCashIn7d,
     arOverduePct, arOverdue,
     topOverdueCount: topOverdueCustomers.length,
   })
@@ -289,9 +294,9 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
         <RiskChip
           label="Cash pressure 7d"
           value={fmtThbCompact(cashPressure7d)}
-          sub={`${fmtThb(apDue7)} out − ${fmtThb(arDue7)} expected in`}
+          sub={`${fmtThbCompact(apDue7)} out − ${fmtThbCompact(expectedCashIn7d)} in (run-rate + AR)`}
           tone={cashPressure7d > 0 ? 'danger' : 'ok'}
-          tooltip="Phase 1 proxy: supplier payments due in 7 days minus open AR due in 7 days. Assumes 100% on-time collection of due AR."
+          tooltip="Phase 1 proxy: AP due in 7 days minus expected cash inflow (trailing-7d Loyverse run-rate + open AR due in 7 days). Assumes run-rate continues and 100% on-time collection of due AR."
         />
         <RiskChip
           label="Reconciliation"
@@ -336,8 +341,8 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
           badge="proxy"
           delta={cashPressure7d > 0 ? 'Net outflow' : cashPressure7d < 0 ? 'Net inflow' : 'Balanced'}
           deltaTone={cashPressure7d > 0 ? 'neg' : cashPressure7d < 0 ? 'pos' : 'flat'}
-          deltaSub="next 7 days, due-date based"
-          tooltip="Phase 1 proxy: supplier payments due in 7 days minus open AR due in 7 days. Assumes 100% on-time collection of due AR."
+          deltaSub={`out ${fmtThbCompact(apDue7)} · in ${fmtThbCompact(expectedCashIn7d)}`}
+          tooltip="Phase 1 proxy: AP due in 7 days minus expected cash inflow (trailing-7d Loyverse run-rate + open AR due in 7 days). Assumes run-rate continues and 100% on-time collection of due AR."
         />
       </div>
 
@@ -501,7 +506,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
           <p><span className="text-deep-black">B2B Credit Sales</span> — sum of FlowAccount tax invoices issued in period (status ≠ Cancelled, not excluded). <span className="text-deep-black">B2B Cash Sales</span> — B2B Sales − B2B Credit Sales, clamped to ≥ 0. Approximate until the payment-to-invoice matcher ships (Phase 2).</p>
           <p><span className="text-deep-black">AR Open / Overdue / Aging</span> — open FA invoices (not Paid, not Cancelled, not excluded). Due date = invoice.due_at, falling back to issued_at + customer.payment_terms_days.</p>
           <p><span className="text-deep-black">Supplier AP</span> — PO with order_date in last 90 days. Invoice date = order_date + supplier.payment_terms_days (default {AP_TERM_DEFAULT}d). AP Open = POs whose due date is within {AP_GRACE_DAYS}d grace of today or in the future; older POs assumed paid (manual paid_at field is unreliable).</p>
-          <p><span className="text-deep-black">Cash Pressure 7D</span> — proxy: AP due ≤ 7d minus open AR due in [today, today+7d]. Assumes 100% on-time collection of due AR. Treat as operational pressure indicator, not a true cash forecast.</p>
+          <p><span className="text-deep-black">Cash Pressure 7D</span> — proxy: AP due in next 7d minus expected cash inflow. Expected inflow = trailing-7d Loyverse revenue (assumes run-rate continues) + open AR due in next 7d (assumes 100% on-time collection). Treat as operational pressure indicator, not a true cash forecast.</p>
         </div>
       </details>
     </>
@@ -528,7 +533,7 @@ function aggregateReceipts(rows: Pick<LoyverseReceipt, 'total' | 'cost_total' | 
 function buildInsight(p: {
   netSales: number; netSalesPrev: number
   grossMarginPct: number; prevGrossMarginPct: number
-  cashPressure7d: number; apDue7: number; arDue7: number
+  cashPressure7d: number; apDue7: number; expectedCashIn7d: number
   arOverduePct: number; arOverdue: number
   topOverdueCount: number
 }): { tone: 'ok' | 'warn' | 'danger'; text: string } {
@@ -536,7 +541,7 @@ function buildInsight(p: {
   let tone: 'ok' | 'warn' | 'danger' = 'ok'
 
   if (p.cashPressure7d > 0) {
-    flags.push(`supplier payments this week exceed expected collections by ${fmtThbCompact(p.cashPressure7d)}`)
+    flags.push(`supplier payments this week exceed expected cash inflow by ${fmtThbCompact(p.cashPressure7d)}`)
     tone = 'danger'
   }
   if (p.arOverduePct >= 30) {
