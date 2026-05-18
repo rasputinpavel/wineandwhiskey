@@ -8,6 +8,7 @@ import {
   computeDueDate, daysBetween, fmtThb, fmtThbCompact, fmtPct,
   fmtDeltaPct, fmtDeltaPp, deltaTone,
   sparkPoints, todayBkk, isoNDaysAgo,
+  endOfWeekBkk, endOfMonthBkk, endOfNextMonthBkk,
 } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,6 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   const prev   = previousPeriodRange(period)
   const trend  = trailingDays(30)
   const today  = todayBkk()
-  const in7d   = isoNDaysAgo(-7)    // today + 7d
 
   // ─── Fetch all source data in parallel ────────────────────────────────────
   const [
@@ -140,9 +140,12 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   const agingByBucket: Record<AgingBucket, number> = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 }
   for (const e of enriched) agingByBucket[e.bucket] += Number(e.inv.total)
 
-  // Open AR with due_date in [today, today+7d] — used by Cash Pressure proxy.
-  const arDue7 = enriched
-    .filter(e => e.dueAt >= today && e.dueAt <= in7d)
+  // Open AR with due_date in [today, end of this week] — used by Cash Pressure proxy.
+  // Overdue AR is intentionally excluded: it should have been collected already;
+  // betting on it for the week's inflow would over-state expected cash.
+  const _eow = endOfWeekBkk()
+  const arDueThisWeek = enriched
+    .filter(e => e.dueAt >= today && e.dueAt <= _eow)
     .reduce((s, e) => s + Number(e.inv.total), 0)
 
   // Aggregate overdue by customer for the action table.
@@ -160,10 +163,17 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   const topOverdueCustomers = [...overdueByCustomer.values()].sort((a, b) => b.total - a.total).slice(0, 5)
 
   // ─── Supplier AP ──────────────────────────────────────────────────────────
-  const AP_TERM_DEFAULT = 30
-  const AP_GRACE_DAYS   = 14
+  // Payment due date = order_date + 30d for every PO (universal grace period
+  // per ops policy — supplier-specific terms ignored). Older-than-14d-past-due
+  // POs assumed paid (manual paid_at is unreliable). Calendar-based buckets
+  // make AP read like a payment schedule, not an abstract aging report.
+  const AP_TERM_DAYS  = 30
+  const AP_GRACE_DAYS = 14
+  const endOfWeek      = endOfWeekBkk()
+  const endOfMonth     = endOfMonthBkk()
+  const endOfNextMonth = endOfNextMonthBkk()
 
-  type SupRow = Pick<Supplier, 'name' | 'type' | 'payment_terms_days'>
+  type SupRow = Pick<Supplier, 'name' | 'type'>
   const suppliers = (suppliersRes.data ?? []) as SupRow[]
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
   function supFor(name: string | null): SupRow | undefined {
@@ -181,8 +191,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   const dueRows: DueRow[] = allPOs
     .filter(p => p.order_date)
     .map(p => {
-      const term = supFor(p.supplier)?.payment_terms_days || AP_TERM_DEFAULT
-      const dueAt = computeDueDate(p.order_date!, term)
+      const dueAt = computeDueDate(p.order_date!, AP_TERM_DAYS)
       return {
         id: p.id, po: p.po_number, supplier: p.supplier ?? '(unknown)',
         total: Number(p.total_thb ?? 0),
@@ -193,9 +202,9 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     })
     .filter(d => d.daysUntilDue >= -AP_GRACE_DAYS)
 
-  const apOpen  = dueRows.reduce((s, d) => s + d.total, 0)
-  const apDue7  = dueRows.filter(d => d.daysUntilDue <= 7).reduce((s, d) => s + d.total, 0)
-  const apDue30 = dueRows.filter(d => d.daysUntilDue <= 30).reduce((s, d) => s + d.total, 0)
+  const apOpen     = dueRows.reduce((s, d) => s + d.total, 0)
+  const apThisWeek = dueRows.filter(d => d.dueAt <= endOfWeek).reduce((s, d) => s + d.total, 0)
+  const apThisMonth = dueRows.filter(d => d.dueAt <= endOfMonth).reduce((s, d) => s + d.total, 0)
 
   // Aggregate suppliers due soon (sum across multiple POs for the same supplier).
   const supDueAgg = new Map<string, { supplier: string; total: number; count: number; minDays: number }>()
@@ -208,13 +217,15 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
   }
   const topSuppliersDue = [...supDueAgg.values()].sort((a, b) => a.minDays - b.minDays).slice(0, 5)
 
-  type ApBucket = 'Invoice issued' | 'Due ≤ 7d' | 'Due 8-30d' | 'Due > 30d'
-  const apBuckets: Record<ApBucket, number> = { 'Invoice issued': 0, 'Due ≤ 7d': 0, 'Due 8-30d': 0, 'Due > 30d': 0 }
+  type ApBucket = 'Overdue' | 'Today' | 'This week' | 'This month' | 'Next month' | 'Later'
+  const apBuckets: Record<ApBucket, number> = { 'Overdue': 0, 'Today': 0, 'This week': 0, 'This month': 0, 'Next month': 0, 'Later': 0 }
   for (const d of dueRows) {
-    if (d.daysUntilDue < 0)        apBuckets['Invoice issued'] += d.total
-    else if (d.daysUntilDue <= 7)  apBuckets['Due ≤ 7d']       += d.total
-    else if (d.daysUntilDue <= 30) apBuckets['Due 8-30d']      += d.total
-    else                            apBuckets['Due > 30d']      += d.total
+    if (d.daysUntilDue < 0)               apBuckets['Overdue']    += d.total
+    else if (d.daysUntilDue === 0)        apBuckets['Today']      += d.total
+    else if (d.dueAt <= endOfWeek)        apBuckets['This week']  += d.total
+    else if (d.dueAt <= endOfMonth)       apBuckets['This month'] += d.total
+    else if (d.dueAt <= endOfNextMonth)   apBuckets['Next month'] += d.total
+    else                                   apBuckets['Later']      += d.total
   }
 
   // ─── Sales / GP trend (30 days, for combo chart and sparklines) ───────────
@@ -272,20 +283,23 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
     .reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
   const coverage: number | null = prevMonthPOTotal > 0 ? projectedCOGS / prevMonthPOTotal : null
 
-  // ─── Cash Pressure 7D (proxy) ─────────────────────────────────────────────
-  // Cash in (next 7d) ≈ trailing-7d Loyverse revenue (run-rate continues) +
-  // AR due in next 7d (assumes 100% on-time collection). Cash out = AP due in
-  // next 7d. Pressure = out − in.
-  const runRate7d         = trendData.slice(-7).reduce((s, d) => s + d.b2c + d.b2b, 0)
-  const expectedCashIn7d  = runRate7d + arDue7
-  const cashPressure7d    = apDue7 - expectedCashIn7d
+  // ─── Cash Pressure this week (proxy) ──────────────────────────────────────
+  // Window = today → end of current calendar week (Mon-Sun). Cash in =
+  // trailing-7d Loyverse revenue × (days remaining / 7) + AR due this week.
+  // Cash out = AP due this week (overdue + today + rest of the week).
+  // Pressure = out − in.
+  const daysRemainingThisWeek = Math.max(1, daysBetween(endOfWeek, today) + 1)
+  const runRate7d          = trendData.slice(-7).reduce((s, d) => s + d.b2c + d.b2b, 0)
+  const runRateRemaining   = runRate7d * (daysRemainingThisWeek / 7)
+  const expectedCashInWeek = runRateRemaining + arDueThisWeek
+  const cashPressureWeek   = apThisWeek - expectedCashInWeek
 
   // ─── Auto-generated insight banner ────────────────────────────────────────
   const arOverduePct = arOpen > 0 ? (arOverdue / arOpen) * 100 : 0
   const insight = buildInsight({
     netSales: agg.netSales, netSalesPrev: prevAgg.netSales,
     grossMarginPct, prevGrossMarginPct,
-    cashPressure7d, apDue7, expectedCashIn7d,
+    cashPressureWeek, apThisWeek, expectedCashInWeek,
     arOverduePct, arOverdue,
     topOverdueCount: topOverdueCustomers.length,
   })
@@ -340,11 +354,11 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
           tone={arOverduePct >= 30 ? 'danger' : arOverduePct > 0 ? 'warn' : 'ok'}
         />
         <RiskChip
-          label="Cash pressure 7d"
-          value={fmtThbCompact(cashPressure7d)}
-          sub={`${fmtThbCompact(apDue7)} out − ${fmtThbCompact(expectedCashIn7d)} in (run-rate + AR)`}
-          tone={cashPressure7d > 0 ? 'danger' : 'ok'}
-          tooltip="Phase 1 proxy: AP due in 7 days minus expected cash inflow (trailing-7d Loyverse run-rate + open AR due in 7 days). Assumes run-rate continues and 100% on-time collection of due AR."
+          label="Cash pressure · this week"
+          value={fmtThbCompact(cashPressureWeek)}
+          sub={`${fmtThbCompact(apThisWeek)} out − ${fmtThbCompact(expectedCashInWeek)} in (run-rate + AR)`}
+          tone={cashPressureWeek > 0 ? 'danger' : 'ok'}
+          tooltip="Phase 1 proxy: AP due by end of this calendar week (Mon-Sun) minus expected cash inflow (trailing Loyverse run-rate prorated for days remaining + open AR due this week). Assumes run-rate continues and 100% on-time collection of due AR."
         />
         <RiskChip
           label="Reconciliation"
@@ -384,13 +398,13 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
           sparkColor="#C9A84C"
         />
         <HeroKpi
-          label="Cash Pressure 7D"
-          value={fmtThbCompact(cashPressure7d)}
+          label="Cash Pressure · this week"
+          value={fmtThbCompact(cashPressureWeek)}
           badge="proxy"
-          delta={cashPressure7d > 0 ? 'Net outflow' : cashPressure7d < 0 ? 'Net inflow' : 'Balanced'}
-          deltaTone={cashPressure7d > 0 ? 'neg' : cashPressure7d < 0 ? 'pos' : 'flat'}
-          deltaSub={`out ${fmtThbCompact(apDue7)} · in ${fmtThbCompact(expectedCashIn7d)}`}
-          tooltip="Phase 1 proxy: AP due in 7 days minus expected cash inflow (trailing-7d Loyverse run-rate + open AR due in 7 days). Assumes run-rate continues and 100% on-time collection of due AR."
+          delta={cashPressureWeek > 0 ? 'Net outflow' : cashPressureWeek < 0 ? 'Net inflow' : 'Balanced'}
+          deltaTone={cashPressureWeek > 0 ? 'neg' : cashPressureWeek < 0 ? 'pos' : 'flat'}
+          deltaSub={`out ${fmtThbCompact(apThisWeek)} · in ${fmtThbCompact(expectedCashInWeek)}`}
+          tooltip="Phase 1 proxy: AP due by end of this calendar week (Mon-Sun) minus expected cash inflow (trailing Loyverse run-rate prorated for days remaining + open AR due this week). Assumes run-rate continues and 100% on-time collection of due AR."
         />
       </div>
 
@@ -461,7 +475,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
         <div className="lg:col-span-3">
           <Card
             title="AP Due Buckets"
-            right={<span className="text-[10px] text-graphite">{fmtThb(apOpen)} · {fmtThbCompact(apDue7)} this week</span>}
+            right={<span className="text-[10px] text-graphite">{fmtThb(apOpen)} · {fmtThbCompact(apThisWeek)} this week</span>}
           >
             <div className="space-y-2">
               {(Object.keys(apBuckets) as (keyof typeof apBuckets)[]).map(b => {
@@ -567,8 +581,8 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
           <p><span className="text-deep-black">Sales / COGS / GP</span> — Loyverse receipts (source of truth for revenue &amp; cost). B2B vs B2C uses the shared classifier (<code className="font-mono text-[10px]">03_automation/lib/b2b.ts</code>): bank-transfer payment OR customer name match.</p>
           <p><span className="text-deep-black">B2B Credit Sales</span> — sum of FlowAccount tax invoices issued in period (status ≠ Cancelled, not excluded). <span className="text-deep-black">B2B Cash Sales</span> — B2B Sales − B2B Credit Sales, clamped to ≥ 0. Approximate until the payment-to-invoice matcher ships (Phase 2).</p>
           <p><span className="text-deep-black">AR Open / Overdue / Aging</span> — open FA invoices (not Paid, not Cancelled, not excluded). Due date = invoice.due_at, falling back to issued_at + customer.payment_terms_days.</p>
-          <p><span className="text-deep-black">Supplier AP</span> — PO with order_date in last 90 days. Invoice date = order_date + supplier.payment_terms_days (default {AP_TERM_DEFAULT}d). AP Open = POs whose due date is within {AP_GRACE_DAYS}d grace of today or in the future; older POs assumed paid (manual paid_at field is unreliable).</p>
-          <p><span className="text-deep-black">Cash Pressure 7D</span> — proxy: AP due in next 7d minus expected cash inflow. Expected inflow = trailing-7d Loyverse revenue (assumes run-rate continues) + open AR due in next 7d (assumes 100% on-time collection). Treat as operational pressure indicator, not a true cash forecast.</p>
+          <p><span className="text-deep-black">Supplier AP</span> — PO with order_date in last 90 days. Payment due = order_date + {AP_TERM_DAYS}d (universal grace per ops policy; supplier-specific terms ignored). AP Open = POs whose due date is within {AP_GRACE_DAYS}d grace of today or in the future; older POs assumed paid (manual paid_at is unreliable). Buckets are calendar-based (Today / This week / This month / Next month).</p>
+          <p><span className="text-deep-black">Cash Pressure · this week</span> — proxy: AP due by end of this calendar week (Mon-Sun) minus expected cash inflow. Expected inflow = trailing Loyverse run-rate prorated for days remaining + open AR due this week (assumes 100% on-time collection). Treat as operational pressure indicator, not a true cash forecast.</p>
         </div>
       </details>
     </>
@@ -595,15 +609,15 @@ function aggregateReceipts(rows: Pick<LoyverseReceipt, 'total' | 'cost_total' | 
 function buildInsight(p: {
   netSales: number; netSalesPrev: number
   grossMarginPct: number; prevGrossMarginPct: number
-  cashPressure7d: number; apDue7: number; expectedCashIn7d: number
+  cashPressureWeek: number; apThisWeek: number; expectedCashInWeek: number
   arOverduePct: number; arOverdue: number
   topOverdueCount: number
 }): { tone: 'ok' | 'warn' | 'danger'; text: string } {
   const flags: string[] = []
   let tone: 'ok' | 'warn' | 'danger' = 'ok'
 
-  if (p.cashPressure7d > 0) {
-    flags.push(`supplier payments this week exceed expected cash inflow by ${fmtThbCompact(p.cashPressure7d)}`)
+  if (p.cashPressureWeek > 0) {
+    flags.push(`supplier payments this week exceed expected cash inflow by ${fmtThbCompact(p.cashPressureWeek)}`)
     tone = 'danger'
   }
   if (p.arOverduePct >= 30) {
@@ -903,9 +917,11 @@ const AGING_COLOR: Record<AgingBucket, string> = {
   '90+':     'bg-burgundy-deep',
 }
 
-const AP_COLOR: Record<'Invoice issued' | 'Due ≤ 7d' | 'Due 8-30d' | 'Due > 30d', string> = {
-  'Invoice issued': 'bg-wine-red',
-  'Due ≤ 7d':       'bg-amber-gold',
-  'Due 8-30d':      'bg-graphite/50',
-  'Due > 30d':      'bg-graphite/30',
+const AP_COLOR: Record<'Overdue' | 'Today' | 'This week' | 'This month' | 'Next month' | 'Later', string> = {
+  'Overdue':    'bg-burgundy-deep',
+  'Today':      'bg-wine-red',
+  'This week':  'bg-amber-gold',
+  'This month': 'bg-graphite/50',
+  'Next month': 'bg-graphite/30',
+  'Later':      'bg-pale-stone',
 }

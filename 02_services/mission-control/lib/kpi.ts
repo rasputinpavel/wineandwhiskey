@@ -160,6 +160,25 @@ export function isoNDaysAgo(n: number, now = new Date()): string {
   return isoDate(bkkUtc(y, m, d - n))
 }
 
+// Calendar-week / month boundaries in BKK. Inclusive end dates ("up to and
+// including this day"). Week is Mon-Sun.
+export function endOfWeekBkk(now = new Date()): string {
+  const { y, m, d, weekday } = bkkParts(now)
+  const daysToSunday = (7 - ((weekday + 6) % 7) - 1)  // Mon=0…Sun=6 → days until Sun
+  return isoDate(bkkUtc(y, m, d + daysToSunday))
+}
+
+export function endOfMonthBkk(now = new Date()): string {
+  const { y, m } = bkkParts(now)
+  // Last day of current month = day before 1st of next month.
+  return isoDate(bkkUtc(y, m + 1, 0))
+}
+
+export function endOfNextMonthBkk(now = new Date()): string {
+  const { y, m } = bkkParts(now)
+  return isoDate(bkkUtc(y, m + 2, 0))
+}
+
 // Same kind of range as periodRange but for the period immediately before
 // the current one. Used to compute "vs last period" deltas.
 export function previousPeriodRange(key: Period, now = new Date()): PeriodRange {
