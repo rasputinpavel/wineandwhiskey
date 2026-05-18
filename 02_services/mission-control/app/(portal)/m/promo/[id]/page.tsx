@@ -7,6 +7,8 @@ import {
   PROMO_STATUS_LABEL, PROMO_MOOD_LABEL,
   type PromoCampaign,
 } from '@/lib/promo/types'
+import { signAssetUrls } from '@/lib/promo/storage'
+import { FORMAT_SPECS, type PromoFormatKey } from '@/lib/promo/visuals'
 import { PromoActionsClient } from '@/components/modules/promo/PromoActionsClient'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +23,10 @@ export default async function PromoDetailPage({ params }: Ctx) {
     .from('campaign').select('*').eq('id', id).single()
   if (error || !data) notFound()
   const c = data as PromoCampaign
+
+  // Resolve signed URLs for any assets present in the row.
+  const assetMap = (c.assets ?? {}) as Partial<Record<PromoFormatKey, string>>
+  const signed = Object.keys(assetMap).length > 0 ? await signAssetUrls(assetMap) : {}
 
   return (
     <>
@@ -49,6 +55,7 @@ export default async function PromoDetailPage({ params }: Ctx) {
               id={c.id}
               status={c.status}
               hasCopy={!!c.headline}
+              hasVisuals={Object.keys(assetMap).length > 0}
             />
           </header>
 
@@ -93,17 +100,35 @@ export default async function PromoDetailPage({ params }: Ctx) {
             )}
           </section>
 
-          <section className="bg-cream/30 border border-pale-stone rounded-md p-4">
-            <div className="overline text-graphite mb-1">Assets</div>
-            {c.assets && Object.keys(c.assets).length > 0 ? (
-              <ul className="text-xs text-graphite space-y-1">
-                {Object.entries(c.assets).map(([k, v]) => (
-                  <li key={k}><strong>{k}:</strong> {v}</li>
-                ))}
-              </ul>
+          <section>
+            <div className="overline text-graphite mb-2">Assets</div>
+            {Object.keys(assetMap).length > 0 ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+                {FORMAT_SPECS.map(spec => {
+                  const url = signed[spec.key]
+                  if (!url) return null
+                  return (
+                    <a key={spec.key} href={url} target="_blank" rel="noopener"
+                      className="block border border-pale-stone rounded-md overflow-hidden bg-cream/30 hover:border-wine-red transition-colors">
+                      <div className="aspect-[4/3] flex items-center justify-center bg-deep-black/5 overflow-hidden">
+                        {spec.ext === 'pdf' ? (
+                          <span className="text-xs text-graphite uppercase tracking-wide">PDF · {spec.width}×{spec.height}</span>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={url} alt={spec.label} className="w-full h-full object-contain" />
+                        )}
+                      </div>
+                      <div className="px-3 py-2 text-xs">
+                        <div className="font-medium text-deep-black">{spec.label}</div>
+                        <div className="text-[10px] text-graphite mt-0.5">{spec.width}×{spec.height} · {spec.ext.toUpperCase()}</div>
+                      </div>
+                    </a>
+                  )
+                })}
+              </div>
             ) : (
-              <p className="text-sm text-graphite italic">
-                No visuals yet — Phase 3 will render IG post, IG story, TG post, A2 poster, A3 stand, web banner.
+              <p className="text-sm text-graphite italic bg-cream/30 border border-pale-stone rounded-md p-4">
+                No visuals yet — click <strong>Generate visuals</strong> after copy is in place.
               </p>
             )}
           </section>

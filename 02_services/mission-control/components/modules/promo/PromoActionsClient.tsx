@@ -8,13 +8,14 @@ import { PROMO_STATUSES, PROMO_STATUS_LABEL, type PromoStatus } from '@/lib/prom
 // add "Generate copy" and "Generate visuals" buttons here.
 
 export function PromoActionsClient({
-  id, status: initialStatus, hasCopy,
-}: { id: string; status: PromoStatus; hasCopy: boolean }) {
+  id, status: initialStatus, hasCopy, hasVisuals,
+}: { id: string; status: PromoStatus; hasCopy: boolean; hasVisuals: boolean }) {
   const router = useRouter()
-  const [status, setStatus]   = useState<PromoStatus>(initialStatus)
-  const [busy, setBusy]       = useState(false)
-  const [generating, setGen]  = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+  const [status, setStatus]      = useState<PromoStatus>(initialStatus)
+  const [busy, setBusy]          = useState(false)
+  const [generating, setGen]     = useState(false)
+  const [renderingVis, setVis]   = useState(false)
+  const [error, setError]        = useState<string | null>(null)
 
   async function setStatusTo(next: PromoStatus) {
     if (next === status) return
@@ -50,6 +51,22 @@ export function PromoActionsClient({
     }
   }
 
+  async function generateVisuals() {
+    if (!hasCopy) { setError('Generate copy first'); return }
+    if (hasVisuals && !confirm('Regenerate all 7 visuals? Current assets will be overwritten.')) return
+    setVis(true); setError(null)
+    try {
+      const res = await fetch(`/api/m/promo/${id}/generate-visuals`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to render')
+      router.refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setVis(false)
+    }
+  }
+
   async function remove() {
     if (!confirm('Delete this promo? This cannot be undone.')) return
     setBusy(true); setError(null)
@@ -68,21 +85,26 @@ export function PromoActionsClient({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2">
-        <button onClick={generateCopy} disabled={busy || generating}
+        <button onClick={generateCopy} disabled={busy || generating || renderingVis}
           className="text-xs px-3 py-1.5 bg-deep-black text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
           {generating ? 'Generating…' : hasCopy ? 'Regenerate copy' : 'Generate copy'}
+        </button>
+        <button onClick={generateVisuals} disabled={busy || generating || renderingVis || !hasCopy}
+          title={!hasCopy ? 'Generate copy first' : undefined}
+          className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
+          {renderingVis ? 'Rendering 7 assets…' : hasVisuals ? 'Regenerate visuals' : 'Generate visuals'}
         </button>
         <select
           value={status}
           onChange={e => setStatusTo(e.target.value as PromoStatus)}
-          disabled={busy || generating}
+          disabled={busy || generating || renderingVis}
           className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-1.5"
         >
           {PROMO_STATUSES.map(s => (
             <option key={s} value={s}>{PROMO_STATUS_LABEL[s]}</option>
           ))}
         </select>
-        <button onClick={remove} disabled={busy || generating}
+        <button onClick={remove} disabled={busy || generating || renderingVis}
           className="text-xs px-2 py-1.5 border border-pale-stone text-graphite rounded-sm hover:border-wine-red hover:text-wine-red disabled:opacity-50">
           Delete
         </button>
