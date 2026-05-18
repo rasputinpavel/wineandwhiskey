@@ -334,7 +334,7 @@ export default async function PulsePage({ searchParams }: { searchParams: Promis
             {(Object.keys(apBuckets) as (keyof typeof apBuckets)[]).map(b => {
               const v = apBuckets[b]
               const pct = apOpen > 0 ? (v / apOpen) * 100 : 0
-              const danger = b === 'Overdue' || b === 'Due ≤ 7d'
+              const danger = b === 'Invoice issued' || b === 'Due ≤ 7d'
               return (
                 <div key={b} className="flex items-center gap-3 text-xs">
                   <div className="w-20 text-graphite">{b}</div>
