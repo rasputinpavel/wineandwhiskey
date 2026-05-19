@@ -8,8 +8,8 @@ import { PROMO_STATUSES, PROMO_STATUS_LABEL, type PromoStatus } from '@/lib/prom
 // add "Generate copy" and "Generate visuals" buttons here.
 
 export function PromoActionsClient({
-  id, status: initialStatus, hasCopy, hasVisuals,
-}: { id: string; status: PromoStatus; hasCopy: boolean; hasVisuals: boolean }) {
+  id, status: initialStatus, hasCopy, hasPrompt, hasVisuals,
+}: { id: string; status: PromoStatus; hasCopy: boolean; hasPrompt: boolean; hasVisuals: boolean }) {
   const router = useRouter()
   const [status, setStatus]      = useState<PromoStatus>(initialStatus)
   const [busy, setBusy]          = useState(false)
@@ -52,7 +52,7 @@ export function PromoActionsClient({
   }
 
   async function generateVisuals() {
-    if (!hasCopy) { setError('Generate copy first'); return }
+    if (!hasPrompt) { setError('Run "Generate copy" first — it authors the image prompt used here'); return }
     if (hasVisuals && !confirm('Regenerate all 7 visuals? Current assets will be overwritten.')) return
     setVis(true); setError(null)
     try {
@@ -89,8 +89,8 @@ export function PromoActionsClient({
           className="text-xs px-3 py-1.5 bg-deep-black text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
           {generating ? 'Generating…' : hasCopy ? 'Regenerate copy' : 'Generate copy'}
         </button>
-        <button onClick={generateVisuals} disabled={busy || generating || renderingVis || !hasCopy}
-          title={!hasCopy ? 'Generate copy first' : undefined}
+        <button onClick={generateVisuals} disabled={busy || generating || renderingVis || !hasPrompt}
+          title={!hasPrompt ? 'Generate copy first — it writes the NBP image prompt' : undefined}
           className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
           {renderingVis ? 'Rendering 7 assets…' : hasVisuals ? 'Regenerate visuals' : 'Generate visuals'}
         </button>

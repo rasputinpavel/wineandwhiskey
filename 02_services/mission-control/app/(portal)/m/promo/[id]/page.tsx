@@ -55,6 +55,7 @@ export default async function PromoDetailPage({ params }: Ctx) {
               id={c.id}
               status={c.status}
               hasCopy={!!c.headline}
+              hasPrompt={!!c.nbp_prompt}
               hasVisuals={Object.keys(assetMap).length > 0}
             />
           </header>
