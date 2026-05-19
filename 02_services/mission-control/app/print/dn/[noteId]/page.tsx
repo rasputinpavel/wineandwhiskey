@@ -13,7 +13,7 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
 
   const { data: note } = await sbInventory
     .from('delivery_note')
-    .select('id, number, issued_at, status, location_id, consignment_location(name, customer_id, b2b_customer(flowaccount_name))')
+    .select('id, number, issued_at, status, with_vat, location_id, consignment_location(name, customer_id, b2b_customer(flowaccount_name))')
     .eq('id', noteId).maybeSingle()
 
   if (!note) {
@@ -28,7 +28,11 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
 
   const rows = (lines ?? []) as any[]
   const totalQty = rows.reduce((s, l) => s + Number(l.qty || 0), 0)
-  const total    = rows.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0)
+  const subtotal = rows.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0)
+  const withVat  = (note as any).with_vat !== false
+  const vat      = withVat ? subtotal * 0.07 : 0
+  const total    = subtotal + vat
+  const money    = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
   const customerId   = (note as any).consignment_location?.customer_id
   const customerName = (note as any).consignment_location?.b2b_customer?.flowaccount_name
                     ?? (note as any).consignment_location?.name
@@ -96,8 +100,8 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
                   <td className="py-1.5 pr-3">{l.sku?.name ?? '—'}</td>
                   <td className="py-1.5 pr-3 text-graphite">{l.sku?.category ?? '—'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{Number(l.qty).toLocaleString('en-US')}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{l.unit_price ? `฿${Number(l.unit_price).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}</td>
-                  <td className="py-1.5 pr-0 text-right tabular-nums">{lt > 0 ? `฿${lt.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{l.unit_price ? `฿${money(Number(l.unit_price))}` : '—'}</td>
+                  <td className="py-1.5 pr-0 text-right tabular-nums">{lt > 0 ? `฿${money(lt)}` : '—'}</td>
                 </tr>
               )
             })}
@@ -106,9 +110,23 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
             <tr className="border-t-2 border-deep-black">
               <td colSpan={3} className="py-2 pr-3 text-graphite text-[11px]">{rows.length} item(s)</td>
               <td className="py-2 pr-3 text-right tabular-nums font-medium">{totalQty}</td>
-              <td />
+              <td className="py-2 pr-3 text-right text-[11px] text-graphite">Subtotal</td>
+              <td className="py-2 pr-0 text-right tabular-nums">
+                {subtotal ? `฿${money(subtotal)}` : '—'}
+              </td>
+            </tr>
+            {withVat && subtotal > 0 && (
+              <tr>
+                <td colSpan={4} />
+                <td className="py-1 pr-3 text-right text-[11px] text-graphite">VAT 7%</td>
+                <td className="py-1 pr-0 text-right tabular-nums">฿{money(vat)}</td>
+              </tr>
+            )}
+            <tr className="border-t border-deep-black">
+              <td colSpan={4} />
+              <td className="py-2 pr-3 text-right text-[11px] text-graphite">Total</td>
               <td className="py-2 pr-0 text-right tabular-nums font-heading">
-                {total ? `฿${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                {total ? `฿${money(total)}` : '—'}
               </td>
             </tr>
           </tfoot>

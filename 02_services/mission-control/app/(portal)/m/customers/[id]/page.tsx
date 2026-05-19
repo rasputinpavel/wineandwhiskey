@@ -289,18 +289,19 @@ async function DeliveriesPanel({ customerId, sp }: { customerId: string; sp: Sea
 
   const { data, error } = await sbInventory
     .from('delivery_note')
-    .select('id, number, issued_at, status, delivery_note_line(qty, unit_price)')
+    .select('id, number, issued_at, status, with_vat, delivery_note_line(qty, unit_price)')
     .eq('location_id', loc.id)
     .limit(200)
   if (error) return <SchemaError error={error.message} />
 
   let notes = ((data ?? []) as any[]).map(n => {
     const lines = (n.delivery_note_line ?? []) as { qty: number; unit_price: number | null }[]
+    const subtotal = lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0)
     return {
       ...n,
       line_count: lines.length,
       total_qty:  lines.reduce((s, l) => s + Number(l.qty || 0), 0),
-      total_money: lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0),
+      total_money: n.with_vat !== false ? subtotal * 1.07 : subtotal,
     }
   })
 
@@ -349,7 +350,7 @@ async function DeliveriesPanel({ customerId, sp }: { customerId: string; sp: Sea
                   <td className="py-2 px-4">{n.status}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.line_count}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_qty}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">{n.total_money ? `฿${n.total_money.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}</td>
+                  <td className="py-2 px-4 text-right tabular-nums">{n.total_money ? `฿${n.total_money.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}</td>
                   <td className="py-2 px-4 text-right">
                     <Link href={`/print/dn/${n.id}`} target="_blank" className="text-xs text-graphite hover:text-wine-red">
                       Print ↗

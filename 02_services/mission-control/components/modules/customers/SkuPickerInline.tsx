@@ -50,7 +50,7 @@ export function SkuPickerInline({
 
   function pick(it: Candidate) {
     onPick(it)
-    setQuery(`${it.loyverse_product_code ?? ''} · ${it.name}`)
+    setQuery(it.name)
     setOpen(false)
   }
 

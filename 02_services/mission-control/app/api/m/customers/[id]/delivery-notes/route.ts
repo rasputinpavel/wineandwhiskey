@@ -9,10 +9,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: customerId } = await params
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'invalid json' }, { status: 400 })
-  const { issued_at, number, lines, status } = body as {
+  const { issued_at, number, lines, status, with_vat } = body as {
     issued_at?: string
     number?: string
     status?: 'draft' | 'issued' | 'delivered'
+    with_vat?: boolean
     lines?: Array<{ sku_id: string; qty: number; unit_price?: number | null }>
   }
 
@@ -55,6 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       number: finalNumber,
       issued_at,
       status: status ?? 'issued',
+      with_vat: with_vat ?? true,
       created_by: 'mission-control',
     })
     .select('id, number')

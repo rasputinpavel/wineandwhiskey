@@ -7,15 +7,19 @@ import { SkuPickerInline } from './SkuPickerInline'
 type Line = {
   key: number
   sku_id: string | null
-  sku_code: string | null
   sku_name: string | null
   qty: string
   unit_price: string
 }
 
 const newLine = (key: number): Line => ({
-  key, sku_id: null, sku_code: null, sku_name: null, qty: '1', unit_price: '',
+  key, sku_id: null, sku_name: null, qty: '1', unit_price: '',
 })
+
+const VAT_RATE = 0.07
+
+const money = (n: number) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
 export function DeliveryNoteForm({ customerId, suggestedNumber }: {
   customerId: string
@@ -26,6 +30,7 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
   const [issuedAt, setIssuedAt] = useState(today)
   const [number, setNumber]     = useState(suggestedNumber)
   const [lines, setLines]       = useState<Line[]>([newLine(1)])
+  const [addVat, setAddVat]     = useState(true)
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
 
@@ -45,6 +50,7 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
       const payload = {
         issued_at: issuedAt,
         number: number.trim() || undefined,
+        with_vat: addVat,
         lines: lines
           .filter(l => l.sku_id && Number(l.qty) > 0)
           .map(l => ({
@@ -77,10 +83,12 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
     } finally { setSaving(false) }
   }
 
-  const total = lines.reduce((s, l) => {
+  const subtotal = lines.reduce((s, l) => {
     const q = Number(l.qty), p = Number(l.unit_price)
     return s + (Number.isFinite(q) && Number.isFinite(p) ? q * p : 0)
   }, 0)
+  const vat   = addVat ? subtotal * VAT_RATE : 0
+  const total = subtotal + vat
 
   return (
     <form onSubmit={e => { e.preventDefault(); save() }} className="space-y-6">
@@ -124,10 +132,9 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
                   <tr key={l.key} className="border-b border-pale-stone/40 last:border-0 align-top">
                     <td className="py-2 px-3">
                       <SkuPickerInline
-                        initialName={l.sku_code ? `${l.sku_code} · ${l.sku_name}` : ''}
+                        initialName={l.sku_name ?? ''}
                         onPick={sku => update(l.key, {
                           sku_id: sku.id,
-                          sku_code: sku.loyverse_product_code,
                           sku_name: sku.name,
                         })}
                       />
@@ -144,7 +151,7 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
                              className="w-24 px-2 py-1 text-right border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red tabular-nums" />
                     </td>
                     <td className="py-2 px-3 text-right tabular-nums text-graphite">
-                      {lineTotal > 0 ? lineTotal.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}
+                      {lineTotal > 0 ? money(lineTotal) : '—'}
                     </td>
                     <td className="py-2 px-3 text-right">
                       <button type="button" onClick={() => removeLine(l.key)}
@@ -163,14 +170,33 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
                     + Add line
                   </button>
                 </td>
+                <td className="px-3 py-2 text-right tabular-nums text-graphite">
+                  {subtotal > 0 ? `฿${money(subtotal)}` : '—'}
+                </td>
+                <td></td>
+              </tr>
+              {addVat && subtotal > 0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-1 text-right text-xs text-graphite">VAT 7%</td>
+                  <td className="px-3 py-1 text-right tabular-nums text-graphite">฿{money(vat)}</td>
+                  <td></td>
+                </tr>
+              )}
+              <tr className="border-t border-pale-stone">
+                <td colSpan={3} className="px-3 py-2 text-right text-xs text-graphite">Total</td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">
-                  {total > 0 ? `฿${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                  {total > 0 ? `฿${money(total)}` : '—'}
                 </td>
                 <td></td>
               </tr>
             </tfoot>
           </table>
         </div>
+        <label className="mt-3 inline-flex items-center gap-2 text-sm text-graphite cursor-pointer">
+          <input type="checkbox" checked={addVat} onChange={e => setAddVat(e.target.checked)}
+                 className="accent-wine-red" />
+          <span>Add 7% VAT (prices entered are net)</span>
+        </label>
       </div>
 
       {err && <div className="text-sm text-wine-red">⚠ {err}</div>}
