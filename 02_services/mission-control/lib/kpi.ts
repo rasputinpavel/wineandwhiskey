@@ -179,6 +179,39 @@ export function endOfNextMonthBkk(now = new Date()): string {
   return isoDate(bkkUtc(y, m + 2, 0))
 }
 
+// Range of last N calendar months in BKK, oldest first. Inclusive of current
+// (in-progress) month at the end. Returned as { y, m, fromDate, toDate, label }.
+export type MonthRange = {
+  y: number; m: number               // m is 0-indexed
+  fromDate: string; toDate: string   // YYYY-MM-DD, toDate exclusive
+  label: string                      // 'May 26' / 'Apr 26'
+}
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export function lastNMonths(n: number, now = new Date()): MonthRange[] {
+  const { y, m } = bkkParts(now)
+  const out: MonthRange[] = []
+  for (let i = n - 1; i >= 0; i--) {
+    const start = bkkUtc(y, m - i, 1)
+    const end   = bkkUtc(y, m - i + 1, 1)
+    const sy = new Date(start.getTime() + BKK_OFFSET_MIN * 60_000)
+    out.push({
+      y: sy.getUTCFullYear(),
+      m: sy.getUTCMonth(),
+      fromDate: isoDate(start),
+      toDate:   isoDate(end),
+      label:    `${MONTH_NAMES_SHORT[sy.getUTCMonth()]} ${String(sy.getUTCFullYear()).slice(-2)}`,
+    })
+  }
+  return out
+}
+
+// Days in the current BKK month, and number of full days elapsed (1..daysInMonth).
+export function mtdProgress(now = new Date()): { daysInMonth: number; daysPassed: number } {
+  const { y, m, d } = bkkParts(now)
+  const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+  return { daysInMonth, daysPassed: d }
+}
+
 // Same kind of range as periodRange but for the period immediately before
 // the current one. Used to compute "vs last period" deltas.
 export function previousPeriodRange(key: Period, now = new Date()): PeriodRange {

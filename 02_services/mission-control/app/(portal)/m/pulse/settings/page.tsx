@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { sbInventory, type FixedCost } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import {
@@ -23,16 +22,6 @@ export default async function PulseSettingsPage() {
 
   return (
     <>
-      {/* Tab nav */}
-      <div className="flex gap-1 text-xs mb-4">
-        <Link href="/m/pulse" className="px-3 py-1.5 rounded-sm border bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red">
-          ← Dashboard
-        </Link>
-        <span className="px-3 py-1.5 rounded-sm border bg-wine-red text-warm-white border-wine-red">
-          Settings
-        </span>
-      </div>
-
       <h2 className="font-heading text-xl text-deep-black mb-1">Monthly fixed costs</h2>
       <p className="text-graphite text-sm mb-4 max-w-3xl">
         Costs you&apos;d pay even if the shop was closed for the month: rent, payroll, utilities, fees.
