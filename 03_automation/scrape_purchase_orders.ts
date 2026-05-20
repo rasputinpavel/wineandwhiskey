@@ -281,17 +281,24 @@ async function discoverNewPOs(page: Page, pagesToScan: number): Promise<number> 
       //   6: expected_on   7: total ฿
       const ordDate = (cells[1] ?? "").trim();
       const expDate = (cells[6] ?? "").trim();
-      // Loyverse renders dates as "Apr 28, 2026". Parse manually — using
-      // new Date(s) in a non-UTC timezone (e.g. Bangkok) shifts the calendar
-      // date back by one day after toISOString.
+      // Loyverse renders dates in one of two formats — historical "Apr 28,
+      // 2026" (Mon DD, YYYY) and current "20 May 2026" (DD Mon YYYY). The
+      // switch happened around May 2026; new POs from then on returned
+      // NULL order_date until this parser learned both shapes.
+      // We do NOT use new Date(s) because in a non-UTC timezone (e.g.
+      // Bangkok) toISOString shifts the calendar date back by one day.
       const MONTHS: Record<string, string> = {
         Jan:"01", Feb:"02", Mar:"03", Apr:"04", May:"05", Jun:"06",
         Jul:"07", Aug:"08", Sep:"09", Oct:"10", Nov:"11", Dec:"12",
       };
       const toIso = (s: string): string | null => {
         if (!s) return null;
-        const m = s.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})$/);
-        if (m && MONTHS[m[1]]) return `${m[3]}-${MONTHS[m[1]]}-${m[2].padStart(2, "0")}`;
+        // "Apr 28, 2026" — historical
+        const mUS = s.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (mUS && MONTHS[mUS[1]]) return `${mUS[3]}-${MONTHS[mUS[1]]}-${mUS[2].padStart(2, "0")}`;
+        // "20 May 2026" — current (verified May 2026)
+        const mEU = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+        if (mEU && MONTHS[mEU[2]]) return `${mEU[3]}-${MONTHS[mEU[2]]}-${mEU[1].padStart(2, "0")}`;
         // Fallback for ISO-ish input
         if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
         return null;
