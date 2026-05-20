@@ -1,29 +1,56 @@
 import Link from 'next/link'
-import { sbInventory, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost, sbPublic } from '@/lib/supabase'
+import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import {
-  lastNMonths, mtdProgress, computeDueDate, isoNDaysAgo,
+  lastNMonths, mtdProgress, computeDueDate, daysBetween, isoNDaysAgo,
   fmtThb, fmtThbCompact, todayBkk,
 } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
 // ════════════════════════════════════════════════════════════════════════════
-// Owner's monthly P&L — the single screen that answers
-// "did the business make money this month, or do I need to top it up?"
+// Owner P&L — cash-basis bookkeeping
 //
-//   Net Profit = Revenue − COGS − Fixed costs (pro-rata MTD)
+//   Revenue           Σ Loyverse receipts in month (SALE − REFUND)
+//                     B2C cash + B2B paid bank transfers / card.
+//                     Unpaid FA tax invoices are AR, not revenue, until they
+//                     create a Loyverse receipt at payment.
 //
-// Everything else (operational metrics, AR aging, AP buckets, cash pressure)
-// lives one tab over under /m/pulse/operations.
+//   Supplier payments Σ purchase_orders where payment_date ∈ month,
+//                     where payment_date = order_date + 30d (universal grace).
+//                     "We pay on time" → POs with payment_date ≤ today are
+//                     assumed paid; POs with payment_date > today are
+//                     future obligations. Excludes consignment.
+//
+//   GP                Revenue − Supplier payments. NOT "cost of goods sold"
+//                     in the bookkeeping sense — it's the cash margin after
+//                     paying suppliers what's due this month.
+//
+//   GM% (ref)         (Revenue − Loyverse receipt.cost) / Revenue. Reference
+//                     metric for unit economics; NOT used in Net calc.
+//
+//   Net               GP − Fixed costs (MTD pro-rata).
+//
+// Period: current calendar month for headline; 18 months for trend.
 // ════════════════════════════════════════════════════════════════════════════
 
+const AP_TERM_DAYS = 30
+
 export default async function PulseDashboardPage() {
-  const months = lastNMonths(6)
-  const sixMonthsStart = months[0].fromDate
-  const { daysInMonth, daysPassed } = mtdProgress()
+  const months = lastNMonths(18)
+  const monthsStart = months[0].fromDate                  // 18 months ago, 1st of month
+  const monthsStartIso = monthsStart + 'T00:00:00Z'
   const today = todayBkk()
+  const { daysInMonth, daysPassed } = mtdProgress()
+  const currentMonth = months[months.length - 1]
+  const startOfMonth = currentMonth.fromDate              // 'YYYY-MM-01'
+  const endOfMonthExclusive = currentMonth.toDate         // 'YYYY-MM-01' of NEXT month
+  const endOfMonthInclusive = computeDueDate(endOfMonthExclusive, -1) // last day of current month
+
+  // To capture POs whose payment date (order + 30d) falls within the trend
+  // window, we need orders up to 30 days before the window starts.
+  const poStart = isoNDaysAgo(daysBetween(today, monthsStart) + AP_TERM_DAYS)
 
   // ─── Fetch ───────────────────────────────────────────────────────────────
   const [
@@ -32,18 +59,18 @@ export default async function PulseDashboardPage() {
     invoicesOpenRes,
     customersRes,
     suppliersRes,
-    posOpenRes,
+    posRes,
   ] = await Promise.all([
     sbInventory
       .from('loyverse_receipt')
-      .select('total, cost_total, receipt_type, receipt_date')
-      .gte('receipt_date', sixMonthsStart + 'T00:00:00Z'),
+      .select('total, cost_total, is_b2b, receipt_type, receipt_date')
+      .gte('receipt_date', monthsStartIso),
     sbInventory
       .from('fixed_cost')
       .select('amount_thb, active'),
     sbInventory
       .from('flowaccount_invoice')
-      .select('total, status, issued_at, due_at, customer_id')
+      .select('id, total, status, issued_at, due_at, customer_id')
       .neq('status', 'Cancelled')
       .eq('excluded', false),
     sbInventory
@@ -55,72 +82,36 @@ export default async function PulseDashboardPage() {
     sbPublic
       .from('purchase_orders')
       .select('id, supplier, total_thb, order_date, cashflow_override')
-      .gte('order_date', isoNDaysAgo(90)),
+      .gte('order_date', poStart),
   ])
 
   for (const r of [receiptsRes, invoicesOpenRes, customersRes, suppliersRes]) {
     if (r.error) return <SchemaError error={r.error.message} />
   }
-  if (posOpenRes.error) return <SchemaError error={posOpenRes.error.message} />
+  if (posRes.error) return <SchemaError error={posRes.error.message} />
 
-  // ─── Aggregate by month ──────────────────────────────────────────────────
-  type Bucket = { revenue: number; cogs: number }
+  // ─── Aggregation per month ───────────────────────────────────────────────
+  type Bucket = {
+    b2c: number; b2b: number; total: number; refRevCost: number
+    supplierPayments: number
+  }
+  const empty = (): Bucket => ({ b2c: 0, b2b: 0, total: 0, refRevCost: 0, supplierPayments: 0 })
   const byMonth = new Map<string, Bucket>()
-  for (const m of months) byMonth.set(m.fromDate.slice(0, 7), { revenue: 0, cogs: 0 })
+  for (const m of months) byMonth.set(m.fromDate.slice(0, 7), empty())
+
+  // Revenue (Loyverse receipts)
   for (const r of (receiptsRes.data ?? []) as LoyverseReceipt[]) {
     const ym = r.receipt_date.slice(0, 7)
     const b  = byMonth.get(ym); if (!b) continue
     const sign  = r.receipt_type === 'REFUND' ? -1 : 1
-    b.revenue  += Number(r.total)             * sign
-    b.cogs     += Number(r.cost_total ?? 0)   * sign
+    const total = Number(r.total) * sign
+    const cost  = Number(r.cost_total ?? 0) * sign
+    b.total += total
+    b.refRevCost += cost
+    if (r.is_b2b) b.b2b += total; else b.b2c += total
   }
 
-  const monthlyFixed = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
-    .filter(r => r.active)
-    .reduce((s, r) => s + Number(r.amount_thb), 0)
-
-  // ─── Per-month P&L ───────────────────────────────────────────────────────
-  // Fixed cost: current snapshot applied to each month (Phase 1 — no history).
-  // Current (in-progress) month: pro-rata MTD share of fixed.
-  type MonthPnl = { ym: string; label: string; revenue: number; cogs: number; gp: number; fixed: number; net: number; isCurrent: boolean }
-  const monthsPnl: MonthPnl[] = months.map((m, i) => {
-    const ym = m.fromDate.slice(0, 7)
-    const b  = byMonth.get(ym) ?? { revenue: 0, cogs: 0 }
-    const isCurrent = i === months.length - 1
-    const fixed = isCurrent ? monthlyFixed * (daysPassed / daysInMonth) : monthlyFixed
-    return {
-      ym, label: m.label,
-      revenue: b.revenue,
-      cogs:    b.cogs,
-      gp:      b.revenue - b.cogs,
-      fixed,
-      net:     b.revenue - b.cogs - fixed,
-      isCurrent,
-    }
-  })
-  const current = monthsPnl[monthsPnl.length - 1]
-  const grossMarginPct = current.revenue > 0 ? (current.gp / current.revenue) * 100 : 0
-
-  // ─── Projection to end of current month ──────────────────────────────────
-  // Scale revenue + cogs by full-month/MTD ratio. Apply full monthlyFixed.
-  const scale = daysPassed > 0 ? daysInMonth / daysPassed : 1
-  const projectedRevenue = current.revenue * scale
-  const projectedCogs    = current.cogs    * scale
-  const projectedGp      = projectedRevenue - projectedCogs
-  const projectedNet     = projectedGp - monthlyFixed
-
-  // ─── Cash control: AR Open vs AP Open ────────────────────────────────────
-  const customers = (customersRes.data ?? []) as Pick<B2bCustomer, 'id' | 'payment_terms_days'>[]
-  const termsByCustomer = new Map(customers.map(c => [c.id, c.payment_terms_days ?? 0]))
-  const openInvoices = ((invoicesOpenRes.data ?? []) as FlowInvoice[]).filter(i => i.status !== 'Paid')
-  const arOpen = openInvoices.reduce((s, i) => s + Number(i.total), 0)
-  let arOverdue = 0
-  for (const inv of openInvoices) {
-    const terms = inv.customer_id ? (termsByCustomer.get(inv.customer_id) ?? 0) : 0
-    const dueAt = inv.due_at ?? (terms > 0 ? computeDueDate(inv.issued_at, terms) : inv.issued_at)
-    if (dueAt < today) arOverdue += Number(inv.total)
-  }
-
+  // Supplier payments — bucketed by payment_date = order_date + 30d.
   type SupRow = Pick<Supplier, 'name' | 'type'>
   const suppliers = (suppliersRes.data ?? []) as SupRow[]
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
@@ -130,24 +121,99 @@ export default async function PulseDashboardPage() {
     const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
     return (t ?? 'regular') !== 'consignment'
   }
-  const apOpen = ((posOpenRes.data ?? []) as PurchaseOrder[])
-    .filter(includedInCashflow)
-    .filter(p => {
-      if (!p.order_date) return false
-      const dueAt = computeDueDate(p.order_date, 30)
-      return dueAt >= today.slice(0, 8) + '01'   // dueAt ≥ start of current month → still active
-    })
-    .reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  const allPOs = ((posRes.data ?? []) as PurchaseOrder[]).filter(includedInCashflow)
+
+  type PayPo = { total: number; paymentDate: string }
+  const supplierPayments: PayPo[] = []
+  for (const p of allPOs) {
+    if (!p.order_date) continue
+    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    supplierPayments.push({ total: Number(p.total_thb ?? 0), paymentDate: pd })
+    const ym = pd.slice(0, 7)
+    const b = byMonth.get(ym)
+    if (b) b.supplierPayments += Number(p.total_thb ?? 0)
+  }
+
+  // Fixed costs
+  const monthlyFixed = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
+    .filter(r => r.active)
+    .reduce((s, r) => s + Number(r.amount_thb), 0)
+
+  // ─── Per-month P&L ───────────────────────────────────────────────────────
+  // For closed months: supplierPayments = full-month bucket; fixed = full.
+  // For current month:
+  //   trend cell shows MTD supplier payments (payment_date ≤ today)
+  //   projection uses full-month bucket (already in byMonth)
+  type MonthPnl = { ym: string; label: string; revenue: number; supplierPayments: number; gp: number; fixed: number; net: number; isCurrent: boolean }
+  const currentYM = currentMonth.fromDate.slice(0, 7)
+
+  const supplierPaymentsMtd = supplierPayments
+    .filter(p => p.paymentDate >= startOfMonth && p.paymentDate <= today)
+    .reduce((s, p) => s + p.total, 0)
+
+  const monthsPnl: MonthPnl[] = months.map(m => {
+    const ym = m.fromDate.slice(0, 7)
+    const b  = byMonth.get(ym) ?? empty()
+    const isCurrent = ym === currentYM
+    const fixed = isCurrent ? monthlyFixed * (daysPassed / daysInMonth) : monthlyFixed
+    const sup   = isCurrent ? supplierPaymentsMtd : b.supplierPayments
+    const gp    = b.total - sup
+    return { ym, label: m.label, revenue: b.total, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent }
+  })
+  const current = monthsPnl[monthsPnl.length - 1]
+  const currentBucket = byMonth.get(currentYM) ?? empty()
+
+  // Reference Gross Margin % (from Loyverse cost_total) — unit-economics signal
+  const refGmPct = currentBucket.total > 0
+    ? ((currentBucket.total - currentBucket.refRevCost) / currentBucket.total) * 100
+    : 0
+
+  // ─── Projected EOM ───────────────────────────────────────────────────────
+  // Revenue projection:
+  //   B2C: pace × scale
+  //   B2B paid: keep MTD (already received)
+  //   B2B inflows from open FA invoices whose due date falls by EOM
+  const customers = (customersRes.data ?? []) as Pick<B2bCustomer, 'id' | 'payment_terms_days'>[]
+  const termsByCustomer = new Map(customers.map(c => [c.id, c.payment_terms_days ?? 0]))
+  const openInvoices = ((invoicesOpenRes.data ?? []) as FlowInvoice[]).filter(i => i.status !== 'Paid')
+
+  function invoiceDueAt(inv: FlowInvoice): string {
+    if (inv.due_at) return inv.due_at
+    const terms = inv.customer_id ? (termsByCustomer.get(inv.customer_id) ?? 0) : 0
+    return terms > 0 ? computeDueDate(inv.issued_at, terms) : inv.issued_at
+  }
+
+  const b2bDueByEom = openInvoices
+    .filter(inv => invoiceDueAt(inv) <= endOfMonthInclusive)
+    .reduce((s, inv) => s + Number(inv.total), 0)
+
+  const scale = daysPassed > 0 ? daysInMonth / daysPassed : 1
+  const projB2C        = currentBucket.b2c * scale
+  const projRevenue    = projB2C + currentBucket.b2b + b2bDueByEom
+  const projSupplier   = currentBucket.supplierPayments              // already full-month bucket
+  const projGp         = projRevenue - projSupplier
+  const projNet        = projGp - monthlyFixed
+
+  // ─── Cash control: AR Open / AP Open / Net WC ────────────────────────────
+  const arOpen = openInvoices.reduce((s, i) => s + Number(i.total), 0)
+  let arOverdue = 0
+  for (const inv of openInvoices) {
+    if (invoiceDueAt(inv) < today) arOverdue += Number(inv.total)
+  }
+
+  // AP Open = supplier payments not yet due ("we pay on time" → past-due assumed paid).
+  const apOpen = supplierPayments
+    .filter(p => p.paymentDate > today)
+    .reduce((s, p) => s + p.total, 0)
   const workingCapital = arOpen - apOpen
 
   // ─── Headline insight ────────────────────────────────────────────────────
   const headline = buildHeadline({
-    netMtd: current.net,
-    netProjected: projectedNet,
-    monthlyFixed,
+    netMtd: current.net, netProjected: projNet, monthlyFixed,
   })
 
-  const trendMax = Math.max(1, ...monthsPnl.map(m => Math.max(m.net, 0)), ...monthsPnl.map(m => Math.abs(Math.min(m.net, 0))))
+  // For trend chart scale, ignore extreme single months by using max(|net|) of 18.
+  const trendMax = Math.max(1, ...monthsPnl.map(m => Math.abs(m.net)))
 
   return (
     <>
@@ -156,37 +222,37 @@ export default async function PulseDashboardPage() {
         <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'flowaccount_receipts', 'purchase_orders']} />
       </div>
 
-      {/* ─── Hero: Net Profit MTD + projection ──────────────────────────── */}
+      {/* ─── Hero ────────────────────────────────────────────────────────── */}
       <HeroBlock
-        netMtd={current.net}
-        netProjected={projectedNet}
-        daysPassed={daysPassed}
-        daysInMonth={daysInMonth}
+        netMtd={current.net} netProjected={projNet}
+        daysPassed={daysPassed} daysInMonth={daysInMonth}
         headline={headline}
       />
 
-      {/* ─── Waterfall + 6-month trend ─────────────────────────────────── */}
+      {/* ─── 18-month trend (full width) ─────────────────────────────────── */}
+      <div className="mb-3">
+        <TrendCard months={monthsPnl} max={trendMax} />
+      </div>
+
+      {/* ─── Waterfall + Cash Control ────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <WaterfallCard
           revenue={current.revenue}
-          cogs={current.cogs}
+          supplierPayments={current.supplierPayments}
+          supplierPaymentsRemaining={currentBucket.supplierPayments - supplierPaymentsMtd}
           gp={current.gp}
-          grossMarginPct={grossMarginPct}
           fixedMtd={current.fixed}
           monthlyFixed={monthlyFixed}
           net={current.net}
           daysPassed={daysPassed}
           daysInMonth={daysInMonth}
+          refGmPct={refGmPct}
         />
-
-        <TrendCard months={monthsPnl} max={trendMax} />
+        <CashControlCard arOpen={arOpen} arOverdue={arOverdue} apOpen={apOpen} workingCapital={workingCapital} />
       </div>
 
-      {/* ─── Cash control row ──────────────────────────────────────────── */}
-      <CashControlCard arOpen={arOpen} arOverdue={arOverdue} apOpen={apOpen} workingCapital={workingCapital} />
-
-      {/* ─── Footer: link to Operations + Methodology ──────────────────── */}
-      <div className="flex items-baseline justify-between mt-4 flex-wrap gap-2 text-xs">
+      {/* ─── Footer ─────────────────────────────────────────────────────── */}
+      <div className="flex items-baseline justify-between mt-2 flex-wrap gap-2 text-xs">
         <Link href="/m/pulse/operations" className="text-graphite hover:text-wine-red">
           See operational signals (break-even, AR aging, AP buckets, cash pressure) →
         </Link>
@@ -197,12 +263,14 @@ export default async function PulseDashboardPage() {
           <span className="text-pale-stone">▸</span> Methodology
         </summary>
         <div className="px-4 pb-4 pt-1 text-graphite space-y-2 leading-relaxed">
-          <p><span className="text-deep-black">Net Profit</span> = Revenue − COGS − Fixed costs. Accrual basis: revenue and cost recognised when the sale happens, regardless of when cash moves.</p>
-          <p><span className="text-deep-black">MTD fixed costs</span> = monthly_fixed × (days passed ÷ days in month). Pro-rated so the in-progress month is comparable to closed months.</p>
-          <p><span className="text-deep-black">Projection</span> = revenue and COGS scaled to full month at current pace, minus full month of fixed. Assumes pace continues without seasonality.</p>
-          <p><span className="text-deep-black">6-month trend</span> uses current monthly_fixed value for all months — no fixed-cost history yet. Edit fixed costs on the Settings tab.</p>
-          <p><span className="text-deep-black">Cash control</span> is a working-capital snapshot: open AR (B2B owe us) − open AP (we owe suppliers). Not a true bank balance — bank integration is out of scope for Phase 1.</p>
-          <p><span className="text-deep-black">Owner salary</span> is not included in fixed costs by current policy — Net Profit is the full take-home before tax.</p>
+          <p><span className="text-deep-black">Basis</span> — cash. Revenue is recognised when money lands in Loyverse (B2C cash/card and B2B bank transfers). Unpaid FA tax invoices are AR (visible in Cash control), not revenue.</p>
+          <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
+          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date (order_date + 30d) falls in the month. Default 30-day grace per ops policy; supplier-specific terms ignored. Consignment suppliers excluded.</p>
+          <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
+          <p><span className="text-deep-black">Fixed costs MTD</span> = monthly_fixed × (days passed / days in month). Pro-rated so the in-progress month is comparable. For closed months in the 18-month trend we apply the current monthly_fixed value to all of them (no history yet).</p>
+          <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
+          <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
+          <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
         </div>
       </details>
     </>
@@ -210,7 +278,7 @@ export default async function PulseDashboardPage() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Headline logic
+// Headline
 // ════════════════════════════════════════════════════════════════════════════
 
 function buildHeadline(p: { netMtd: number; netProjected: number; monthlyFixed: number }): {
@@ -226,7 +294,7 @@ function buildHeadline(p: { netMtd: number; netProjected: number; monthlyFixed: 
     return { tone: 'warn', text: `Still in the red MTD, but pacing toward ${fmtThbCompact(p.netProjected)} by month-end if revenue holds.` }
   }
   if (p.netProjected <= 0 && p.netMtd > 0) {
-    return { tone: 'warn', text: `Profitable MTD, but month-end projection is negative (${fmtThbCompact(p.netProjected)}) — fixed costs eat the gains.` }
+    return { tone: 'warn', text: `Profitable MTD, but month-end projection is negative (${fmtThbCompact(p.netProjected)}) — supplier and fixed obligations eat the gains.` }
   }
   return { tone: 'danger', text: `On pace for a ${fmtThbCompact(Math.abs(p.netProjected))} loss — owner will need to top up.` }
 }
@@ -242,11 +310,9 @@ function HeroBlock({ netMtd, netProjected, daysPassed, daysInMonth, headline }: 
   const positive = netMtd >= 0
   const valCls   = positive ? 'text-deep-black' : 'text-wine-red'
   const sign     = positive ? '+' : '−'
-
   const projPositive = netProjected >= 0
   const projCls      = projPositive ? 'text-deep-black' : 'text-wine-red'
   const projSign     = projPositive ? '+' : '−'
-
   const bar = headline.tone === 'danger' ? 'bg-wine-red' : headline.tone === 'warn' ? 'bg-amber-gold' : 'bg-graphite/30'
 
   return (
@@ -273,10 +339,10 @@ function HeroBlock({ netMtd, netProjected, daysPassed, daysInMonth, headline }: 
   )
 }
 
-function WaterfallCard({ revenue, cogs, gp, grossMarginPct, fixedMtd, monthlyFixed, net, daysPassed, daysInMonth }: {
-  revenue: number; cogs: number; gp: number; grossMarginPct: number
-  fixedMtd: number; monthlyFixed: number; net: number
-  daysPassed: number; daysInMonth: number
+function WaterfallCard({ revenue, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixed, net, daysPassed, daysInMonth, refGmPct }: {
+  revenue: number; supplierPayments: number; supplierPaymentsRemaining: number
+  gp: number; fixedMtd: number; monthlyFixed: number; net: number
+  daysPassed: number; daysInMonth: number; refGmPct: number
 }) {
   const netPositive = net >= 0
   return (
@@ -287,12 +353,13 @@ function WaterfallCard({ revenue, cogs, gp, grossMarginPct, fixedMtd, monthlyFix
       </div>
       <table className="w-full text-sm">
         <tbody>
-          <WaterfallRow label="Revenue"  value={revenue}            sign="+" />
-          <WaterfallRow label="COGS"     value={cogs}               sign="−" muted />
-          <WaterfallRow label="Gross Profit" value={gp}             sign="="  bold sub={`${grossMarginPct.toFixed(1)}% margin`} />
+          <WaterfallRow label="Revenue"  value={revenue} sign="+" />
+          <WaterfallRow label="Supplier payments" value={supplierPayments} sign="−" muted
+            sub={supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered'} />
+          <WaterfallRow label="Gross Profit" value={gp} sign="=" bold sub={`GM% ref: ${refGmPct.toFixed(1)}%`} />
           <WaterfallRow label={`Fixed (${daysPassed}/${daysInMonth} d)`} value={fixedMtd} sign="−" muted
             sub={monthlyFixed > 0 ? `from ${fmtThb(monthlyFixed)}/mo` : 'not configured'} />
-          <WaterfallRow label="Net Profit" value={net} sign="="  bold
+          <WaterfallRow label="Net Profit" value={net} sign="=" bold
             valueCls={netPositive ? 'text-deep-black' : 'text-wine-red'} />
         </tbody>
       </table>
@@ -312,58 +379,69 @@ function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls }: {
         {label}
       </td>
       <td className={`py-2 text-right tabular-nums ${cls} ${bold ? 'font-medium' : ''}`}>
-        {fmtThb(Math.abs(value)) /* keep raw, sign comes from leading column */}
+        {fmtThb(Math.abs(value))}
       </td>
       {sub
-        ? <td className="py-2 text-right text-[10px] text-graphite pl-2 w-28">{sub}</td>
-        : <td className="py-2 w-28" />
+        ? <td className="py-2 text-right text-[10px] text-graphite pl-2 w-40">{sub}</td>
+        : <td className="py-2 w-40" />
       }
     </tr>
   )
 }
 
-function TrendCard({ months, max }: { months: { label: string; net: number; isCurrent: boolean }[]; max: number }) {
+function TrendCard({ months, max }: { months: { label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]; max: number }) {
+  // SVG vertical bar chart: 18 bars side-by-side, zero baseline in the middle.
+  const w = 720, h = 180, padX = 8, padTop = 12, padBottom = 24
+  const innerW   = w - 2 * padX
+  const innerH   = h - padTop - padBottom
+  const zeroY    = padTop + innerH / 2
+  const halfH    = innerH / 2
+  const stepX    = innerW / months.length
+  const barW     = Math.max(6, stepX * 0.62)
+
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card">
       <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">Last 6 months · net profit</div>
-        <div className="text-[10px] text-graphite">current month projected if dashed</div>
+        <div className="font-heading text-sm text-deep-black">Last 18 months · net profit</div>
+        <div className="text-[10px] text-graphite">current month projected · dashed</div>
       </div>
-      <div className="space-y-2">
-        {months.map(m => {
-          const w   = Math.min(100, (Math.abs(m.net) / max) * 100)
-          const pos = m.net >= 0
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-44" preserveAspectRatio="none">
+        {/* zero baseline */}
+        <line x1={padX} y1={zeroY} x2={w - padX} y2={zeroY} stroke="#D4C9BC" strokeWidth={0.5} />
+
+        {months.map((m, i) => {
+          const x = padX + i * stepX + (stepX - barW) / 2
+          const v = m.net
+          const positive = v >= 0
+          const bh = Math.min(halfH, (Math.abs(v) / max) * halfH)
+          const y  = positive ? zeroY - bh : zeroY
+          const fill = positive ? '#3D3D3D' : '#8C1C1C'
+          const opacity = m.isCurrent ? 0.45 : 1
+          const dash = m.isCurrent ? '3 2' : undefined
           return (
-            <div key={m.label} className="flex items-center gap-2 text-xs">
-              <div className="w-12 text-graphite shrink-0 font-mono text-[11px]">{m.label}</div>
-              <div className="flex-1 flex items-center gap-px h-5">
-                {/* negative half — right-aligned bar growing left from centre */}
-                <div className="flex-1 flex justify-end">
-                  {!pos && (
-                    <div
-                      className={`h-full ${m.isCurrent ? 'bg-wine-red/40 border border-wine-red/60 border-dashed' : 'bg-wine-red'}`}
-                      style={{ width: `${w}%` }}
-                    />
-                  )}
-                </div>
-                <div className="w-px h-full bg-pale-stone" />
-                {/* positive half */}
-                <div className="flex-1">
-                  {pos && (
-                    <div
-                      className={`h-full ${m.isCurrent ? 'bg-graphite/40 border border-graphite/60 border-dashed' : 'bg-graphite'}`}
-                      style={{ width: `${w}%` }}
-                    />
-                  )}
-                </div>
-              </div>
-              <div className={`w-20 text-right tabular-nums text-[11px] ${pos ? 'text-deep-black' : 'text-wine-red'}`}>
-                {pos ? '+' : '−'}{fmtThbCompact(Math.abs(m.net))}
-              </div>
-            </div>
+            <g key={m.label}>
+              <rect
+                x={x} y={y} width={barW} height={Math.max(0.5, bh)}
+                fill={fill} opacity={opacity}
+                stroke={m.isCurrent ? fill : 'none'} strokeWidth={m.isCurrent ? 1 : 0}
+                strokeDasharray={dash}
+              >
+                <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${positive ? '+' : '−'}${fmtThbCompact(Math.abs(m.net))}${m.isCurrent ? ' (projected)' : ''}`}</title>
+              </rect>
+              {/* Label every 3rd month + last month */}
+              {(i % 3 === 0 || i === months.length - 1) && (
+                <text
+                  x={x + barW / 2} y={h - 8}
+                  textAnchor="middle"
+                  fontSize={9} fill="#3D3D3D" fontFamily="monospace"
+                >
+                  {m.label}
+                </text>
+              )}
+            </g>
           )
         })}
-      </div>
+      </svg>
     </div>
   )
 }
@@ -389,7 +467,7 @@ function CashControlCard({ arOpen, arOverdue, apOpen, workingCapital }: {
         <div>
           <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">AP Open · we owe suppliers</div>
           <div className="font-display text-2xl tracking-display text-wine-red leading-none">−{fmtThbCompact(apOpen)}</div>
-          <div className="text-[10px] text-graphite mt-1">payment due within 30d of order</div>
+          <div className="text-[10px] text-graphite mt-1">future obligations only (we pay on time)</div>
         </div>
         <div className="sm:border-l sm:border-pale-stone sm:pl-4">
           <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">Net working capital</div>
