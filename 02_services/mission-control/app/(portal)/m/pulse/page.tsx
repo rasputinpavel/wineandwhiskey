@@ -38,7 +38,9 @@ export const dynamic = 'force-dynamic'
 const AP_TERM_DAYS = 30
 
 export default async function PulseDashboardPage() {
-  const months = lastNMonths(18)
+  // 13 months so the trailing 12 + current both fit, and same-month-prior-year
+  // sits as the leftmost bar (year-over-year comparison at a glance).
+  const months = lastNMonths(13)
   const monthsStart = months[0].fromDate                  // 18 months ago, 1st of month
   const monthsStartIso = monthsStart + 'T00:00:00Z'
   const today = todayBkk()
@@ -402,7 +404,7 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card">
       <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">Last 18 months · net profit</div>
+        <div className="font-heading text-sm text-deep-black">Last 12 months + current · net profit</div>
         <div className="text-[10px] text-graphite">current month projected · dashed</div>
       </div>
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-44" preserveAspectRatio="none">
@@ -428,8 +430,8 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
               >
                 <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${positive ? '+' : '−'}${fmtThbCompact(Math.abs(m.net))}${m.isCurrent ? ' (projected)' : ''}`}</title>
               </rect>
-              {/* Label every 3rd month + last month */}
-              {(i % 3 === 0 || i === months.length - 1) && (
+              {/* Label every 2nd month + last month — 13 bars wide enough for readable cadence */}
+              {(i % 2 === 0 || i === months.length - 1) && (
                 <text
                   x={x + barW / 2} y={h - 8}
                   textAnchor="middle"
