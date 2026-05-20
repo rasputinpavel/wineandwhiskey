@@ -54,19 +54,57 @@ export default async function PulseDashboardPage() {
   // window, we need orders up to 30 days before the window starts.
   const poStart = isoNDaysAgo(daysBetween(today, monthsStart) + AP_TERM_DAYS)
 
+  // PostgREST max-rows is 1000 on Supabase Cloud — `.limit(N>1000)` is
+  // silently capped. Page over 1000-row windows to fetch the full set.
+  async function fetchAllReceipts(): Promise<LoyverseReceipt[]> {
+    const all: LoyverseReceipt[] = []
+    const PAGE = 1000
+    for (let from = 0; from < 100000; from += PAGE) {
+      const { data, error } = await sbInventory
+        .from('loyverse_receipt')
+        .select('total, cost_total, is_b2b, receipt_type, receipt_date')
+        .gte('receipt_date', monthsStartIso)
+        .order('receipt_date', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      all.push(...(data as LoyverseReceipt[]))
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+  async function fetchAllPOs(): Promise<PurchaseOrder[]> {
+    const all: PurchaseOrder[] = []
+    const PAGE = 1000
+    for (let from = 0; from < 100000; from += PAGE) {
+      const { data, error } = await sbPublic
+        .from('purchase_orders')
+        .select('id, supplier, total_thb, order_date, cashflow_override')
+        .gte('order_date', poStart)
+        .order('order_date', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      all.push(...(data as PurchaseOrder[]))
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+
   // ─── Fetch ───────────────────────────────────────────────────────────────
+  let receiptsAll: LoyverseReceipt[] = []
+  let posAll: PurchaseOrder[] = []
+  try {
+    [receiptsAll, posAll] = await Promise.all([fetchAllReceipts(), fetchAllPOs()])
+  } catch (e: any) {
+    return <SchemaError error={String(e?.message ?? e)} />
+  }
   const [
-    receiptsRes,
     fixedCostsRes,
     invoicesOpenRes,
     customersRes,
     suppliersRes,
-    posRes,
   ] = await Promise.all([
-    sbInventory
-      .from('loyverse_receipt')
-      .select('total, cost_total, is_b2b, receipt_type, receipt_date')
-      .gte('receipt_date', monthsStartIso),
     sbInventory
       .from('fixed_cost')
       .select('amount_thb, active'),
@@ -81,16 +119,11 @@ export default async function PulseDashboardPage() {
     sbInventory
       .from('supplier')
       .select('name, type'),
-    sbPublic
-      .from('purchase_orders')
-      .select('id, supplier, total_thb, order_date, cashflow_override')
-      .gte('order_date', poStart),
   ])
 
-  for (const r of [receiptsRes, invoicesOpenRes, customersRes, suppliersRes]) {
+  for (const r of [invoicesOpenRes, customersRes, suppliersRes]) {
     if (r.error) return <SchemaError error={r.error.message} />
   }
-  if (posRes.error) return <SchemaError error={posRes.error.message} />
 
   // ─── Aggregation per month ───────────────────────────────────────────────
   type Bucket = {
@@ -102,7 +135,7 @@ export default async function PulseDashboardPage() {
   for (const m of months) byMonth.set(m.fromDate.slice(0, 7), empty())
 
   // Revenue (Loyverse receipts)
-  for (const r of (receiptsRes.data ?? []) as LoyverseReceipt[]) {
+  for (const r of receiptsAll) {
     const ym = r.receipt_date.slice(0, 7)
     const b  = byMonth.get(ym); if (!b) continue
     const sign  = r.receipt_type === 'REFUND' ? -1 : 1
@@ -123,7 +156,7 @@ export default async function PulseDashboardPage() {
     const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
     return (t ?? 'regular') !== 'consignment'
   }
-  const allPOs = ((posRes.data ?? []) as PurchaseOrder[]).filter(includedInCashflow)
+  const allPOs = posAll.filter(includedInCashflow)
 
   type PayPo = { total: number; paymentDate: string }
   const supplierPayments: PayPo[] = []
