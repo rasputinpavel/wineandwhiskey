@@ -565,9 +565,15 @@ async function main() {
 
   console.log(`[1/3] Starting browser (headless: ${HEADLESS})...`);
   const browser = await chromium.launch({ headless: HEADLESS });
+  // Pin browser timezone to Bangkok. Loyverse renders PO dates relative to
+  // the browser timezone — headless chromium defaults to UTC, which shifted
+  // every date back by one day (a PO created at 00:00 BKK was rendered as
+  // "previous day 17:00 UTC"). Pinning BKK makes the rendered date match
+  // what the user sees in their normal browser.
+  const ctxOpts = { timezoneId: 'Asia/Bangkok' as const, locale: 'en-US' as const };
   const context = fs.existsSync(AUTH_STATE_PATH)
-    ? await browser.newContext({ storageState: AUTH_STATE_PATH })
-    : await browser.newContext();
+    ? await browser.newContext({ storageState: AUTH_STATE_PATH, ...ctxOpts })
+    : await browser.newContext(ctxOpts);
   const page = await context.newPage();
 
   try {
