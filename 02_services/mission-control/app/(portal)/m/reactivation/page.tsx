@@ -17,11 +17,11 @@ export default async function ReactivationPage({ searchParams }: { searchParams:
   try {
     customers = await loadReactivationCustomers({ windowDays })
   } catch (e) {
-    return <div className="p-6"><SchemaError error={(e as Error).message} /></div>
+    return <SchemaError error={(e as Error).message} />
   }
 
   return (
-    <div className="p-6">
+    <>
       <div className="flex items-baseline justify-between mb-2 flex-wrap gap-3">
         <h2 className="font-heading text-xl text-deep-black">Reactivation</h2>
         <DataFreshness sources={['loyverse_receipts']} />
@@ -52,6 +52,6 @@ export default async function ReactivationPage({ searchParams }: { searchParams:
       </div>
 
       <ReactivationTable customers={customers} />
-    </div>
+    </>
   )
 }
