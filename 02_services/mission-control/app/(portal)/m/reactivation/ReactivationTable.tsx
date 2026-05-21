@@ -3,6 +3,12 @@
 import { useMemo, useState } from 'react'
 import type { ReactivationCustomer } from '@/lib/reactivation/data'
 
+// Seasonal hero banner shown above every reactivation message. Generated
+// once via scripts/gen-reactivation-banner.mjs and mirrored from
+// 05_creative/output/ into public/creative/ by sync-brand-assets.mjs.
+// Re-run the script and bump this constant when the season turns.
+const BANNER_URL = '/creative/reactivation-rainy-season_2026-05.png'
+
 type LapsedFilter = 'all' | '30' | '60' | '90' | '180'
 
 function fmt(n: number): string {
@@ -160,7 +166,7 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
           onClick={() => setModal(null)}
         >
           <div
-            className="bg-warm-white rounded-md border border-pale-stone max-w-xl w-full p-6 shadow-xl"
+            className="bg-warm-white rounded-md border border-pale-stone max-w-xl w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">
@@ -175,6 +181,27 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
                 </div>
               </div>
               <button onClick={() => setModal(null)} className="text-graphite hover:text-deep-black text-xl leading-none">×</button>
+            </div>
+
+            <div className="mb-4">
+              <div className="relative rounded-sm overflow-hidden border border-pale-stone bg-cream">
+                <img src={BANNER_URL} alt="Rainy season banner" className="w-full block" />
+                <div className="absolute bottom-2 right-2 text-[10px] text-warm-white/90 bg-deep-black/40 backdrop-blur px-1.5 py-0.5 rounded-sm">
+                  placeholder for customer&apos;s favourite bottle
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <a
+                  href={BANNER_URL}
+                  download={`wine-whiskey-rainy-season.png`}
+                  className="px-3 py-1.5 text-xs rounded-sm border border-pale-stone text-graphite hover:border-wine-red hover:text-wine-red"
+                >
+                  Download image
+                </a>
+                <span className="text-[11px] text-graphite/70">
+                  Attach this manually after pasting the text — WhatsApp doesn&apos;t accept image+text pre-fill.
+                </span>
+              </div>
             </div>
 
             {modal.loading && (
