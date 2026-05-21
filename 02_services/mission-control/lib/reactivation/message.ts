@@ -15,8 +15,8 @@ import type { ReactivationCustomer, ReactivationProduct } from './data'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const MessageSchema = z.object({
-  message: z.string().min(80).max(800).describe(
-    "Plain-text English reactivation message. 5–7 short sentences. No emojis. No exclamation marks. No prices."
+  message: z.string().min(100).max(900).describe(
+    "Plain-text English reactivation message. 6–8 short sentences. No emojis. No exclamation marks. No prices. Must include the URL wine-whiskey.com/catalog and an instruction to reply to the message to order."
   ),
 })
 
@@ -95,17 +95,18 @@ Voice — non-negotiable:
 - Never mention a product unless the brief explicitly marks it [in stock]. If nothing is in stock, mention the category instead.
 - Address the customer by their GIVEN NAME (first name). The brief tells you which one it is.
 
-Message must follow this exact 5-part flow (do not label these sections; write them as one short paragraph or as a few short lines):
+Message must follow this exact 6-part flow (do not label these sections; write them as one short paragraph or as a few short lines):
 
 1. Greeting line: "Warm greetings from Wine & Whiskey, a wine and whisky shop in Phuket." (verbatim or very close to verbatim — this is our standard opener)
 2. A short line thanking them for being one of our regulars (vary the wording — "we're glad to have you among our regulars", "it's always been a pleasure having you stop by", etc.). Then, ONLY IF days_since_visit > 14, add a small note that it's been <lapsed_phrase> since we saw them. If days_since_visit ≤ 14, skip the "it's been a while" note — they were just here.
 3. Low-season bridge: acknowledge that it's low season on Phuket and the rain doesn't always make you want to leave home. Keep this human and short — one sentence. Examples (vary, don't copy): "We know low season is in full swing and the rain makes it easy to stay in.", "Low season has the island in its grey mood, and stepping out isn't always tempting." Do NOT use the words "monsoon" or "weather report" tone.
 4. The pitch: a bottle of their favourite [drink or category] can brighten any weather, and it's in stock right now. Use the specific product name if the brief gives one; otherwise mention the category.
-5. Soft close: we're happy to deliver it to their door.
+5. Catalog pointer: tell them they can browse the full stock list any time at wine-whiskey.com/catalog (write the URL exactly like that — lowercase, no protocol, no trailing slash, no markdown formatting).
+6. Order CTA + close: tell them ordering is simple — just reply to this message and we'll deliver to their door. Keep it one sentence.
 
 Sign off as "Wine & Whiskey" on its own line at the end.
 
-Total length: 5–7 short sentences. Keep it human, never robotic. Never read out the raw day count.`
+Total length: 6–8 short sentences. Keep it human, never robotic. Never read out the raw day count.`
 
 export async function generateReactivationMessage(
   customer: ReactivationCustomer,
