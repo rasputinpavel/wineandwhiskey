@@ -37,18 +37,34 @@ export const dynamic = 'force-dynamic'
 
 const AP_TERM_DAYS = 30
 
-export default async function PulseDashboardPage() {
+type SearchParams = { month?: string }
+
+export default async function PulseDashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams
   // 13 months so the trailing 12 + current both fit, and same-month-prior-year
   // sits as the leftmost bar (year-over-year comparison at a glance).
   const months = lastNMonths(13)
-  const monthsStart = months[0].fromDate                  // 18 months ago, 1st of month
+  const validYms = new Set(months.map(m => m.fromDate.slice(0, 7)))
+  const monthsStart = months[0].fromDate                  // 13 months ago, 1st
   const monthsStartIso = monthsStart + 'T00:00:00Z'
   const today = todayBkk()
-  const { daysInMonth, daysPassed } = mtdProgress()
+  const { daysInMonth: currentDaysInMonth, daysPassed: currentDaysPassed } = mtdProgress()
   const currentMonth = months[months.length - 1]
-  const startOfMonth = currentMonth.fromDate              // 'YYYY-MM-01'
-  const endOfMonthExclusive = currentMonth.toDate         // 'YYYY-MM-01' of NEXT month
-  const endOfMonthInclusive = computeDueDate(endOfMonthExclusive, -1) // last day of current month
+  const currentYm = currentMonth.fromDate.slice(0, 7)
+  // ?month=YYYY-MM jumps the Hero + Waterfall into a past month. Trend chart and
+  // Cash control stay live (full 13m / today's snapshot).
+  const monthParam = typeof sp.month === 'string' && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : null
+  const selectedYm = monthParam && validYms.has(monthParam) ? monthParam : currentYm
+  const isCurrent  = selectedYm === currentYm
+  const selectedMonth = months.find(m => m.fromDate.slice(0, 7) === selectedYm) ?? currentMonth
+  const startOfMonth = selectedMonth.fromDate
+  const endOfMonthExclusive = selectedMonth.toDate
+  const endOfMonthInclusive = computeDueDate(endOfMonthExclusive, -1)
+  // For past months treat as fully elapsed; current month uses live MTD progress.
+  const selectedDaysInMonth = isCurrent
+    ? currentDaysInMonth
+    : new Date(Date.UTC(Number(selectedYm.slice(0, 4)), Number(selectedYm.slice(5, 7)), 0)).getUTCDate()
+  const selectedDaysPassed = isCurrent ? currentDaysPassed : selectedDaysInMonth
 
   // To capture POs whose payment date (order + 30d) falls within the trend
   // window, we need orders up to 30 days before the window starts.
@@ -189,18 +205,18 @@ export default async function PulseDashboardPage() {
   const monthsPnl: MonthPnl[] = months.map(m => {
     const ym = m.fromDate.slice(0, 7)
     const b  = byMonth.get(ym) ?? empty()
-    const isCurrent = ym === currentYM
-    const fixed = isCurrent ? monthlyFixed * (daysPassed / daysInMonth) : monthlyFixed
-    const sup   = isCurrent ? supplierPaymentsMtd : b.supplierPayments
+    const cur = ym === currentYm
+    const fixed = cur ? monthlyFixed * (currentDaysPassed / currentDaysInMonth) : monthlyFixed
+    const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
-    return { ym, label: m.label, revenue: b.total, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent }
+    return { ym, label: m.label, revenue: b.total, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent: cur }
   })
-  const current = monthsPnl[monthsPnl.length - 1]
-  const currentBucket = byMonth.get(currentYM) ?? empty()
+  const selected      = monthsPnl.find(m => m.ym === selectedYm) ?? monthsPnl[monthsPnl.length - 1]
+  const selectedBucket = byMonth.get(selectedYm) ?? empty()
 
-  // Reference Gross Margin % (from Loyverse cost_total) — unit-economics signal
-  const refGmPct = currentBucket.total > 0
-    ? ((currentBucket.total - currentBucket.refRevCost) / currentBucket.total) * 100
+  // Reference Gross Margin % (from Loyverse cost_total) for the selected month.
+  const refGmPct = selectedBucket.total > 0
+    ? ((selectedBucket.total - selectedBucket.refRevCost) / selectedBucket.total) * 100
     : 0
 
   // ─── Projected EOM ───────────────────────────────────────────────────────
@@ -222,12 +238,50 @@ export default async function PulseDashboardPage() {
     .filter(inv => invoiceDueAt(inv) <= endOfMonthInclusive)
     .reduce((s, inv) => s + Number(inv.total), 0)
 
-  const scale = daysPassed > 0 ? daysInMonth / daysPassed : 1
-  const projB2C        = currentBucket.b2c * scale
-  const projRevenue    = projB2C + currentBucket.b2b + b2bDueByEom
-  const projSupplier   = currentBucket.supplierPayments              // already full-month bucket
+  // Projection logic only matters for the current month. Past months are final.
+  const currentBucket = byMonth.get(currentYm) ?? empty()
+  const scale = isCurrent && currentDaysPassed > 0 ? currentDaysInMonth / currentDaysPassed : 1
+  const projB2C        = (isCurrent ? selectedBucket.b2c : 0) * (isCurrent ? scale : 1)
+  const projRevenue    = isCurrent
+    ? projB2C + selectedBucket.b2b + b2bDueByEom
+    : selected.revenue
+  const projSupplier   = isCurrent ? currentBucket.supplierPayments : selected.supplierPayments
   const projGp         = projRevenue - projSupplier
-  const projNet        = projGp - monthlyFixed
+  const projNet        = isCurrent ? (projGp - monthlyFixed) : selected.net
+  // For "more by EOM" sub on waterfall — only meaningful when looking at current.
+  const revenueRemainingProj  = isCurrent ? Math.max(0, projRevenue - selected.revenue) : 0
+  const supplierRemainingProj = isCurrent ? Math.max(0, projSupplier - selected.supplierPayments) : 0
+
+  // ─── Next Month Outlook ──────────────────────────────────────────────────
+  // Cash-out side of next month is already known: POs ordered THIS month
+  // mature 30d later, so their payments fall in next month. Plus full monthly
+  // fixed. Cash-in is unknown except for B2B credit sales already invoiced
+  // and maturing in next month — we treat that as guaranteed inflow.
+  //
+  //   minRevenueRequired = supplier_payments_NEXT + monthlyFixed
+  //   expectedB2BInflow  = open FA invoices with due_at in NEXT calendar month
+  //   minB2CRequired     = max(0, minRevenueRequired − expectedB2BInflow)
+  //
+  // Always anchored to CURRENT calendar month → next, regardless of the
+  // selected month filter (the filter scopes the past view, not the forecast).
+  const nextMonthDate    = new Date(Date.UTC(Number(currentYm.slice(0, 4)), Number(currentYm.slice(5, 7)), 1))
+  const nextMonthFrom    = nextMonthDate.toISOString().slice(0, 10)
+  const nextMonthToExcl  = new Date(Date.UTC(nextMonthDate.getUTCFullYear(), nextMonthDate.getUTCMonth() + 1, 1)).toISOString().slice(0, 10)
+  const nextMonthLabel   = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][nextMonthDate.getUTCMonth()]} ${String(nextMonthDate.getUTCFullYear()).slice(-2)}`
+
+  const supplierPaymentsNext = supplierPayments
+    .filter(p => p.paymentDate >= nextMonthFrom && p.paymentDate < nextMonthToExcl)
+    .reduce((s, p) => s + p.total, 0)
+
+  const expectedB2BNext = openInvoices
+    .filter(inv => {
+      const d = invoiceDueAt(inv)
+      return d >= nextMonthFrom && d < nextMonthToExcl
+    })
+    .reduce((s, inv) => s + Number(inv.total), 0)
+
+  const minRevenueNext = supplierPaymentsNext + monthlyFixed
+  const minB2CNext     = Math.max(0, minRevenueNext - expectedB2BNext)
 
   // ─── Cash control: AR Open / AP Open / Net WC ────────────────────────────
   const arOpen = openInvoices.reduce((s, i) => s + Number(i.total), 0)
@@ -243,9 +297,9 @@ export default async function PulseDashboardPage() {
   const workingCapital = arOpen - apOpen
 
   // ─── Headline insight ────────────────────────────────────────────────────
-  const headline = buildHeadline({
-    netMtd: current.net, netProjected: projNet, monthlyFixed,
-  })
+  const headline = isCurrent
+    ? buildHeadline({ netMtd: selected.net, netProjected: projNet, monthlyFixed })
+    : buildPastHeadline({ net: selected.net, monthLabel: selected.label })
 
   // For trend chart scale, ignore extreme single months by using max(|net|) of 18.
   const trendMax = Math.max(1, ...monthsPnl.map(m => Math.abs(m.net)))
@@ -253,35 +307,59 @@ export default async function PulseDashboardPage() {
   return (
     <>
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-3">
-        <h2 className="font-heading text-xl text-deep-black">This month&apos;s bottom line</h2>
-        <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'flowaccount_receipts', 'purchase_orders']} />
+        <h2 className="font-heading text-xl text-deep-black">
+          {isCurrent ? "This month's bottom line" : `${selected.label} · final`}
+        </h2>
+        <div className="flex items-center gap-3">
+          {!isCurrent && (
+            <Link href="/m/pulse" className="text-[11px] text-graphite hover:text-wine-red font-mono">
+              ← back to current
+            </Link>
+          )}
+          <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'flowaccount_receipts', 'purchase_orders']} />
+        </div>
       </div>
 
       {/* ─── Hero ────────────────────────────────────────────────────────── */}
       <HeroBlock
-        netMtd={current.net} netProjected={projNet}
-        daysPassed={daysPassed} daysInMonth={daysInMonth}
+        net={selected.net}
+        netProjected={projNet}
+        isCurrent={isCurrent}
+        monthLabel={selected.label}
+        daysPassed={selectedDaysPassed}
+        daysInMonth={selectedDaysInMonth}
         headline={headline}
       />
 
-      {/* ─── 18-month trend (full width) ─────────────────────────────────── */}
-      <div className="mb-3">
-        <TrendCard months={monthsPnl} max={trendMax} />
+      {/* ─── Trend + Waterfall side by side ──────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        <TrendCard months={monthsPnl} max={trendMax} selectedYm={selectedYm} />
+        <WaterfallCard
+          monthLabel={selected.label}
+          isCurrent={isCurrent}
+          revenue={selected.revenue}
+          revenueRemainingProj={revenueRemainingProj}
+          supplierPayments={selected.supplierPayments}
+          supplierPaymentsRemaining={supplierRemainingProj}
+          gp={selected.gp}
+          fixedMtd={selected.fixed}
+          monthlyFixed={monthlyFixed}
+          net={selected.net}
+          daysPassed={selectedDaysPassed}
+          daysInMonth={selectedDaysInMonth}
+          refGmPct={refGmPct}
+        />
       </div>
 
-      {/* ─── Waterfall + Cash Control ────────────────────────────────────── */}
+      {/* ─── Next-month outlook + Cash control ───────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <WaterfallCard
-          revenue={current.revenue}
-          supplierPayments={current.supplierPayments}
-          supplierPaymentsRemaining={currentBucket.supplierPayments - supplierPaymentsMtd}
-          gp={current.gp}
-          fixedMtd={current.fixed}
+        <NextMonthCard
+          monthLabel={nextMonthLabel}
+          supplierPaymentsNext={supplierPaymentsNext}
           monthlyFixed={monthlyFixed}
-          net={current.net}
-          daysPassed={daysPassed}
-          daysInMonth={daysInMonth}
-          refGmPct={refGmPct}
+          expectedB2BNext={expectedB2BNext}
+          minRevenueNext={minRevenueNext}
+          minB2CNext={minB2CNext}
         />
         <CashControlCard arOpen={arOpen} arOverdue={arOverdue} apOpen={apOpen} workingCapital={workingCapital} />
       </div>
@@ -338,11 +416,13 @@ function buildHeadline(p: { netMtd: number; netProjected: number; monthlyFixed: 
 // UI atoms
 // ════════════════════════════════════════════════════════════════════════════
 
-function HeroBlock({ netMtd, netProjected, daysPassed, daysInMonth, headline }: {
-  netMtd: number; netProjected: number; daysPassed: number; daysInMonth: number
+function HeroBlock({ net, netProjected, isCurrent, monthLabel, daysPassed, daysInMonth, headline }: {
+  net: number; netProjected: number
+  isCurrent: boolean; monthLabel: string
+  daysPassed: number; daysInMonth: number
   headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
 }) {
-  const positive = netMtd >= 0
+  const positive = net >= 0
   const valCls   = positive ? 'text-deep-black' : 'text-wine-red'
   const sign     = positive ? '+' : '−'
   const projPositive = netProjected >= 0
@@ -356,17 +436,21 @@ function HeroBlock({ netMtd, netProjected, daysPassed, daysInMonth, headline }: 
         <div className={`${bar} w-1`} />
         <div className="flex-1 px-6 py-5">
           <div className="text-[10px] uppercase tracking-overline text-graphite mb-2">
-            Net profit · MTD · day {daysPassed} of {daysInMonth}
+            {isCurrent
+              ? `Net profit · MTD · day ${daysPassed} of ${daysInMonth}`
+              : `Net profit · ${monthLabel} · final`}
           </div>
           <div className={`font-display text-6xl tracking-display leading-none ${valCls}`}>
-            {sign}{fmtThb(Math.abs(netMtd)).replace(/^[-]?[฿]/, '฿')}
+            {sign}{fmtThb(Math.abs(net)).replace(/^[-]?[฿]/, '฿')}
           </div>
-          <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-            <div className="text-[10px] uppercase tracking-overline text-graphite">Projected EOM</div>
-            <div className={`font-display text-xl tracking-display ${projCls}`}>
-              {projSign}{fmtThb(Math.abs(netProjected)).replace(/^[-]?[฿]/, '฿')}
+          {isCurrent && (
+            <div className="mt-3 flex items-baseline gap-2 flex-wrap">
+              <div className="text-[10px] uppercase tracking-overline text-graphite">Projected EOM</div>
+              <div className={`font-display text-xl tracking-display ${projCls}`}>
+                {projSign}{fmtThb(Math.abs(netProjected)).replace(/^[-]?[฿]/, '฿')}
+              </div>
             </div>
-          </div>
+          )}
           <div className="text-sm text-deep-black mt-3">{headline.text}</div>
         </div>
       </div>
@@ -374,25 +458,41 @@ function HeroBlock({ netMtd, netProjected, daysPassed, daysInMonth, headline }: 
   )
 }
 
-function WaterfallCard({ revenue, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixed, net, daysPassed, daysInMonth, refGmPct }: {
-  revenue: number; supplierPayments: number; supplierPaymentsRemaining: number
+function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: string }): {
+  tone: 'ok' | 'warn' | 'danger'; text: string
+} {
+  if (net > 0) return { tone: 'ok',     text: `${monthLabel} closed at +${fmtThbCompact(net)} take-home.` }
+  if (net < 0) return { tone: 'danger', text: `${monthLabel} closed at a ${fmtThbCompact(Math.abs(net))} loss.` }
+  return { tone: 'warn', text: `${monthLabel} closed at break-even.` }
+}
+
+function WaterfallCard({ monthLabel, isCurrent, revenue, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixed, net, daysPassed, daysInMonth, refGmPct }: {
+  monthLabel: string; isCurrent: boolean
+  revenue: number; revenueRemainingProj: number
+  supplierPayments: number; supplierPaymentsRemaining: number
   gp: number; fixedMtd: number; monthlyFixed: number; net: number
   daysPassed: number; daysInMonth: number; refGmPct: number
 }) {
   const netPositive = net >= 0
+  const title = isCurrent ? 'Where the money went · MTD' : `Where the money went · ${monthLabel}`
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card">
+    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
       <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">Where the money went · MTD</div>
+        <div className="font-heading text-sm text-deep-black">{title}</div>
         <Link href="/m/pulse/settings" className="text-[10px] text-graphite hover:text-wine-red">edit fixed costs →</Link>
       </div>
       <table className="w-full text-sm">
         <tbody>
-          <WaterfallRow label="Revenue"  value={revenue} sign="+" />
+          <WaterfallRow label="Revenue" value={revenue} sign="+"
+            sub={isCurrent && revenueRemainingProj > 0
+              ? `${fmtThbCompact(revenueRemainingProj)} more proj. by EOM (run-rate + AR)`
+              : undefined} />
           <WaterfallRow label="Supplier payments" value={supplierPayments} sign="−" muted
-            sub={supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered'} />
+            sub={isCurrent
+              ? (supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered')
+              : undefined} />
           <WaterfallRow label="Gross Profit" value={gp} sign="=" bold sub={`GM% ref: ${refGmPct.toFixed(1)}%`} />
-          <WaterfallRow label={`Fixed (${daysPassed}/${daysInMonth} d)`} value={fixedMtd} sign="−" muted
+          <WaterfallRow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" muted
             sub={monthlyFixed > 0 ? `from ${fmtThb(monthlyFixed)}/mo` : 'not configured'} />
           <WaterfallRow label="Net Profit" value={net} sign="=" bold
             valueCls={netPositive ? 'text-deep-black' : 'text-wine-red'} />
@@ -424,11 +524,11 @@ function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls }: {
   )
 }
 
-function TrendCard({ months, max }: { months: { label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]; max: number }) {
-  // SVG vertical bar chart with zero baseline in the middle. Top padding holds
-  // value labels for positive bars; bottom holds value labels for negative
-  // bars + month names.
-  const w = 720, h = 240, padX = 8, padTop = 28, padBottom = 44
+function TrendCard({ months, max, selectedYm }: { months: { ym: string; label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]; max: number; selectedYm: string }) {
+  // SVG vertical bar chart with zero baseline in the middle. Each bar is a
+  // <Link> to filter the Hero/Waterfall into that month.
+  // Wider per-bar slot since chart now occupies half-width on desktop.
+  const w = 720, h = 280, padX = 8, padTop = 32, padBottom = 48
   const innerW   = w - 2 * padX
   const innerH   = h - padTop - padBottom
   const zeroY    = padTop + innerH / 2
@@ -437,13 +537,12 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
   const barW     = Math.max(6, stepX * 0.62)
 
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card">
+    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
       <div className="flex items-baseline justify-between mb-3 gap-2">
         <div className="font-heading text-sm text-deep-black">Last 12 months + current · net profit</div>
-        <div className="text-[10px] text-graphite">current month projected · dashed</div>
+        <div className="text-[10px] text-graphite">click a bar to drill into a month</div>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-56" preserveAspectRatio="xMidYMid meet">
-        {/* zero baseline */}
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
         <line x1={padX} y1={zeroY} x2={w - padX} y2={zeroY} stroke="#D4C9BC" strokeWidth={0.5} />
 
         {months.map((m, i) => {
@@ -453,42 +552,88 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
           const bh = Math.min(halfH, (Math.abs(v) / max) * halfH)
           const y  = positive ? zeroY - bh : zeroY
           const fill = positive ? '#3D3D3D' : '#8C1C1C'
-          const opacity = m.isCurrent ? 0.45 : 1
           const dash = m.isCurrent ? '3 2' : undefined
+          const isSelected = m.ym === selectedYm
+          const baseOpacity = m.isCurrent ? 0.45 : 1
+          const opacity = isSelected ? 1 : baseOpacity * 0.85
           const valueLabel = `${positive ? '+' : '−'}${fmtThbCompact(Math.abs(m.net))}`
           const valueY = positive ? Math.max(14, y - 4) : Math.min(h - padBottom + 14, y + bh + 12)
+          const href = `/m/pulse?month=${m.ym}`
           return (
-            <g key={m.label}>
+            <Link key={m.ym} href={href} aria-label={`Drill into ${m.label}`}>
+              {/* invisible hit target stretching from top to bottom of inner chart */}
+              <rect x={padX + i * stepX} y={padTop} width={stepX} height={innerH} fill="transparent" />
               <rect
                 x={x} y={y} width={barW} height={Math.max(0.5, bh)}
                 fill={fill} opacity={opacity}
-                stroke={m.isCurrent ? fill : 'none'} strokeWidth={m.isCurrent ? 1 : 0}
+                stroke={isSelected ? '#8C1C1C' : (m.isCurrent ? fill : 'none')}
+                strokeWidth={isSelected ? 2 : (m.isCurrent ? 1 : 0)}
                 strokeDasharray={dash}
               >
                 <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${valueLabel}${m.isCurrent ? ' (projected)' : ''}`}</title>
               </rect>
-              {/* Net value label — above (positive) / below (negative) bar */}
               <text
                 x={x + barW / 2} y={valueY}
                 textAnchor="middle"
                 fontSize={10} fill={positive ? '#3D3D3D' : '#8C1C1C'}
                 fontFamily="monospace"
+                fontWeight={isSelected ? 700 : 400}
                 opacity={m.isCurrent ? 0.7 : 1}
               >
                 {valueLabel}
               </text>
-              {/* Month label under every bar — 13 bars fit at width 720 */}
               <text
                 x={x + barW / 2} y={h - 8}
                 textAnchor="middle"
-                fontSize={9} fill="#3D3D3D" fontFamily="monospace"
+                fontSize={10} fill={isSelected ? '#8C1C1C' : '#3D3D3D'}
+                fontFamily="monospace"
+                fontWeight={isSelected ? 700 : 400}
               >
                 {m.label}
               </text>
-            </g>
+            </Link>
           )
         })}
       </svg>
+    </div>
+  )
+}
+
+function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, expectedB2BNext, minRevenueNext, minB2CNext }: {
+  monthLabel: string
+  supplierPaymentsNext: number
+  monthlyFixed: number
+  expectedB2BNext: number
+  minRevenueNext: number
+  minB2CNext: number
+}) {
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
+      <div className="flex items-baseline justify-between mb-3 gap-2">
+        <div className="font-heading text-sm text-deep-black">Next month outlook · {monthLabel}</div>
+        <div className="text-[10px] text-graphite">break-even target</div>
+      </div>
+
+      {/* Cash-out side */}
+      <table className="w-full text-sm mb-3">
+        <tbody>
+          <WaterfallRow label="Supplier payments due" value={supplierPaymentsNext} sign="+" muted
+            sub="POs ordered this month, payable next" />
+          <WaterfallRow label="Fixed costs" value={monthlyFixed} sign="+" muted
+            sub={monthlyFixed > 0 ? 'full month' : 'not configured'} />
+          <WaterfallRow label="Min revenue needed" value={minRevenueNext} sign="=" bold />
+        </tbody>
+      </table>
+
+      {/* Cash-in offset */}
+      <table className="w-full text-sm">
+        <tbody>
+          <WaterfallRow label="− Expected B2B inflow" value={expectedB2BNext} sign="−" muted
+            sub="open FA invoices maturing next month" />
+          <WaterfallRow label="Min B2C revenue to break even" value={minB2CNext} sign="=" bold
+            valueCls="text-deep-black" />
+        </tbody>
+      </table>
     </div>
   )
 }
