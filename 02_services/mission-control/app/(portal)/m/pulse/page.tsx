@@ -333,19 +333,40 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         </div>
       </div>
 
-      {/* ─── Hero ────────────────────────────────────────────────────────── */}
-      <HeroBlock
-        net={selected.net}
-        netProjected={projNet}
-        isCurrent={isCurrent}
-        monthLabel={selected.label}
-        daysPassed={selectedDaysPassed}
-        daysInMonth={selectedDaysInMonth}
-        headline={headline}
-      />
-
-      {/* ─── Trend + Waterfall side by side ──────────────────────────────── */}
+      {/* ─── Row 1: This Month + Next Month (hero pair) ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        <ThisMonthCard
+          monthLabel={selected.label}
+          isCurrent={isCurrent}
+          net={selected.net}
+          netProjected={projNet}
+          daysPassed={selectedDaysPassed}
+          daysInMonth={selectedDaysInMonth}
+          headline={headline}
+          revenue={selected.revenue}
+          revenueB2C={selected.revenueB2C}
+          revenueB2B={selected.revenueB2B}
+          revenueRemainingProj={revenueRemainingProj}
+          supplierPayments={selected.supplierPayments}
+          supplierPaymentsRemaining={supplierRemainingProj}
+          gp={selected.gp}
+          fixedMtd={selected.fixed}
+          monthlyFixedBase={monthlyFixedBase}
+          refGmPct={refGmPct}
+        />
+        <NextMonthCard
+          monthLabel={nextMonthLabel}
+          supplierPaymentsNext={supplierPaymentsNext}
+          monthlyFixed={monthlyFixed}
+          monthlyFixedBase={monthlyFixedBase}
+          expectedB2BNext={expectedB2BNext}
+          minRevenueNext={minRevenueNext}
+          minB2CNext={minB2CNext}
+        />
+      </div>
+
+      {/* ─── Row 2: Trend chart full width ───────────────────────────────── */}
+      <div className="mb-3">
         <TrendCard
           months={monthsPnl}
           max={trendMax}
@@ -356,36 +377,10 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           annualAvgRev={annualAvgRev}
           closedCount={closedMonths.length}
         />
-        <WaterfallCard
-          monthLabel={selected.label}
-          isCurrent={isCurrent}
-          revenue={selected.revenue}
-          revenueB2C={selected.revenueB2C}
-          revenueB2B={selected.revenueB2B}
-          revenueRemainingProj={revenueRemainingProj}
-          supplierPayments={selected.supplierPayments}
-          supplierPaymentsRemaining={supplierRemainingProj}
-          gp={selected.gp}
-          fixedMtd={selected.fixed}
-          monthlyFixedBase={monthlyFixedBase}
-          net={selected.net}
-          daysPassed={selectedDaysPassed}
-          daysInMonth={selectedDaysInMonth}
-          refGmPct={refGmPct}
-        />
       </div>
 
-      {/* ─── Next-month outlook + Cash control ───────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <NextMonthCard
-          monthLabel={nextMonthLabel}
-          supplierPaymentsNext={supplierPaymentsNext}
-          monthlyFixed={monthlyFixed}
-          monthlyFixedBase={monthlyFixedBase}
-          expectedB2BNext={expectedB2BNext}
-          minRevenueNext={minRevenueNext}
-          minB2CNext={minB2CNext}
-        />
+      {/* ─── Row 3: 4th widget slot (Cash control placeholder for now) ──── */}
+      <div className="mb-3">
         <CashControlCard arOpen={arOpen} arOverdue={arOverdue} apOpen={apOpen} workingCapital={workingCapital} />
       </div>
 
@@ -441,48 +436,6 @@ function buildHeadline(p: { netMtd: number; netProjected: number; monthlyFixed: 
 // UI atoms
 // ════════════════════════════════════════════════════════════════════════════
 
-function HeroBlock({ net, netProjected, isCurrent, monthLabel, daysPassed, daysInMonth, headline }: {
-  net: number; netProjected: number
-  isCurrent: boolean; monthLabel: string
-  daysPassed: number; daysInMonth: number
-  headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
-}) {
-  const positive = net >= 0
-  const valCls   = positive ? 'text-deep-black' : 'text-wine-red'
-  const sign     = positive ? '+' : '−'
-  const projPositive = netProjected >= 0
-  const projCls      = projPositive ? 'text-deep-black' : 'text-wine-red'
-  const projSign     = projPositive ? '+' : '−'
-  const bar = headline.tone === 'danger' ? 'bg-wine-red' : headline.tone === 'warn' ? 'bg-amber-gold' : 'bg-graphite/30'
-
-  return (
-    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card mb-3 overflow-hidden">
-      <div className="flex items-stretch">
-        <div className={`${bar} w-1`} />
-        <div className="flex-1 px-6 py-5">
-          <div className="text-[10px] uppercase tracking-overline text-graphite mb-2">
-            {isCurrent
-              ? `Net profit · MTD · day ${daysPassed} of ${daysInMonth}`
-              : `Net profit · ${monthLabel} · final`}
-          </div>
-          <div className={`font-display text-6xl tracking-display leading-none ${valCls}`}>
-            {sign}{fmtThb(Math.abs(net)).replace(/^[-]?[฿]/, '฿')}
-          </div>
-          {isCurrent && (
-            <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-              <div className="text-[10px] uppercase tracking-overline text-graphite">Projected EOM</div>
-              <div className={`font-display text-xl tracking-display ${projCls}`}>
-                {projSign}{fmtThb(Math.abs(netProjected)).replace(/^[-]?[฿]/, '฿')}
-              </div>
-            </div>
-          )}
-          <div className="text-sm text-deep-black mt-3">{headline.text}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: string }): {
   tone: 'ok' | 'warn' | 'danger'; text: string
 } {
@@ -491,80 +444,79 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
   return { tone: 'warn', text: `${monthLabel} closed at break-even.` }
 }
 
-function WaterfallCard({ monthLabel, isCurrent, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, net, daysPassed, daysInMonth, refGmPct }: {
+// Unified hero for the selected month — mirrors NextMonthCard's structure
+// (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, refGmPct }: {
   monthLabel: string; isCurrent: boolean
+  net: number; netProjected: number
+  daysPassed: number; daysInMonth: number
+  headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
   revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
   supplierPayments: number; supplierPaymentsRemaining: number
-  gp: number; fixedMtd: number; monthlyFixedBase: number; net: number
-  daysPassed: number; daysInMonth: number; refGmPct: number
+  gp: number; fixedMtd: number; monthlyFixedBase: number
+  refGmPct: number
 }) {
-  const netPositive = net >= 0
-  const title = isCurrent ? 'Where the money went · MTD' : `Where the money went · ${monthLabel}`
-  const fixedSub = monthlyFixedBase > 0
-    ? `from ${fmtThb(monthlyFixedBase)}/mo + 15% buffer`
-    : 'not configured'
+  const positive  = net >= 0
+  const valCls    = positive ? 'text-deep-black' : 'text-wine-red'
+  const sign      = positive ? '+' : '−'
+  const dailyAvg  = daysPassed > 0 ? net / daysPassed : 0
+  const dailyCls  = dailyAvg >= 0 ? 'text-deep-black' : 'text-wine-red'
+  const projPos   = netProjected >= 0
+  const projCls   = projPos ? 'text-deep-black' : 'text-wine-red'
+  const stripBg   = headline.tone === 'danger' ? 'bg-wine-red' : headline.tone === 'warn' ? 'bg-amber-gold' : 'bg-graphite/30'
+  const stripLbl  = headline.tone === 'danger' ? 'text-wine-red' : headline.tone === 'warn' ? 'text-amber-gold' : 'text-graphite'
+
+  const headerLabel = isCurrent ? `THIS MONTH · ${monthLabel.toUpperCase()}` : `${monthLabel.toUpperCase()} · FINAL`
+  const headerTag   = isCurrent ? 'NET PROFIT MTD' : 'NET PROFIT'
+  const fixedSub    = monthlyFixedBase > 0 ? `${fmtThb(monthlyFixedBase)}/mo + 15% buffer` : 'not configured'
+
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
-      <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">{title}</div>
-        <Link href="/m/pulse/settings" className="text-[10px] text-graphite hover:text-wine-red">edit fixed costs →</Link>
+    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card h-full overflow-hidden flex flex-col">
+      <div className="flex items-stretch border-b border-pale-stone">
+        <div className={`${stripBg} w-1`} />
+        <div className="flex-1 px-5 py-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[10px] uppercase tracking-overline text-graphite">{headerLabel}</div>
+            <div className={`text-[10px] uppercase tracking-overline ${stripLbl}`}>{headerTag}</div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+            <div className={`font-display text-5xl tracking-display leading-none ${valCls}`}>
+              {sign}{fmtThbCompact(Math.abs(net))}
+            </div>
+            <div className="text-xs text-graphite">
+              {isCurrent ? `day ${daysPassed} of ${daysInMonth}` : 'final · 12-month closed'}
+            </div>
+          </div>
+          <div className="mt-2 text-[11px] text-graphite font-mono">
+            {isCurrent
+              ? <>≈ <span className={dailyCls}>{dailyAvg >= 0 ? '+' : '−'}{fmtThbCompact(Math.abs(dailyAvg))}</span> / day so far · proj. EOM <span className={projCls}>{projPos ? '+' : '−'}{fmtThbCompact(Math.abs(netProjected))}</span></>
+              : <>{headline.text}</>}
+          </div>
+        </div>
       </div>
-      <table className="w-full text-sm">
-        <tbody>
-          <WaterfallRow label="Revenue" value={revenue} sign="+" hideBorder />
-          <WaterfallSubRow label="B2C" value={fmtThb(revenueB2C)} />
-          <WaterfallSubRow label="B2B" value={fmtThb(revenueB2B)} last={!isCurrent || revenueRemainingProj <= 0} />
+
+      <div className="px-5 py-4 flex-1">
+        <div className="flex items-baseline justify-between mb-2 gap-2">
+          <div className="text-[10px] uppercase tracking-overline text-graphite">Inputs</div>
+          <Link href="/m/pulse/settings" className="text-[10px] text-graphite hover:text-wine-red">edit fixed costs →</Link>
+        </div>
+        <div className="space-y-1.5 text-xs">
+          <NMORow label="Revenue" value={revenue} sign="+" />
+          <NMORow label="B2C" value={revenueB2C} sign="↳" sub="cash & card" />
+          <NMORow label="B2B" value={revenueB2B} sign="↳" sub="bank transfer" />
           {isCurrent && revenueRemainingProj > 0 && (
-            <WaterfallSubRow label="proj. by EOM" value={`+${fmtThb(revenueRemainingProj)}`} muted last />
+            <NMORow label="proj. by EOM" value={revenueRemainingProj} sign="↳" sub="run-rate + AR" signed="+" />
           )}
-          <WaterfallRow label="Supplier payments" value={supplierPayments} sign="−" muted
+          <NMORow label="Supplier payments" value={supplierPayments} sign="−"
             sub={isCurrent
               ? (supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered')
               : undefined} />
-          <WaterfallRow label="Gross Profit" value={gp} sign="=" bold sub={`GM% ref: ${refGmPct.toFixed(1)}%`} />
-          <WaterfallRow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" muted
-            sub={fixedSub} />
-          <WaterfallRow label="Net Profit" value={net} sign="=" bold
-            valueCls={netPositive ? 'text-deep-black' : 'text-wine-red'} />
-        </tbody>
-      </table>
+          <NMORow label={`Gross Profit · GM% ref ${refGmPct.toFixed(1)}%`} value={gp} sign="=" bold />
+          <NMORow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" sub={fixedSub} />
+          <NMORow label="Net Profit" value={net} sign="=" bold tone={positive ? 'pos' : 'neg'} />
+        </div>
+      </div>
     </div>
-  )
-}
-
-function WaterfallSubRow({ label, value, muted, last }: {
-  label: string; value: string; muted?: boolean; last?: boolean
-}) {
-  return (
-    <tr className={last ? 'border-b border-pale-stone/40' : ''}>
-      <td className="py-1 pl-6 text-[11px] text-graphite">
-        <span className="text-graphite/50">↳</span> {label}
-      </td>
-      <td className={`py-1 text-right tabular-nums text-[11px] ${muted ? 'text-graphite/80' : 'text-graphite'}`}>{value}</td>
-      <td className="py-1 w-40" />
-    </tr>
-  )
-}
-
-function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls, hideBorder }: {
-  label: string; value: number; sign: '+' | '−' | '='
-  sub?: string; bold?: boolean; muted?: boolean; valueCls?: string; hideBorder?: boolean
-}) {
-  const cls = valueCls ?? (muted ? 'text-graphite' : 'text-deep-black')
-  return (
-    <tr className={`${hideBorder ? '' : 'border-b border-pale-stone/40 last:border-0'} ${bold ? 'border-pale-stone' : ''}`}>
-      <td className={`py-2 text-graphite ${bold ? 'text-deep-black' : ''}`}>
-        <span className="inline-block w-4 text-[10px] text-graphite/60">{sign}</span>
-        {label}
-      </td>
-      <td className={`py-2 text-right tabular-nums ${cls} ${bold ? 'font-medium' : ''}`}>
-        {fmtThb(Math.abs(value))}
-      </td>
-      {sub
-        ? <td className="py-2 text-right text-[10px] text-graphite pl-2 w-40">{sub}</td>
-        : <td className="py-2 w-40" />
-      }
-    </tr>
   )
 }
 
@@ -736,19 +688,30 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthly
   )
 }
 
-function NMORow({ label, value, sign, sub, bold, tone }: {
-  label: string; value: number; sign: '+' | '−' | '='
-  sub?: string; bold?: boolean; tone?: 'pos' | 'neg'
+function NMORow({ label, value, sign, sub, bold, tone, signed }: {
+  label: string; value: number; sign: '+' | '−' | '=' | '↳'
+  sub?: string; bold?: boolean; tone?: 'pos' | 'neg'; signed?: '+' | '−'
 }) {
-  const valueCls = bold ? 'text-deep-black font-medium' : tone === 'pos' ? 'text-deep-black' : 'text-graphite'
+  const isSubRow = sign === '↳'
+  const valueCls =
+    tone === 'neg' ? 'text-wine-red' :
+    bold          ? 'text-deep-black font-medium' :
+    tone === 'pos' ? 'text-deep-black' :
+    isSubRow      ? 'text-graphite/90' :
+                    'text-graphite'
+  const labelCls =
+    bold      ? 'text-deep-black' :
+    isSubRow  ? 'text-graphite/80 text-[11px]' :
+                'text-graphite'
+  const valueStr = `${signed ?? ''}${fmtThb(Math.abs(value))}`
   return (
-    <div className={`flex items-baseline gap-2 ${bold ? 'pt-1.5 border-t border-pale-stone/60' : ''}`}>
-      <span className="w-3 text-[10px] text-graphite/60 shrink-0">{sign}</span>
+    <div className={`flex items-baseline gap-2 ${bold ? 'pt-1.5 border-t border-pale-stone/60' : ''} ${isSubRow ? 'pl-3' : ''}`}>
+      <span className={`w-3 text-[10px] shrink-0 ${isSubRow ? 'text-graphite/40' : 'text-graphite/60'}`}>{sign}</span>
       <div className="flex-1 min-w-0">
-        <div className={bold ? 'text-deep-black' : 'text-graphite'}>{label}</div>
-        {sub && <div className="text-[10px] text-graphite/80 mt-0.5">{sub}</div>}
+        <div className={labelCls}>{label}</div>
+        {sub && <div className="text-[10px] text-graphite/70 mt-0.5">{sub}</div>}
       </div>
-      <div className={`tabular-nums text-right ${valueCls}`}>{fmtThb(value)}</div>
+      <div className={`tabular-nums text-right ${valueCls} ${isSubRow ? 'text-[11px]' : ''}`}>{valueStr}</div>
     </div>
   )
 }
