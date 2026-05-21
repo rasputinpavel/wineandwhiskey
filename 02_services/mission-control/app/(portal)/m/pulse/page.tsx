@@ -425,8 +425,10 @@ function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls }: {
 }
 
 function TrendCard({ months, max }: { months: { label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]; max: number }) {
-  // SVG vertical bar chart: 18 bars side-by-side, zero baseline in the middle.
-  const w = 720, h = 180, padX = 8, padTop = 12, padBottom = 24
+  // SVG vertical bar chart with zero baseline in the middle. Top padding holds
+  // value labels for positive bars; bottom holds value labels for negative
+  // bars + month names.
+  const w = 720, h = 240, padX = 8, padTop = 28, padBottom = 44
   const innerW   = w - 2 * padX
   const innerH   = h - padTop - padBottom
   const zeroY    = padTop + innerH / 2
@@ -440,7 +442,7 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
         <div className="font-heading text-sm text-deep-black">Last 12 months + current · net profit</div>
         <div className="text-[10px] text-graphite">current month projected · dashed</div>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-44" preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-56" preserveAspectRatio="xMidYMid meet">
         {/* zero baseline */}
         <line x1={padX} y1={zeroY} x2={w - padX} y2={zeroY} stroke="#D4C9BC" strokeWidth={0.5} />
 
@@ -453,6 +455,8 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
           const fill = positive ? '#3D3D3D' : '#8C1C1C'
           const opacity = m.isCurrent ? 0.45 : 1
           const dash = m.isCurrent ? '3 2' : undefined
+          const valueLabel = `${positive ? '+' : '−'}${fmtThbCompact(Math.abs(m.net))}`
+          const valueY = positive ? Math.max(14, y - 4) : Math.min(h - padBottom + 14, y + bh + 12)
           return (
             <g key={m.label}>
               <rect
@@ -461,18 +465,26 @@ function TrendCard({ months, max }: { months: { label: string; net: number; reve
                 stroke={m.isCurrent ? fill : 'none'} strokeWidth={m.isCurrent ? 1 : 0}
                 strokeDasharray={dash}
               >
-                <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${positive ? '+' : '−'}${fmtThbCompact(Math.abs(m.net))}${m.isCurrent ? ' (projected)' : ''}`}</title>
+                <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${valueLabel}${m.isCurrent ? ' (projected)' : ''}`}</title>
               </rect>
-              {/* Label every 2nd month + last month — 13 bars wide enough for readable cadence */}
-              {(i % 2 === 0 || i === months.length - 1) && (
-                <text
-                  x={x + barW / 2} y={h - 8}
-                  textAnchor="middle"
-                  fontSize={9} fill="#3D3D3D" fontFamily="monospace"
-                >
-                  {m.label}
-                </text>
-              )}
+              {/* Net value label — above (positive) / below (negative) bar */}
+              <text
+                x={x + barW / 2} y={valueY}
+                textAnchor="middle"
+                fontSize={10} fill={positive ? '#3D3D3D' : '#8C1C1C'}
+                fontFamily="monospace"
+                opacity={m.isCurrent ? 0.7 : 1}
+              >
+                {valueLabel}
+              </text>
+              {/* Month label under every bar — 13 bars fit at width 720 */}
+              <text
+                x={x + barW / 2} y={h - 8}
+                textAnchor="middle"
+                fontSize={9} fill="#3D3D3D" fontFamily="monospace"
+              >
+                {m.label}
+              </text>
             </g>
           )
         })}
