@@ -27,7 +27,7 @@ data/raw/
 
 # Playwright session
 .loyverse-session.json
-.flow-session.json
+.flow-session*.json
 
 # Playwright debug artifacts (FLOW_DEBUG=1, SCRAPER_HEADFUL=1, etc.)
 flow-debug-*.png
