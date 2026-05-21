@@ -19,6 +19,9 @@ export type ReactivationProduct = {
   qty: number
   revenue: number
   category: string
+  /** true if this SKU is currently in stock (inventory.v_sku_breakdown.in_store > 0).
+   *  Null when the product can't be matched to the SKU master (e.g. line has no sku). */
+  inStock: boolean | null
 }
 
 export type ReactivationCustomer = {
@@ -107,25 +110,34 @@ export async function loadReactivationCustomers(
     if (data) lines.push(...(data as LineRow[]))
   }
 
-  // 3) SKU master — for category mapping.
-  const skus: SkuRow[] = []
+  // 3) SKU master + current in-store stock (via v_sku_breakdown view, which
+  //    already reconciles loyverse_stock minus B2B in-transit and consignment).
+  type SkuBreakdownRow = {
+    loyverse_product_code: string | null
+    name: string
+    category: string | null
+    in_store: number | null
+  }
+  const skus: SkuBreakdownRow[] = []
   for (let page = 0; ; page++) {
     const from = page * 1000
     const { data, error } = await sbInventory
-      .from('sku')
-      .select('loyverse_product_code, name, category')
+      .from('v_sku_breakdown')
+      .select('loyverse_product_code, name, category, in_store')
       .range(from, from + 999)
-    if (error) throw new Error(`sku: ${error.message}`)
+    if (error) throw new Error(`v_sku_breakdown: ${error.message}`)
     if (!data || data.length === 0) break
-    skus.push(...(data as SkuRow[]))
+    skus.push(...(data as SkuBreakdownRow[]))
     if (data.length < 1000) break
   }
   const catByCode = new Map<string, string>()
   const nameByCode = new Map<string, string>()
+  const stockByCode = new Map<string, number>()
   for (const s of skus) {
     if (!s.loyverse_product_code) continue
     if (s.category) catByCode.set(s.loyverse_product_code, s.category)
     nameByCode.set(s.loyverse_product_code, s.name)
+    stockByCode.set(s.loyverse_product_code, Number(s.in_store ?? 0))
   }
 
   // 4) Customer contact info.
@@ -200,7 +212,13 @@ export async function loadReactivationCustomers(
     const niceName = (code ? nameByCode.get(code) : undefined) ?? l.product_name ?? '(no name)'
 
     let p = a.products.get(key)
-    if (!p) { p = { key, name: niceName, qty: 0, revenue: 0, category: cat }; a.products.set(key, p) }
+    if (!p) {
+      const inStock = code
+        ? (stockByCode.has(code) ? (stockByCode.get(code)! > 0) : false)
+        : null
+      p = { key, name: niceName, qty: 0, revenue: 0, category: cat, inStock }
+      a.products.set(key, p)
+    }
     p.qty     += sign * Number(l.qty ?? 0)
     p.revenue += sign * Number(l.line_total ?? 0)
 
