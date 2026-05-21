@@ -528,13 +528,13 @@ function TrendCard({ months, max, selectedYm }: { months: { ym: string; label: s
   // SVG vertical bar chart with zero baseline in the middle. Each bar is a
   // <Link> to filter the Hero/Waterfall into that month.
   // Wider per-bar slot since chart now occupies half-width on desktop.
-  const w = 720, h = 280, padX = 8, padTop = 32, padBottom = 48
+  const w = 720, h = 280, padX = 8, padTop = 24, padBottom = 40
   const innerW   = w - 2 * padX
   const innerH   = h - padTop - padBottom
   const zeroY    = padTop + innerH / 2
   const halfH    = innerH / 2
   const stepX    = innerW / months.length
-  const barW     = Math.max(6, stepX * 0.62)
+  const barW     = stepX * 0.82
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
