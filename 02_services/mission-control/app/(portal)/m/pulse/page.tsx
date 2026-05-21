@@ -40,7 +40,7 @@ const AP_TERM_DAYS = 30
 // (repairs, surprise invoices) that aren't worth giving their own line in Settings.
 const FIXED_BUFFER_RATE = 0.15
 
-type SearchParams = { month?: string }
+type SearchParams = { month?: string; settle?: 'month' | 'total' }
 
 export default async function PulseDashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
@@ -57,6 +57,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   // ?month=YYYY-MM jumps the Hero + Waterfall into a past month. Trend chart and
   // Cash control stay live (full 13m / today's snapshot).
   const monthParam = typeof sp.month === 'string' && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : null
+  const settleView: 'month' | 'total' = sp.settle === 'total' ? 'total' : 'month'
   const selectedYm = monthParam && validYms.has(monthParam) ? monthParam : currentYm
   const isCurrent  = selectedYm === currentYm
   const selectedMonth = months.find(m => m.fromDate.slice(0, 7) === selectedYm) ?? currentMonth
@@ -358,6 +359,48 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const custSettlePaid     = custSettlements.reduce((s, x) => s + x.thisMonthPaid, 0)
   const custSettleOverdue  = custSettlements.reduce((s, x) => s + x.overdue, 0)
 
+  // ─── Settlements · TOTAL (all-time open obligations) ─────────────────────
+  // Suppliers: all POs whose payment_date is in the future or within 14d
+  // grace of today (i.e. not yet assumed paid). Customer side: all open
+  // FA invoices (unpaid + not cancelled).
+  type TotalSupRow = { name: string; openTotal: number; dueSoon: number }   // dueSoon = within next 7d
+  const totalSupMap = new Map<string, TotalSupRow>()
+  for (const p of allPOs) {
+    if (!p.order_date) continue
+    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    const dpd = daysBetween(pd, today)        // positive = future
+    if (dpd < 0) continue                      // past-due = assumed paid (we pay on time)
+    const name = p.supplier ?? '(unknown)'
+    const cur = totalSupMap.get(name) ?? { name, openTotal: 0, dueSoon: 0 }
+    const v = Number(p.total_thb ?? 0)
+    cur.openTotal += v
+    if (dpd <= 7) cur.dueSoon += v
+    totalSupMap.set(name, cur)
+  }
+  const totalSups = [...totalSupMap.values()].sort((a, b) => b.openTotal - a.openTotal)
+  const totalSupSum     = totalSups.reduce((s, x) => s + x.openTotal, 0)
+  const totalSupDueSoon = totalSups.reduce((s, x) => s + x.dueSoon, 0)
+
+  type TotalCustRow = { name: string; openTotal: number; overdue: number }
+  const totalCustMap = new Map<string, TotalCustRow>()
+  for (const inv of openInvoices) {
+    const name = inv.customer_name || '(unknown)'
+    const dueAt = invoiceDueAt(inv)
+    const isOverdue = dueAt < today
+    const cur = totalCustMap.get(name) ?? { name, openTotal: 0, overdue: 0 }
+    const v = Number(inv.total)
+    cur.openTotal += v
+    if (isOverdue) cur.overdue += v
+    totalCustMap.set(name, cur)
+  }
+  const totalCusts = [...totalCustMap.values()].sort((a, b) => {
+    if ((b.overdue > 0) !== (a.overdue > 0)) return b.overdue - a.overdue
+    return b.openTotal - a.openTotal
+  })
+  const totalCustSum     = totalCusts.reduce((s, x) => s + x.openTotal, 0)
+  const totalCustOverdue = totalCusts.reduce((s, x) => s + x.overdue, 0)
+  void apOpen; void arOverdue; void workingCapital  // surfaced via settlements now
+
   // ─── Headline insight ────────────────────────────────────────────────────
   const headline = isCurrent
     ? buildHeadline({ netMtd: selected.net, netProjected: projNet, monthlyFixed })
@@ -389,6 +432,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         </div>
       </div>
 
+      {/* Break-even reference for the selected month: total cash needed
+          (full-month supplier + full-month fixed-with-buffer). Current
+          revenue is what's already in the books (MTD or final). */}
+      {(() => null)() /* placeholder to keep below const list legible */}
+
       {/* ─── Row 1: This Month + Next Month (hero pair) ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <ThisMonthCard
@@ -409,6 +457,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
           refGmPct={refGmPct}
+          breakevenRevenue={(isCurrent ? currentBucket.supplierPayments : selected.supplierPayments) + monthlyFixed}
         />
         <NextMonthCard
           monthLabel={nextMonthLabel}
@@ -435,18 +484,32 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         />
       </div>
 
-      {/* ─── Row 3: Settlements (suppliers + customers this month) ──────── */}
+      {/* ─── Row 3: Settlements (this month / total tabs) ───────────────── */}
       <div className="mb-3">
         <SettlementsCard
+          view={settleView}
           monthLabel={selected.label}
           isCurrent={isCurrent}
-          suppliers={supSettlements}
-          supTotal={supSettleTotal}
-          supPaid={supSettlePaid}
-          customers={custSettlements}
-          custTotal={custSettleTotal}
-          custPaid={custSettlePaid}
-          custOverdue={custSettleOverdue}
+          monthHref={`/m/pulse${selectedYm !== currentYm ? `?month=${selectedYm}` : ''}`}
+          totalHref={`/m/pulse?settle=total${selectedYm !== currentYm ? `&month=${selectedYm}` : ''}`}
+          // this-month
+          monthSuppliers={supSettlements}
+          monthSupTotal={supSettleTotal}
+          monthSupPaid={supSettlePaid}
+          monthCustomers={custSettlements}
+          monthCustTotal={custSettleTotal}
+          monthCustPaid={custSettlePaid}
+          monthCustOverdue={custSettleOverdue}
+          // total
+          totalSuppliers={totalSups}
+          totalSupSum={totalSupSum}
+          totalSupDueSoon={totalSupDueSoon}
+          totalCustomers={totalCusts}
+          totalCustSum={totalCustSum}
+          totalCustOverdue={totalCustOverdue}
+          arOpen={arOpen}
+          apOpen={apOpen}
+          workingCapital={workingCapital}
         />
       </div>
 
@@ -512,7 +575,7 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
 
 // Unified hero for the selected month — mirrors NextMonthCard's structure
 // (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
-function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, refGmPct }: {
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, refGmPct, breakevenRevenue }: {
   monthLabel: string; isCurrent: boolean
   net: number; netProjected: number
   daysPassed: number; daysInMonth: number
@@ -521,6 +584,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
   supplierPayments: number; supplierPaymentsRemaining: number
   gp: number; fixedMtd: number; monthlyFixedBase: number
   refGmPct: number
+  breakevenRevenue: number
 }) {
   const positive  = net >= 0
   const valCls    = positive ? 'text-deep-black' : 'text-wine-red'
@@ -541,9 +605,22 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
       <div className="flex items-stretch border-b border-pale-stone">
         <div className={`${stripBg} w-1`} />
         <div className="flex-1 px-5 py-4">
-          <div className="flex items-baseline justify-between gap-2">
+          <div className="flex items-start justify-between gap-2">
             <div className="text-[10px] uppercase tracking-overline text-graphite">{headerLabel}</div>
-            <div className={`text-[10px] uppercase tracking-overline ${stripLbl}`}>{headerTag}</div>
+            <div className="text-right">
+              <div className={`text-[10px] uppercase tracking-overline ${stripLbl}`}>{headerTag}</div>
+              {breakevenRevenue > 0 && (
+                <div className="text-[10px] text-graphite font-mono mt-0.5">
+                  rev <span className="text-deep-black">{fmtThbCompact(revenue)}</span>
+                  {' / be '}<span className="text-deep-black">{fmtThbCompact(breakevenRevenue)}</span>
+                  {' ('}
+                  <span className={revenue >= breakevenRevenue ? 'text-deep-black' : 'text-wine-red'}>
+                    {((revenue / breakevenRevenue) * 100).toFixed(0)}%
+                  </span>
+                  {')'}
+                </div>
+              )}
+            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-3 flex-wrap">
             <div className={`font-display text-5xl tracking-display leading-none ${valCls}`}>
@@ -782,83 +859,193 @@ function NMORow({ label, value, sign, sub, bold, tone, signed }: {
   )
 }
 
-function SettlementsCard({ monthLabel, isCurrent, suppliers, supTotal, supPaid, customers, custTotal, custPaid, custOverdue }: {
-  monthLabel: string
-  isCurrent: boolean
+function SettlementsCard(p: {
+  view: 'month' | 'total'
+  monthLabel: string; isCurrent: boolean
+  monthHref: string; totalHref: string
+  // this-month
+  monthSuppliers: { name: string; total: number; paid: number }[]
+  monthSupTotal: number; monthSupPaid: number
+  monthCustomers: { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }[]
+  monthCustTotal: number; monthCustPaid: number; monthCustOverdue: number
+  // total
+  totalSuppliers: { name: string; openTotal: number; dueSoon: number }[]
+  totalSupSum: number; totalSupDueSoon: number
+  totalCustomers: { name: string; openTotal: number; overdue: number }[]
+  totalCustSum: number; totalCustOverdue: number
+  arOpen: number; apOpen: number; workingCapital: number
+}) {
+  const TOP_N = 7
+  const isMonth = p.view === 'month'
+  const monthTitle = p.isCurrent ? 'this month' : p.monthLabel
+  const wcPos = p.workingCapital >= 0
+
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card overflow-hidden">
+      {/* Header with tabs */}
+      <div className="px-5 py-3 border-b border-pale-stone flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-baseline gap-3">
+          <div className="font-heading text-sm text-deep-black">Settlements</div>
+          <div className="flex gap-1 text-[11px]">
+            <Link href={p.monthHref} className={`px-2.5 py-1 rounded-sm border transition-colors ${
+              isMonth
+                ? 'bg-wine-red text-warm-white border-wine-red'
+                : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
+            }`}>{monthTitle}</Link>
+            <Link href={p.totalHref} className={`px-2.5 py-1 rounded-sm border transition-colors ${
+              !isMonth
+                ? 'bg-wine-red text-warm-white border-wine-red'
+                : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
+            }`}>total open</Link>
+          </div>
+        </div>
+        {!isMonth && (
+          <div className="text-[10px] text-graphite font-mono">
+            AR <span className="text-deep-black">+{fmtThbCompact(p.arOpen)}</span>
+            {' · '}AP <span className="text-wine-red">−{fmtThbCompact(p.apOpen)}</span>
+            {' · '}Net WC <span className={wcPos ? 'text-deep-black' : 'text-wine-red'}>
+              {wcPos ? '+' : '−'}{fmtThbCompact(Math.abs(p.workingCapital))}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x divide-pale-stone">
+        {isMonth
+          ? <MonthSettlements
+              suppliers={p.monthSuppliers} supTotal={p.monthSupTotal} supPaid={p.monthSupPaid}
+              customers={p.monthCustomers} custTotal={p.monthCustTotal} custPaid={p.monthCustPaid} custOverdue={p.monthCustOverdue}
+              topN={TOP_N} />
+          : <TotalSettlements
+              suppliers={p.totalSuppliers} supSum={p.totalSupSum} supDueSoon={p.totalSupDueSoon}
+              customers={p.totalCustomers} custSum={p.totalCustSum} custOverdue={p.totalCustOverdue}
+              topN={TOP_N} />
+        }
+      </div>
+    </div>
+  )
+}
+
+function MonthSettlements({ suppliers, supTotal, supPaid, customers, custTotal, custPaid, custOverdue, topN }: {
   suppliers: { name: string; total: number; paid: number }[]
   supTotal: number; supPaid: number
   customers: { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }[]
   custTotal: number; custPaid: number; custOverdue: number
+  topN: number
 }) {
-  const TOP_N = 7
-  const supTop = suppliers.slice(0, TOP_N)
-  const supRestCount = Math.max(0, suppliers.length - TOP_N)
-  const supRestSum   = suppliers.slice(TOP_N).reduce((s, x) => s + x.total, 0)
-  const custTop = customers.slice(0, TOP_N)
-  const custRestCount = Math.max(0, customers.length - TOP_N)
-  const custRestSum   = customers.slice(TOP_N).reduce((s, x) => s + x.thisMonthTotal + x.overdue, 0)
-
-  const supRemaining  = supTotal - supPaid
+  const supTop = suppliers.slice(0, topN)
+  const supRestSum = suppliers.slice(topN).reduce((s, x) => s + x.total, 0)
+  const supRestCount = Math.max(0, suppliers.length - topN)
+  const custTop = customers.slice(0, topN)
+  const custRestSum = customers.slice(topN).reduce((s, x) => s + x.thisMonthTotal + x.overdue, 0)
+  const custRestCount = Math.max(0, customers.length - topN)
+  const supRemaining = supTotal - supPaid
   const custRemaining = custTotal - custPaid
-
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card overflow-hidden">
-      <div className="px-5 py-3 border-b border-pale-stone flex items-baseline justify-between gap-2">
-        <div className="font-heading text-sm text-deep-black">
-          {isCurrent ? 'Settlements · this month' : `Settlements · ${monthLabel}`}
+    <>
+      <div className="px-5 py-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-overline text-graphite">Suppliers · we owe</div>
+          <div className="text-[10px] text-graphite font-mono">
+            <span className="text-deep-black">{fmtThbCompact(supPaid)}</span> paid · <span className="text-wine-red">{fmtThbCompact(supRemaining)}</span> outstanding
+          </div>
         </div>
-        <div className="text-[10px] text-graphite">paid · outstanding · overdue</div>
+        <div className="space-y-2.5">
+          {supTop.length === 0
+            ? <div className="text-xs text-graphite py-2">No supplier obligations this month.</div>
+            : supTop.map(s => (
+                <SettleRow key={s.name} name={s.name} leftValue={s.paid} rightValue={s.total} tone="sup" />
+              ))}
+          {supRestCount > 0 && (
+            <div className="text-[10px] text-graphite pt-1">+ {supRestCount} more · {fmtThbCompact(supRestSum)} total</div>
+          )}
+        </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x divide-pale-stone">
-        {/* Suppliers (we owe) */}
-        <div className="px-5 py-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <div className="text-[10px] uppercase tracking-overline text-graphite">Suppliers · we owe</div>
-            <div className="text-[10px] text-graphite font-mono">
-              <span className="text-deep-black">{fmtThbCompact(supPaid)}</span>
-              {' '}paid · <span className="text-wine-red">{fmtThbCompact(supRemaining)}</span> outstanding
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {supTop.length === 0
-              ? <div className="text-xs text-graphite py-2">No supplier obligations this month.</div>
-              : supTop.map(s => (
-                  <SettleRow key={s.name} name={s.name}
-                    leftValue={s.paid} rightValue={s.total} tone="sup" />
-                ))}
-            {supRestCount > 0 && (
-              <div className="text-[10px] text-graphite pt-1">
-                + {supRestCount} more · {fmtThbCompact(supRestSum)} total
-              </div>
-            )}
+      <div className="px-5 py-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-overline text-graphite">B2B customers · they owe us</div>
+          <div className="text-[10px] text-graphite font-mono">
+            <span className="text-deep-black">{fmtThbCompact(custPaid)}</span> received · <span className="text-graphite">{fmtThbCompact(custRemaining)}</span> outstanding
+            {custOverdue > 0 && <> · <span className="text-wine-red">{fmtThbCompact(custOverdue)}</span> overdue</>}
           </div>
         </div>
+        <div className="space-y-2.5">
+          {custTop.length === 0
+            ? <div className="text-xs text-graphite py-2">No B2B obligations this month.</div>
+            : custTop.map(c => (
+                <SettleRow key={c.name} name={c.name} leftValue={c.thisMonthPaid} rightValue={c.thisMonthTotal} overdue={c.overdue} tone="cust" />
+              ))}
+          {custRestCount > 0 && (
+            <div className="text-[10px] text-graphite pt-1">+ {custRestCount} more · {fmtThbCompact(custRestSum)} total</div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
 
-        {/* B2B Customers (they owe us) */}
-        <div className="px-5 py-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <div className="text-[10px] uppercase tracking-overline text-graphite">B2B customers · they owe us</div>
-            <div className="text-[10px] text-graphite font-mono">
-              <span className="text-deep-black">{fmtThbCompact(custPaid)}</span>
-              {' '}received · <span className="text-graphite">{fmtThbCompact(custRemaining)}</span> outstanding
-              {custOverdue > 0 && <> · <span className="text-wine-red">{fmtThbCompact(custOverdue)}</span> overdue</>}
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {custTop.length === 0
-              ? <div className="text-xs text-graphite py-2">No B2B obligations this month.</div>
-              : custTop.map(c => (
-                  <SettleRow key={c.name} name={c.name}
-                    leftValue={c.thisMonthPaid} rightValue={c.thisMonthTotal} overdue={c.overdue} tone="cust" />
-                ))}
-            {custRestCount > 0 && (
-              <div className="text-[10px] text-graphite pt-1">
-                + {custRestCount} more · {fmtThbCompact(custRestSum)} total
-              </div>
-            )}
+function TotalSettlements({ suppliers, supSum, supDueSoon, customers, custSum, custOverdue, topN }: {
+  suppliers: { name: string; openTotal: number; dueSoon: number }[]
+  supSum: number; supDueSoon: number
+  customers: { name: string; openTotal: number; overdue: number }[]
+  custSum: number; custOverdue: number
+  topN: number
+}) {
+  const supTop  = suppliers.slice(0, topN)
+  const supRest = suppliers.slice(topN)
+  const custTop  = customers.slice(0, topN)
+  const custRest = customers.slice(topN)
+  return (
+    <>
+      <div className="px-5 py-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-overline text-graphite">Suppliers · open AP</div>
+          <div className="text-[10px] text-graphite font-mono">
+            <span className="text-wine-red">{fmtThbCompact(supSum)}</span> total
+            {supDueSoon > 0 && <> · <span className="text-amber-gold">{fmtThbCompact(supDueSoon)}</span> due ≤ 7d</>}
           </div>
         </div>
+        <div className="space-y-2">
+          {supTop.length === 0
+            ? <div className="text-xs text-graphite py-2">No open supplier balances.</div>
+            : supTop.map(s => (
+                <TotalRow key={s.name} name={s.name} amount={s.openTotal} sub={s.dueSoon > 0 ? `${fmtThbCompact(s.dueSoon)} due ≤ 7d` : undefined} toneAccent={s.dueSoon > 0} />
+              ))}
+          {supRest.length > 0 && (
+            <div className="text-[10px] text-graphite pt-1">+ {supRest.length} more · {fmtThbCompact(supRest.reduce((s,x)=>s+x.openTotal,0))} total</div>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-overline text-graphite">B2B customers · open AR</div>
+          <div className="text-[10px] text-graphite font-mono">
+            <span className="text-deep-black">{fmtThbCompact(custSum)}</span> total
+            {custOverdue > 0 && <> · <span className="text-wine-red">{fmtThbCompact(custOverdue)}</span> overdue</>}
+          </div>
+        </div>
+        <div className="space-y-2">
+          {custTop.length === 0
+            ? <div className="text-xs text-graphite py-2">No open B2B balances.</div>
+            : custTop.map(c => (
+                <TotalRow key={c.name} name={c.name} amount={c.openTotal} sub={c.overdue > 0 ? `${fmtThbCompact(c.overdue)} overdue` : undefined} toneAccent={c.overdue > 0} />
+              ))}
+          {custRest.length > 0 && (
+            <div className="text-[10px] text-graphite pt-1">+ {custRest.length} more · {fmtThbCompact(custRest.reduce((s,x)=>s+x.openTotal,0))} total</div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function TotalRow({ name, amount, sub, toneAccent }: { name: string; amount: number; sub?: string; toneAccent?: boolean }) {
+  return (
+    <div className="text-xs flex items-baseline justify-between gap-2">
+      <div className="truncate text-deep-black" title={name}>{name}</div>
+      <div className="text-right shrink-0">
+        <div className="tabular-nums text-deep-black">{fmtThbCompact(amount)}</div>
+        {sub && <div className={`text-[10px] ${toneAccent ? 'text-wine-red' : 'text-graphite'}`}>{sub}</div>}
       </div>
     </div>
   )
