@@ -1073,7 +1073,7 @@ function SettleRow({ name, leftValue, rightValue, overdue, tone }: {
           {rightValue > 0
             ? <><span className="text-deep-black">{fmtThbCompact(leftValue)}</span> / {fmtThbCompact(rightValue)}</>
             : <span className="text-graphite/60">no due this month</span>}
-          {overdue && overdue > 0 && (
+          {overdue !== undefined && overdue > 0 && (
             <> · <span className="text-wine-red">{fmtThbCompact(overdue)} overdue</span></>
           )}
         </div>
