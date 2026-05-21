@@ -620,33 +620,62 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthly
   minRevenueNext: number
   minB2CNext: number
 }) {
+  // Approximate days in the upcoming month — used only for the daily-target
+  // breakdown, exact calendar arithmetic not worth it.
+  const daysInNextMonth = 30
+  const dailyTarget = minB2CNext / daysInNextMonth
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
-      <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">Next month outlook · {monthLabel}</div>
-        <div className="text-[10px] text-graphite">break-even target</div>
+    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card h-full overflow-hidden flex flex-col">
+      <div className="flex items-stretch border-b border-pale-stone">
+        <div className="bg-amber-gold w-1" />
+        <div className="flex-1 px-5 py-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[10px] uppercase tracking-overline text-graphite">Next month · {monthLabel}</div>
+            <div className="text-[10px] uppercase tracking-overline text-amber-gold">Break-even target</div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+            <div className="font-display text-5xl tracking-display text-deep-black leading-none">
+              {fmtThbCompact(minB2CNext)}
+            </div>
+            <div className="text-xs text-graphite">
+              Min B2C revenue to break even
+            </div>
+          </div>
+          <div className="mt-2 text-[11px] text-graphite font-mono">
+            ≈ {fmtThbCompact(dailyTarget)} / day over {daysInNextMonth} days
+          </div>
+        </div>
       </div>
 
-      {/* Cash-out side */}
-      <table className="w-full text-sm mb-3">
-        <tbody>
-          <WaterfallRow label="Supplier payments due" value={supplierPaymentsNext} sign="+" muted
+      <div className="px-5 py-4 flex-1">
+        <div className="text-[10px] uppercase tracking-overline text-graphite mb-2">Inputs</div>
+        <div className="space-y-1.5 text-xs">
+          <NMORow label="Supplier payments due" value={supplierPaymentsNext} sign="−"
             sub="POs ordered this month, payable next" />
-          <WaterfallRow label="Fixed costs" value={monthlyFixed} sign="+" muted
+          <NMORow label="Fixed costs" value={monthlyFixed} sign="−"
             sub={monthlyFixedBase > 0 ? `${fmtThb(monthlyFixedBase)}/mo + 15% buffer` : 'not configured'} />
-          <WaterfallRow label="Min revenue needed" value={minRevenueNext} sign="=" bold />
-        </tbody>
-      </table>
+          <NMORow label="Min revenue needed" value={minRevenueNext} sign="=" bold />
+          <NMORow label="Expected B2B inflow" value={expectedB2BNext} sign="+"
+            sub="open FA invoices maturing next month" tone="pos" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      {/* Cash-in offset */}
-      <table className="w-full text-sm">
-        <tbody>
-          <WaterfallRow label="− Expected B2B inflow" value={expectedB2BNext} sign="−" muted
-            sub="open FA invoices maturing next month" />
-          <WaterfallRow label="Min B2C revenue to break even" value={minB2CNext} sign="=" bold
-            valueCls="text-deep-black" />
-        </tbody>
-      </table>
+function NMORow({ label, value, sign, sub, bold, tone }: {
+  label: string; value: number; sign: '+' | '−' | '='
+  sub?: string; bold?: boolean; tone?: 'pos' | 'neg'
+}) {
+  const valueCls = bold ? 'text-deep-black font-medium' : tone === 'pos' ? 'text-deep-black' : 'text-graphite'
+  return (
+    <div className={`flex items-baseline gap-2 ${bold ? 'pt-1.5 border-t border-pale-stone/60' : ''}`}>
+      <span className="w-3 text-[10px] text-graphite/60 shrink-0">{sign}</span>
+      <div className="flex-1 min-w-0">
+        <div className={bold ? 'text-deep-black' : 'text-graphite'}>{label}</div>
+        {sub && <div className="text-[10px] text-graphite/80 mt-0.5">{sub}</div>}
+      </div>
+      <div className={`tabular-nums text-right ${valueCls}`}>{fmtThb(value)}</div>
     </div>
   )
 }
