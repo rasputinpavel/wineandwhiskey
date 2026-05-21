@@ -484,9 +484,6 @@ function WaterfallCard({ monthLabel, isCurrent, revenue, revenueB2C, revenueB2B,
 }) {
   const netPositive = net >= 0
   const title = isCurrent ? 'Where the money went · MTD' : `Where the money went · ${monthLabel}`
-  const revenueSub = `B2C ${fmtThbCompact(revenueB2C)} · B2B ${fmtThbCompact(revenueB2B)}${
-    isCurrent && revenueRemainingProj > 0 ? ` · +${fmtThbCompact(revenueRemainingProj)} proj. by EOM` : ''
-  }`
   const fixedSub = monthlyFixedBase > 0
     ? `from ${fmtThb(monthlyFixedBase)}/mo + 15% buffer`
     : 'not configured'
@@ -498,7 +495,12 @@ function WaterfallCard({ monthLabel, isCurrent, revenue, revenueB2C, revenueB2B,
       </div>
       <table className="w-full text-sm">
         <tbody>
-          <WaterfallRow label="Revenue" value={revenue} sign="+" sub={revenueSub} />
+          <WaterfallRow label="Revenue" value={revenue} sign="+" hideBorder />
+          <WaterfallSubRow label="B2C" value={fmtThb(revenueB2C)} />
+          <WaterfallSubRow label="B2B" value={fmtThb(revenueB2B)} last={!isCurrent || revenueRemainingProj <= 0} />
+          {isCurrent && revenueRemainingProj > 0 && (
+            <WaterfallSubRow label="proj. by EOM" value={`+${fmtThb(revenueRemainingProj)}`} muted last />
+          )}
           <WaterfallRow label="Supplier payments" value={supplierPayments} sign="−" muted
             sub={isCurrent
               ? (supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered')
@@ -514,13 +516,27 @@ function WaterfallCard({ monthLabel, isCurrent, revenue, revenueB2C, revenueB2B,
   )
 }
 
-function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls }: {
+function WaterfallSubRow({ label, value, muted, last }: {
+  label: string; value: string; muted?: boolean; last?: boolean
+}) {
+  return (
+    <tr className={last ? 'border-b border-pale-stone/40' : ''}>
+      <td className="py-1 pl-6 text-[11px] text-graphite">
+        <span className="text-graphite/50">↳</span> {label}
+      </td>
+      <td className={`py-1 text-right tabular-nums text-[11px] ${muted ? 'text-graphite/80' : 'text-graphite'}`}>{value}</td>
+      <td className="py-1 w-40" />
+    </tr>
+  )
+}
+
+function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls, hideBorder }: {
   label: string; value: number; sign: '+' | '−' | '='
-  sub?: string; bold?: boolean; muted?: boolean; valueCls?: string
+  sub?: string; bold?: boolean; muted?: boolean; valueCls?: string; hideBorder?: boolean
 }) {
   const cls = valueCls ?? (muted ? 'text-graphite' : 'text-deep-black')
   return (
-    <tr className={`border-b border-pale-stone/40 last:border-0 ${bold ? 'border-pale-stone' : ''}`}>
+    <tr className={`${hideBorder ? '' : 'border-b border-pale-stone/40 last:border-0'} ${bold ? 'border-pale-stone' : ''}`}>
       <td className={`py-2 text-graphite ${bold ? 'text-deep-black' : ''}`}>
         <span className="inline-block w-4 text-[10px] text-graphite/60">{sign}</span>
         {label}
