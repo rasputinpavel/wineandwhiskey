@@ -307,8 +307,15 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     ? buildHeadline({ netMtd: selected.net, netProjected: projNet, monthlyFixed })
     : buildPastHeadline({ net: selected.net, monthLabel: selected.label })
 
-  // For trend chart scale, ignore extreme single months by using max(|net|) of 18.
+  // For trend chart scale, ignore extreme single months by using max(|net|).
   const trendMax = Math.max(1, ...monthsPnl.map(m => Math.abs(m.net)))
+
+  // Trailing-12-month totals (closed months only — exclude in-progress current).
+  const closedMonths   = monthsPnl.slice(0, -1)
+  const annualTotalNet = closedMonths.reduce((s, m) => s + m.net, 0)
+  const annualAvgNet   = closedMonths.length > 0 ? annualTotalNet / closedMonths.length : 0
+  const annualTotalRev = closedMonths.reduce((s, m) => s + m.revenue, 0)
+  const annualAvgRev   = closedMonths.length > 0 ? annualTotalRev / closedMonths.length : 0
 
   return (
     <>
@@ -339,7 +346,16 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
 
       {/* ─── Trend + Waterfall side by side ──────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <TrendCard months={monthsPnl} max={trendMax} selectedYm={selectedYm} />
+        <TrendCard
+          months={monthsPnl}
+          max={trendMax}
+          selectedYm={selectedYm}
+          annualTotalNet={annualTotalNet}
+          annualAvgNet={annualAvgNet}
+          annualTotalRev={annualTotalRev}
+          annualAvgRev={annualAvgRev}
+          closedCount={closedMonths.length}
+        />
         <WaterfallCard
           monthLabel={selected.label}
           isCurrent={isCurrent}
@@ -552,7 +568,16 @@ function WaterfallRow({ label, value, sign, sub, bold, muted, valueCls, hideBord
   )
 }
 
-function TrendCard({ months, max, selectedYm }: { months: { ym: string; label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]; max: number; selectedYm: string }) {
+function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annualTotalRev, annualAvgRev, closedCount }: {
+  months: { ym: string; label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]
+  max: number
+  selectedYm: string
+  annualTotalNet: number
+  annualAvgNet: number
+  annualTotalRev: number
+  annualAvgRev: number
+  closedCount: number
+}) {
   // SVG vertical bar chart with zero baseline in the middle. Each bar is a
   // <Link> to filter the Hero/Waterfall into that month.
   // Wider per-bar slot since chart now occupies half-width on desktop.
@@ -623,6 +648,38 @@ function TrendCard({ months, max, selectedYm }: { months: { ym: string; label: s
           )
         })}
       </svg>
+
+      {/* Trailing-year summary — closed months only, excludes in-progress current. */}
+      <div className="mt-3 pt-3 border-t border-pale-stone grid grid-cols-2 gap-4 text-xs">
+        <div>
+          <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">
+            Net profit · last {closedCount} months
+          </div>
+          <div className="flex items-baseline gap-3">
+            <div className={`font-display text-2xl tracking-display leading-none ${annualTotalNet >= 0 ? 'text-deep-black' : 'text-wine-red'}`}>
+              {annualTotalNet >= 0 ? '+' : '−'}{fmtThbCompact(Math.abs(annualTotalNet))}
+            </div>
+            <div className="text-graphite text-[11px]">
+              avg <span className={annualAvgNet >= 0 ? 'text-deep-black' : 'text-wine-red'}>
+                {annualAvgNet >= 0 ? '+' : '−'}{fmtThbCompact(Math.abs(annualAvgNet))}
+              </span> / month
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">
+            Revenue · last {closedCount} months
+          </div>
+          <div className="flex items-baseline gap-3">
+            <div className="font-display text-2xl tracking-display text-deep-black leading-none">
+              {fmtThbCompact(annualTotalRev)}
+            </div>
+            <div className="text-graphite text-[11px]">
+              avg {fmtThbCompact(annualAvgRev)} / month
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
