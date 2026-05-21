@@ -36,6 +36,9 @@ export const dynamic = 'force-dynamic'
 // ════════════════════════════════════════════════════════════════════════════
 
 const AP_TERM_DAYS = 30
+// 15% safety buffer on top of declared monthly fixed costs — covers small one-offs
+// (repairs, surprise invoices) that aren't worth giving their own line in Settings.
+const FIXED_BUFFER_RATE = 0.15
 
 type SearchParams = { month?: string }
 
@@ -186,16 +189,19 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   }
 
   // Fixed costs
-  const monthlyFixed = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
+  const monthlyFixedBase = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
     .filter(r => r.active)
     .reduce((s, r) => s + Number(r.amount_thb), 0)
+  // Effective monthly fixed used in P&L = declared total + 15% contingency.
+  // Display shows base value; calculations always use the buffered amount.
+  const monthlyFixed = monthlyFixedBase * (1 + FIXED_BUFFER_RATE)
 
   // ─── Per-month P&L ───────────────────────────────────────────────────────
   // For closed months: supplierPayments = full-month bucket; fixed = full.
   // For current month:
   //   trend cell shows MTD supplier payments (payment_date ≤ today)
   //   projection uses full-month bucket (already in byMonth)
-  type MonthPnl = { ym: string; label: string; revenue: number; supplierPayments: number; gp: number; fixed: number; net: number; isCurrent: boolean }
+  type MonthPnl = { ym: string; label: string; revenue: number; revenueB2C: number; revenueB2B: number; supplierPayments: number; gp: number; fixed: number; net: number; isCurrent: boolean }
   const currentYM = currentMonth.fromDate.slice(0, 7)
 
   const supplierPaymentsMtd = supplierPayments
@@ -209,7 +215,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     const fixed = cur ? monthlyFixed * (currentDaysPassed / currentDaysInMonth) : monthlyFixed
     const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
-    return { ym, label: m.label, revenue: b.total, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent: cur }
+    return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent: cur }
   })
   const selected      = monthsPnl.find(m => m.ym === selectedYm) ?? monthsPnl[monthsPnl.length - 1]
   const selectedBucket = byMonth.get(selectedYm) ?? empty()
@@ -338,12 +344,14 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           monthLabel={selected.label}
           isCurrent={isCurrent}
           revenue={selected.revenue}
+          revenueB2C={selected.revenueB2C}
+          revenueB2B={selected.revenueB2B}
           revenueRemainingProj={revenueRemainingProj}
           supplierPayments={selected.supplierPayments}
           supplierPaymentsRemaining={supplierRemainingProj}
           gp={selected.gp}
           fixedMtd={selected.fixed}
-          monthlyFixed={monthlyFixed}
+          monthlyFixedBase={monthlyFixedBase}
           net={selected.net}
           daysPassed={selectedDaysPassed}
           daysInMonth={selectedDaysInMonth}
@@ -357,6 +365,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           monthLabel={nextMonthLabel}
           supplierPaymentsNext={supplierPaymentsNext}
           monthlyFixed={monthlyFixed}
+          monthlyFixedBase={monthlyFixedBase}
           expectedB2BNext={expectedB2BNext}
           minRevenueNext={minRevenueNext}
           minB2CNext={minB2CNext}
@@ -380,7 +389,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
           <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date (order_date + 30d) falls in the month. Default 30-day grace per ops policy; supplier-specific terms ignored. Consignment suppliers excluded.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
-          <p><span className="text-deep-black">Fixed costs MTD</span> = monthly_fixed × (days passed / days in month). Pro-rated so the in-progress month is comparable. For closed months in the 18-month trend we apply the current monthly_fixed value to all of them (no history yet).</p>
+          <p><span className="text-deep-black">Fixed costs MTD</span> = (declared monthly fixed + 15% contingency buffer) × (days passed / days in month). The buffer covers small one-offs (repairs, surprise invoices) we don&apos;t want to manage row-by-row in Settings. Pro-rated so the in-progress month is comparable. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
           <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
           <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
@@ -466,15 +475,21 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
   return { tone: 'warn', text: `${monthLabel} closed at break-even.` }
 }
 
-function WaterfallCard({ monthLabel, isCurrent, revenue, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixed, net, daysPassed, daysInMonth, refGmPct }: {
+function WaterfallCard({ monthLabel, isCurrent, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, net, daysPassed, daysInMonth, refGmPct }: {
   monthLabel: string; isCurrent: boolean
-  revenue: number; revenueRemainingProj: number
+  revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
   supplierPayments: number; supplierPaymentsRemaining: number
-  gp: number; fixedMtd: number; monthlyFixed: number; net: number
+  gp: number; fixedMtd: number; monthlyFixedBase: number; net: number
   daysPassed: number; daysInMonth: number; refGmPct: number
 }) {
   const netPositive = net >= 0
   const title = isCurrent ? 'Where the money went · MTD' : `Where the money went · ${monthLabel}`
+  const revenueSub = `B2C ${fmtThbCompact(revenueB2C)} · B2B ${fmtThbCompact(revenueB2B)}${
+    isCurrent && revenueRemainingProj > 0 ? ` · +${fmtThbCompact(revenueRemainingProj)} proj. by EOM` : ''
+  }`
+  const fixedSub = monthlyFixedBase > 0
+    ? `from ${fmtThb(monthlyFixedBase)}/mo + 15% buffer`
+    : 'not configured'
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card h-full">
       <div className="flex items-baseline justify-between mb-3 gap-2">
@@ -483,17 +498,14 @@ function WaterfallCard({ monthLabel, isCurrent, revenue, revenueRemainingProj, s
       </div>
       <table className="w-full text-sm">
         <tbody>
-          <WaterfallRow label="Revenue" value={revenue} sign="+"
-            sub={isCurrent && revenueRemainingProj > 0
-              ? `${fmtThbCompact(revenueRemainingProj)} more proj. by EOM (run-rate + AR)`
-              : undefined} />
+          <WaterfallRow label="Revenue" value={revenue} sign="+" sub={revenueSub} />
           <WaterfallRow label="Supplier payments" value={supplierPayments} sign="−" muted
             sub={isCurrent
               ? (supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered')
               : undefined} />
           <WaterfallRow label="Gross Profit" value={gp} sign="=" bold sub={`GM% ref: ${refGmPct.toFixed(1)}%`} />
           <WaterfallRow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" muted
-            sub={monthlyFixed > 0 ? `from ${fmtThb(monthlyFixed)}/mo` : 'not configured'} />
+            sub={fixedSub} />
           <WaterfallRow label="Net Profit" value={net} sign="=" bold
             valueCls={netPositive ? 'text-deep-black' : 'text-wine-red'} />
         </tbody>
@@ -599,10 +611,11 @@ function TrendCard({ months, max, selectedYm }: { months: { ym: string; label: s
   )
 }
 
-function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, expectedB2BNext, minRevenueNext, minB2CNext }: {
+function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, expectedB2BNext, minRevenueNext, minB2CNext }: {
   monthLabel: string
   supplierPaymentsNext: number
   monthlyFixed: number
+  monthlyFixedBase: number
   expectedB2BNext: number
   minRevenueNext: number
   minB2CNext: number
@@ -620,7 +633,7 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, expecte
           <WaterfallRow label="Supplier payments due" value={supplierPaymentsNext} sign="+" muted
             sub="POs ordered this month, payable next" />
           <WaterfallRow label="Fixed costs" value={monthlyFixed} sign="+" muted
-            sub={monthlyFixed > 0 ? 'full month' : 'not configured'} />
+            sub={monthlyFixedBase > 0 ? `${fmtThb(monthlyFixedBase)}/mo + 15% buffer` : 'not configured'} />
           <WaterfallRow label="Min revenue needed" value={minRevenueNext} sign="=" bold />
         </tbody>
       </table>
