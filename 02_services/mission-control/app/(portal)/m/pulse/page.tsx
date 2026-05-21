@@ -232,7 +232,8 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   //   B2B inflows from open FA invoices whose due date falls by EOM
   const customers = (customersRes.data ?? []) as Pick<B2bCustomer, 'id' | 'payment_terms_days'>[]
   const termsByCustomer = new Map(customers.map(c => [c.id, c.payment_terms_days ?? 0]))
-  const openInvoices = ((invoicesOpenRes.data ?? []) as FlowInvoice[]).filter(i => i.status !== 'Paid')
+  const allActiveInvoices = (invoicesOpenRes.data ?? []) as FlowInvoice[]
+  const openInvoices = allActiveInvoices.filter(i => i.status !== 'Paid')
 
   function invoiceDueAt(inv: FlowInvoice): string {
     if (inv.due_at) return inv.due_at
@@ -301,6 +302,61 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     .filter(p => p.paymentDate > today)
     .reduce((s, p) => s + p.total, 0)
   const workingCapital = arOpen - apOpen
+
+  // ─── Settlements for the selected month ──────────────────────────────────
+  // Suppliers — POs whose payment_date (order+30d) falls in the selected
+  // month. "Paid" follows the same on-time assumption used elsewhere:
+  // payment_date ≤ today → paid; > today → still owed.
+  type SupSet = { name: string; total: number; paid: number }
+  const supSettleMap = new Map<string, SupSet>()
+  for (const p of allPOs) {
+    if (!p.order_date) continue
+    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    if (pd < startOfMonth || pd >= endOfMonthExclusive) continue
+    const name = p.supplier ?? '(unknown)'
+    const cur  = supSettleMap.get(name) ?? { name, total: 0, paid: 0 }
+    const v = Number(p.total_thb ?? 0)
+    cur.total += v
+    if (pd <= today) cur.paid += v
+    supSettleMap.set(name, cur)
+  }
+  const supSettlements = [...supSettleMap.values()].sort((a, b) => b.total - a.total)
+  const supSettleTotal = supSettlements.reduce((s, x) => s + x.total, 0)
+  const supSettlePaid  = supSettlements.reduce((s, x) => s + x.paid, 0)
+
+  // B2B customers — FA invoices due in the selected month (paid + unpaid)
+  // PLUS overdue (unpaid with due before the selected month start).
+  type CustSet = { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }
+  const custSettleMap = new Map<string, CustSet>()
+  const nameByCustomerId = new Map(customers.map(() => ['', ''] as [string, string]))
+  // Bring B2B customer flowaccount_name lookup back — we stripped it earlier in this refactor.
+  const b2bRows = (customersRes.data ?? []) as Pick<B2bCustomer, 'id' | 'payment_terms_days'>[]
+  void b2bRows
+  for (const inv of allActiveInvoices) {
+    const dueAt = invoiceDueAt(inv)
+    const isPaid = inv.status === 'Paid'
+    const inMonth = dueAt >= startOfMonth && dueAt < endOfMonthExclusive
+    const overdue = !isPaid && dueAt < startOfMonth
+    if (!inMonth && !overdue) continue
+    const name = inv.customer_name || '(unknown)'
+    const cur = custSettleMap.get(name) ?? { name, thisMonthTotal: 0, thisMonthPaid: 0, overdue: 0 }
+    const v = Number(inv.total)
+    if (inMonth) {
+      cur.thisMonthTotal += v
+      if (isPaid) cur.thisMonthPaid += v
+    } else if (overdue) {
+      cur.overdue += v
+    }
+    custSettleMap.set(name, cur)
+  }
+  const custSettlements = [...custSettleMap.values()].sort((a, b) => {
+    // overdue first, then by remaining (unpaid this month), then total
+    if ((b.overdue > 0) !== (a.overdue > 0)) return b.overdue - a.overdue
+    return (b.thisMonthTotal - b.thisMonthPaid) - (a.thisMonthTotal - a.thisMonthPaid)
+  })
+  const custSettleTotal    = custSettlements.reduce((s, x) => s + x.thisMonthTotal, 0)
+  const custSettlePaid     = custSettlements.reduce((s, x) => s + x.thisMonthPaid, 0)
+  const custSettleOverdue  = custSettlements.reduce((s, x) => s + x.overdue, 0)
 
   // ─── Headline insight ────────────────────────────────────────────────────
   const headline = isCurrent
@@ -379,9 +435,19 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         />
       </div>
 
-      {/* ─── Row 3: 4th widget slot (Cash control placeholder for now) ──── */}
+      {/* ─── Row 3: Settlements (suppliers + customers this month) ──────── */}
       <div className="mb-3">
-        <CashControlCard arOpen={arOpen} arOverdue={arOverdue} apOpen={apOpen} workingCapital={workingCapital} />
+        <SettlementsCard
+          monthLabel={selected.label}
+          isCurrent={isCurrent}
+          suppliers={supSettlements}
+          supTotal={supSettleTotal}
+          supPaid={supSettlePaid}
+          customers={custSettlements}
+          custTotal={custSettleTotal}
+          custPaid={custSettlePaid}
+          custOverdue={custSettleOverdue}
+        />
       </div>
 
       {/* ─── Footer ─────────────────────────────────────────────────────── */}
@@ -716,36 +782,117 @@ function NMORow({ label, value, sign, sub, bold, tone, signed }: {
   )
 }
 
-function CashControlCard({ arOpen, arOverdue, apOpen, workingCapital }: {
-  arOpen: number; arOverdue: number; apOpen: number; workingCapital: number
+function SettlementsCard({ monthLabel, isCurrent, suppliers, supTotal, supPaid, customers, custTotal, custPaid, custOverdue }: {
+  monthLabel: string
+  isCurrent: boolean
+  suppliers: { name: string; total: number; paid: number }[]
+  supTotal: number; supPaid: number
+  customers: { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }[]
+  custTotal: number; custPaid: number; custOverdue: number
 }) {
-  const wcPositive = workingCapital >= 0
+  const TOP_N = 7
+  const supTop = suppliers.slice(0, TOP_N)
+  const supRestCount = Math.max(0, suppliers.length - TOP_N)
+  const supRestSum   = suppliers.slice(TOP_N).reduce((s, x) => s + x.total, 0)
+  const custTop = customers.slice(0, TOP_N)
+  const custRestCount = Math.max(0, customers.length - TOP_N)
+  const custRestSum   = customers.slice(TOP_N).reduce((s, x) => s + x.thisMonthTotal + x.overdue, 0)
+
+  const supRemaining  = supTotal - supPaid
+  const custRemaining = custTotal - custPaid
+
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md p-4 shadow-card">
-      <div className="flex items-baseline justify-between mb-3 gap-2">
-        <div className="font-heading text-sm text-deep-black">Cash control · working capital snapshot</div>
-        <div className="text-[10px] text-graphite">not a bank balance</div>
+    <div className="bg-warm-white border border-pale-stone rounded-md shadow-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-pale-stone flex items-baseline justify-between gap-2">
+        <div className="font-heading text-sm text-deep-black">
+          {isCurrent ? 'Settlements · this month' : `Settlements · ${monthLabel}`}
+        </div>
+        <div className="text-[10px] text-graphite">paid · outstanding · overdue</div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">AR Open · they owe us</div>
-          <div className="font-display text-2xl tracking-display text-deep-black leading-none">+{fmtThbCompact(arOpen)}</div>
-          {arOverdue > 0 && (
-            <div className="text-[10px] text-wine-red mt-1">{fmtThbCompact(arOverdue)} overdue</div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x divide-pale-stone">
+        {/* Suppliers (we owe) */}
+        <div className="px-5 py-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-overline text-graphite">Suppliers · we owe</div>
+            <div className="text-[10px] text-graphite font-mono">
+              <span className="text-deep-black">{fmtThbCompact(supPaid)}</span>
+              {' '}paid · <span className="text-wine-red">{fmtThbCompact(supRemaining)}</span> outstanding
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {supTop.length === 0
+              ? <div className="text-xs text-graphite py-2">No supplier obligations this month.</div>
+              : supTop.map(s => (
+                  <SettleRow key={s.name} name={s.name}
+                    leftValue={s.paid} rightValue={s.total} tone="sup" />
+                ))}
+            {supRestCount > 0 && (
+              <div className="text-[10px] text-graphite pt-1">
+                + {supRestCount} more · {fmtThbCompact(supRestSum)} total
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* B2B Customers (they owe us) */}
+        <div className="px-5 py-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-overline text-graphite">B2B customers · they owe us</div>
+            <div className="text-[10px] text-graphite font-mono">
+              <span className="text-deep-black">{fmtThbCompact(custPaid)}</span>
+              {' '}received · <span className="text-graphite">{fmtThbCompact(custRemaining)}</span> outstanding
+              {custOverdue > 0 && <> · <span className="text-wine-red">{fmtThbCompact(custOverdue)}</span> overdue</>}
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {custTop.length === 0
+              ? <div className="text-xs text-graphite py-2">No B2B obligations this month.</div>
+              : custTop.map(c => (
+                  <SettleRow key={c.name} name={c.name}
+                    leftValue={c.thisMonthPaid} rightValue={c.thisMonthTotal} overdue={c.overdue} tone="cust" />
+                ))}
+            {custRestCount > 0 && (
+              <div className="text-[10px] text-graphite pt-1">
+                + {custRestCount} more · {fmtThbCompact(custRestSum)} total
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SettleRow({ name, leftValue, rightValue, overdue, tone }: {
+  name: string
+  leftValue: number   // paid (or received)
+  rightValue: number  // total this month
+  overdue?: number
+  tone: 'sup' | 'cust'
+}) {
+  const pct = rightValue > 0 ? Math.min(100, (leftValue / rightValue) * 100) : 0
+  const full = rightValue > 0 && leftValue >= rightValue
+  const barFill = full
+    ? 'bg-graphite/60'
+    : tone === 'sup'
+      ? 'bg-amber-gold'  // partial payment to supplier — still owe
+      : 'bg-graphite/60' // partial received from B2B
+  return (
+    <div className="text-xs">
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <div className="truncate text-deep-black" title={name}>{name}</div>
+        <div className="tabular-nums text-[11px] text-graphite font-mono shrink-0">
+          {rightValue > 0
+            ? <><span className="text-deep-black">{fmtThbCompact(leftValue)}</span> / {fmtThbCompact(rightValue)}</>
+            : <span className="text-graphite/60">no due this month</span>}
+          {overdue && overdue > 0 && (
+            <> · <span className="text-wine-red">{fmtThbCompact(overdue)} overdue</span></>
           )}
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">AP Open · we owe suppliers</div>
-          <div className="font-display text-2xl tracking-display text-wine-red leading-none">−{fmtThbCompact(apOpen)}</div>
-          <div className="text-[10px] text-graphite mt-1">future obligations only (we pay on time)</div>
-        </div>
-        <div className="sm:border-l sm:border-pale-stone sm:pl-4">
-          <div className="text-[10px] uppercase tracking-overline text-graphite mb-1">Net working capital</div>
-          <div className={`font-display text-2xl tracking-display leading-none ${wcPositive ? 'text-deep-black' : 'text-wine-red'}`}>
-            {wcPositive ? '+' : '−'}{fmtThbCompact(Math.abs(workingCapital))}
-          </div>
-          <div className="text-[10px] text-graphite mt-1">if all debts settle now</div>
-        </div>
+      </div>
+      <div className="bg-cream h-1.5 rounded-sm overflow-hidden">
+        <div className={`h-full ${barFill}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
