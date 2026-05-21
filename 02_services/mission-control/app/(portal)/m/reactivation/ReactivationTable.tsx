@@ -3,11 +3,14 @@
 import { useMemo, useState } from 'react'
 import type { ReactivationCustomer } from '@/lib/reactivation/data'
 
-// Seasonal hero banner shown above every reactivation message. Generated
-// once via scripts/gen-reactivation-banner.mjs and mirrored from
-// 05_creative/output/ into public/creative/ by sync-brand-assets.mjs.
-// Re-run the script and bump this constant when the season turns.
-const BANNER_URL = '/creative/reactivation-rainy-season_2026-05.png'
+// Seasonal hero banner shown above every reactivation message.
+//  - bannerUrlFor(customerId) → server composites the customer's favourite
+//    in-stock bottle into the spotlight (Sharp). Falls back to the empty
+//    base banner if the bottle PNG isn't on disk yet.
+//  - Generator script: scripts/gen-reactivation-banner.mjs
+const BANNER_BASE = '/creative/reactivation-rainy-season_2026-05.png'
+const bannerUrlFor = (customerId: string) =>
+  `/api/m/reactivation/banner?customerId=${encodeURIComponent(customerId)}`
 
 type LapsedFilter = 'all' | '30' | '60' | '90' | '180'
 
@@ -185,21 +188,30 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
 
             <div className="mb-4">
               <div className="relative rounded-sm overflow-hidden border border-pale-stone bg-cream">
-                <img src={BANNER_URL} alt="Rainy season banner" className="w-full block" />
-                <div className="absolute bottom-2 right-2 text-[10px] text-warm-white/90 bg-deep-black/40 backdrop-blur px-1.5 py-0.5 rounded-sm">
-                  placeholder for customer&apos;s favourite bottle
-                </div>
+                <img
+                  src={bannerUrlFor(modal.customer.customerId)}
+                  alt={`Rainy season banner for ${modal.customer.name}`}
+                  className="w-full block"
+                />
               </div>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <a
-                  href={BANNER_URL}
-                  download={`wine-whiskey-rainy-season.png`}
+                  href={bannerUrlFor(modal.customer.customerId)}
+                  download={`wine-whiskey-rainy-season-${modal.customer.name.replace(/\s+/g, '-').toLowerCase()}.png`}
                   className="px-3 py-1.5 text-xs rounded-sm border border-pale-stone text-graphite hover:border-wine-red hover:text-wine-red"
                 >
                   Download image
                 </a>
+                <a
+                  href={BANNER_BASE}
+                  download="wine-whiskey-rainy-season.png"
+                  className="px-3 py-1.5 text-xs rounded-sm border border-pale-stone/60 text-graphite/70 hover:border-wine-red hover:text-wine-red"
+                  title="Generic banner without a bottle"
+                >
+                  Download empty
+                </a>
                 <span className="text-[11px] text-graphite/70">
-                  Attach this manually after pasting the text — WhatsApp doesn&apos;t accept image+text pre-fill.
+                  Attach manually — WhatsApp doesn&apos;t pre-fill image + text together.
                 </span>
               </div>
             </div>
