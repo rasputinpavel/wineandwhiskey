@@ -14,6 +14,7 @@
 export type SourceKey =
   | 'loyverse_products'
   | 'loyverse_stock'
+  | 'loyverse_receipts'
   | 'flowaccount_invoices'
   | 'flowaccount_receipts'
   | 'purchase_orders'
@@ -55,6 +56,16 @@ export const SOURCES: Record<SourceKey, DataSource> = {
     cronEveryHours: 8,
     cronOffsetHourUtc: 1,
     workflow: 'sync-loyverse.yml',
+  },
+  loyverse_receipts: {
+    key: 'loyverse_receipts',
+    label: 'Loyverse receipts',
+    description:
+      'B2C-чеки и B2B-чеки из Loyverse POS (Sale + Refund) с детализацией по SKU. ' +
+      'Тянется через REST: /v1.0/receipts. Пишется в inventory.loyverse_receipt. ' +
+      'Запускается вручную через npm run inv:receipts (по умолчанию окно 30 дней).',
+    command: 'npm run inv:receipts',
+    runnable: 'manual',
   },
   flowaccount_invoices: {
     key: 'flowaccount_invoices',

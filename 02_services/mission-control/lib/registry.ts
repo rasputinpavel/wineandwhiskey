@@ -198,6 +198,12 @@ export const SECTIONS: Section[] = [
         route: m('sales-playbook'),
         embed: { kind: 'native' },
       },
+      {
+        slug: 'reactivation', name: 'Reactivation', icon: '🔔', status: 'building',
+        description: 'B2C reactivation list: top customers, last visit, favourite drink, Claude-drafted WhatsApp reminder.',
+        route: m('reactivation'),
+        embed: { kind: 'native' },
+      },
     ],
   },
 
