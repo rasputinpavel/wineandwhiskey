@@ -88,7 +88,6 @@ export async function generateReactivationMessage(
     ],
     output_config: {
       format: zodOutputFormat(MessageSchema),
-      effort: 'low',
     },
   })
 
