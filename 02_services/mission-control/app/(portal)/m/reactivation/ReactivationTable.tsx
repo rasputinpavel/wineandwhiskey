@@ -3,14 +3,16 @@
 import { useMemo, useState } from 'react'
 import type { ReactivationCustomer } from '@/lib/reactivation/data'
 
-// Seasonal hero banner shown above every reactivation message.
-//  - bannerUrlFor(customerId) → server composites the customer's favourite
-//    in-stock bottle into the spotlight (Sharp). Falls back to the empty
-//    base banner if the bottle PNG isn't on disk yet.
-//  - Generator script: scripts/gen-reactivation-banner.mjs
-const BANNER_BASE = '/creative/reactivation-rainy-season_2026-05.png'
-const bannerUrlFor = (customerId: string) =>
-  `/api/m/reactivation/banner?customerId=${encodeURIComponent(customerId)}`
+// Seasonal hero banner shown above every reactivation message — single
+// shared image for now. The empty spotlight on the bar is a deliberate
+// placeholder where a customer's favourite bottle could later be composited
+// per-customer; the server endpoint /api/m/reactivation/banner exists and
+// works (see lib/reactivation/composite.ts), but bottle-PNG coverage in
+// 04_brand/products/ is too low to switch over yet, so the modal points
+// at the static base banner. Re-enable the dynamic URL once coverage is up.
+//
+// Generator script: scripts/gen-reactivation-banner.mjs
+const BANNER_URL = '/creative/reactivation-rainy-season_2026-05.png'
 
 type LapsedFilter = 'all' | '30' | '60' | '90' | '180'
 
@@ -187,28 +189,16 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
             </div>
 
             <div className="mb-4">
-              <div className="relative rounded-sm overflow-hidden border border-pale-stone bg-cream">
-                <img
-                  src={bannerUrlFor(modal.customer.customerId)}
-                  alt={`Rainy season banner for ${modal.customer.name}`}
-                  className="w-full block"
-                />
+              <div className="rounded-sm overflow-hidden border border-pale-stone bg-cream">
+                <img src={BANNER_URL} alt="Rainy season banner" className="w-full block" />
               </div>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <a
-                  href={bannerUrlFor(modal.customer.customerId)}
-                  download={`wine-whiskey-rainy-season-${modal.customer.name.replace(/\s+/g, '-').toLowerCase()}.png`}
+                  href={BANNER_URL}
+                  download="wine-whiskey-rainy-season.png"
                   className="px-3 py-1.5 text-xs rounded-sm border border-pale-stone text-graphite hover:border-wine-red hover:text-wine-red"
                 >
                   Download image
-                </a>
-                <a
-                  href={BANNER_BASE}
-                  download="wine-whiskey-rainy-season.png"
-                  className="px-3 py-1.5 text-xs rounded-sm border border-pale-stone/60 text-graphite/70 hover:border-wine-red hover:text-wine-red"
-                  title="Generic banner without a bottle"
-                >
-                  Download empty
                 </a>
                 <span className="text-[11px] text-graphite/70">
                   Attach manually — WhatsApp doesn&apos;t pre-fill image + text together.
