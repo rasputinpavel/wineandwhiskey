@@ -30,25 +30,36 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       # Decode the persisted Loyverse session into a file the scraper expects.
-      # We support both raw base64 (legacy LOYVERSE_SESSION_B64) and gzip+
-      # base64 (LOYVERSE_SESSION_B64_GZ) so this Loyverse secret stays
-      # consistent with FA's encoding. New sessions: prefer the GZ variant.
-      # To refresh: SCRAPER_HEADFUL=1 npm run orders, solve captcha, then
-      #   gzip -c -9 .loyverse-session.json | base64 | pbcopy
+      # Secret content is base64-encoded; the inner payload may be either raw
+      # JSON or gzip'd JSON — we auto-detect via the gzip magic bytes (1f 8b)
+      # so refreshing with `base64 < .loyverse-session.json | pbcopy` or
+      # `gzip -c -9 .loyverse-session.json | base64 | pbcopy` both work.
       - name: Restore Loyverse session
         env:
           LOYVERSE_SESSION_B64:    ${{ secrets.LOYVERSE_SESSION_B64 }}
           LOYVERSE_SESSION_B64_GZ: ${{ secrets.LOYVERSE_SESSION_B64_GZ }}
         run: |
           if [ -n "$LOYVERSE_SESSION_B64_GZ" ]; then
-            printf '%s' "$LOYVERSE_SESSION_B64_GZ" | base64 -d | gunzip > .loyverse-session.json
+            payload="$LOYVERSE_SESSION_B64_GZ"
           elif [ -n "$LOYVERSE_SESSION_B64" ]; then
-            printf '%s' "$LOYVERSE_SESSION_B64" | base64 -d > .loyverse-session.json
+            payload="$LOYVERSE_SESSION_B64"
           else
             echo "::error::Neither LOYVERSE_SESSION_B64_GZ nor LOYVERSE_SESSION_B64 secret is set."
             exit 1
           fi
+          printf '%s' "$payload" | base64 -d > .loyverse-session.bin
+          magic=$(head -c 2 .loyverse-session.bin | xxd -p)
+          if [ "$magic" = "1f8b" ]; then
+            gunzip -c .loyverse-session.bin > .loyverse-session.json
+          else
+            mv .loyverse-session.bin .loyverse-session.json
+          fi
+          rm -f .loyverse-session.bin
           echo "Session file size: $(wc -c < .loyverse-session.json) bytes"
+          if ! head -c 1 .loyverse-session.json | grep -q '{'; then
+            echo "::error::Decoded session is not JSON (first byte is not '{'). Check the secret value."
+            exit 1
+          fi
 
       - name: Scrape purchase orders
         env:
