@@ -130,7 +130,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       .select('amount_thb, active'),
     sbInventory
       .from('flowaccount_invoice')
-      .select('id, total, status, issued_at, due_at, customer_id')
+      .select('id, total, status, issued_at, due_at, customer_id, customer_name')
       .neq('status', 'Cancelled')
       .eq('excluded', false),
     sbInventory
