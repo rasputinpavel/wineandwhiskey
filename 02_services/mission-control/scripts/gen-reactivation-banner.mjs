@@ -38,9 +38,11 @@ Scene: looking into a small wine shop interior, intimate and warm. Foreground: a
 
 Composition: the CENTER of the image is a clearly empty cylindrical spotlight on the bar — a pool of soft warm light from above, ready to host a wine bottle that is intentionally not there. This empty placeholder is the focal point. The pool of light is approximately 1/4 of the image height, centred, with the wine glass just to its left for scale. No bottle, no shadow of a bottle, no implied bottle — just the empty waiting circle of light.
 
-Typography (rendered cleanly, no spelling errors):
-- Top-left corner: the words "rainy season" in elegant hand-written serif italic script, small, in deep wine red.
-- Bottom-centre, below the empty spotlight: "with love from Wine & Whiskey" in restrained classic sans-serif, tracked uppercase letterspacing, smaller still, in soft graphite.
+Typography — MUST be clearly readable against the background, with strong contrast:
+- Top-left corner: the words "rainy season" in elegant hand-written serif italic script, large and prominent (roughly 8-10% of image height), in deep saturated wine red almost black (#4A1620) — dark enough to read clearly against the cream wall behind. NOT small, NOT subtle. Sized like a confident hand-painted shop sign.
+- Bottom-centre, below the empty spotlight: "with love from Wine & Whiskey" in classic serif (Cormorant or Garamond style), large and well-spaced, in deep almost-black graphite (#1A1A1A). Readable at a glance. NOT thin, NOT washed out. Roughly 5-6% of image height.
+
+If the rendered text looks faded, low-contrast, or too small to read at a glance, that is a failure. Both phrases must read instantly even from a phone thumbnail.
 
 Colour palette: warm cream travertine, deep wine red (#722F37), soft graphite, ivory highlights. No neon, no bright blue, no oranges. Lighting: warm tungsten interior + cool soft grey from the rainy window — the two temperatures meet on the bar surface. Texture: filmic, very subtle 35mm grain, slight depth-of-field bokeh on the window side.
 
