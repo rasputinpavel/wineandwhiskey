@@ -645,10 +645,10 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
         </div>
         <div className="space-y-1.5 text-xs">
           <NMORow label="Revenue" value={revenue} sign="+" />
-          <NMORow label="B2C" value={revenueB2C} sign="↳" sub="cash & card" />
-          <NMORow label="B2B" value={revenueB2B} sign="↳" sub="bank transfer" />
+          <NMORow label="B2C" value={revenueB2C} sign="↳" />
+          <NMORow label="B2B" value={revenueB2B} sign="↳" />
           {isCurrent && revenueRemainingProj > 0 && (
-            <NMORow label="proj. by EOM" value={revenueRemainingProj} sign="↳" sub="run-rate + AR" signed="+" />
+            <NMORow label="proj. by EOM" value={revenueRemainingProj} sign="↳" signed="+" />
           )}
           <NMORow label="Supplier payments" value={supplierPayments} sign="−"
             sub={isCurrent
