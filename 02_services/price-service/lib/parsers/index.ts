@@ -26,6 +26,7 @@ import { isVinumLector, parseVinumLector } from './vinum-lector'
 import { isIdeal, parseIdeal } from './ideal'
 import { isRichly, parseRichly } from './richly'
 import { isWineGarage, parseWineGarage } from './wine-garage'
+import { isWinePro, parseWinePro } from './wine-pro'
 import {
   isWineGallery, parseWineGallery,
   isWineGalleryOffer, parseWineGalleryOffer,
@@ -130,6 +131,12 @@ export const PARSERS: Parser[] = [
     fileTypes: ['pdf'],
     detect: (buf, fn) => isWineGarage(buf, fn),
     run: (buf, fn, _m, cb) => parseWineGarage(buf, fn, cb),
+  },
+  {
+    id: 'wine-pro',
+    fileTypes: ['pdf'],
+    detect: (buf, fn) => isWinePro(buf, fn),
+    run: (buf, fn, _m, cb) => parseWinePro(buf, fn, cb),
   },
   {
     id: 'universal',
