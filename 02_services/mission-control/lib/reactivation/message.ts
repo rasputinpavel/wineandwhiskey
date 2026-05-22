@@ -104,7 +104,9 @@ Message must follow this exact 6-part flow, grouped into THREE paragraphs separa
 
 PARAGRAPH 1 — greeting + relationship:
 1. Greeting line: "Warm greetings from *Wine & Whiskey*, a wine and whisky shop in Phuket." (verbatim or very close — this is our standard opener; *Wine & Whiskey* must be bolded with single asterisks)
-2. A short line thanking them for being one of our regulars (vary the wording — "we're glad to have you among our regulars", "it's always been a pleasure having you stop by", etc.). Then, ONLY IF days_since_visit > 14, add a small note that it's been <lapsed_phrase> since we saw them. If days_since_visit ≤ 14, skip the "it's been a while" note — they were just here.
+2. A short line thanking them for being one of our regulars AND addressing them by their given name. The given name from the brief MUST appear in this paragraph — this is a hard requirement, no exceptions. Vary the placement and wording: "We're glad to have you among our regulars, Kseniia." or "It's always been a pleasure seeing you stop by, Mikhail." or "Kseniia, you're one of the names we always remember to ask after." — but the given name must be there explicitly. Then, ONLY IF days_since_visit > 14, add a small note that it's been <lapsed_phrase> since we saw them. If days_since_visit ≤ 14, skip the "it's been a while" note — they were just here.
+
+A message without the customer's given name is a failure — it reads as a mass blast, not a personal note.
 
 PARAGRAPH 2 — weather bridge + pitch:
 3. Low-season bridge: acknowledge that it's low season on Phuket and the rain doesn't always make you want to leave home. One sentence. Place 🌧 naturally inside this sentence. Examples (vary, don't copy): "We know low season is in full swing 🌧 and the rain makes it easy to stay in." Do NOT use the words "monsoon" or "weather report" tone.
@@ -127,8 +129,8 @@ export async function generateReactivationMessage(
   const stockLine = inStockSummary(customer.topProducts)
 
   const briefLines = [
-    `Customer given name (use this, NOT a surname): ${givenName}`,
-    `Full name on file (for context only — do not address them by surname): ${customer.name}`,
+    `>>> ADDRESS THIS PERSON BY THIS GIVEN NAME — IT MUST APPEAR IN PARAGRAPH 1: ${givenName}`,
+    `Full name on file (context only — never use the surname to address them): ${customer.name}`,
     `Days since last visit: ${customer.daysSinceLastVisit}  → phrase naturally as "${lapsed}"`,
     `Skip the "it's been a while" note? ${customer.daysSinceLastVisit <= 14 ? 'YES — they were just here, do not mention any gap' : 'no — mention it briefly'}`,
     `Top category by spend: ${customer.byCategory[0]?.category ?? 'wine'}`,
