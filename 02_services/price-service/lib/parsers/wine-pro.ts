@@ -97,7 +97,7 @@ export async function parseWinePro(
   }
 
   const CHUNK = 2
-  const PARALLEL = 5
+  const PARALLEL = 3
   const allItems: ExtractedItem[] = []
   const chunkErrors: string[] = []
 
@@ -349,12 +349,44 @@ async function callWithImages(prompt: string, imagesBase64: string[]): Promise<s
     type: 'image' as const,
     source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data },
   }))
-  const res = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16384,
-    messages: [{ role: 'user', content: [...blocks as unknown as Anthropic.TextBlockParam[], { type: 'text', text: prompt }] }],
-  })
-  return res.content[0].type === 'text' ? res.content[0].text : ''
+  // Retry on transient Anthropic capacity errors (529 overloaded, 503,
+  // 429 rate-limit). Without this, a brief upstream blip while we're
+  // fanning out 3 parallel requests fails every chunk simultaneously.
+  const MAX_ATTEMPTS = 5
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16384,
+        messages: [{ role: 'user', content: [...blocks as unknown as Anthropic.TextBlockParam[], { type: 'text', text: prompt }] }],
+      })
+      return res.content[0].type === 'text' ? res.content[0].text : ''
+    } catch (e) {
+      lastErr = e
+      if (!isRetryable(e) || attempt === MAX_ATTEMPTS) throw e
+      // Backoff: 1s, 2s, 4s, 8s, with ±25% jitter to desynchronise parallel callers.
+      const base = 1000 * Math.pow(2, attempt - 1)
+      const jitter = base * (0.75 + Math.random() * 0.5)
+      console.warn(`[wine-pro] anthropic retry ${attempt}/${MAX_ATTEMPTS - 1} after ${Math.round(jitter)}ms (${describeErr(e)})`)
+      await new Promise(r => setTimeout(r, jitter))
+    }
+  }
+  throw lastErr
+}
+
+function isRetryable(e: unknown): boolean {
+  const status = (e as { status?: number; statusCode?: number })?.status
+              ?? (e as { statusCode?: number })?.statusCode
+  if (status === 429 || status === 503 || status === 529) return true
+  const msg = e instanceof Error ? e.message : String(e)
+  return /overloaded_error|rate.?limit|529|503/i.test(msg)
+}
+
+function describeErr(e: unknown): string {
+  const status = (e as { status?: number })?.status
+  const msg = e instanceof Error ? e.message : String(e)
+  return status ? `${status} ${msg.slice(0, 80)}` : msg.slice(0, 100)
 }
 
 async function renderPagesToJpegs(pdfPath: string, fromPage: number, toPage: number, scale: number): Promise<string[]> {
