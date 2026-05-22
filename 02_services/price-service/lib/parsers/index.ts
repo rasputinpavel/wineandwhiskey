@@ -27,6 +27,7 @@ import { isIdeal, parseIdeal } from './ideal'
 import { isRichly, parseRichly } from './richly'
 import { isWineGarage, parseWineGarage } from './wine-garage'
 import { isWinePro, parseWinePro } from './wine-pro'
+import { isEnoteca, parseEnoteca } from './enoteca'
 import {
   isWineGallery, parseWineGallery,
   isWineGalleryOffer, parseWineGalleryOffer,
@@ -137,6 +138,12 @@ export const PARSERS: Parser[] = [
     fileTypes: ['pdf'],
     detect: (buf, fn) => isWinePro(buf, fn),
     run: (buf, fn, _m, cb) => parseWinePro(buf, fn, cb),
+  },
+  {
+    id: 'enoteca',
+    fileTypes: ['pdf'],
+    detect: (buf, fn) => isEnoteca(buf, fn),
+    run: (buf, fn, _m, cb) => parseEnoteca(buf, fn, cb),
   },
   {
     id: 'universal',
