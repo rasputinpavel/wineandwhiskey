@@ -219,7 +219,7 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
                 <textarea
                   value={modal.message}
                   onChange={e => setModal({ ...modal, message: e.target.value })}
-                  className="w-full min-h-[140px] border border-pale-stone rounded-sm bg-warm-white p-3 text-sm text-deep-black font-mono leading-relaxed focus:outline-none focus:border-wine-red"
+                  className="w-full min-h-[200px] border border-pale-stone rounded-sm bg-warm-white p-3 text-sm text-deep-black leading-relaxed whitespace-pre-wrap focus:outline-none focus:border-wine-red"
                 />
                 <div className="flex items-center gap-2 mt-3 flex-wrap">
                   <button
