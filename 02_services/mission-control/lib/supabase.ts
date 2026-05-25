@@ -159,6 +159,17 @@ export type FlowInvoice = {
   excluded: boolean
 }
 
+export type ConsignmentPrice = {
+  id: string
+  supplier_id: string
+  sku_id: string
+  price_hc: number
+  price_retail: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type ConsignmentLocation = {
   id: string
   customer_id: string

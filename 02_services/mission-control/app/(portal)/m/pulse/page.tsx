@@ -111,11 +111,34 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     return all
   }
 
+  // Lines for the SELECTED month (for consignment debt: sold-units × price).
+  // Embedded receipt_line array per receipt; PostgREST resolves the join.
+  async function fetchSelectedMonthLines(): Promise<any[]> {
+    const all: any[] = []
+    const PAGE = 1000
+    for (let from = 0; from < 100000; from += PAGE) {
+      const { data, error } = await sbInventory
+        .from('loyverse_receipt')
+        .select('id, receipt_date, receipt_type, loyverse_receipt_line(sku, qty)')
+        .gte('receipt_date', startOfMonth + 'T00:00:00Z')
+        .lt('receipt_date', endOfMonthExclusive + 'T00:00:00Z')
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      all.push(...data)
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+
   // ─── Fetch ───────────────────────────────────────────────────────────────
   let receiptsAll: LoyverseReceipt[] = []
   let posAll: PurchaseOrder[] = []
+  let monthReceiptsWithLines: any[] = []
   try {
-    [receiptsAll, posAll] = await Promise.all([fetchAllReceipts(), fetchAllPOs()])
+    [receiptsAll, posAll, monthReceiptsWithLines] = await Promise.all([
+      fetchAllReceipts(), fetchAllPOs(), fetchSelectedMonthLines(),
+    ])
   } catch (e: any) {
     return <SchemaError error={String(e?.message ?? e)} />
   }
@@ -124,6 +147,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     invoicesOpenRes,
     customersRes,
     suppliersRes,
+    consignmentPricesRes,
   ] = await Promise.all([
     sbInventory
       .from('fixed_cost')
@@ -138,7 +162,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       .select('id, payment_terms_days'),
     sbInventory
       .from('supplier')
-      .select('name, type'),
+      .select('id, name, type'),
+    sbInventory
+      .from('consignment_price')
+      .select('id, supplier_id, price_hc, sku:sku(id, loyverse_product_code)')
+      .limit(5000),
   ])
 
   for (const r of [invoicesOpenRes, customersRes, suppliersRes]) {
@@ -167,9 +195,10 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   }
 
   // Supplier payments — bucketed by payment_date = order_date + 30d.
-  type SupRow = Pick<Supplier, 'name' | 'type'>
+  type SupRow = Pick<Supplier, 'id' | 'name' | 'type'>
   const suppliers = (suppliersRes.data ?? []) as SupRow[]
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
+  const supById   = new Map(suppliers.map(s => [s.id, s]))
   function includedInCashflow(p: Pick<PurchaseOrder, 'cashflow_override' | 'supplier'>): boolean {
     if (p.cashflow_override === 'exclude') return false
     if (p.cashflow_override === 'include') return true
@@ -321,6 +350,41 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (pd <= today) cur.paid += v
     supSettleMap.set(name, cur)
   }
+  // Consignment debt for the selected month: Σ (sold_qty × price_hc) per
+  // consignment supplier, where sold_qty = SALE − REFUND units of each SKU
+  // and price_hc is the agreed HC consignment price. Consignment POs are
+  // excluded from `allPOs`, so this is the only path these suppliers reach
+  // the settlements table.
+  type ConsignPrice = { supplier_id: string; price_hc: number; sku: Array<{ loyverse_product_code: string | null }> | null }
+  const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
+  const priceByCode = new Map<string, { supplierId: string; price: number }>()
+  for (const cp of consignmentPrices) {
+    const code = cp.sku?.[0]?.loyverse_product_code
+    if (!code || !cp.supplier_id) continue
+    priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
+  }
+  const consignDebtBySupId = new Map<string, number>()
+  for (const r of monthReceiptsWithLines) {
+    const sign = r.receipt_type === 'REFUND' ? -1 : 1
+    const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
+    for (const ln of lines) {
+      if (!ln.sku) continue
+      const hit = priceByCode.get(ln.sku)
+      if (!hit) continue
+      const add = Number(ln.qty ?? 0) * hit.price * sign
+      consignDebtBySupId.set(hit.supplierId, (consignDebtBySupId.get(hit.supplierId) ?? 0) + add)
+    }
+  }
+  for (const [supId, debt] of consignDebtBySupId) {
+    if (debt <= 0) continue
+    const sup = supById.get(supId)
+    const name = sup?.name ?? '(unknown consignment)'
+    const cur = supSettleMap.get(name) ?? { name, total: 0, paid: 0 }
+    cur.total += debt
+    // Consignment is unpaid until we cut a PO/transfer; surface as outstanding.
+    supSettleMap.set(name, cur)
+  }
+
   const supSettlements = [...supSettleMap.values()].sort((a, b) => b.total - a.total)
   const supSettleTotal = supSettlements.reduce((s, x) => s + x.total, 0)
   const supSettlePaid  = supSettlements.reduce((s, x) => s + x.paid, 0)
@@ -676,7 +740,7 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
   // SVG vertical bar chart with zero baseline in the middle. Each bar is a
   // <Link> to filter the Hero/Waterfall into that month.
   // Wider per-bar slot since chart now occupies half-width on desktop.
-  const w = 720, h = 280, padX = 8, padTop = 24, padBottom = 40
+  const w = 720, h = 230, padX = 8, padTop = 22, padBottom = 22
   const innerW   = w - 2 * padX
   const innerH   = h - padTop - padBottom
   const zeroY    = padTop + innerH / 2
@@ -731,7 +795,7 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
                 {valueLabel}
               </text>
               <text
-                x={x + barW / 2} y={h - 8}
+                x={x + barW / 2} y={zeroY + halfH + 12}
                 textAnchor="middle"
                 fontSize={10} fill={isSelected ? '#8C1C1C' : '#3D3D3D'}
                 fontFamily="monospace"
