@@ -657,13 +657,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         />
       </div>
 
-      {/* ─── Footer ─────────────────────────────────────────────────────── */}
-      <div className="flex items-baseline justify-between mt-2 flex-wrap gap-2 text-xs">
-        <Link href="/m/pulse/operations" className="text-graphite hover:text-wine-red">
-          See operational signals (break-even, AR aging, AP buckets, cash pressure) →
-        </Link>
-      </div>
-
       <details className="mt-3 bg-warm-white border border-pale-stone rounded-md text-xs">
         <summary className="cursor-pointer px-4 py-2 text-graphite hover:text-wine-red list-none flex items-center gap-1">
           <span className="text-pale-stone">▸</span> Methodology

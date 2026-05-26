@@ -3,15 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-// Sub-nav for the Finance Pulse module. Three tabs, picked by URL match.
-//   /m/pulse              → Dashboard (owner P&L)
-//   /m/pulse/operations   → Operations (BE, AR, AP, cash pressure)
-//   /m/pulse/settings     → Settings (fixed costs CRUD)
+// Sub-nav for the Finance Pulse module. Two tabs, picked by URL match.
+//   /m/pulse           → Dashboard (owner P&L)
+//   /m/pulse/settings  → Settings (fixed costs CRUD)
 
 const TABS = [
-  { href: '/m/pulse',            label: 'Dashboard'  },
-  { href: '/m/pulse/operations', label: 'Operations' },
-  { href: '/m/pulse/settings',   label: 'Settings'   },
+  { href: '/m/pulse',          label: 'Dashboard' },
+  { href: '/m/pulse/settings', label: 'Settings'  },
 ] as const
 
 export function PulseTabs() {
