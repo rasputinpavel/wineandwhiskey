@@ -355,11 +355,13 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   // and price_hc is the agreed HC consignment price. Consignment POs are
   // excluded from `allPOs`, so this is the only path these suppliers reach
   // the settlements table.
-  type ConsignPrice = { supplier_id: string; price_hc: number; sku: Array<{ loyverse_product_code: string | null }> | null }
+  // PostgREST returns many-to-one embeds as a single object, not an array —
+  // supabase-js types it as an array regardless, hence the cast.
+  type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
   const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
   const priceByCode = new Map<string, { supplierId: string; price: number }>()
   for (const cp of consignmentPrices) {
-    const code = cp.sku?.[0]?.loyverse_product_code
+    const code = cp.sku?.loyverse_product_code
     if (!code || !cp.supplier_id) continue
     priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
   }
