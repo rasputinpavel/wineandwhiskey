@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
+export type SectionKey = 'pulse' | 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -50,6 +50,22 @@ const folderOpen  = (id: string) => `https://drive.google.com/drive/folders/${id
 const m = (slug: string) => `/m/${slug}`
 
 export const SECTIONS: Section[] = [
+  // ═══ PULSE ════════════════════════════════════════════════════════════
+  // Main business pulse — top of the nav, single screen reconciled from
+  // Loyverse + FlowAccount.
+  {
+    key: 'pulse', label: 'Pulse',
+    description: 'Главный пульс бизнеса',
+    items: [
+      {
+        slug: 'pulse', name: 'Finance Pulse', icon: '❤', status: 'building',
+        description: 'Sales, gross profit, B2B AR, supplier AP — single screen reconciled from Loyverse + FlowAccount.',
+        route: m('pulse'),
+        embed: { kind: 'native' },
+      },
+    ],
+  },
+
   // ═══ OPERATIONS ═══════════════════════════════════════════════════════
   {
     key: 'operations', label: 'Operations',
@@ -95,12 +111,6 @@ export const SECTIONS: Section[] = [
     key: 'analytics', label: 'Аналитика',
     description: 'Дашборды, метрики, отчёты',
     items: [
-      {
-        slug: 'pulse', name: 'Finance Pulse', icon: '❤', status: 'building',
-        description: 'Sales, gross profit, B2B AR, supplier AP — single screen reconciled from Loyverse + FlowAccount.',
-        route: m('pulse'),
-        embed: { kind: 'native' },
-      },
       {
         slug: 'dashboard-sheet', name: 'Главный Dashboard', icon: '📊', status: 'live',
         description: 'Cashflow, daily revenue, B2B, поставщики, остатки.',
