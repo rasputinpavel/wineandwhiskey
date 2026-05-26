@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { sbInventory, sbPublic, type PurchaseOrderItem, type PurchaseOrder } from '@/lib/supabase'
 import { fetchSkuB2cSalesWindow, type SkuB2cSalesWindow } from '@/lib/loyverse'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { WineAttrsEditor } from '@/components/modules/inventory/WineAttrsEditor'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { SortHeader, readSortParams, cmpBy } from '@/components/shell/SortHeader'
 import { fmtDate, fmtDateTime } from '@/lib/fmt'
@@ -49,6 +50,14 @@ export default async function SkuDetail({
         <h2 className="font-heading text-2xl text-deep-black">{sku.name}</h2>
         <DataFreshness sources={['loyverse_stock', 'flowaccount_invoices', 'purchase_orders']} />
       </div>
+
+      <WineAttrsEditor
+        skuId={sku.id}
+        wine_color={sku.wine_color ?? null}
+        grape_variety={sku.grape_variety ?? null}
+        wine_country={sku.wine_country ?? null}
+        source={sku.wine_attrs_source ?? null}
+      />
 
       {/* Each section streams independently. Suspense with a skeleton so the */}
       {/* slow Loyverse REST scan doesn't block the rest of the page. */}
