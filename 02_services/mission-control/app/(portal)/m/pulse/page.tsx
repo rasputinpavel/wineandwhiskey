@@ -545,6 +545,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           revenueRemainingProj={revenueRemainingProj}
           supplierPayments={selected.supplierPayments}
           supplierPaymentsRemaining={supplierRemainingProj}
+          supplierConsignment={selectedConsignDebt}
           gp={selected.gp}
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
@@ -668,13 +669,13 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
 
 // Unified hero for the selected month — mirrors NextMonthCard's structure
 // (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
-function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, gp, fixedMtd, monthlyFixedBase, refGmPct, breakevenRevenue }: {
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, gp, fixedMtd, monthlyFixedBase, refGmPct, breakevenRevenue }: {
   monthLabel: string; isCurrent: boolean
   net: number; netProjected: number
   daysPassed: number; daysInMonth: number
   headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
   revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
-  supplierPayments: number; supplierPaymentsRemaining: number
+  supplierPayments: number; supplierPaymentsRemaining: number; supplierConsignment: number
   gp: number; fixedMtd: number; monthlyFixedBase: number
   refGmPct: number
   breakevenRevenue: number
@@ -747,6 +748,12 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
             sub={isCurrent
               ? (supplierPaymentsRemaining > 0 ? `${fmtThbCompact(supplierPaymentsRemaining)} more due by EOM` : 'all due this month covered')
               : undefined} />
+          {supplierConsignment > 0 && (
+            <>
+              <NMORow label="PO" value={supplierPayments - supplierConsignment} sign="↳" />
+              <NMORow label="Consignment" value={supplierConsignment} sign="↳" />
+            </>
+          )}
           <NMORow label={`Gross Profit · GM% ref ${refGmPct.toFixed(1)}%`} value={gp} sign="=" bold />
           <NMORow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" sub={fixedSub} />
           <NMORow label="Net Profit" value={net} sign="=" bold tone={positive ? 'pos' : 'neg'} />
