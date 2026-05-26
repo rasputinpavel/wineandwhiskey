@@ -17,14 +17,14 @@ export const dynamic = 'force-dynamic'
 //                     Unpaid FA tax invoices are AR, not revenue, until they
 //                     create a Loyverse receipt at payment.
 //
-//   Supplier payments Σ purchase_orders where payment_date ∈ month,
-//                     where payment_date = order_date + 30d (universal grace).
-//                     "We pay on time" → POs with payment_date ≤ today are
-//                     assumed paid; POs with payment_date > today are
-//                     future obligations. PLUS consignment debt for the
-//                     selected month (Σ sold_qty × price_hc per consignment
-//                     supplier) — consignment is invoiced monthly per actual
-//                     sales and is a real obligation even without a PO.
+//   Supplier payments Σ purchase_orders where payment_date ∈ month, where
+//                     payment_date = paid_at if set, else order_date +
+//                     supplier.payment_terms_days (0 if unknown). For POs
+//                     without an explicit paid_at, payment_date ≤ today is
+//                     assumed paid. PLUS consignment debt for the selected
+//                     month (Σ sold_qty × price_hc per consignment supplier)
+//                     — consignment is invoiced monthly per actual sales and
+//                     is a real obligation even without a PO.
 //
 //   GP                Revenue − Supplier payments. NOT "cost of goods sold"
 //                     in the bookkeeping sense — it's the cash margin after
@@ -38,7 +38,10 @@ export const dynamic = 'force-dynamic'
 // Period: current calendar month for headline; 18 months for trend.
 // ════════════════════════════════════════════════════════════════════════════
 
-const AP_TERM_DAYS = 30
+// Fetch window grace: we pull POs going back this many extra days before
+// the trend window starts so any whose computed payment_date falls inside
+// the window is captured. 60d covers the longest reasonable supplier terms.
+const AP_FETCH_GRACE_DAYS = 60
 // 15% safety buffer on top of declared monthly fixed costs — covers small one-offs
 // (repairs, surprise invoices) that aren't worth giving their own line in Settings.
 const FIXED_BUFFER_RATE = 0.15
@@ -75,7 +78,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
 
   // To capture POs whose payment date (order + 30d) falls within the trend
   // window, we need orders up to 30 days before the window starts.
-  const poStart = isoNDaysAgo(daysBetween(today, monthsStart) + AP_TERM_DAYS)
+  const poStart = isoNDaysAgo(daysBetween(today, monthsStart) + AP_FETCH_GRACE_DAYS)
 
   // PostgREST max-rows is 1000 on Supabase Cloud — `.limit(N>1000)` is
   // silently capped. Page over 1000-row windows to fetch the full set.
@@ -102,7 +105,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     for (let from = 0; from < 100000; from += PAGE) {
       const { data, error } = await sbPublic
         .from('purchase_orders')
-        .select('id, supplier, total_thb, order_date, cashflow_override')
+        .select('id, supplier, total_thb, order_date, paid_at, cashflow_override')
         .gte('order_date', poStart)
         .order('order_date', { ascending: true })
         .range(from, from + PAGE - 1)
@@ -165,7 +168,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       .select('id, payment_terms_days'),
     sbInventory
       .from('supplier')
-      .select('id, name, type'),
+      .select('id, name, type, payment_terms_days'),
     sbInventory
       .from('consignment_price')
       .select('id, supplier_id, price_hc, sku:sku(id, loyverse_product_code)')
@@ -197,11 +200,26 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (r.is_b2b) b.b2b += total; else b.b2c += total
   }
 
-  // Supplier payments — bucketed by payment_date = order_date + 30d.
-  type SupRow = Pick<Supplier, 'id' | 'name' | 'type'>
+  // Supplier payments — bucketed by payment_date = paid_at if set, else
+  // order_date + supplier.payment_terms_days.
+  type SupRow = Pick<Supplier, 'id' | 'name' | 'type' | 'payment_terms_days'>
   const suppliers = (suppliersRes.data ?? []) as SupRow[]
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
   const supById   = new Map(suppliers.map(s => [s.id, s]))
+  // Per-supplier payment terms. 0 = cash-on-delivery (payment_date = order_date).
+  // Unknown supplier → 0 days as well.
+  function termsFor(supplierName: string | null): number {
+    if (!supplierName) return 0
+    return supByName.get(supplierName.trim().toLowerCase())?.payment_terms_days ?? 0
+  }
+  // Authoritative cash-out date for a PO:
+  //   paid_at → explicit, trust it
+  //   else order_date + supplier.payment_terms_days
+  function payDate(p: Pick<PurchaseOrder, 'paid_at' | 'order_date' | 'supplier'>): string {
+    if (p.paid_at) return p.paid_at
+    if (!p.order_date) return ''
+    return computeDueDate(p.order_date, termsFor(p.supplier))
+  }
   function includedInCashflow(p: Pick<PurchaseOrder, 'cashflow_override' | 'supplier'>): boolean {
     const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
     // Consignment supplier POs document the prior-month invoice; pulse uses
@@ -218,7 +236,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const supplierPayments: PayPo[] = []
   for (const p of allPOs) {
     if (!p.order_date) continue
-    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    const pd = payDate(p)
     supplierPayments.push({ total: Number(p.total_thb ?? 0), paymentDate: pd })
     const ym = pd.slice(0, 7)
     const b = byMonth.get(ym)
@@ -382,7 +400,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const supSettleMap = new Map<string, SupSet>()
   for (const p of allPOs) {
     if (!p.order_date) continue
-    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    const pd = payDate(p)
     if (pd < startOfMonth || pd >= endOfMonthExclusive) continue
     const name = p.supplier ?? '(unknown)'
     const cur  = supSettleMap.get(name) ?? { name, total: 0, paid: 0 }
@@ -459,7 +477,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const totalSupMap = new Map<string, TotalSupRow>()
   for (const p of allPOs) {
     if (!p.order_date) continue
-    const pd = computeDueDate(p.order_date, AP_TERM_DAYS)
+    const pd = payDate(p)
     const dpd = daysBetween(pd, today)        // positive = future
     if (dpd < 0) continue                      // past-due = assumed paid (we pay on time)
     const name = p.supplier ?? '(unknown)'
@@ -621,7 +639,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <div className="px-4 pb-4 pt-1 text-graphite space-y-2 leading-relaxed">
           <p><span className="text-deep-black">Basis</span> — cash. Revenue is recognised when money lands in Loyverse (B2C cash/card and B2B bank transfers). Unpaid FA tax invoices are AR (visible in Cash control), not revenue.</p>
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
-          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date (order_date + 30d) falls in the month. Default 30-day grace per ops policy; supplier-specific terms ignored. Consignment suppliers excluded.</p>
+          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment suppliers tracked via monthly accrual, not POs.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
           <p><span className="text-deep-black">Fixed costs MTD</span> = (declared monthly fixed + 15% contingency buffer) × (days passed / days in month). The buffer covers small one-offs (repairs, surprise invoices) we don&apos;t want to manage row-by-row in Settings. Pro-rated so the in-progress month is comparable. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>

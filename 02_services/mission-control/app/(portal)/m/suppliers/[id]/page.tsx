@@ -6,6 +6,7 @@ import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
+import { computeDueDate } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,11 +55,13 @@ export default async function SupplierDetail({
   }
 
   // Cashflow inclusion: override='exclude' → out, override='include' → in,
-  // override='auto' → follow supplier type.
+  // override='auto' → follow supplier type. Consignment suppliers always
+  // out (accrual-based in pulse), override is ignored for them.
   function includedInCashflow(p: PurchaseOrder): boolean {
+    if (s.type === 'consignment') return false
     if (p.cashflow_override === 'exclude') return false
     if (p.cashflow_override === 'include') return true
-    return s.type !== 'consignment'
+    return true
   }
 
   // Aggregate (across filtered POs)
@@ -140,6 +143,9 @@ export default async function SupplierDetail({
           <tbody>
             {pos.map(p => {
               const dimmed = !includedInCashflow(p)
+              const projected = !p.paid_at && p.order_date && s.type !== 'consignment'
+                ? computeDueDate(p.order_date, s.payment_terms_days ?? 0)
+                : null
               return (
                 <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${dimmed ? 'opacity-70' : ''}`}>
                   <td className="py-2 px-4 font-mono">
@@ -151,7 +157,14 @@ export default async function SupplierDetail({
                   <td className="py-2 px-4 text-right tabular-nums">{p.total_thb ? `฿${fmt(p.total_thb)}` : '—'}</td>
                   <td className="py-2 px-4 text-graphite text-xs">{p.status ?? '—'}</td>
                   <td className="py-2 px-4"><CashflowOverrideCell poId={p.id} initial={p.cashflow_override} /></td>
-                  <td className="py-2 px-4"><PaidAtCell poId={p.id} initial={p.paid_at} /></td>
+                  <td className="py-2 px-4">
+                    <PaidAtCell poId={p.id} initial={p.paid_at} />
+                    {projected && (
+                      <div className="text-[10px] text-graphite/70 mt-0.5">
+                        proj. {fmtDate(projected)}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2 px-4"><DocsUrlCell poId={p.id} initial={p.docs_url} /></td>
                 </tr>
               )
