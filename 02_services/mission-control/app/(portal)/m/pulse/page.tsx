@@ -21,7 +21,10 @@ export const dynamic = 'force-dynamic'
 //                     where payment_date = order_date + 30d (universal grace).
 //                     "We pay on time" → POs with payment_date ≤ today are
 //                     assumed paid; POs with payment_date > today are
-//                     future obligations. Excludes consignment.
+//                     future obligations. PLUS consignment debt for the
+//                     selected month (Σ sold_qty × price_hc per consignment
+//                     supplier) — consignment is invoiced monthly per actual
+//                     sales and is a real obligation even without a PO.
 //
 //   GP                Revenue − Supplier payments. NOT "cost of goods sold"
 //                     in the bookkeeping sense — it's the cash margin after
@@ -218,6 +221,39 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += Number(p.total_thb ?? 0)
   }
 
+  // Consignment debt for the selected month: Σ (sold_qty × price_hc) per
+  // consignment supplier, where sold_qty = SALE − REFUND units of each SKU
+  // and price_hc is the agreed HC consignment price. Folds into the selected
+  // month's supplier payments because consignment is invoiced monthly per
+  // actual sales — it IS a real cash obligation for the month, even though
+  // no PO exists yet. Trend chart for prior months stays PO-only (we only
+  // fetch receipt lines for the selected month).
+  // PostgREST many-to-one embeds come back as a single object; supabase-js
+  // types it as an array regardless — hence the unknown cast.
+  type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
+  const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
+  const priceByCode = new Map<string, { supplierId: string; price: number }>()
+  for (const cp of consignmentPrices) {
+    const code = cp.sku?.loyverse_product_code
+    if (!code || !cp.supplier_id) continue
+    priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
+  }
+  const consignDebtBySupId = new Map<string, number>()
+  for (const r of monthReceiptsWithLines) {
+    const sign = r.receipt_type === 'REFUND' ? -1 : 1
+    const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
+    for (const ln of lines) {
+      if (!ln.sku) continue
+      const hit = priceByCode.get(ln.sku)
+      if (!hit) continue
+      const add = Number(ln.qty ?? 0) * hit.price * sign
+      consignDebtBySupId.set(hit.supplierId, (consignDebtBySupId.get(hit.supplierId) ?? 0) + add)
+    }
+  }
+  const selectedConsignDebt = [...consignDebtBySupId.values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
+  const selectedBucketForDebt = byMonth.get(selectedYm)
+  if (selectedBucketForDebt) selectedBucketForDebt.supplierPayments += selectedConsignDebt
+
   // Fixed costs
   const monthlyFixedBase = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
     .filter(r => r.active)
@@ -237,6 +273,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const supplierPaymentsMtd = supplierPayments
     .filter(p => p.paymentDate >= startOfMonth && p.paymentDate <= today)
     .reduce((s, p) => s + p.total, 0)
+    + (isCurrent ? selectedConsignDebt : 0)
 
   const monthsPnl: MonthPnl[] = months.map(m => {
     const ym = m.fromDate.slice(0, 7)
@@ -350,40 +387,15 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (pd <= today) cur.paid += v
     supSettleMap.set(name, cur)
   }
-  // Consignment debt for the selected month: Σ (sold_qty × price_hc) per
-  // consignment supplier, where sold_qty = SALE − REFUND units of each SKU
-  // and price_hc is the agreed HC consignment price. Consignment POs are
-  // excluded from `allPOs`, so this is the only path these suppliers reach
-  // the settlements table.
-  // PostgREST returns many-to-one embeds as a single object, not an array —
-  // supabase-js types it as an array regardless, hence the cast.
-  type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
-  const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
-  const priceByCode = new Map<string, { supplierId: string; price: number }>()
-  for (const cp of consignmentPrices) {
-    const code = cp.sku?.loyverse_product_code
-    if (!code || !cp.supplier_id) continue
-    priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
-  }
-  const consignDebtBySupId = new Map<string, number>()
-  for (const r of monthReceiptsWithLines) {
-    const sign = r.receipt_type === 'REFUND' ? -1 : 1
-    const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
-    for (const ln of lines) {
-      if (!ln.sku) continue
-      const hit = priceByCode.get(ln.sku)
-      if (!hit) continue
-      const add = Number(ln.qty ?? 0) * hit.price * sign
-      consignDebtBySupId.set(hit.supplierId, (consignDebtBySupId.get(hit.supplierId) ?? 0) + add)
-    }
-  }
+  // Merge selected-month consignment debt (computed earlier) into the
+  // settlements table — consignment suppliers have no POs so this is the
+  // only path they reach the table.
   for (const [supId, debt] of consignDebtBySupId) {
     if (debt <= 0) continue
     const sup = supById.get(supId)
     const name = sup?.name ?? '(unknown consignment)'
     const cur = supSettleMap.get(name) ?? { name, total: 0, paid: 0 }
     cur.total += debt
-    // Consignment is unpaid until we cut a PO/transfer; surface as outstanding.
     supSettleMap.set(name, cur)
   }
 
