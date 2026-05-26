@@ -8,7 +8,7 @@ import { sbInventory } from '@/lib/supabase'
 //          field ∈ { opening_stock, closing_stock, tastings, notes }
 //          value: number | null for stocks/tastings; string | null for notes
 
-const FIELDS = new Set(['opening_stock', 'closing_stock', 'tastings', 'notes'])
+const FIELDS = new Set(['opening_stock', 'closing_stock', 'tastings', 'b2c_override', 'b2b_override', 'notes'])
 
 export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({}))

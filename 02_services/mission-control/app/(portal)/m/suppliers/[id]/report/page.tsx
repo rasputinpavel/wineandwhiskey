@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { NumCell, ExportCsvButton } from '@/components/modules/suppliers/ConsignmentReportCells'
+import { NumCell, OverrideNumCell, ExportCsvButton } from '@/components/modules/suppliers/ConsignmentReportCells'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,11 +94,11 @@ export default async function SupplierMonthlyReportPage({
   // Pull report cells for current + previous period (prev for opening-stock pre-fill).
   const { data: cellsRaw, error: cellsErr } = await sbInventory
     .from('consignment_report_cell')
-    .select('sku_id, period, opening_stock, closing_stock, tastings, notes')
+    .select('sku_id, period, opening_stock, closing_stock, tastings, b2c_override, b2b_override, notes')
     .eq('supplier_id', id)
     .in('period', [period, prevPeriod])
   if (cellsErr) return <SchemaError error={cellsErr.message} />
-  type Cell = { sku_id: string; period: string; opening_stock: number | null; closing_stock: number | null; tastings: number; notes: string | null }
+  type Cell = { sku_id: string; period: string; opening_stock: number | null; closing_stock: number | null; tastings: number; b2c_override: number | null; b2b_override: number | null; notes: string | null }
   const cells = (cellsRaw ?? []) as Cell[]
   const cellByKey = new Map(cells.map(c => [`${c.sku_id}|${c.period}`, c]))
 
@@ -108,16 +108,19 @@ export default async function SupplierMonthlyReportPage({
     .map(p => {
       const sku = p.sku!
       const code = sku.loyverse_product_code ?? ''
-      const b2c = Math.round(b2cBySku.get(code) ?? 0)
-      const b2b = Math.round(b2bBySku.get(code) ?? 0)
+      const b2cAuto = Math.round(b2cBySku.get(code) ?? 0)
+      const b2bAuto = Math.round(b2bBySku.get(code) ?? 0)
       const thisCell = cellByKey.get(`${p.sku_id}|${period}`)
       const prevCell = cellByKey.get(`${p.sku_id}|${prevPeriod}`)
-      // Opening pre-fill: prior period's closing if not yet set this period.
       const opening = thisCell?.opening_stock ?? prevCell?.closing_stock ?? null
       const closing = thisCell?.closing_stock ?? null
       const tastings = thisCell?.tastings ?? 0
+      const b2cOverride = thisCell?.b2c_override ?? null
+      const b2bOverride = thisCell?.b2b_override ?? null
+      const b2c = b2cOverride ?? b2cAuto
+      const b2b = b2bOverride ?? b2bAuto
       const total = b2c + b2b + tastings
-      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, closing, b2c, b2b, tastings, total }
+      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, closing, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, total }
     })
     .sort((a, b) => (b.b2c + b.b2b + b.tastings) - (a.b2c + a.b2b + a.tastings) || a.sku_name.localeCompare(b.sku_name))
 
@@ -181,8 +184,16 @@ export default async function SupplierMonthlyReportPage({
                 <td className="py-2 px-3 text-right">
                   <NumCell supplierId={id} skuId={r.sku_id} period={period} field="opening_stock" initial={r.opening} />
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums">{r.b2c || <span className="text-graphite/40">—</span>}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{r.b2b || <span className="text-graphite/40">—</span>}</td>
+                <td className="py-2 px-3 text-right">
+                  <OverrideNumCell supplierId={id} skuId={r.sku_id} period={period} field="b2c_override"
+                    auto={r.b2cAuto} override={r.b2cOverride}
+                    salesHref={`/m/suppliers/${id}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2c`} />
+                </td>
+                <td className="py-2 px-3 text-right">
+                  <OverrideNumCell supplierId={id} skuId={r.sku_id} period={period} field="b2b_override"
+                    auto={r.b2bAuto} override={r.b2bOverride}
+                    salesHref={`/m/suppliers/${id}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2b`} />
+                </td>
                 <td className="py-2 px-3 text-right">
                   <NumCell supplierId={id} skuId={r.sku_id} period={period} field="tastings" initial={r.tastings || null} />
                 </td>
