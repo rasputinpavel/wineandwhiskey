@@ -90,12 +90,20 @@ export default async function SupplierDetail({
       <nav className="border-b border-pale-stone mb-5 flex gap-1 text-sm">
         <span className="px-3 py-1.5 -mb-px border-b-2 border-wine-red text-wine-red">Purchase Orders</span>
         {(s.type === 'consignment' || s.type === 'mix') && (
-          <Link
-            href={`/m/suppliers/${s.id}/consignment`}
-            className="px-3 py-1.5 -mb-px border-b-2 border-transparent text-graphite hover:text-wine-red hover:border-pale-stone"
-          >
-            Consignment prices
-          </Link>
+          <>
+            <Link
+              href={`/m/suppliers/${s.id}/consignment`}
+              className="px-3 py-1.5 -mb-px border-b-2 border-transparent text-graphite hover:text-wine-red hover:border-pale-stone"
+            >
+              Consignment prices
+            </Link>
+            <Link
+              href={`/m/suppliers/${s.id}/report`}
+              className="px-3 py-1.5 -mb-px border-b-2 border-transparent text-graphite hover:text-wine-red hover:border-pale-stone"
+            >
+              Monthly report
+            </Link>
+          </>
         )}
       </nav>
 
