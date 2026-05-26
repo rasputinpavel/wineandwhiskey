@@ -98,10 +98,10 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
-        slug: 'wine-matrix', name: 'Wine Matrix', icon: '🧮', status: 'planned',
-        description: 'Trello-доска: что заказывать, у каких поставщиков, в каком объёме.',
+        slug: 'wine-matrix', name: 'Wine Matrix', icon: '🧮', status: 'building',
+        description: 'Полки по сортам, странам и типам игристого — для планирования закупок.',
         route: m('wine-matrix'),
-        embed: { kind: 'external', href: `${REPO}/tree/main/02_services/matrix-runner` },
+        embed: { kind: 'native' },
       },
     ],
   },
@@ -147,6 +147,12 @@ export const SECTIONS: Section[] = [
         slug: 'brand-assets', name: 'Brand Assets', icon: '🖼', status: 'live',
         description: 'Logos, business cards, references, backgrounds.',
         route: m('brand-assets'),
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'product-images', name: 'Product Images', icon: '🍾', status: 'live',
+        description: 'Wine label cutouts on transparent background — searchable library, source for creatives.',
+        route: m('product-images'),
         embed: { kind: 'native' },
       },
       {

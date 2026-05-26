@@ -62,6 +62,8 @@ export async function scanCreative(): Promise<Project[]> {
 
   for (const entry of entries) {
     if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue
+    // Bulk product-image dumps belong on the Product Images page, not the Creative Library.
+    if (/^wines?_/i.test(entry.name)) continue
     const abs = path.join(root, entry.name)
 
     // `social/` is a mirror of 05_creative/social — each child dir is a Social campaign.
