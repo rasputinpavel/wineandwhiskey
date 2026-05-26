@@ -7,6 +7,7 @@ import type { UploadResult } from './upload-action'
 type Props = {
   images: ProductImage[]
   uploadAction: (formData: FormData) => Promise<UploadResult>
+  replaceAction: (slug: string, formData: FormData) => Promise<UploadResult>
 }
 
 function humanizeSlug(slug: string): string {
@@ -19,10 +20,11 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function ProductGrid({ images, uploadAction }: Props) {
+export function ProductGrid({ images, uploadAction, replaceAction }: Props) {
   const [query, setQuery] = useState('')
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [replacingSlug, setReplacingSlug] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
@@ -49,6 +51,24 @@ export function ProductGrid({ images, uploadAction }: Props) {
         setMessage({ kind: 'err', text: res.error })
       }
       if (fileInputRef.current) fileInputRef.current.value = ''
+    })
+  }
+
+  function onReplace(slug: string, file: File | undefined) {
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+
+    setMessage(null)
+    setReplacingSlug(slug)
+    startTransition(async () => {
+      const res = await replaceAction(slug, formData)
+      if (res.ok) {
+        setMessage({ kind: 'ok', text: `Replaced ${res.written[0]}.` })
+      } else {
+        setMessage({ kind: 'err', text: res.error })
+      }
+      setReplacingSlug(null)
     })
   }
 
@@ -119,34 +139,70 @@ export function ProductGrid({ images, uploadAction }: Props) {
         </div>
       ) : (
         <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {filtered.map(img => (
-            <li key={img.name}>
-              <a
-                href={img.href}
-                target="_blank"
-                rel="noopener"
-                className="group block border border-pale-stone rounded-md overflow-hidden bg-warm-white hover:shadow-card-hover hover:border-wine-red/40 transition-all"
-                title={img.name}
-              >
-                <div className="aspect-square bg-cream/40 flex items-center justify-center p-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.href}
-                    alt={img.slug}
-                    loading="lazy"
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-                <div className="px-2 py-1.5 border-t border-pale-stone">
-                  <div className="text-[12px] text-deep-black truncate font-medium">{humanizeSlug(img.slug)}</div>
-                  <div className="text-[10px] text-graphite truncate flex items-center justify-between">
-                    <span className="truncate">{img.slug}</span>
-                    <span className="shrink-0 ml-2">{fmtSize(img.size)}</span>
+          {filtered.map(img => {
+            const isReplacing = replacingSlug === img.slug
+            return (
+              <li key={img.name}>
+                <div
+                  className={`group block border rounded-md overflow-hidden bg-warm-white transition-all ${
+                    isReplacing
+                      ? 'border-amber-gold shadow-card-hover'
+                      : 'border-pale-stone hover:shadow-card-hover hover:border-wine-red/40'
+                  }`}
+                >
+                  <a
+                    href={img.href}
+                    target="_blank"
+                    rel="noopener"
+                    className="relative block aspect-square bg-cream/40 flex items-center justify-center p-3"
+                    title={img.name}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`${img.href}?v=${img.mtime}`}
+                      alt={img.slug}
+                      loading="lazy"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                    {isReplacing && (
+                      <div className="absolute inset-0 bg-warm-white/80 flex items-center justify-center text-[11px] uppercase tracking-[0.15em] text-graphite">
+                        Updating…
+                      </div>
+                    )}
+                  </a>
+                  <div className="px-2 py-1.5 border-t border-pale-stone flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px] text-deep-black truncate font-medium" title={humanizeSlug(img.slug)}>
+                        {humanizeSlug(img.slug)}
+                      </div>
+                      <div className="text-[10px] text-graphite truncate flex items-center justify-between">
+                        <span className="truncate" title={img.slug}>{img.slug}</span>
+                        <span className="shrink-0 ml-2">{fmtSize(img.size)}</span>
+                      </div>
+                    </div>
+                    <label
+                      className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm border text-[13px] leading-none transition-colors ${
+                        isPending
+                          ? 'border-pale-stone text-pale-stone cursor-wait'
+                          : 'border-pale-stone text-graphite cursor-pointer hover:border-wine-red hover:text-wine-red'
+                      }`}
+                      title="Replace this image"
+                      aria-label={`Replace ${img.slug}`}
+                    >
+                      ↻
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={isPending}
+                        className="sr-only"
+                        onChange={e => onReplace(img.slug, e.target.files?.[0])}
+                      />
+                    </label>
                   </div>
                 </div>
-              </a>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

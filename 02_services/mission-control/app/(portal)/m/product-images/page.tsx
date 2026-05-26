@@ -3,7 +3,7 @@ import path from 'node:path'
 import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { ProductGrid } from './ProductGrid'
-import { uploadProductImage } from './upload-action'
+import { uploadProductImage, replaceProductImage } from './upload-action'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +62,11 @@ export default async function ProductImagesPage() {
             </p>
           </header>
 
-          <ProductGrid images={images} uploadAction={uploadProductImage} />
+          <ProductGrid
+            images={images}
+            uploadAction={uploadProductImage}
+            replaceAction={replaceProductImage}
+          />
         </div>
       </div>
     </>

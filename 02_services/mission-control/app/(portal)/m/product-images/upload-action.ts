@@ -1,6 +1,6 @@
 'use server'
 
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { revalidatePath } from 'next/cache'
 
@@ -59,4 +59,48 @@ export async function uploadProductImage(formData: FormData): Promise<UploadResu
 
   revalidatePath('/m/product-images')
   return { ok: true, written }
+}
+
+// Replace the file at an existing slug with a new file. The new file may have
+// a different extension; we delete any prior file matching the slug across all
+// allowed extensions so the slug ends up pointing at exactly one image.
+export async function replaceProductImage(slug: string, formData: FormData): Promise<UploadResult> {
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'No file selected.' }
+  }
+  if (file.size > MAX_BYTES) {
+    return { ok: false, error: `${file.name}: too large (max ${MAX_BYTES / 1024 / 1024} MB).` }
+  }
+  const ext = path.extname(file.name).toLowerCase()
+  if (!ALLOWED_EXT.has(ext)) {
+    return { ok: false, error: `${file.name}: unsupported extension (allowed: ${[...ALLOWED_EXT].join(', ')}).` }
+  }
+  const cleanSlug = sanitizeSlug(slug)
+  if (!cleanSlug || cleanSlug !== slug) {
+    return { ok: false, error: `Invalid slug "${slug}".` }
+  }
+
+  const serviceRoot = process.cwd()
+  const repoRoot = path.resolve(serviceRoot, '../..')
+  const canonicalDir = path.join(repoRoot, '04_brand/products')
+  const mirrorDir = path.join(serviceRoot, 'public/brand/products')
+
+  // Strip any prior file with this slug — across all allowed extensions —
+  // so a png→jpg replacement doesn't leave a stale png lying around.
+  for (const dir of [canonicalDir, mirrorDir]) {
+    for (const e of ALLOWED_EXT) {
+      try { await unlink(path.join(dir, `${cleanSlug}${e}`)) } catch {}
+    }
+  }
+
+  const filename = `${cleanSlug}${ext}`
+  const buf = Buffer.from(await file.arrayBuffer())
+  await mkdir(canonicalDir, { recursive: true })
+  await mkdir(mirrorDir, { recursive: true })
+  await writeFile(path.join(canonicalDir, filename), buf)
+  await writeFile(path.join(mirrorDir, filename), buf)
+
+  revalidatePath('/m/product-images')
+  return { ok: true, written: [filename] }
 }
