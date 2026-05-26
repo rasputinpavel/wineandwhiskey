@@ -203,10 +203,14 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const supByName = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]))
   const supById   = new Map(suppliers.map(s => [s.id, s]))
   function includedInCashflow(p: Pick<PurchaseOrder, 'cashflow_override' | 'supplier'>): boolean {
+    const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
+    // Consignment supplier POs document the prior-month invoice; pulse uses
+    // real-time accrual (sold_qty × price_hc) instead so we don't double-count.
+    // cashflow_override is honored only for non-consignment suppliers.
+    if (t === 'consignment') return false
     if (p.cashflow_override === 'exclude') return false
     if (p.cashflow_override === 'include') return true
-    const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
-    return (t ?? 'regular') !== 'consignment'
+    return true
   }
   const allPOs = posAll.filter(includedInCashflow)
 
