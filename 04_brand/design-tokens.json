@@ -128,7 +128,7 @@
   "layout": {
     "alignment": "left",
     "contentPosition": "text left or top, visual right or background",
-    "headerStyle": "logo left (Wine & Whiskey), minimal nav right, no heavy chrome",
+    "headerStyle": "W&W monogram left (channel_avatar_light/dark — wordmark PNGs deprecated 2026-05-26), minimal nav right, no heavy chrome",
     "footerStyle": "multi-column links, brand name bottom-left, muted text",
 
     "grid": {
@@ -182,7 +182,7 @@
       "product cards with subtle border and 8px corner radius",
       "overline label above headline",
       "Wine Red CTA button",
-      "logo as sole mark in full-bleed photo compositions",
+      "W&W monogram (channel_avatar_light/dark) as sole brand mark in full-bleed photo compositions — wordmark PNGs with 'store' element deprecated 2026-05-26",
       "W&W monogram for placeholder/watermark"
     ],
     "dataLabelStyle": "Inter SemiBold, accent color for key numbers, Graphite for secondary",
@@ -360,6 +360,40 @@
       "focusPoint": "product_cards",
       "typicalSubjects": ["bottle product shots", "wine labels"]
     }
+  },
+
+  "logo": {
+    "primaryMark": "monogram",
+    "monogram": {
+      "files": {
+        "lightBackground": "brand/logo/channel_avatar_light.png",
+        "darkBackground":  "brand/logo/channel_avatar_dark.png"
+      },
+      "usage": "Sole brand mark across all materials — social, decks, B2B, print, web."
+    },
+    "wordmark": {
+      "status": "deprecated",
+      "deprecatedOn": "2026-05-26",
+      "reason": "All current PNG wordmarks (logo_black*, logo_white*, logo_color*, logo_sq_color*, logo_sq_black*, logo_sq_white*) still contain the legacy 'store' element between WINE and & WHISKEY. Do not use until clean files are regenerated.",
+      "deprecatedFiles": [
+        "brand/logo/logo_black.png",
+        "brand/logo/logo_black_transparent.png",
+        "brand/logo/logo_white.png",
+        "brand/logo/logo_color.png",
+        "brand/logo/logo_color_transparent.png",
+        "brand/logo/logo_sq_color.png",
+        "brand/logo/logo_sq_color_transparent.png",
+        "brand/logo/logo_sq_black.png",
+        "brand/logo/logo_sq_black_transparent.png",
+        "brand/logo/logo_sq_white.png"
+      ],
+      "fallback": "If a text logo is genuinely required, set 'Wine & Whiskey' by hand in Bebas Neue UPPERCASE — no 'store' or any other word between WINE and & WHISKEY."
+    },
+    "forbidden": [
+      "Using any deprecated wordmark PNG that contains 'store'",
+      "Adding any subscript/word between WINE and & WHISKEY",
+      "Recoloring, distorting, adding shadow or outline to the monogram"
+    ]
   },
 
   "brand": {

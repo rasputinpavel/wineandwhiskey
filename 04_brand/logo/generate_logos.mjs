@@ -2,6 +2,12 @@
  * Logo generator — Wine & Whiskey
  * Uses locally downloaded fonts for reliable offline rendering
  * Run: node generate_logos.mjs
+ *
+ * NOTE (2026-05-26): the "store" element between WINE and & WHISKEY is
+ * deprecated. The primary brand mark is now the monogram in
+ * channel_avatar_light.png / channel_avatar_dark.png. The wordmark generator
+ * below is kept so we can re-export clean wordmark files when needed — without
+ * the "store" word.
  */
 
 import { execSync } from 'child_process';
@@ -31,8 +37,7 @@ const FONT_FACE = `
 
 // ─── HTML builders ────────────────────────────────────────────────────────────
 
-function buildVertical({ bgColor, wineColor, whiskyColor, storeColor, fontSize = 130 }) {
-  const storeFontSize = Math.round(fontSize * 0.22);
+function buildVertical({ bgColor, wineColor, whiskyColor, fontSize = 130 }) {
   const W = Math.round(fontSize * 4.3);
   const H = Math.round(fontSize * 2.15);
 
@@ -43,26 +48,21 @@ function buildVertical({ bgColor, wineColor, whiskyColor, storeColor, fontSize =
   html, body { width:${W}px; height:${H}px; background:${bgColor};
     display:flex; align-items:center; justify-content:center; }
   .logo { display:inline-flex; flex-direction:column; align-items:flex-start; gap:0; }
-  .line1 { display:flex; align-items:flex-end; gap:5px; }
   .wine  { font-family:'Anton',sans-serif; font-size:${fontSize}px;
     color:${wineColor}; line-height:1; }
-  .store { font-family:'Inter',sans-serif; font-weight:500; font-size:${storeFontSize}px;
-    color:${storeColor}; letter-spacing:1px;
-    margin-bottom:${Math.round(fontSize*0.04)}px; }
   .whisky { font-family:'Anton',sans-serif; font-size:${fontSize}px;
     color:${whiskyColor}; line-height:1;
     margin-top:${Math.round(fontSize*-0.02)}px; }
 </style></head>
 <body>
   <div class="logo">
-    <div class="line1"><span class="wine">WINE</span><span class="store">store</span></div>
+    <span class="wine">WINE</span>
     <span class="whisky">&amp;&nbsp;WHISKEY</span>
   </div>
 </body></html>` };
 }
 
-function buildHorizontal({ bgColor, wineColor, whiskyColor, storeColor, fontSize = 100 }) {
-  const storeFontSize = Math.round(fontSize * 0.24);
+function buildHorizontal({ bgColor, wineColor, whiskyColor, fontSize = 100 }) {
   const W = Math.round(fontSize * 10);
   const H = Math.round(fontSize * 1.6);
 
@@ -72,20 +72,16 @@ function buildHorizontal({ bgColor, wineColor, whiskyColor, storeColor, fontSize
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { width:${W}px; height:${H}px; background:${bgColor};
     display:flex; align-items:center; justify-content:center; }
-  .logo { display:inline-flex; align-items:flex-end; gap:8px;
+  .logo { display:inline-flex; align-items:flex-end; gap:18px;
     padding-bottom:${Math.round(fontSize*0.05)}px; }
   .wine  { font-family:'Anton',sans-serif; font-size:${fontSize}px;
     color:${wineColor}; letter-spacing:0px; line-height:1; }
-  .store { font-family:'Inter',sans-serif; font-weight:500; font-size:${storeFontSize}px;
-    color:${storeColor}; letter-spacing:3px; text-transform:uppercase;
-    margin-bottom:${Math.round(fontSize*0.14)}px; }
   .whisky { font-family:'Anton',sans-serif; font-size:${fontSize}px;
     color:${whiskyColor}; letter-spacing:0px; line-height:1; }
 </style></head>
 <body>
   <div class="logo">
     <span class="wine">WINE</span>
-    <span class="store">STORE</span>
     <span class="whisky">&amp;&nbsp;WHISKEY</span>
   </div>
 </body></html>` };

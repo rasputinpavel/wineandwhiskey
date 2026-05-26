@@ -52,7 +52,15 @@ const TYPE_TOKEN_ORDER = [
   'label', 'overline',
 ] as const
 
-const LOGO_FILES = [
+// Primary brand mark = the W&W monogram (channel_avatar_*). All wordmark PNGs
+// still contain the legacy "store" element between WINE and & WHISKEY and are
+// deprecated since 2026-05-26 until clean files are regenerated.
+const MONOGRAM_FILES = [
+  { file: 'channel_avatar_light.png', label: 'Monogram, light bg' },
+  { file: 'channel_avatar_dark.png',  label: 'Monogram, dark bg' },
+]
+
+const DEPRECATED_LOGO_FILES = [
   { file: 'logo_black.png',              label: 'Black, solid' },
   { file: 'logo_black_transparent.png',  label: 'Black, transparent' },
   { file: 'logo_white.png',              label: 'White, solid' },
@@ -198,9 +206,14 @@ export default async function DesignSystemPage() {
           {/* LOGO */}
           <section className="space-y-4">
             <SectionHeader eyebrow="03" title="Logo" />
+            <p className="text-sm text-graphite max-w-2xl -mt-2">
+              Primary brand mark is the W&amp;W monogram. The full wordmark is deprecated until clean files (without the legacy &ldquo;store&rdquo; element) are regenerated.
+            </p>
+
+            <h3 className="text-[12px] uppercase tracking-[0.15em] text-graphite pt-2">Monogram — use this</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {LOGO_FILES.map(({ file, label }) => {
-                const isDarkBg = file.includes('white')
+              {MONOGRAM_FILES.map(({ file, label }) => {
+                const isDarkBg = file.includes('dark')
                 return (
                   <a
                     key={file}
@@ -214,6 +227,36 @@ export default async function DesignSystemPage() {
                     </div>
                     <div className="px-2 py-1.5 border-t border-pale-stone flex items-center justify-between">
                       <span className="text-[12px] text-graphite truncate">{label}</span>
+                      <span className="text-[11px] text-wine-red opacity-0 group-hover:opacity-100 transition-opacity">↓</span>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+
+            <h3 className="text-[12px] uppercase tracking-[0.15em] text-graphite pt-4">Wordmark — deprecated 2026-05-26</h3>
+            <p className="text-[12px] text-graphite max-w-2xl -mt-2">
+              All files below still contain the legacy <code className="text-[11px]">store</code> element. Do not use in new materials.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {DEPRECATED_LOGO_FILES.map(({ file, label }) => {
+                const isDarkBg = file.includes('white')
+                return (
+                  <a
+                    key={file}
+                    href={`/brand/logo/${file}`}
+                    download
+                    className="group block border border-pale-stone rounded-md overflow-hidden bg-warm-white hover:shadow-card-hover transition-shadow opacity-50 hover:opacity-80"
+                  >
+                    <div className={`aspect-square flex items-center justify-center p-4 relative ${isDarkBg ? 'bg-deep-black' : 'bg-cream/40'}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/brand/logo/${file}`} alt={label} className="max-h-full max-w-full object-contain grayscale" />
+                      <span className="absolute top-1.5 right-1.5 text-[9px] uppercase tracking-[0.1em] font-semibold px-1.5 py-0.5 rounded-sm bg-wine-red text-warm-white">
+                        Deprecated
+                      </span>
+                    </div>
+                    <div className="px-2 py-1.5 border-t border-pale-stone flex items-center justify-between">
+                      <span className="text-[12px] text-graphite truncate line-through">{label}</span>
                       <span className="text-[11px] text-wine-red opacity-0 group-hover:opacity-100 transition-opacity">↓</span>
                     </div>
                   </a>
