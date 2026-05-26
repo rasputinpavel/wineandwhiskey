@@ -421,6 +421,16 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if ((b.overdue > 0) !== (a.overdue > 0)) return b.overdue - a.overdue
     return (b.thisMonthTotal - b.thisMonthPaid) - (a.thisMonthTotal - a.thisMonthPaid)
   })
+  // Invoices issued this month but with a due date in a future month — they
+  // don't show up in the dueAt-keyed settlements above, but the user expects
+  // to see "I invoiced them this month" somewhere. Surfaced as a sub-line
+  // under the B2B settlements header without inflating cash-flow-due totals.
+  const b2bIssuedDueNext = openInvoices.reduce((s, inv) => {
+    const issued = inv.issued_at
+    const due = invoiceDueAt(inv)
+    if (issued >= startOfMonth && issued < endOfMonthExclusive && due >= endOfMonthExclusive) return s + Number(inv.total)
+    return s
+  }, 0)
   const custSettleTotal    = custSettlements.reduce((s, x) => s + x.thisMonthTotal, 0)
   const custSettlePaid     = custSettlements.reduce((s, x) => s + x.thisMonthPaid, 0)
   const custSettleOverdue  = custSettlements.reduce((s, x) => s + x.overdue, 0)
@@ -566,6 +576,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           monthCustTotal={custSettleTotal}
           monthCustPaid={custSettlePaid}
           monthCustOverdue={custSettleOverdue}
+          monthB2bIssuedDueNext={b2bIssuedDueNext}
           // total
           totalSuppliers={totalSups}
           totalSupSum={totalSupSum}
@@ -933,7 +944,7 @@ function SettlementsCard(p: {
   monthSuppliers: { name: string; total: number; paid: number }[]
   monthSupTotal: number; monthSupPaid: number
   monthCustomers: { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }[]
-  monthCustTotal: number; monthCustPaid: number; monthCustOverdue: number
+  monthCustTotal: number; monthCustPaid: number; monthCustOverdue: number; monthB2bIssuedDueNext: number
   // total
   totalSuppliers: { name: string; openTotal: number; dueSoon: number }[]
   totalSupSum: number; totalSupDueSoon: number
@@ -981,6 +992,7 @@ function SettlementsCard(p: {
           ? <MonthSettlements
               suppliers={p.monthSuppliers} supTotal={p.monthSupTotal} supPaid={p.monthSupPaid}
               customers={p.monthCustomers} custTotal={p.monthCustTotal} custPaid={p.monthCustPaid} custOverdue={p.monthCustOverdue}
+              custIssuedDueNext={p.monthB2bIssuedDueNext}
               topN={TOP_N} />
           : <TotalSettlements
               suppliers={p.totalSuppliers} supSum={p.totalSupSum} supDueSoon={p.totalSupDueSoon}
@@ -992,11 +1004,11 @@ function SettlementsCard(p: {
   )
 }
 
-function MonthSettlements({ suppliers, supTotal, supPaid, customers, custTotal, custPaid, custOverdue, topN }: {
+function MonthSettlements({ suppliers, supTotal, supPaid, customers, custTotal, custPaid, custOverdue, custIssuedDueNext, topN }: {
   suppliers: { name: string; total: number; paid: number }[]
   supTotal: number; supPaid: number
   customers: { name: string; thisMonthTotal: number; thisMonthPaid: number; overdue: number }[]
-  custTotal: number; custPaid: number; custOverdue: number
+  custTotal: number; custPaid: number; custOverdue: number; custIssuedDueNext: number
   topN: number
 }) {
   const supTop = suppliers.slice(0, topN)
@@ -1035,6 +1047,11 @@ function MonthSettlements({ suppliers, supTotal, supPaid, customers, custTotal, 
             {custOverdue > 0 && <> · <span className="text-wine-red">{fmtThbCompact(custOverdue)}</span> overdue</>}
           </div>
         </div>
+        {custIssuedDueNext > 0 && (
+          <div className="text-[10px] text-graphite mb-2">
+            + <span className="text-deep-black font-mono">{fmtThbCompact(custIssuedDueNext)}</span> invoiced this month, due next
+          </div>
+        )}
         <div className="space-y-2.5">
           {custTop.length === 0
             ? <div className="text-xs text-graphite py-2">No B2B obligations this month.</div>
