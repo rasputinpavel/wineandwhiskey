@@ -100,11 +100,18 @@ export type B2bCustomerGroup = {
 export type FixedCost = {
   id: string
   category: string
-  amount_thb: number
+  amount_thb: number | null        // null when percent_revenue is set
+  percent_revenue: number | null   // 0-100; non-null → pct-of-revenue, amount_thb ignored
   active: boolean
   notes: string | null
   sort_order: number
   created_at: string
+  updated_at: string
+}
+
+export type PulseSettings = {
+  id: number
+  fixed_buffer_pct: number
   updated_at: string
 }
 
@@ -143,6 +150,12 @@ export type Sku = {
   default_price: number | null
   is_inventory_tracked: boolean
   updated_at: string
+  // Migration 019 — Wine Matrix attributes. Nullable for non-wine SKUs.
+  wine_color: 'red' | 'white' | 'rose' | 'sparkling' | 'orange' | null
+  grape_variety: string | null
+  wine_country: string | null
+  wine_attrs_source: 'auto' | 'manual' | null
+  wine_attrs_updated_at: string | null
 }
 
 export type FlowInvoice = {

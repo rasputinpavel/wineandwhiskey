@@ -20,16 +20,22 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
-  const { category, amount_thb, notes, sort_order, active } = body
+  const { category, amount_thb, percent_revenue, notes, sort_order, active } = body
 
   if (typeof category !== 'string' || !category.trim()) {
     return NextResponse.json({ error: 'category (non-empty string) required' }, { status: 400 })
   }
-  if (typeof amount_thb !== 'number' || !Number.isFinite(amount_thb) || amount_thb < 0) {
-    return NextResponse.json({ error: 'amount_thb (non-negative number) required' }, { status: 400 })
+  const hasAmount = typeof amount_thb === 'number' && Number.isFinite(amount_thb) && amount_thb >= 0
+  const hasPct    = typeof percent_revenue === 'number' && Number.isFinite(percent_revenue) && percent_revenue >= 0 && percent_revenue <= 100
+  if (!hasAmount && !hasPct) {
+    return NextResponse.json({ error: 'amount_thb (≥0) or percent_revenue (0..100) required' }, { status: 400 })
   }
 
-  const row: Record<string, unknown> = { category: category.trim(), amount_thb }
+  const row: Record<string, unknown> = {
+    category: category.trim(),
+    amount_thb:      hasPct ? null     : amount_thb,
+    percent_revenue: hasPct ? percent_revenue : null,
+  }
   if (notes !== undefined)      row.notes      = notes === null ? null : String(notes)
   if (sort_order !== undefined) row.sort_order = Math.max(0, Math.floor(Number(sort_order) || 100))
   if (active !== undefined)     row.active     = !!active
@@ -41,7 +47,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({}))
-  const { id, category, amount_thb, notes, sort_order, active } = body
+  const { id, category, amount_thb, percent_revenue, notes, sort_order, active } = body
   if (typeof id !== 'string') {
     return NextResponse.json({ error: 'id (string) required' }, { status: 400 })
   }
@@ -53,11 +59,29 @@ export async function PATCH(req: Request) {
     }
     patch.category = category.trim()
   }
+  // Switching to fixed THB: amount_thb set, percent_revenue cleared.
   if (amount_thb !== undefined) {
-    if (typeof amount_thb !== 'number' || !Number.isFinite(amount_thb) || amount_thb < 0) {
-      return NextResponse.json({ error: 'amount_thb must be non-negative number' }, { status: 400 })
+    if (amount_thb === null) {
+      patch.amount_thb = null
+    } else {
+      if (typeof amount_thb !== 'number' || !Number.isFinite(amount_thb) || amount_thb < 0) {
+        return NextResponse.json({ error: 'amount_thb must be non-negative number or null' }, { status: 400 })
+      }
+      patch.amount_thb = amount_thb
+      patch.percent_revenue = null
     }
-    patch.amount_thb = amount_thb
+  }
+  // Switching to pct-of-revenue: percent_revenue set, amount_thb cleared.
+  if (percent_revenue !== undefined) {
+    if (percent_revenue === null) {
+      patch.percent_revenue = null
+    } else {
+      if (typeof percent_revenue !== 'number' || !Number.isFinite(percent_revenue) || percent_revenue < 0 || percent_revenue > 100) {
+        return NextResponse.json({ error: 'percent_revenue must be 0..100 or null' }, { status: 400 })
+      }
+      patch.percent_revenue = percent_revenue
+      patch.amount_thb = null
+    }
   }
   if (notes !== undefined)      patch.notes      = notes === null ? null : String(notes)
   if (sort_order !== undefined) patch.sort_order = Math.max(0, Math.floor(Number(sort_order) || 100))

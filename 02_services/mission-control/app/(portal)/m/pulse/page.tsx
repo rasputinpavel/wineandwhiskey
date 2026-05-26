@@ -42,9 +42,6 @@ export const dynamic = 'force-dynamic'
 // the trend window starts so any whose computed payment_date falls inside
 // the window is captured. 60d covers the longest reasonable supplier terms.
 const AP_FETCH_GRACE_DAYS = 60
-// 15% safety buffer on top of declared monthly fixed costs — covers small one-offs
-// (repairs, surprise invoices) that aren't worth giving their own line in Settings.
-const FIXED_BUFFER_RATE = 0.15
 
 type SearchParams = { month?: string; settle?: 'month' | 'total' }
 
@@ -154,10 +151,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     customersRes,
     suppliersRes,
     consignmentPricesRes,
+    pulseSettingsRes,
   ] = await Promise.all([
     sbInventory
       .from('fixed_cost')
-      .select('amount_thb, active'),
+      .select('amount_thb, percent_revenue, active'),
     sbInventory
       .from('flowaccount_invoice')
       .select('id, total, status, issued_at, due_at, customer_id, customer_name')
@@ -173,6 +171,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       .from('consignment_price')
       .select('id, supplier_id, price_hc, sku:sku(id, loyverse_product_code)')
       .limit(5000),
+    sbInventory
+      .from('pulse_settings')
+      .select('fixed_buffer_pct')
+      .eq('id', 1)
+      .maybeSingle(),
   ])
 
   for (const r of [invoicesOpenRes, customersRes, suppliersRes]) {
@@ -276,13 +279,26 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const selectedBucketForDebt = byMonth.get(selectedYm)
   if (selectedBucketForDebt) selectedBucketForDebt.supplierPayments += selectedConsignDebt
 
-  // Fixed costs
-  const monthlyFixedBase = ((fixedCostsRes.data ?? []) as Pick<FixedCost, 'amount_thb' | 'active'>[])
-    .filter(r => r.active)
-    .reduce((s, r) => s + Number(r.amount_thb), 0)
-  // Effective monthly fixed used in P&L = declared total + 15% contingency.
-  // Display shows base value; calculations always use the buffered amount.
-  const monthlyFixed = monthlyFixedBase * (1 + FIXED_BUFFER_RATE)
+  // Fixed costs — two kinds:
+  //   fixed rows  → flat THB/month (rent, salary, …)
+  //   pct rows    → percent of monthly revenue (tax, royalties, …)
+  // The buffer % (configurable in Settings) is applied to fixed-THB only —
+  // pct rows already scale with revenue and don't need a contingency on top.
+  type FxCost = Pick<FixedCost, 'amount_thb' | 'percent_revenue' | 'active'>
+  const fixedCostRows = ((fixedCostsRes.data ?? []) as FxCost[]).filter(r => r.active)
+  const monthlyFixedBase = fixedCostRows
+    .filter(r => r.percent_revenue == null)
+    .reduce((s, r) => s + Number(r.amount_thb ?? 0), 0)
+  const fixedPctOfRevenue = fixedCostRows
+    .filter(r => r.percent_revenue != null)
+    .reduce((s, r) => s + Number(r.percent_revenue ?? 0), 0) / 100
+  const bufferPct = Number((pulseSettingsRes.data as { fixed_buffer_pct?: number } | null)?.fixed_buffer_pct ?? 15) / 100
+  // Helper: full-month fixed for a given revenue (used by trend, projection, etc.)
+  function fixedForMonth(revenue: number): number {
+    return monthlyFixedBase * (1 + bufferPct) + revenue * fixedPctOfRevenue
+  }
+  // Legacy convenience: fixed cost assuming the selected month's revenue.
+  const monthlyFixed = monthlyFixedBase * (1 + bufferPct)
 
   // ─── Per-month P&L ───────────────────────────────────────────────────────
   // For closed months: supplierPayments = full-month bucket; fixed = full.
@@ -301,7 +317,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     const ym = m.fromDate.slice(0, 7)
     const b  = byMonth.get(ym) ?? empty()
     const cur = ym === currentYm
-    const fixed = cur ? monthlyFixed * (currentDaysPassed / currentDaysInMonth) : monthlyFixed
+    // Fixed-THB pro-rated for current month MTD; pct-of-revenue already scales
+    // by revenue (which is MTD for current month, full for closed months).
+    const fixed = cur
+      ? monthlyFixedBase * (1 + bufferPct) * (currentDaysPassed / currentDaysInMonth) + b.total * fixedPctOfRevenue
+      : monthlyFixedBase * (1 + bufferPct) + b.total * fixedPctOfRevenue
     const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
     return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent: cur }
@@ -343,7 +363,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     : selected.revenue
   const projSupplier   = isCurrent ? currentBucket.supplierPayments : selected.supplierPayments
   const projGp         = projRevenue - projSupplier
-  const projNet        = isCurrent ? (projGp - monthlyFixed) : selected.net
+  const projNet        = isCurrent ? (projGp - fixedForMonth(projRevenue)) : selected.net
   // For "more by EOM" sub on waterfall — only meaningful when looking at current.
   const revenueRemainingProj  = isCurrent ? Math.max(0, projRevenue - selected.revenue) : 0
   const supplierRemainingProj = isCurrent ? Math.max(0, projSupplier - selected.supplierPayments) : 0
@@ -376,8 +396,12 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     })
     .reduce((s, inv) => s + Number(inv.total), 0)
 
-  const minRevenueNext = supplierPaymentsNext + monthlyFixed
-  const minB2CNext     = Math.max(0, minRevenueNext - expectedB2BNext)
+  // Solve R = sup + base*(1+buf) + R*pct  →  R = (sup + base*(1+buf)) / (1 - pct).
+  // Guard pct ≥ 1 (cost scales beyond 100% of revenue → no break-even possible).
+  const minRevenueNext = fixedPctOfRevenue >= 1
+    ? Infinity
+    : (supplierPaymentsNext + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
+  const minB2CNext     = Number.isFinite(minRevenueNext) ? Math.max(0, minRevenueNext - expectedB2BNext) : minRevenueNext
 
   // ─── Cash control: AR Open / AP Open / Net WC ────────────────────────────
   const arOpen = openInvoices.reduce((s, i) => s + Number(i.total), 0)
@@ -567,14 +591,22 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           gp={selected.gp}
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
+          bufferPct={bufferPct}
+          fixedPctOfRevenue={fixedPctOfRevenue}
           refGmPct={refGmPct}
-          breakevenRevenue={(isCurrent ? currentBucket.supplierPayments : selected.supplierPayments) + monthlyFixed}
+          breakevenRevenue={
+            fixedPctOfRevenue >= 1
+              ? Infinity
+              : ((isCurrent ? currentBucket.supplierPayments : selected.supplierPayments) + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
+          }
         />
         <NextMonthCard
           monthLabel={nextMonthLabel}
           supplierPaymentsNext={supplierPaymentsNext}
-          monthlyFixed={monthlyFixed}
+          monthlyFixed={Number.isFinite(minRevenueNext) ? fixedForMonth(minRevenueNext) : monthlyFixed}
           monthlyFixedBase={monthlyFixedBase}
+          bufferPct={bufferPct}
+          fixedPctOfRevenue={fixedPctOfRevenue}
           expectedB2BNext={expectedB2BNext}
           minRevenueNext={minRevenueNext}
           minB2CNext={minB2CNext}
@@ -641,7 +673,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
           <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment suppliers tracked via monthly accrual, not POs.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
-          <p><span className="text-deep-black">Fixed costs MTD</span> = (declared monthly fixed + 15% contingency buffer) × (days passed / days in month). The buffer covers small one-offs (repairs, surprise invoices) we don&apos;t want to manage row-by-row in Settings. Pro-rated so the in-progress month is comparable. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
+          <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) × (1 + buffer%) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. The buffer and the pct list are configured in Settings. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
           <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
           <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
@@ -687,7 +719,7 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
 
 // Unified hero for the selected month — mirrors NextMonthCard's structure
 // (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
-function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, gp, fixedMtd, monthlyFixedBase, refGmPct, breakevenRevenue }: {
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, gp, fixedMtd, monthlyFixedBase, bufferPct, fixedPctOfRevenue, refGmPct, breakevenRevenue }: {
   monthLabel: string; isCurrent: boolean
   net: number; netProjected: number
   daysPassed: number; daysInMonth: number
@@ -695,6 +727,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
   revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
   supplierPayments: number; supplierPaymentsRemaining: number; supplierConsignment: number
   gp: number; fixedMtd: number; monthlyFixedBase: number
+  bufferPct: number; fixedPctOfRevenue: number
   refGmPct: number
   breakevenRevenue: number
 }) {
@@ -710,7 +743,10 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
 
   const headerLabel = isCurrent ? `THIS MONTH · ${monthLabel.toUpperCase()}` : `${monthLabel.toUpperCase()} · FINAL`
   const headerTag   = isCurrent ? 'NET PROFIT MTD' : 'NET PROFIT'
-  const fixedSub    = monthlyFixedBase > 0 ? `${fmtThb(monthlyFixedBase)}/mo + 15% buffer` : 'not configured'
+  const fixedParts: string[] = []
+  if (monthlyFixedBase > 0) fixedParts.push(`${fmtThb(monthlyFixedBase)}/mo + ${(bufferPct * 100).toFixed(0)}% buffer`)
+  if (fixedPctOfRevenue > 0) fixedParts.push(`${(fixedPctOfRevenue * 100).toFixed(1)}% of revenue`)
+  const fixedSub = fixedParts.length > 0 ? fixedParts.join(' · ') : 'not configured'
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md shadow-card h-full overflow-hidden flex flex-col">
@@ -897,11 +933,13 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
   )
 }
 
-function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, expectedB2BNext, minRevenueNext, minB2CNext }: {
+function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, bufferPct, fixedPctOfRevenue, expectedB2BNext, minRevenueNext, minB2CNext }: {
   monthLabel: string
   supplierPaymentsNext: number
   monthlyFixed: number
   monthlyFixedBase: number
+  bufferPct: number
+  fixedPctOfRevenue: number
   expectedB2BNext: number
   minRevenueNext: number
   minB2CNext: number
@@ -939,7 +977,12 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthly
           <NMORow label="Supplier payments due" value={supplierPaymentsNext} sign="−"
             sub="POs ordered this month, payable next" />
           <NMORow label="Fixed costs" value={monthlyFixed} sign="−"
-            sub={monthlyFixedBase > 0 ? `${fmtThb(monthlyFixedBase)}/mo + 15% buffer` : 'not configured'} />
+            sub={(() => {
+              const parts: string[] = []
+              if (monthlyFixedBase > 0) parts.push(`${fmtThb(monthlyFixedBase)}/mo + ${(bufferPct * 100).toFixed(0)}% buffer`)
+              if (fixedPctOfRevenue > 0) parts.push(`${(fixedPctOfRevenue * 100).toFixed(1)}% of revenue`)
+              return parts.length > 0 ? parts.join(' · ') : 'not configured'
+            })()} />
           <NMORow label="Min revenue needed" value={minRevenueNext} sign="=" bold />
           <NMORow label="Expected B2B inflow" value={expectedB2BNext} sign="+"
             sub="open FA invoices maturing next month" tone="pos" />
