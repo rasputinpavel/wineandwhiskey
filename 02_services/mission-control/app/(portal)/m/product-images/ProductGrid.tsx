@@ -144,32 +144,33 @@ export function ProductGrid({ images, uploadAction, replaceAction }: Props) {
             return (
               <li key={img.name}>
                 <div
-                  className={`group block border rounded-md overflow-hidden bg-warm-white transition-all ${
+                  className={`group border rounded-md overflow-hidden bg-warm-white transition-all ${
                     isReplacing
                       ? 'border-amber-gold shadow-card-hover'
                       : 'border-pale-stone hover:shadow-card-hover hover:border-wine-red/40'
                   }`}
                 >
-                  <a
-                    href={img.href}
-                    target="_blank"
-                    rel="noopener"
-                    className="relative block aspect-square bg-cream/40 flex items-center justify-center p-3"
-                    title={img.name}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`${img.href}?v=${img.mtime}`}
-                      alt={img.slug}
-                      loading="lazy"
-                      className="max-h-full max-w-full object-contain"
-                    />
+                  <div className="relative aspect-square bg-cream/40">
+                    <a
+                      href={img.href}
+                      target="_blank"
+                      rel="noopener"
+                      className="absolute inset-0 flex items-center justify-center p-3"
+                      title={img.name}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`${img.href}?v=${img.mtime}`}
+                        alt={img.slug}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </a>
                     {isReplacing && (
-                      <div className="absolute inset-0 bg-warm-white/80 flex items-center justify-center text-[11px] uppercase tracking-[0.15em] text-graphite">
+                      <div className="absolute inset-0 bg-warm-white/80 flex items-center justify-center text-[11px] uppercase tracking-[0.15em] text-graphite pointer-events-none">
                         Updating…
                       </div>
                     )}
-                  </a>
+                  </div>
                   <div className="px-2 py-1.5 border-t border-pale-stone flex items-center gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="text-[12px] text-deep-black truncate font-medium" title={humanizeSlug(img.slug)}>
