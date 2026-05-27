@@ -25,22 +25,57 @@ export interface PendingPhoto {
 
 // ─── Date helper ─────────────────────────────────────────────────────────────
 
-export function bangkokDate(): string {
-  const d = new Date(Date.now() + 7 * 3600_000);
+export function bangkokDate(offsetDays = 0): string {
+  const d = new Date(Date.now() + 7 * 3600_000 + offsetDays * 86_400_000);
   const dd   = String(d.getUTCDate()).padStart(2, "0");
   const mm   = String(d.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = String(d.getUTCFullYear());
   return `${dd}.${mm}.${yyyy}`;
 }
 
+// Pull an explicit date hint out of a user message ("вчера", "25.05", "25.05.2026")
+// and return both the parsed DD.MM.YYYY date and the text with the hint removed.
+// Safe against false-positives inside decimal amounts: "4879.20" won't match
+// because the inner digits aren't at word boundaries.
+export function parseDateHint(text: string): { date: string | null; cleanText: string } {
+  const wordMatch = text.match(/\b(вчера|позавчера|сегодня)\b/i);
+  if (wordMatch) {
+    const w = wordMatch[1].toLowerCase();
+    const offset = w === "позавчера" ? -2 : w === "вчера" ? -1 : 0;
+    return {
+      date:      bangkokDate(offset),
+      cleanText: stripMatch(text, wordMatch),
+    };
+  }
+  const dateMatch = text.match(/\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b/);
+  if (dateMatch) {
+    const dd = dateMatch[1].padStart(2, "0");
+    const mm = dateMatch[2].padStart(2, "0");
+    let yyyy = dateMatch[3];
+    if (!yyyy)                  yyyy = bangkokDate().slice(6);
+    else if (yyyy.length === 2) yyyy = "20" + yyyy;
+    return {
+      date:      `${dd}.${mm}.${yyyy}`,
+      cleanText: stripMatch(text, dateMatch),
+    };
+  }
+  return { date: null, cleanText: text };
+}
+
+function stripMatch(text: string, m: RegExpMatchArray): string {
+  return (text.slice(0, m.index!) + text.slice(m.index! + m[0].length))
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 // ─── Detection ───────────────────────────────────────────────────────────────
 
 // Heuristic: does this text look like an expense entry?
-// Matches: "856 интернет", "฿450 полка", "3500 замена аккума"
+// Matches: "856 интернет", "฿450 полка", "3500 замена аккума", "4879.20 p hops кредиторка"
 export function looksLikeExpense(text: string): boolean {
   const t = text.trim();
   if (t.startsWith("/")) return false;
-  return /฿\d/.test(t) || /^\d[\d\s,.]*(?:thb|бат|baht)?\s+\S{2,}/i.test(t);
+  return /฿\d/.test(t) || /^\d[\d.,]*(?:thb|бат|baht)?\s+\S+/i.test(t);
 }
 
 // ─── Claude extraction ────────────────────────────────────────────────────────
@@ -58,20 +93,24 @@ const EXTRACT_AMOUNT_PROMPT =
 
 export async function extractExpenseFromText(
   text: string
-): Promise<{ amount: string; description: string } | null> {
+): Promise<{ amount: string; description: string; date: string | null } | null> {
+  const { date, cleanText } = parseDateHint(text);
   const response = await anthropic.messages.create({
     model:      "claude-haiku-4-5-20251001",
     max_tokens: 150,
-    messages:   [{ role: "user", content: EXTRACT_TEXT_PROMPT(text) }],
+    messages:   [{ role: "user", content: EXTRACT_TEXT_PROMPT(cleanText) }],
   });
-  return parseExtractedJSON(response);
+  const parsed = parseExtractedJSON(response);
+  if (!parsed) return null;
+  return { ...parsed, date };
 }
 
 export async function extractExpenseFromPhoto(
   base64:      string,
   mimeType:    "image/jpeg" | "image/png",
   description: string,
-): Promise<{ amount: string; description: string } | null> {
+): Promise<{ amount: string; description: string; date: string | null } | null> {
+  const { date, cleanText } = parseDateHint(description);
   const response = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
     max_tokens: 100,
@@ -85,7 +124,7 @@ export async function extractExpenseFromPhoto(
   });
   const parsed = parseExtractedJSON(response);
   if (!parsed) return null;
-  return { amount: parsed.amount, description };
+  return { amount: parsed.amount, description: cleanText, date };
 }
 
 function parseExtractedJSON(

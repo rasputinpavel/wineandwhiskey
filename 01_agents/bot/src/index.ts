@@ -60,12 +60,12 @@ const pendingExpenses = new Map<number, PendingExpense>();
 
 async function startExpenseFlow(
   chatId: number,
-  extracted: { amount: string; description: string },
+  extracted: { amount: string; description: string; date?: string | null },
 ): Promise<void> {
   const expense: PendingExpense = {
     amount:      extracted.amount,
     description: extracted.description,
-    date:        bangkokDate(),
+    date:        extracted.date ?? bangkokDate(),
     isCompany:   false,
     hasDocs:     false,
     category:    "Операционные",
