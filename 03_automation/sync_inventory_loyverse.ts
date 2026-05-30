@@ -171,12 +171,21 @@ async function syncStock(): Promise<{ rowsIn: number; rowsOut: number }> {
     const levels = await fetchAllInventory();
     console.log(`[loyverse] ${levels.length} inventory levels`);
 
-    // Map variant_id → sku.id (single round-trip).
-    const { data: skus, error: skuErr } = await supabase
-      .from("sku")
-      .select("id, loyverse_variant_id");
-    if (skuErr) throw new Error(`sku lookup: ${skuErr.message}`);
-    const variantToId = new Map((skus ?? []).map(s => [s.loyverse_variant_id, s.id]));
+    // Map variant_id → sku.id. Must paginate: PostgREST caps SELECT at 1000
+    // rows by default, and the unpaginated version silently dropped ~⅔ of
+    // SKUs from the map → stock for those SKUs never got upserted and went
+    // stale for days.
+    const variantToId = new Map<string, string>();
+    for (let cur = 0; ; cur += 1000) {
+      const { data, error } = await supabase
+        .from("sku")
+        .select("id, loyverse_variant_id")
+        .range(cur, cur + 999);
+      if (error) throw new Error(`sku lookup: ${error.message}`);
+      if (!data?.length) break;
+      for (const s of data) variantToId.set(s.loyverse_variant_id, s.id);
+      if (data.length < 1000) break;
+    }
 
     const rows = [];
     let skipped = 0;
