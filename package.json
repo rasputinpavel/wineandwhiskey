@@ -16,6 +16,7 @@
     "discover-accounts": "tsx 03_automation/discover_trend_accounts.ts",
     "bestsellers": "tsx 03_automation/identify_bestsellers.ts",
     "accounting": "tsx 03_automation/sync_accounting.ts",
+    "schedule": "tsx 03_automation/build_manager_schedule.ts",
     "inv:loyverse": "tsx 03_automation/sync_inventory_loyverse.ts",
     "inv:flow": "tsx 03_automation/sync_inventory_flow.ts",
     "inv:receipts": "tsx 03_automation/sync_loyverse_receipts.ts",

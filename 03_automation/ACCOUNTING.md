@@ -16,10 +16,10 @@
 
 - Источник: Loyverse `/receipts` (SALE + REFUND, фильтрация по `receipt_type` на клиенте — серверный фильтр Loyverse игнорируется).
 - Окно: `YYYY-MM-01 00:00 +07` → `последний день месяца 23:59 +07` (Bangkok).
-- **B2B-классификация (строгая, бухгалтерская):** sale считается B2B только если оплачен `Bank Transfer`. Customer-name match без bank-transfer → B2C (walk-in покупатель с B2B-именем, заплативший картой/налом).
+- **B2B-классификация (единая, management):** [lib/b2b.ts::classifyReceipt](lib/b2b.ts) — sale считается B2B если оплачен `Bank Transfer` **ИЛИ** customer_name ∈ `B2B_PATTERNS`. Walk-in B2B-клиент, заплативший картой/налом, тоже идёт в B2B. Эту же логику используют Bonuses (премия не считается от B2B-сделок) и CRM.
 - Возвраты вычитаются из выручки, счётчики не уменьшают.
 - Per-receipt overrides — `08_config/b2b_overrides.json`:
-  - `force_b2c_receipts` — конкретный bank-transfer чек переводим в B2C (например, B2B-клиент пришёл сам, забрал с полки, заплатил банковской картой через Loyverse, но ни один tax invoice в Flow не выписан).
+  - `force_b2c_receipts` — конкретный B2B-чек переводим в B2C (если редко-используемое исключение).
 - Колонки: Date · B2C revenue ฿ · B2B revenue ฿ · Total ฿. Внизу — TOTAL.
 
 ### 2. `Tax Invoices`
@@ -31,7 +31,7 @@
 - **Conditional formatting:** строки со статусом `Unpaid` или `Overdue` подсвечиваются светло-оранжевым.
 - **Логика мэтчинга invoice ↔ receipt:** ищем FlowAccount receipt с тем же `client + amount` (±1 ฿). Если найден — `Paid` + receipt #/date.
 - **Section «Receipts received this month for prior invoices»** — apr-receipts которые не сматчились с apr-invoices (= оплаты по предыдущим месяцам). В Note подставляется referenced INV из popover'а на list-странице (без click-through).
-- **Section «Reconciliation»:** Loyverse B2B revenue vs FlowAccount receipts. Эта проверка должна сходиться (см. ниже про работу с расхождениями).
+- **Section «Reconciliation»:** Loyverse B2B **bank-transfer subset** vs FlowAccount receipts. Сходиться должна именно подмножество — Flow receipt выписывается только под bank-transfer оплаты (card/cash-оплата от B2B-named клиента — management-only, в Flow её нет). Дополнительная информационная строка «Loyverse B2B (card/cash, management only)» показывает сумму card/cash B2B сделок отдельно.
 - Phantom Flow receipts — `08_config/b2b_overrides.json` секция `exclude_flow_receipts`. Используется когда бухгалтер выписал в Flow receipt-«напоминалку» по старому долгу, но реальных денег не пришло. Такие receipts исключаются из reconciliation, чтобы не давать ложного расхождения.
 
 **Требования:** `FLOW_EMAIL` / `FLOW_PASSWORD` в `.env.local`. Playwright уже в зависимостях. 2FA в FlowAccount отключена.
@@ -51,7 +51,8 @@
 ### 4. `Bonuses`
 Расчёт премий менеджерам по B2C.
 
-- **Источник графика:** `08_config/manager_schedules/YYYY-MM.json` (см. `2026-04.json` как образец). Там вручную атрибутирована дневная B2C-выручка по менеджерам — пока в Loyverse один общий аккаунт. Когда у каждого менеджера будет свой Loyverse pos_device, можно перейти на авто-выгрузку.
+- **Источник графика:** `08_config/manager_schedules/YYYY-MM.json`. Генерируется `npm run schedule` (см. ниже) или редактируется вручную.
+- **Какой B2C тут считается:** премия = 1% от B2C по **единому правилу** `lib/b2b.ts::classifyReceipt` (тот же, что в Sales tab). B2B-клиент, заплативший картой/налом, исключается из базы бонуса — менеджер не получает % с корпоративной сделки.
 - **Editable cells (жёлтые):**
   - `Commission %` — процент премии per-manager (PERCENT format, `0.5%` → `0.005`).
   - `Fix ฿` — фиксированный оклад per-manager.
@@ -69,9 +70,15 @@
 # 1. Подтянуть свежие POs с Loyverse (источник для Expenses)
 npm run orders
 
-# 2. Подготовить график менеджеров
-cp 08_config/manager_schedules/{prev-month}.json 08_config/manager_schedules/YYYY-MM.json
-# Отредактировать days по картинке-расписанию от менеджера-супервайзера, обновить commissions/fixed если изменились
+# 2. Сгенерировать график менеджеров. --som / --grace — дни N. --half поддерживает
+#    несколько сегментов через "|" (пример: "3:Grace=11-16,Som=16-22").
+#    Скрипт сам пуллит Loyverse, применяет management B2B-классификатор и считает per-day B2C.
+npm run schedule -- --month YYYY-MM \
+  --som  4,5,8,9,10,11,12,13,20,21,24,25,26,28 \
+  --grace 1,2,6,7,14,15,16,17,18,19,22,23,27,29,30 \
+  --half "3:Grace=11-16,Som=16-22" \
+  --closed 31 --closed-reason "Visakha Bucha Day" \
+  --commission Grace=1,Som=1 --fixed Grace=18000,Som=20000
 
 # 3. Сгенерировать отчёт
 npm run accounting -- --month YYYY-MM
@@ -88,15 +95,16 @@ npm run accounting -- --month YYYY-MM
 
 ## Reconciliation: что делать при расхождении Sales vs Tax Invoices
 
-В конце вкладки `Tax Invoices` есть блок **«Reconciliation: Loyverse B2B vs FlowAccount receipts»**. Three rows:
+В конце вкладки `Tax Invoices` есть блок **«Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts»**. Сравнивается **подмножество** B2B-чеков, оплаченных через банк (только под них выписывают Flow receipt):
 
 | Source | Amount ฿ | Note |
 |---|---|---|
-| Loyverse B2B revenue | ... | from Sales tab |
+| Loyverse B2B (bank transfer only) | ... | subset of B2B revenue paid via bank transfer |
 | FlowAccount receipts | ... | N receipts in YYYY-MM |
 | **Difference** | **0.00 ฿ ✓ OK** *(зелёный)* / **X.XX ฿ ⚠ Investigate** *(оранжевый)* |
+| Loyverse B2B (card/cash, management only) | ... | walk-in B2B clients without Flow tax invoice — informational |
 
-Каждый Loyverse bank-transfer SALE = один FlowAccount receipt. Эти два числа должны совпадать. Если есть расхождение — выясняем что не так.
+Каждый Loyverse bank-transfer SALE = один FlowAccount receipt. Card/cash-оплаченные B2B-чеки (management-only) показываются отдельной информационной строкой и в reconciliation не участвуют. Если bank-transfer-subset не сошёлся — выясняем что не так.
 
 **Что делает скрипт:** при `diff != 0` в console (НЕ в листе — для бухгалтерии не показывается) печатается список конкретных несовпадений:
 - `Loyverse only: <date> <receipt#> <amount> — <client>` → bank-transfer SALE в Loyverse есть, FlowAccount receipt отсутствует

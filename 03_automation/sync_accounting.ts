@@ -21,7 +21,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { createClient } from "@supabase/supabase-js";
-import { BANK_TRANSFER_TYPE_ID } from "./lib/b2b.js";
+import { BANK_TRANSFER_TYPE_ID, classifyReceipt } from "./lib/b2b.js";
 import { canonicalize, loadB2BOverrides } from "./lib/b2b_overrides.js";
 import { openFlow, closeFlow, listInvoices, listReceipts, FlowInvoice, FlowReceipt } from "./lib/flow.js";
 
@@ -249,8 +249,11 @@ interface DayBucket { b2cRev: number; b2cChecks: number; b2bRev: number; b2bChec
 interface SalesPayload {
   byDay: Map<string, DayBucket>;
   totals: DayBucket;
-  // Receipts paid via bank transfer (B2B candidates for invoice matching).
-  bankTransferReceipts: Array<{ date: string; receiptNumber: string; total: number; customerName: string }>;
+  // All B2B receipts (management classifier: bank transfer OR B2B_PATTERNS name).
+  // Used for per-receipt matching against FlowAccount receipts in reconciliation —
+  // but only the bank-transfer subset (isBankTransfer=true) is expected to match
+  // a Flow receipt. Card/cash-paid B2B-named sales are management-only.
+  b2bReceipts: Array<{ date: string; receiptNumber: string; total: number; customerName: string; isBankTransfer: boolean }>;
 }
 
 async function buildSalesPayload(): Promise<SalesPayload> {
@@ -261,9 +264,13 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     `/receipts?created_at_min=${minUtc}&created_at_max=${maxUtc}`,
     "receipts",
   );
-  const receipts = all.filter(r => r.receipt_type === "SALE");
-  const refunds  = all.filter(r => r.receipt_type === "REFUND");
-  console.log(`  ${receipts.length} sales, ${refunds.length} refunds`);
+  // Cancelled receipts stay in the Loyverse list with cancelled_at set — skip them so
+  // a voided bank-transfer SALE doesn't show up as an unmatched B2B receipt in reco.
+  const live = all.filter(r => !r.cancelled_at);
+  const cancelled = all.length - live.length;
+  const receipts = live.filter(r => r.receipt_type === "SALE");
+  const refunds  = live.filter(r => r.receipt_type === "REFUND");
+  console.log(`  ${receipts.length} sales, ${refunds.length} refunds${cancelled ? ` (skipped ${cancelled} cancelled)` : ""}`);
 
   const custIds = new Set<string>();
   for (const r of [...receipts, ...refunds]) if (r.customer_id) custIds.add(r.customer_id);
@@ -272,7 +279,7 @@ async function buildSalesPayload(): Promise<SalesPayload> {
 
   const byDay = new Map<string, DayBucket>();
   const totals: DayBucket = { b2cRev: 0, b2cChecks: 0, b2bRev: 0, b2bChecks: 0 };
-  const bankTransferReceipts: SalesPayload["bankTransferReceipts"] = [];
+  const b2bReceipts: SalesPayload["b2bReceipts"] = [];
 
   // Initialize buckets for every day in the month so empty days still show 0.
   for (let d = 1; d <= lastDay; d++) {
@@ -280,17 +287,16 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     byDay.set(key, { b2cRev: 0, b2cChecks: 0, b2bRev: 0, b2bChecks: 0 });
   }
 
-  // Bookkeeping rule (stricter than the management-accounting classifier in
-  // lib/b2b.ts): a sale is B2B *for accounting* only if it was paid via bank
-  // transfer. Walk-in customers whose name matches B2B_PATTERNS but who paid
-  // with card/cash are recorded as B2C — we don't issue them a tax invoice
-  // in FlowAccount, so counting them as B2B would create a permanent gap
-  // in the Loyverse-vs-Flow reconciliation.
+  // Single B2B classifier across the whole report: lib/b2b.ts::classifyReceipt.
+  // A sale is B2B iff payment_type = Bank Transfer OR customer_name ∈ B2B_PATTERNS.
+  // The same rule drives Sales tab, Bonuses tab and the Loyverse↔Flow reconciliation
+  // — Sales B2B revenue should equal Flow receipts. Mismatches mean either
+  // (1a/1b) missing/unneeded Flow receipt, (2a/2b/2c) phantom Flow receipt — see
+  // ACCOUNTING.md decision tree.
   //
-  // 08_config/b2b_overrides.json carries per-receipt exceptions
-  // (force_b2c_receipts) — used when Loyverse recorded a payment as bank
-  // transfer but no FlowAccount invoice/receipt was issued (walk-in purchase
-  // by a B2B-named client paid through their bank).
+  // 08_config/b2b_overrides.json::force_b2c_receipts overrides a specific receipt
+  // back to B2C when the management rule fires but no Flow receipt will be issued
+  // (walk-in corp client picked stock off the shelf, paid out-of-pocket).
   const forceB2C = new Set<string>();
   try {
     const cfgPath = nodePath.join(process.cwd(), "08_config", "b2b_overrides.json");
@@ -310,7 +316,7 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     } else {
       customerName = canonicalize(customerName);
     }
-    let isB2B = (r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID);
+    let { isB2B } = classifyReceipt({ payments: r.payments, customerName });
     if (isB2B && forceB2C.has(String(r.receipt_number ?? ""))) isB2B = false;
     return { isB2B, customerName };
   }
@@ -323,17 +329,17 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     const bucket = byDay.get(day)!;
     const cls = classify(r);
     const total = Number(r.total_money ?? 0);
-    if (cls.isB2B) { bucket.b2bRev += total; bucket.b2bChecks++; totals.b2bRev += total; totals.b2bChecks++; }
-    else            { bucket.b2cRev += total; bucket.b2cChecks++; totals.b2cRev += total; totals.b2cChecks++; }
-
-    if ((r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID)) {
-      bankTransferReceipts.push({
+    if (cls.isB2B) {
+      bucket.b2bRev += total; bucket.b2bChecks++; totals.b2bRev += total; totals.b2bChecks++;
+      const isBankTransfer = (r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID);
+      b2bReceipts.push({
         date: day,
         receiptNumber: String(r.receipt_number ?? ""),
         total,
         customerName: cls.customerName,
+        isBankTransfer,
       });
-    }
+    } else { bucket.b2cRev += total; bucket.b2cChecks++; totals.b2cRev += total; totals.b2cChecks++; }
   }
   for (const r of refunds) {
     const day = bangkokDateOf(r.created_at);
@@ -345,7 +351,7 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     else            { bucket.b2cRev -= total; totals.b2cRev -= total; }
   }
 
-  return { byDay, totals, bankTransferReceipts };
+  return { byDay, totals, b2bReceipts };
 }
 
 async function writeSalesTab(sid: string, payload: SalesPayload) {
@@ -544,20 +550,22 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
   rows.push(["", "", "TOTAL", Number(strayTotal.toFixed(2)), ""]);
   const strayTotalRow = rows.length - 1;
 
-  // ─── Reconciliation: Loyverse B2B vs FlowAccount receipts ─────────
-  // Each FlowAccount receipt = one Loyverse bank-transfer SALE. Sum should
-  // match Loyverse's monthly B2B total. Mismatch = receipt missing from
-  // Loyverse, bank transfer not yet receipted in Flow, or tz edge.
-  const loyverseB2B = salesPayload.totals.b2bRev;
+  // ─── Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts ─
+  // Sales tab uses the management B2B rule (broad), but only bank-transfer
+  // B2B sales get a FlowAccount receipt issued — card/cash-paid B2B-named
+  // clients (walk-in corporate buyers) are management B2B only and won't
+  // appear in Flow. So this reconciliation compares the **bank-transfer subset**
+  // of Loyverse B2B against Flow receipts.
+  const loyB2BBankTransferList = salesPayload.b2bReceipts.filter(r => r.isBankTransfer);
+  const loyverseB2BBankTransfer = loyB2BBankTransferList.reduce((s, r) => s + r.total, 0);
   const flowReceiptsTotal = receipts.reduce((s, r) => s + r.amount, 0);
-  const diff = Math.round((loyverseB2B - flowReceiptsTotal) * 100) / 100;
+  const diff = Math.round((loyverseB2BBankTransfer - flowReceiptsTotal) * 100) / 100;
 
   // Per-receipt mismatches are surfaced only in the console log (management
   // diagnostic) — the bookkeeper sees totals and the diff line only.
-  const loyB2BList = salesPayload.bankTransferReceipts;
   const flowMatched = new Set<string>();
-  const loyOnly: typeof loyB2BList = [];
-  for (const lr of loyB2BList) {
+  const loyOnly: typeof loyB2BBankTransferList = [];
+  for (const lr of loyB2BBankTransferList) {
     const fr = receipts.find(f => !flowMatched.has(f.number) && Math.abs(f.amount - lr.total) <= 1);
     if (fr) flowMatched.add(fr.number);
     else loyOnly.push(lr);
@@ -569,15 +577,19 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
     for (const r of flowOnly) console.log(`       FlowAccount only: ${r.date} ${r.number} ${r.amount.toFixed(2)} ฿ — ${r.client}`);
   }
 
+  const mgmtOnlyB2B = salesPayload.totals.b2bRev - loyverseB2BBankTransfer;
+
   rows.push([]);
-  rows.push([`Reconciliation: Loyverse B2B vs FlowAccount receipts (${monthArg})`]);
+  rows.push([`Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts (${monthArg})`]);
   const recoTitleRow = rows.length - 1;
   rows.push(["Source", "Amount ฿", "", "", "Note"]);
   const recoHeaderRow = rows.length - 1;
-  rows.push(["Loyverse B2B revenue", Math.round(loyverseB2B * 100) / 100, "", "", "from Sales tab"]);
+  rows.push(["Loyverse B2B (bank transfer only)", Math.round(loyverseB2BBankTransfer * 100) / 100, "", "", "subset of B2B revenue paid via bank transfer"]);
   rows.push(["FlowAccount receipts", Math.round(flowReceiptsTotal * 100) / 100, "", "", `${receipts.length} receipts in ${monthArg}`]);
   rows.push(["Difference", diff, "", "", Math.abs(diff) < 1 ? "OK" : "Investigate"]);
   const recoDiffRow = rows.length - 1;
+  rows.push(["Loyverse B2B (card/cash, management only)", Math.round(mgmtOnlyB2B * 100) / 100, "", "", "walk-in B2B clients without Flow tax invoice — informational"]);
+  const recoMgmtRow = rows.length - 1;
 
   await writeRows(sid, sheetId, rows);
 
@@ -625,7 +637,7 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
       // Reconciliation header
       { repeatCell: { range: { sheetId, startRowIndex: recoHeaderRow, endRowIndex: recoHeaderRow + 1, startColumnIndex: 0, endColumnIndex: 5 }, cell: { userEnteredFormat: { backgroundColor: { red: 0.85, green: 0.85, blue: 0.85 }, textFormat: { bold: true } } }, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
       // Reconciliation amount column
-      { repeatCell: { range: { sheetId, startRowIndex: recoHeaderRow + 1, endRowIndex: recoDiffRow + 1, startColumnIndex: 1, endColumnIndex: 2 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } },
+      { repeatCell: { range: { sheetId, startRowIndex: recoHeaderRow + 1, endRowIndex: recoMgmtRow + 1, startColumnIndex: 1, endColumnIndex: 2 }, cell: { userEnteredFormat: { numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(numberFormat,horizontalAlignment)" } },
       // Difference row — orange if non-zero
       { repeatCell: { range: { sheetId, startRowIndex: recoDiffRow, endRowIndex: recoDiffRow + 1, startColumnIndex: 0, endColumnIndex: 5 }, cell: { userEnteredFormat: { backgroundColor: Math.abs(diff) < 1 ? { red: 0.78, green: 0.92, blue: 0.78 } : { red: 1.0, green: 0.85, blue: 0.65 }, textFormat: { bold: true }, numberFormat: FMT_BAHT } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat)" } },
       // Conditional format: highlight Status cell light-orange when invoice is unpaid.
@@ -658,7 +670,7 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
     ],
   });
   console.log(`  ✓ "${TAB_INVOICES}" written: ${invoices.length} invoices, ${stray.length} stray receipts`);
-  console.log(`     Reconciliation: Loyverse B2B = ${Math.round(loyverseB2B).toLocaleString("ru-RU")} ฿, FlowAccount receipts = ${Math.round(flowReceiptsTotal).toLocaleString("ru-RU")} ฿, diff = ${diff.toFixed(2)} ฿${Math.abs(diff) < 1 ? " ✓" : " ⚠ investigate"}`);
+  console.log(`     Reconciliation: Loyverse B2B (bank transfer) = ${Math.round(loyverseB2BBankTransfer).toLocaleString("ru-RU")} ฿, FlowAccount receipts = ${Math.round(flowReceiptsTotal).toLocaleString("ru-RU")} ฿, diff = ${diff.toFixed(2)} ฿${Math.abs(diff) < 1 ? " ✓" : " ⚠ investigate"} · management-only B2B (card/cash) = ${Math.round(mgmtOnlyB2B).toLocaleString("ru-RU")} ฿`);
 }
 
 
@@ -803,6 +815,8 @@ interface ManagerSchedule {
   commissions?: Record<string, number>;
   // Per-manager fixed monthly salary in THB (fallback when sheet cell empty).
   fixed?: Record<string, number>;
+  // Per-manager advances already paid this month (fallback when sheet cell empty).
+  paid?: Record<string, number>;
   days: Record<string, Record<string, number | string>>;
   remarks?: Record<string, string>;
 }
@@ -839,9 +853,10 @@ async function writeBonusesTab(sid: string) {
   }
   const managers = sched.managers;
 
-  // Preserve user-edited values (Commission %, Fix ฿) across re-runs.
+  // Preserve user-edited values (Commission %, Fix ฿, Already paid ฿) across re-runs.
   const userCommission: Record<string, number> = {};
   const userFixed: Record<string, number> = {};
+  const userPaid: Record<string, number> = {};
   if (existed) {
     const existing = await readRange(sid, `${TAB_BONUSES}!A1:Z200`);
     for (const row of existing) {
@@ -858,17 +873,26 @@ async function writeBonusesTab(sid: string) {
           const v = Number(row[i + 1]);
           if (Number.isFinite(v) && v >= 0) userFixed[managers[i]] = v;
         }
+      } else if (label === "Already paid ฿") {
+        for (let i = 0; i < managers.length; i++) {
+          // Only treat the cell as user input when > 0; blank or 0 → fall back
+          // to JSON. A user who entered "0" gets the same result as JSON-default 0.
+          const v = Number(row[i + 1]);
+          if (Number.isFinite(v) && v > 0) userPaid[managers[i]] = v;
+        }
       }
     }
   }
   // Initial values: user-edited sheet > JSON > CLI default / 0.
   const initialPct: Record<string, number> = {};
   const initialFixed: Record<string, number> = {};
+  const initialPaid: Record<string, number> = {};
   for (const m of managers) {
     initialPct[m] = userCommission[m]
       ?? sched.commissions?.[m]
       ?? commissionPctArg;
     initialFixed[m] = userFixed[m] ?? sched.fixed?.[m] ?? 0;
+    initialPaid[m]  = userPaid[m]  ?? sched.paid?.[m]  ?? 0;
   }
 
   await clearTab(sid, sheetId);
@@ -953,17 +977,39 @@ async function writeBonusesTab(sid: string) {
   ]);
   const payoutRow = rows.length - 1;
 
+  // Already paid ฿ row — editable per-manager advances paid during the month.
+  // Write blank for 0 so empty cells fall back to JSON seed on re-run; only
+  // explicit user-entered numbers persist.
+  rows.push([
+    "Already paid ฿",
+    ...managers.map(m => initialPaid[m] > 0 ? initialPaid[m] : ""),
+    "",
+    "↑ edit if advances were paid during the month",
+  ]);
+  const paidRow = rows.length - 1;
+
+  // Remaining ฿ row — formula = Total payout - Already paid.
+  rows.push([
+    "Remaining ฿",
+    ...managers.map(_ => 0),
+    0,
+    "",
+  ]);
+  const remainingRow = rows.length - 1;
+
   await writeRows(sid, sheetId, rows);
 
   // Now overwrite bonus / payout cells with formulas. 1-indexed sheet row numbers:
-  const totalRow1  = totalRow  + 1;
-  const pctRow1    = pctRow    + 1;
-  const bonusRow1  = bonusRow  + 1;
-  const fixRow1    = fixRow    + 1;
-  const payoutRow1 = payoutRow + 1;
+  const totalRow1     = totalRow     + 1;
+  const pctRow1       = pctRow       + 1;
+  const bonusRow1     = bonusRow     + 1;
+  const fixRow1       = fixRow       + 1;
+  const payoutRow1    = payoutRow    + 1;
+  const paidRow1      = paidRow      + 1;
+  const remainingRow1 = remainingRow + 1;
 
   const formulaCells: any[] = [];
-  // Per-manager: bonus = total × pct;  payout = fix + bonus
+  // Per-manager: bonus = total × pct;  payout = fix + bonus;  remaining = payout − paid
   managers.forEach((_, i) => {
     const col = colA1(i + 1);
     formulaCells.push({
@@ -980,11 +1026,18 @@ async function writeBonusesTab(sid: string) {
         range: { sheetId, startRowIndex: payoutRow, endRowIndex: payoutRow + 1, startColumnIndex: i + 1, endColumnIndex: i + 2 },
       },
     });
+    formulaCells.push({
+      updateCells: {
+        rows: [{ values: [{ userEnteredValue: { formulaValue: `=${col}${payoutRow1}-${col}${paidRow1}` } }] }],
+        fields: "userEnteredValue",
+        range: { sheetId, startRowIndex: remainingRow, endRowIndex: remainingRow + 1, startColumnIndex: i + 1, endColumnIndex: i + 2 },
+      },
+    });
   });
   // Grand totals (right-most column): SUM across managers
   const firstMgrCol = colA1(1);
   const lastMgrCol  = colA1(managers.length);
-  for (const [r1, idx] of [[bonusRow1, bonusRow], [fixRow1, fixRow], [payoutRow1, payoutRow]] as const) {
+  for (const [r1, idx] of [[bonusRow1, bonusRow], [fixRow1, fixRow], [payoutRow1, payoutRow], [paidRow1, paidRow], [remainingRow1, remainingRow]] as const) {
     formulaCells.push({
       updateCells: {
         rows: [{ values: [{ userEnteredValue: { formulaValue: `=SUM(${firstMgrCol}${r1}:${lastMgrCol}${r1})` } }] }],
@@ -1029,11 +1082,20 @@ async function writeBonusesTab(sid: string) {
       // Fix ฿ cells: yellow editable (numbers) + label
       { repeatCell: { range: { sheetId, startRowIndex: fixRow, endRowIndex: fixRow + 1, startColumnIndex: 1, endColumnIndex: 1 + managers.length }, cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.96, blue: 0.78 }, textFormat: { bold: true }, numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat,horizontalAlignment)" } },
       { repeatCell: { range: { sheetId, startRowIndex: fixRow, endRowIndex: fixRow + 1, startColumnIndex: 0, endColumnIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat(textFormat)" } },
-      // Total payout (deeper green, formula = fix + bonus)
-      { repeatCell: { range: { sheetId, startRowIndex: payoutRow, endRowIndex: payoutRow + 1, startColumnIndex: 0, endColumnIndex: totalCols }, cell: { userEnteredFormat: { backgroundColor: { red: 0.65, green: 0.85, blue: 0.65 }, textFormat: { bold: true }, numberFormat: FMT_BAHT } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat)" } },
+      // Total payout (lighter green, formula = fix + bonus)
+      { repeatCell: { range: { sheetId, startRowIndex: payoutRow, endRowIndex: payoutRow + 1, startColumnIndex: 0, endColumnIndex: totalCols }, cell: { userEnteredFormat: { backgroundColor: { red: 0.82, green: 0.92, blue: 0.82 }, textFormat: { bold: true }, numberFormat: FMT_BAHT } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat)" } },
+      // Already paid ฿ — yellow editable
+      { repeatCell: { range: { sheetId, startRowIndex: paidRow, endRowIndex: paidRow + 1, startColumnIndex: 1, endColumnIndex: 1 + managers.length }, cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.96, blue: 0.78 }, textFormat: { bold: true }, numberFormat: FMT_BAHT, horizontalAlignment: "RIGHT" } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat,horizontalAlignment)" } },
+      { repeatCell: { range: { sheetId, startRowIndex: paidRow, endRowIndex: paidRow + 1, startColumnIndex: 0, endColumnIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat(textFormat)" } },
+      // Remaining ฿ — final payout, deepest green (what's actually owed)
+      { repeatCell: { range: { sheetId, startRowIndex: remainingRow, endRowIndex: remainingRow + 1, startColumnIndex: 0, endColumnIndex: totalCols }, cell: { userEnteredFormat: { backgroundColor: { red: 0.55, green: 0.78, blue: 0.55 }, textFormat: { bold: true }, numberFormat: FMT_BAHT } }, fields: "userEnteredFormat(backgroundColor,textFormat,numberFormat)" } },
     ],
   });
-  console.log(`  ✓ "${TAB_BONUSES}": ${managers.map(m => `${m} sales=${Math.round(totals[m]).toLocaleString("ru-RU")} @ ${initialPct[m]}% bonus=${Math.round(totals[m] * initialPct[m] / 100).toLocaleString("ru-RU")} + fix=${initialFixed[m].toLocaleString("ru-RU")}`).join("; ")}`);
+  console.log(`  ✓ "${TAB_BONUSES}": ${managers.map(m => {
+    const payout = initialFixed[m] + totals[m] * initialPct[m] / 100;
+    const remaining = payout - initialPaid[m];
+    return `${m} sales=${Math.round(totals[m]).toLocaleString("ru-RU")} @ ${initialPct[m]}% bonus=${Math.round(totals[m] * initialPct[m] / 100).toLocaleString("ru-RU")} + fix=${initialFixed[m].toLocaleString("ru-RU")} − paid=${initialPaid[m].toLocaleString("ru-RU")} → remaining=${Math.round(remaining).toLocaleString("ru-RU")}`;
+  }).join("; ")}`);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────
