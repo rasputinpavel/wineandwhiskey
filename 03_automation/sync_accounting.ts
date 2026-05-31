@@ -728,7 +728,23 @@ async function writeExpensesTab(sid: string) {
     .ilike("status", "closed")
     .order("order_date", { ascending: true });
   if (error) throw new Error(`Supabase: ${error.message}`);
-  const pos = data ?? [];
+  let pos = data ?? [];
+
+  // Apply PO exclusions (artificial / corrective POs that shouldn't appear).
+  const excludedPOs = new Set<string>();
+  try {
+    const cfgPath = nodePath.join(process.cwd(), "08_config", "po_exclude.json");
+    if (fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+      for (const ent of cfg.excluded ?? []) {
+        if (ent?.po_number) excludedPOs.add(String(ent.po_number));
+      }
+    }
+  } catch (e) { console.warn("[Expenses] failed to load po_exclude.json:", e); }
+  const before = pos.length;
+  pos = pos.filter(p => !excludedPOs.has(String(p.po_number)));
+  if (before !== pos.length) console.log(`  excluded ${before - pos.length} PO(s) per 08_config/po_exclude.json`);
+
   console.log(`[Expenses] ${pos.length} closed POs in ${monthArg}`);
 
   // Net / VAT / Total come straight from the XHR-derived columns:
@@ -757,11 +773,28 @@ async function writeExpensesTab(sid: string) {
   const headerRow = rows.length - 1;
   const dataStart = rows.length;
 
+  // VAT-inclusive fallback: every PO must carry VAT. If the supplier didn't
+  // break VAT out as a separate line item (vat_thb is null or 0), the line
+  // prices in the PO are already inclusive of 7% — back the VAT out of total.
+  //   gross = total_thb (unchanged, what we actually paid)
+  //   vat   = gross × 7/107
+  //   net   = gross − vat
   let totalNet = 0, totalVat = 0, totalGross = 0;
+  let inclusiveCount = 0;
   pos.forEach((po, i) => {
-    const net   = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? 0);
     const gross = Number(po.total_thb ?? 0);
-    const vat   = po.vat_thb != null ? Number(po.vat_thb) : Math.max(0, gross - net);
+    const rawVat = Number(po.vat_thb ?? 0);
+    let net: number;
+    let vat: number;
+    if (rawVat > 0) {
+      vat = rawVat;
+      net = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? gross - vat);
+    } else {
+      // VAT not separately broken out → assume total is VAT-inclusive.
+      vat = Math.round((gross * 7 / 107) * 100) / 100;
+      net = Math.round((gross - vat) * 100) / 100;
+      inclusiveCount++;
+    }
     totalNet += net; totalVat += vat; totalGross += gross;
     rows.push([
       i + 1,
@@ -773,6 +806,7 @@ async function writeExpensesTab(sid: string) {
       Math.round(gross * 100) / 100,
     ]);
   });
+  if (inclusiveCount) console.log(`  ${inclusiveCount} PO(s) had VAT not broken out — treated as VAT-inclusive (7% backed out)`);
   const dataEnd = rows.length;
   rows.push([
     "", "", "", "TOTAL",

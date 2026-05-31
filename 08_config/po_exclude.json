@@ -1,0 +1,12 @@
+{
+  "_doc": "Purchase orders excluded from the monthly Expenses tab. Used by sync_accounting.ts. Add a PO here when it shouldn't count as a real expense — e.g. an artificial PO created in Loyverse to patch a stock discrepancy.",
+  "excluded": [
+    {
+      "po_number": "PO2941",
+      "date": "2026-05-22",
+      "supplier": "Wine Garage Co.Ltd",
+      "amount": 1501,
+      "reason": "Artificial PO created in Loyverse to fix a stock discrepancy — not a real purchase."
+    }
+  ]
+}

@@ -44,8 +44,10 @@
   - Net = subtotal после PO-level скидки (orderData.amount + сумма отрицательных landedCosts ÷ 100)
   - VAT = сумма положительных landedCosts ÷ 100
   - Total = Net + VAT (= ยอดรวมสุทธิ на list-странице Loyverse)
+- **VAT-inclusive fallback:** если `vat_thb` ≤ 0 (поставщик не вынес VAT отдельной строкой, а написал «VAT included» в Notes), считаем total VAT-инклюзивным: `vat = total × 7/107`, `net = total − vat`. Без VAT PO существовать не может — поставщик-неплательщик у нас не работает.
 - Поля `subtotal_thb` / `vat_thb` / `total_thb` хранятся в `purchase_orders` (миграция: `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS subtotal_thb numeric, ADD COLUMN IF NOT EXISTS vat_thb numeric;`).
 - Self-heal: для PO со старого scrape (когда колонки в DB сдвинуты из-за бага парсера list-страницы) скрипт восстанавливает `status='Closed'` из items, если `received='Closed'` и `total_thb` null.
+- **PO exclusions:** `08_config/po_exclude.json` — список PO, которые не должны попадать в Expenses (например, искусственный PO, созданный в Loyverse для коррекции остатков). Каждая запись: `po_number` + `reason`.
 - Колонки: # · PO · Order date · Supplier · Net ฿ · VAT ฿ · Total ฿. Внизу — TOTAL.
 
 ### 4. `Bonuses`
