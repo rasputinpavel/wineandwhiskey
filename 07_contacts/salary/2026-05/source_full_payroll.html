@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Payroll Source — New Latitude — May 2026</title>
+<style>
+  body {
+    font-family: "Times New Roman", Times, serif;
+    color: #000;
+    background: #fff;
+    margin: 40px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .header h1 {
+    font-size: 20px;
+    margin: 0 0 8px;
+    font-weight: bold;
+  }
+  .header h2 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: bold;
+  }
+  .actual {
+    text-align: right;
+    color: #c00;
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    border: 1px solid #000;
+    padding: 8px 10px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  th {
+    font-weight: bold;
+  }
+  td.name {
+    text-align: left;
+  }
+  td.num {
+    text-align: right;
+  }
+  .total-row td {
+    font-weight: bold;
+  }
+  .footnote {
+    margin-top: 16px;
+    font-size: 12px;
+    color: #333;
+    line-height: 1.5;
+  }
+  @media print {
+    body { margin: 20mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>New Latitude Co., Ltd.</h1>
+  <h2>Payroll for May 2026</h2>
+</div>
+
+<div class="actual">COMPUTED — internal commission schedule</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>No.</th>
+      <th>Name</th>
+      <th>ID</th>
+      <th>Salary</th>
+      <th>Commission<br>(1% B2C)</th>
+      <th>Total</th>
+      <th>Advances<br>paid</th>
+      <th>Net to<br>Transfer</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td class="name">Ms. Nutsaphorn (Grace) Sakulsrisuk</td>
+      <td>1 3014 00147 77 3</td>
+      <td class="num">18,000.00</td>
+      <td class="num">991.22</td>
+      <td class="num">18,991.22</td>
+      <td class="num">14,000.00</td>
+      <td class="num">4,991.22</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td class="name">Ms. Nattaporn (Som) Nattakanpong</td>
+      <td>1 5601 00454 04 0</td>
+      <td class="num">20,000.00</td>
+      <td class="num">847.57</td>
+      <td class="num">20,847.57</td>
+      <td class="num">—</td>
+      <td class="num">20,847.57</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td class="name">Mr. Iurii Prudnikov</td>
+      <td>0 9910 23117 31 4</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="3">TOTAL</td>
+      <td class="num">38,000.00</td>
+      <td class="num">1,838.79</td>
+      <td class="num">39,838.79</td>
+      <td class="num">14,000.00</td>
+      <td class="num">25,838.79</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footnote">
+  Commission = 1% of net B2C revenue on each manager's shifts (B2B receipts
+  excluded — bank-transfer or named-account customers). Source:
+  <code>08_config/manager_schedules/2026-05.json</code>.
+  Commission base — Grace ฿99,122.22, Som ฿84,757.15.<br>
+  SSO (5%) and withholding tax are contributed by the employer; the figures
+  above are net to the employee. Store closed 31 May (Visakha Bucha Day).<br>
+  Pending the official New Latitude payroll sheet for May.
+</div>
+
+</body>
+</html>
