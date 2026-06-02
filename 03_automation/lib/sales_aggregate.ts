@@ -122,8 +122,11 @@ export async function aggregateSales(opts: AggregateOptions): Promise<AggregateR
   // 2. Fetch receipts for the window
   const minUtc = new Date(`${fromIso}T00:00:00+07:00`).toISOString();
   const maxUtc = new Date(`${toIso}T23:59:59+07:00`).toISOString();
+  // Fetch SALE + REFUND (no receipt_type filter): refunds are subtracted below
+  // so revenue is net of returns. Cancelled receipts (cancelled_at != null) are
+  // skipped — they are voided and never represented a sale.
   const receipts: any[] = await loyFetch(
-    `/receipts?receipt_type=SALE&created_at_min=${minUtc}&created_at_max=${maxUtc}`,
+    `/receipts?created_at_min=${minUtc}&created_at_max=${maxUtc}`,
     "receipts",
   );
 
@@ -142,14 +145,21 @@ export async function aggregateSales(opts: AggregateOptions): Promise<AggregateR
 
   function getOrInit(itemId: string): ItemSales | null {
     const meta = itemMeta!.get(itemId);
-    if (!meta) return null;
-    if (opts.itemFilter && !opts.itemFilter(itemId, meta)) return null;
+    // Item missing from the /items catalog (deleted/archived) — its revenue is
+    // still real. Filtered callers can't evaluate the filter without meta, so
+    // they skip it; the unfiltered total caller folds it into a placeholder so
+    // month revenue stays complete (matches the receipt-total basis).
+    if (!meta) {
+      if (opts.itemFilter) return null;
+    } else if (opts.itemFilter && !opts.itemFilter(itemId, meta)) {
+      return null;
+    }
     let row = items.get(itemId);
     if (!row) {
       row = {
-        itemId, name: meta.name,
-        categoryId: meta.categoryId,
-        categoryName: categoryName!.get(meta.categoryId) ?? "—",
+        itemId, name: meta?.name ?? "— (archived item)",
+        categoryId: meta?.categoryId ?? "",
+        categoryName: meta ? (categoryName!.get(meta.categoryId) ?? "—") : "—",
         total: emptyStats(), b2c: emptyStats(), b2b: emptyStats(),
         b2bByCustomer: new Map(),
       };
@@ -159,9 +169,12 @@ export async function aggregateSales(opts: AggregateOptions): Promise<AggregateR
   }
 
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const isRefund = r.receipt_type === "REFUND";
+    const sign = isRefund ? -1 : 1;                      // refunds reduce net sales
     const customerName = r.customer_id ? (custNames.get(r.customer_id) ?? "") : "";
     const cls = classifyReceipt({ payments: r.payments, customerName });
-    if (cls.isB2B) receiptsB2B++; else receiptsB2C++;
+    if (!isRefund) { if (cls.isB2B) receiptsB2B++; else receiptsB2C++; }
 
     // Per-receipt: each item line touches one channel.
     const seenInThisReceipt = new Set<string>();  // for `checks` counting (one check per SKU per receipt)
@@ -170,9 +183,9 @@ export async function aggregateSales(opts: AggregateOptions): Promise<AggregateR
       if (!id) continue;
       const row = getOrInit(id);
       if (!row) continue;
-      const qty = Number(li.quantity ?? 0);
-      const rev = Number(li.total_money ?? 0);
-      const cost = Number(li.cost_total ?? 0);
+      const qty = Number(li.quantity ?? 0) * sign;
+      const rev = Number(li.total_money ?? 0) * sign;
+      const cost = Number(li.cost_total ?? 0) * sign;
       const channelStats = cls.isB2B ? row.b2b : row.b2c;
       channelStats.units += qty;
       channelStats.revenue += rev;
@@ -180,7 +193,8 @@ export async function aggregateSales(opts: AggregateOptions): Promise<AggregateR
       row.total.units += qty;
       row.total.revenue += rev;
       row.total.cost += cost;
-      if (!seenInThisReceipt.has(id)) {
+      // Refunds don't count as transactions ("checks") — only real sales do.
+      if (!isRefund && !seenInThisReceipt.has(id)) {
         channelStats.checks++;
         row.total.checks++;
         seenInThisReceipt.add(id);

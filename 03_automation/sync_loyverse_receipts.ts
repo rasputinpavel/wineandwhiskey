@@ -7,7 +7,9 @@
  *
  * Persists:
  *   • inventory.loyverse_customer     — справочник для UI picker'а
- *   • inventory.loyverse_receipt      — все receipts (SALE + REFUND)
+ *   • inventory.loyverse_receipt      — все receipts (SALE + REFUND), кроме
+ *                                       отменённых (cancelled_at != null —
+ *                                       они выкидываются и удаляются из таблицы)
  *   • inventory.loyverse_receipt_line — детализация по SKU
  *
  * B2B классификация делается через 03_automation/lib/b2b.ts (общий с
@@ -119,7 +121,18 @@ async function syncReceipts(fromIso: string, toIso: string) {
 
     // Upsert receipt'ы и линии. Замешиваем в одном цикле.
     for (let i = 0; i < receipts.length; i += 100) {
-      const batch = receipts.slice(i, i + 100);
+      const rawBatch = receipts.slice(i, i + 100);
+
+      // Отменённые чеки (cancelled_at != null) не являются продажей — выкидываем
+      // их из выручки и удаляем, если они уже лежат в таблице (cascade снесёт линии).
+      const cancelledNums = rawBatch.filter(r => r.cancelled_at).map(r => r.receipt_number);
+      const batch = rawBatch.filter(r => !r.cancelled_at);
+      if (cancelledNums.length) {
+        const { error: delErr } = await sb.from("loyverse_receipt").delete().in("receipt_number", cancelledNums);
+        if (delErr) throw new Error(`cancelled purge: ${delErr.message}`);
+        console.log(`[receipts]   purged ${cancelledNums.length} cancelled receipt(s)`);
+      }
+      if (batch.length === 0) continue;
 
       const receiptRows = batch.map(r => {
         const cName = r.customer_id ? (nameById.get(r.customer_id) ?? "") : "";

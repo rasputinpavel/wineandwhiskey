@@ -43,6 +43,12 @@ export const dynamic = 'force-dynamic'
 // the window is captured. 60d covers the longest reasonable supplier terms.
 const AP_FETCH_GRACE_DAYS = 60
 
+// Previous calendar month for a 'YYYY-MM' key.
+function prevYm(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
 type SearchParams = { month?: string; settle?: 'month' | 'total' }
 
 export default async function PulseDashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -53,6 +59,9 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const validYms = new Set(months.map(m => m.fromDate.slice(0, 7)))
   const monthsStart = months[0].fromDate                  // 13 months ago, 1st
   const monthsStartIso = monthsStart + 'T00:00:00Z'
+  // Consignment obligation of the oldest trend month comes from the month
+  // BEFORE the window, so fetch receipt lines starting one month earlier.
+  const consignLinesStartIso = prevYm(months[0].fromDate.slice(0, 7)) + '-01T00:00:00Z'
   const today = todayBkk()
   const { daysInMonth: currentDaysInMonth, daysPassed: currentDaysPassed } = mtdProgress()
   const currentMonth = months[months.length - 1]
@@ -114,17 +123,18 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     return all
   }
 
-  // Lines for the SELECTED month (for consignment debt: sold-units × price).
-  // Embedded receipt_line array per receipt; PostgREST resolves the join.
-  async function fetchSelectedMonthLines(): Promise<any[]> {
+  // Receipt lines across the whole window (for consignment debt: sold-units ×
+  // price), folded per month downstream. Embedded receipt_line array per
+  // receipt; PostgREST resolves the join.
+  async function fetchAllReceiptLines(fromIso: string): Promise<any[]> {
     const all: any[] = []
     const PAGE = 1000
     for (let from = 0; from < 100000; from += PAGE) {
       const { data, error } = await sbInventory
         .from('loyverse_receipt')
-        .select('id, receipt_date, receipt_type, loyverse_receipt_line(sku, qty)')
-        .gte('receipt_date', startOfMonth + 'T00:00:00Z')
-        .lt('receipt_date', endOfMonthExclusive + 'T00:00:00Z')
+        .select('receipt_date, receipt_type, loyverse_receipt_line(sku, qty)')
+        .gte('receipt_date', fromIso)
+        .order('receipt_date', { ascending: true })
         .range(from, from + PAGE - 1)
       if (error) throw error
       if (!data || data.length === 0) break
@@ -137,11 +147,16 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   // ─── Fetch ───────────────────────────────────────────────────────────────
   let receiptsAll: LoyverseReceipt[] = []
   let posAll: PurchaseOrder[] = []
-  let monthReceiptsWithLines: any[] = []
+  let allReceiptLines: any[] = []
   try {
-    [receiptsAll, posAll, monthReceiptsWithLines] = await Promise.all([
-      fetchAllReceipts(), fetchAllPOs(), fetchSelectedMonthLines(),
+    const [r, p, lines] = await Promise.all([
+      fetchAllReceipts(),
+      fetchAllPOs(),
+      fetchAllReceiptLines(consignLinesStartIso),
     ])
+    receiptsAll = r
+    posAll = p
+    allReceiptLines = lines
   } catch (e: any) {
     return <SchemaError error={String(e?.message ?? e)} />
   }
@@ -246,13 +261,17 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += Number(p.total_thb ?? 0)
   }
 
-  // Consignment debt for the selected month: Σ (sold_qty × price_hc) per
-  // consignment supplier, where sold_qty = SALE − REFUND units of each SKU
-  // and price_hc is the agreed HC consignment price. Folds into the selected
-  // month's supplier payments because consignment is invoiced monthly per
-  // actual sales — it IS a real cash obligation for the month, even though
-  // no PO exists yet. Trend chart for prior months stays PO-only (we only
-  // fetch receipt lines for the selected month).
+  // Consignment debt: Σ (sold_qty × price_hc) per consignment supplier,
+  // where sold_qty = SALE − REFUND units of each SKU and price_hc is the
+  // agreed HC consignment price.
+  //
+  // TIMING — consignment is invoiced and paid on ~the 5th of the FOLLOWING
+  // month. So sales of month M are a cash obligation of month M+1, NOT of M.
+  // We fold per-supplier debt by SALES month, then book each calendar month's
+  // obligation from the PRIOR month's sales (consignObligation*). Because the
+  // source month is always a closed month, the number is stable — it no longer
+  // drifts intra-month nor flickers when a live join lags.
+  //
   // PostgREST many-to-one embeds come back as a single object; supabase-js
   // types it as an array regardless — hence the unknown cast.
   type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
@@ -263,21 +282,38 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (!code || !cp.supplier_id) continue
     priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
   }
-  const consignDebtBySupId = new Map<string, number>()
-  for (const r of monthReceiptsWithLines) {
+  // ym → supplierId → consignment debt accrued from THAT month's sales.
+  const consignSalesByMonth = new Map<string, Map<string, number>>()
+  for (const r of allReceiptLines) {
+    const ym = (r.receipt_date as string).slice(0, 7)
     const sign = r.receipt_type === 'REFUND' ? -1 : 1
     const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
     for (const ln of lines) {
       if (!ln.sku) continue
       const hit = priceByCode.get(ln.sku)
       if (!hit) continue
-      const add = Number(ln.qty ?? 0) * hit.price * sign
-      consignDebtBySupId.set(hit.supplierId, (consignDebtBySupId.get(hit.supplierId) ?? 0) + add)
+      let bucket = consignSalesByMonth.get(ym)
+      if (!bucket) { bucket = new Map(); consignSalesByMonth.set(ym, bucket) }
+      bucket.set(hit.supplierId, (bucket.get(hit.supplierId) ?? 0) + Number(ln.qty ?? 0) * hit.price * sign)
     }
   }
-  const selectedConsignDebt = [...consignDebtBySupId.values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
-  const selectedBucketForDebt = byMonth.get(selectedYm)
-  if (selectedBucketForDebt) selectedBucketForDebt.supplierPayments += selectedConsignDebt
+  // Obligation booked in month `ym` = consignment SALES of the previous month.
+  function consignObligationBySupId(ym: string): Map<string, number> {
+    return consignSalesByMonth.get(prevYm(ym)) ?? new Map<string, number>()
+  }
+  function consignObligationTotal(ym: string): number {
+    return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
+  }
+  // Settlements table reads this for the selected month.
+  const consignDebtBySupId = consignObligationBySupId(selectedYm)
+  // Fold each month's consignment obligation into its supplier-payments bucket
+  // so trend bars + closed-month P&L carry it. The current month additionally
+  // uses supplierPaymentsMtd (which adds the same obligation) for its headline.
+  for (const m of months) {
+    const ym = m.fromDate.slice(0, 7)
+    const b = byMonth.get(ym)
+    if (b) b.supplierPayments += consignObligationTotal(ym)
+  }
 
   // Fixed costs — two kinds:
   //   fixed rows  → flat THB/month (rent, salary, …)
@@ -308,10 +344,13 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   type MonthPnl = { ym: string; label: string; revenue: number; revenueB2C: number; revenueB2B: number; supplierPayments: number; gp: number; fixed: number; net: number; isCurrent: boolean }
   const currentYM = currentMonth.fromDate.slice(0, 7)
 
+  // Always anchored to the CURRENT month — this is what the trend's current
+  // bar shows ("paid so far this month"), and must not move with the
+  // selected-month filter.
   const supplierPaymentsMtd = supplierPayments
-    .filter(p => p.paymentDate >= startOfMonth && p.paymentDate <= today)
+    .filter(p => p.paymentDate >= currentMonth.fromDate && p.paymentDate <= today)
     .reduce((s, p) => s + p.total, 0)
-    + (isCurrent ? selectedConsignDebt : 0)
+    + consignObligationTotal(currentYm)
 
   const monthsPnl: MonthPnl[] = months.map(m => {
     const ym = m.fromDate.slice(0, 7)
@@ -328,6 +367,15 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   })
   const selected      = monthsPnl.find(m => m.ym === selectedYm) ?? monthsPnl[monthsPnl.length - 1]
   const selectedBucket = byMonth.get(selectedYm) ?? empty()
+
+  // Hero/Waterfall: selected.supplierPayments already carries the consignment
+  // obligation (folded into byMonth for closed months, into supplierPaymentsMtd
+  // for the current month), so no override is needed. We surface the obligation
+  // amount separately for the PO/Consignment breakout line.
+  const selectedConsignObligation = consignObligationTotal(selectedYm)
+  const selectedSupplierPayments = selected.supplierPayments
+  const selectedGp  = selected.revenue - selectedSupplierPayments
+  const selectedNet = selectedGp - selected.fixed
 
   // Reference Gross Margin % (from Loyverse cost_total) for the selected month.
   const refGmPct = selectedBucket.total > 0
@@ -361,12 +409,12 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const projRevenue    = isCurrent
     ? projB2C + selectedBucket.b2b + b2bDueByEom
     : selected.revenue
-  const projSupplier   = isCurrent ? currentBucket.supplierPayments : selected.supplierPayments
+  const projSupplier   = isCurrent ? currentBucket.supplierPayments : selectedSupplierPayments
   const projGp         = projRevenue - projSupplier
-  const projNet        = isCurrent ? (projGp - fixedForMonth(projRevenue)) : selected.net
+  const projNet        = isCurrent ? (projGp - fixedForMonth(projRevenue)) : selectedNet
   // For "more by EOM" sub on waterfall — only meaningful when looking at current.
   const revenueRemainingProj  = isCurrent ? Math.max(0, projRevenue - selected.revenue) : 0
-  const supplierRemainingProj = isCurrent ? Math.max(0, projSupplier - selected.supplierPayments) : 0
+  const supplierRemainingProj = isCurrent ? Math.max(0, projSupplier - selectedSupplierPayments) : 0
 
   // ─── Next Month Outlook ──────────────────────────────────────────────────
   // Cash-out side of next month is already known: POs ordered THIS month
@@ -384,10 +432,14 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const nextMonthFrom    = nextMonthDate.toISOString().slice(0, 10)
   const nextMonthToExcl  = new Date(Date.UTC(nextMonthDate.getUTCFullYear(), nextMonthDate.getUTCMonth() + 1, 1)).toISOString().slice(0, 10)
   const nextMonthLabel   = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][nextMonthDate.getUTCMonth()]} ${String(nextMonthDate.getUTCFullYear()).slice(-2)}`
+  const nextMonthYm      = nextMonthFrom.slice(0, 7)
 
+  // POs payable next month + next month's consignment obligation (= THIS
+  // month's in-progress consignment sales, invoiced ~5th of next month).
   const supplierPaymentsNext = supplierPayments
     .filter(p => p.paymentDate >= nextMonthFrom && p.paymentDate < nextMonthToExcl)
     .reduce((s, p) => s + p.total, 0)
+    + consignObligationTotal(nextMonthYm)
 
   const expectedB2BNext = openInvoices
     .filter(inv => {
@@ -537,8 +589,8 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
 
   // ─── Headline insight ────────────────────────────────────────────────────
   const headline = isCurrent
-    ? buildHeadline({ netMtd: selected.net, netProjected: projNet, monthlyFixed })
-    : buildPastHeadline({ net: selected.net, monthLabel: selected.label })
+    ? buildHeadline({ netMtd: selectedNet, netProjected: projNet, monthlyFixed })
+    : buildPastHeadline({ net: selectedNet, monthLabel: selected.label })
 
   // For trend chart scale, ignore extreme single months by using max(|net|).
   const trendMax = Math.max(1, ...monthsPnl.map(m => Math.abs(m.net)))
@@ -576,7 +628,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <ThisMonthCard
           monthLabel={selected.label}
           isCurrent={isCurrent}
-          net={selected.net}
+          net={selectedNet}
           netProjected={projNet}
           daysPassed={selectedDaysPassed}
           daysInMonth={selectedDaysInMonth}
@@ -585,10 +637,10 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           revenueB2C={selected.revenueB2C}
           revenueB2B={selected.revenueB2B}
           revenueRemainingProj={revenueRemainingProj}
-          supplierPayments={selected.supplierPayments}
+          supplierPayments={selectedSupplierPayments}
           supplierPaymentsRemaining={supplierRemainingProj}
-          supplierConsignment={selectedConsignDebt}
-          gp={selected.gp}
+          supplierConsignment={selectedConsignObligation}
+          gp={selectedGp}
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
           bufferPct={bufferPct}
@@ -597,7 +649,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           breakevenRevenue={
             fixedPctOfRevenue >= 1
               ? Infinity
-              : ((isCurrent ? currentBucket.supplierPayments : selected.supplierPayments) + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
+              : ((isCurrent ? currentBucket.supplierPayments : selectedSupplierPayments) + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
           }
         />
         <NextMonthCard
