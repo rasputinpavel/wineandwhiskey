@@ -21,10 +21,10 @@ export const dynamic = 'force-dynamic'
 //                     payment_date = paid_at if set, else order_date +
 //                     supplier.payment_terms_days (0 if unknown). For POs
 //                     without an explicit paid_at, payment_date ≤ today is
-//                     assumed paid. PLUS consignment debt for the selected
-//                     month (Σ sold_qty × price_hc per consignment supplier)
-//                     — consignment is invoiced monthly per actual sales and
-//                     is a real obligation even without a PO.
+//                     assumed paid. PLUS consignment debt (Harvest): Σ
+//                     sold_qty × price_hc × 1.07 (7% VAT) on a 5th-to-5th
+//                     billing cycle, booked in the month its invoice issues
+//                     (the 5th) — a real obligation even without a PO.
 //
 //   GP                Revenue − Supplier payments. NOT "cost of goods sold"
 //                     in the bookkeeping sense — it's the cash margin after
@@ -47,6 +47,11 @@ const AP_FETCH_GRACE_DAYS = 60
 function prevYm(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+// Next calendar month for a 'YYYY-MM' key.
+function nextYm(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
 type SearchParams = { month?: string; settle?: 'month' | 'total' }
@@ -261,19 +266,22 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += Number(p.total_thb ?? 0)
   }
 
-  // Consignment debt: Σ (sold_qty × price_hc) per consignment supplier,
-  // where sold_qty = SALE − REFUND units of each SKU and price_hc is the
-  // agreed HC consignment price.
+  // Consignment debt: Σ (sold_qty × price_hc × (1 + VAT)) per consignment
+  // supplier, where sold_qty = SALE − REFUND units of each SKU and price_hc is
+  // the agreed (net) HC consignment price. Harvest issues a 7% VAT tax invoice.
   //
-  // TIMING — consignment is invoiced and paid on ~the 5th of the FOLLOWING
-  // month. So sales of month M are a cash obligation of month M+1, NOT of M.
-  // We fold per-supplier debt by SALES month, then book each calendar month's
-  // obligation from the PRIOR month's sales (consignObligation*). Because the
-  // source month is always a closed month, the number is stable — it no longer
-  // drifts intra-month nor flickers when a live join lags.
+  // TIMING — Harvest settles on a 5th-to-5th billing cycle (NOT the calendar
+  // month): the invoice dated the 5th of month Y covers sales in
+  // [5th of Y-1, 5th of Y) and is a cash obligation of month Y. So a sale on or
+  // after the 5th rolls into NEXT month's invoice; a sale on the 1st–4th still
+  // belongs to the invoice issued on the 5th of the same month. Only consignment
+  // suppliers use this cycle — everyone else stays on the calendar month (their
+  // costs flow through POs above, untouched here).
   //
   // PostgREST many-to-one embeds come back as a single object; supabase-js
   // types it as an array regardless — hence the unknown cast.
+  const CONSIGNMENT_CYCLE_START_DAY = 5   // Harvest bills 5th → 5th
+  const CONSIGNMENT_VAT_FACTOR = 1.07     // 7% VAT on the net HC price
   type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
   const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
   const priceByCode = new Map<string, { supplierId: string; price: number }>()
@@ -282,24 +290,27 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (!code || !cp.supplier_id) continue
     priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
   }
-  // ym → supplierId → consignment debt accrued from THAT month's sales.
-  const consignSalesByMonth = new Map<string, Map<string, number>>()
+  // obligationMonth(YYYY-MM) → supplierId → VAT-inclusive consignment debt,
+  // bucketed by the 5th-to-5th cycle (sale day ≥ 5 → next month's invoice).
+  const consignObligationByMonth = new Map<string, Map<string, number>>()
   for (const r of allReceiptLines) {
-    const ym = (r.receipt_date as string).slice(0, 7)
+    const date = (r.receipt_date as string).slice(0, 10)
+    const ym = date.slice(0, 7)
+    const oblYm = Number(date.slice(8, 10)) >= CONSIGNMENT_CYCLE_START_DAY ? nextYm(ym) : ym
     const sign = r.receipt_type === 'REFUND' ? -1 : 1
     const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
     for (const ln of lines) {
       if (!ln.sku) continue
       const hit = priceByCode.get(ln.sku)
       if (!hit) continue
-      let bucket = consignSalesByMonth.get(ym)
-      if (!bucket) { bucket = new Map(); consignSalesByMonth.set(ym, bucket) }
-      bucket.set(hit.supplierId, (bucket.get(hit.supplierId) ?? 0) + Number(ln.qty ?? 0) * hit.price * sign)
+      let bucket = consignObligationByMonth.get(oblYm)
+      if (!bucket) { bucket = new Map(); consignObligationByMonth.set(oblYm, bucket) }
+      bucket.set(hit.supplierId, (bucket.get(hit.supplierId) ?? 0) + Number(ln.qty ?? 0) * hit.price * CONSIGNMENT_VAT_FACTOR * sign)
     }
   }
-  // Obligation booked in month `ym` = consignment SALES of the previous month.
+  // Consignment cash obligation booked in calendar month `ym`.
   function consignObligationBySupId(ym: string): Map<string, number> {
-    return consignSalesByMonth.get(prevYm(ym)) ?? new Map<string, number>()
+    return consignObligationByMonth.get(ym) ?? new Map<string, number>()
   }
   function consignObligationTotal(ym: string): number {
     return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
@@ -716,7 +727,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <div className="px-4 pb-4 pt-1 text-graphite space-y-2 leading-relaxed">
           <p><span className="text-deep-black">Basis</span> — cash. Revenue is recognised when money lands in Loyverse (B2C cash/card and B2B bank transfers). Unpaid FA tax invoices are AR (visible in Cash control), not revenue.</p>
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
-          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment suppliers tracked via monthly accrual, not POs.</p>
+          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is tracked via sold-units × HC price + 7% VAT on a 5th-to-5th billing cycle, booked in the month its invoice is issued (the 5th), not via POs.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
           <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) × (1 + buffer%) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. The buffer and the pct list are configured in Settings. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
