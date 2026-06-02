@@ -21,10 +21,10 @@ export const dynamic = 'force-dynamic'
 //                     payment_date = paid_at if set, else order_date +
 //                     supplier.payment_terms_days (0 if unknown). For POs
 //                     without an explicit paid_at, payment_date ≤ today is
-//                     assumed paid. PLUS consignment debt (Harvest): Σ
-//                     sold_qty × price_hc × 1.07 (7% VAT) on a 5th-to-5th
-//                     billing cycle, booked in the month its invoice issues
-//                     (the 5th) — a real obligation even without a PO.
+//                     assumed paid. PLUS consignment (Harvest): the manually
+//                     CONFIRMED invoice total per 5th-to-5th period, booked in
+//                     the month the invoice issues (the 5th). Not auto-computed
+//                     from receipts (handover carve-outs); pre-May-2026 excluded.
 //
 //   GP                Revenue − Supplier payments. NOT "cost of goods sold"
 //                     in the bookkeeping sense — it's the cash margin after
@@ -43,17 +43,6 @@ export const dynamic = 'force-dynamic'
 // the window is captured. 60d covers the longest reasonable supplier terms.
 const AP_FETCH_GRACE_DAYS = 60
 
-// Previous calendar month for a 'YYYY-MM' key.
-function prevYm(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
-}
-// Next calendar month for a 'YYYY-MM' key.
-function nextYm(ym: string): string {
-  const [y, m] = ym.split('-').map(Number)
-  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
-}
-
 type SearchParams = { month?: string; settle?: 'month' | 'total' }
 
 export default async function PulseDashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -64,9 +53,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const validYms = new Set(months.map(m => m.fromDate.slice(0, 7)))
   const monthsStart = months[0].fromDate                  // 13 months ago, 1st
   const monthsStartIso = monthsStart + 'T00:00:00Z'
-  // Consignment obligation of the oldest trend month comes from the month
-  // BEFORE the window, so fetch receipt lines starting one month earlier.
-  const consignLinesStartIso = prevYm(months[0].fromDate.slice(0, 7)) + '-01T00:00:00Z'
   const today = todayBkk()
   const { daysInMonth: currentDaysInMonth, daysPassed: currentDaysPassed } = mtdProgress()
   const currentMonth = months[months.length - 1]
@@ -128,40 +114,16 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     return all
   }
 
-  // Receipt lines across the whole window (for consignment debt: sold-units ×
-  // price), folded per month downstream. Embedded receipt_line array per
-  // receipt; PostgREST resolves the join.
-  async function fetchAllReceiptLines(fromIso: string): Promise<any[]> {
-    const all: any[] = []
-    const PAGE = 1000
-    for (let from = 0; from < 100000; from += PAGE) {
-      const { data, error } = await sbInventory
-        .from('loyverse_receipt')
-        .select('receipt_date, receipt_type, loyverse_receipt_line(sku, qty)')
-        .gte('receipt_date', fromIso)
-        .order('receipt_date', { ascending: true })
-        .range(from, from + PAGE - 1)
-      if (error) throw error
-      if (!data || data.length === 0) break
-      all.push(...data)
-      if (data.length < PAGE) break
-    }
-    return all
-  }
-
   // ─── Fetch ───────────────────────────────────────────────────────────────
   let receiptsAll: LoyverseReceipt[] = []
   let posAll: PurchaseOrder[] = []
-  let allReceiptLines: any[] = []
   try {
-    const [r, p, lines] = await Promise.all([
+    const [r, p] = await Promise.all([
       fetchAllReceipts(),
       fetchAllPOs(),
-      fetchAllReceiptLines(consignLinesStartIso),
     ])
     receiptsAll = r
     posAll = p
-    allReceiptLines = lines
   } catch (e: any) {
     return <SchemaError error={String(e?.message ?? e)} />
   }
@@ -170,7 +132,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     invoicesOpenRes,
     customersRes,
     suppliersRes,
-    consignmentPricesRes,
     pulseSettingsRes,
   ] = await Promise.all([
     sbInventory
@@ -187,10 +148,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     sbInventory
       .from('supplier')
       .select('id, name, type, payment_terms_days'),
-    sbInventory
-      .from('consignment_price')
-      .select('id, supplier_id, price_hc, sku:sku(id, loyverse_product_code)')
-      .limit(5000),
     sbInventory
       .from('pulse_settings')
       .select('fixed_buffer_pct')
@@ -245,9 +202,9 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   }
   function includedInCashflow(p: Pick<PurchaseOrder, 'cashflow_override' | 'supplier'>): boolean {
     const t = p.supplier ? supByName.get(p.supplier.trim().toLowerCase())?.type : undefined
-    // Consignment supplier POs document the prior-month invoice; pulse uses
-    // real-time accrual (sold_qty × price_hc) instead so we don't double-count.
-    // cashflow_override is honored only for non-consignment suppliers.
+    // Consignment supplier POs are excluded here; consignment cost is booked
+    // from the manually-confirmed Harvest invoice instead (see below) so we
+    // don't double-count. cashflow_override is honored only for non-consignment.
     if (t === 'consignment') return false
     if (p.cashflow_override === 'exclude') return false
     if (p.cashflow_override === 'include') return true
@@ -266,60 +223,50 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += Number(p.total_thb ?? 0)
   }
 
-  // Consignment debt: Σ (sold_qty × price_hc × (1 + VAT)) per consignment
-  // supplier, where sold_qty = SALE − REFUND units of each SKU and price_hc is
-  // the agreed (net) HC consignment price. Harvest issues a 7% VAT tax invoice.
+  // ─── Harvest consignment — manually confirmed per booking month ────────────
+  // Auto-recomputing from POS receipts does NOT reproduce the real Harvest
+  // invoice: the invoice is built from physical stock reconciliation, and during
+  // the ownership handover (we bought the store) the invoices carve out sales
+  // the previous owner already paid for. So the obligation is a CONFIRMED figure
+  // taken from the actual invoice, booked in the month the invoice is issued.
+  // (Harvest bills on a 5th-to-5th cycle: the invoice dated the 5th of month Y
+  // covers sales in [5th of Y-1, 5th of Y) and is a cash obligation of month Y.)
   //
-  // TIMING — Harvest settles on a 5th-to-5th billing cycle (NOT the calendar
-  // month): the invoice dated the 5th of month Y covers sales in
-  // [5th of Y-1, 5th of Y) and is a cash obligation of month Y. So a sale on or
-  // after the 5th rolls into NEXT month's invoice; a sale on the 1st–4th still
-  // belongs to the invoice issued on the 5th of the same month. Only consignment
-  // suppliers use this cycle — everyone else stays on the calendar month (their
-  // costs flow through POs above, untouched here).
+  //   • before 2026-05 (pre-handover): EXCLUDED — previous owner's liability,
+  //     to be reconciled later from the bank statement (note shown in the UI).
+  //   • 2026-05  = first invoice under new ownership (PO2916, ฿20,824), already
+  //     net of the previous owner's share. Transitional.
+  //   • 2026-06  = transitional — manual exclusions still needed; amount TBD.
+  //   • 2026-07+ = clean.
   //
-  // PostgREST many-to-one embeds come back as a single object; supabase-js
-  // types it as an array regardless — hence the unknown cast.
-  const CONSIGNMENT_CYCLE_START_DAY = 5   // Harvest bills 5th → 5th
-  const CONSIGNMENT_VAT_FACTOR = 1.07     // 7% VAT on the net HC price
-  type ConsignPrice = { supplier_id: string; price_hc: number; sku: { loyverse_product_code: string | null } | null }
-  const consignmentPrices = (consignmentPricesRes.data ?? []) as unknown as ConsignPrice[]
-  const priceByCode = new Map<string, { supplierId: string; price: number }>()
-  for (const cp of consignmentPrices) {
-    const code = cp.sku?.loyverse_product_code
-    if (!code || !cp.supplier_id) continue
-    priceByCode.set(code, { supplierId: cp.supplier_id, price: Number(cp.price_hc ?? 0) })
+  // TODO: move these confirmed totals into an editable field on the Harvest
+  // Monthly Report so the report is the single source of truth (needs a schema
+  // migration). For now they live here and are edited by hand.
+  const HARVEST_START_YM = '2026-05'
+  const HARVEST_CONFIRMED_BY_MONTH: Record<string, number> = {
+    '2026-05': 20824,   // Apr 5 – May 5 invoice (PO2916)
   }
-  // obligationMonth(YYYY-MM) → supplierId → VAT-inclusive consignment debt,
-  // bucketed by the 5th-to-5th cycle (sale day ≥ 5 → next month's invoice).
-  const consignObligationByMonth = new Map<string, Map<string, number>>()
-  for (const r of allReceiptLines) {
-    const date = (r.receipt_date as string).slice(0, 10)
-    const ym = date.slice(0, 7)
-    const oblYm = Number(date.slice(8, 10)) >= CONSIGNMENT_CYCLE_START_DAY ? nextYm(ym) : ym
-    const sign = r.receipt_type === 'REFUND' ? -1 : 1
-    const lines = (r.loyverse_receipt_line ?? []) as Array<{ sku: string | null; qty: number | null }>
-    for (const ln of lines) {
-      if (!ln.sku) continue
-      const hit = priceByCode.get(ln.sku)
-      if (!hit) continue
-      let bucket = consignObligationByMonth.get(oblYm)
-      if (!bucket) { bucket = new Map(); consignObligationByMonth.set(oblYm, bucket) }
-      bucket.set(hit.supplierId, (bucket.get(hit.supplierId) ?? 0) + Number(ln.qty ?? 0) * hit.price * CONSIGNMENT_VAT_FACTOR * sign)
-    }
-  }
-  // Consignment cash obligation booked in calendar month `ym`.
-  function consignObligationBySupId(ym: string): Map<string, number> {
-    return consignObligationByMonth.get(ym) ?? new Map<string, number>()
-  }
+  const consignmentSupplierId = suppliers.find(s => s.type === 'consignment')?.id ?? null
   function consignObligationTotal(ym: string): number {
-    return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
+    return HARVEST_CONFIRMED_BY_MONTH[ym] ?? 0
+  }
+  function consignObligationBySupId(ym: string): Map<string, number> {
+    const amt = consignObligationTotal(ym)
+    return amt > 0 && consignmentSupplierId ? new Map([[consignmentSupplierId, amt]]) : new Map<string, number>()
+  }
+  // Note for months where consignment is intentionally absent (excluded during
+  // handover, or not yet confirmed) — surfaced on the hero so the bottom line
+  // isn't misread as final/complete.
+  function harvestNote(ym: string): string | null {
+    if (consignObligationTotal(ym) > 0) return null
+    if (ym < HARVEST_START_YM) return 'Excludes Harvest consignment (pre-handover — previous owner’s liability, pending bank reconciliation)'
+    return 'Harvest consignment for this month not yet confirmed'
   }
   // Settlements table reads this for the selected month.
   const consignDebtBySupId = consignObligationBySupId(selectedYm)
-  // Fold each month's consignment obligation into its supplier-payments bucket
-  // so trend bars + closed-month P&L carry it. The current month additionally
-  // uses supplierPaymentsMtd (which adds the same obligation) for its headline.
+  // Fold each month's confirmed consignment obligation into its supplier-payments
+  // bucket so trend bars + closed-month P&L carry it. The current month also adds
+  // the same obligation into supplierPaymentsMtd for its headline.
   for (const m of months) {
     const ym = m.fromDate.slice(0, 7)
     const b = byMonth.get(ym)
@@ -651,6 +598,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           supplierPayments={selectedSupplierPayments}
           supplierPaymentsRemaining={supplierRemainingProj}
           supplierConsignment={selectedConsignObligation}
+          consignmentNote={harvestNote(selectedYm)}
           gp={selectedGp}
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
@@ -727,7 +675,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <div className="px-4 pb-4 pt-1 text-graphite space-y-2 leading-relaxed">
           <p><span className="text-deep-black">Basis</span> — cash. Revenue is recognised when money lands in Loyverse (B2C cash/card and B2B bank transfers). Unpaid FA tax invoices are AR (visible in Cash control), not revenue.</p>
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
-          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is tracked via sold-units × HC price + 7% VAT on a 5th-to-5th billing cycle, booked in the month its invoice is issued (the 5th), not via POs.</p>
+          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is NOT auto-computed from receipts (POS units don&apos;t match the real invoice, which is built from physical stock reconciliation and, during the ownership handover, excludes the previous owner&apos;s sales). Instead the confirmed Harvest invoice total is entered per 5th-to-5th billing period and booked in the month its invoice issues (the 5th). Months before the first invoice (May 2026) are flagged as excluding Harvest.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
           <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) × (1 + buffer%) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. The buffer and the pct list are configured in Settings. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
@@ -775,13 +723,13 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
 
 // Unified hero for the selected month — mirrors NextMonthCard's structure
 // (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
-function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, gp, fixedMtd, monthlyFixedBase, bufferPct, fixedPctOfRevenue, refGmPct, breakevenRevenue }: {
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, consignmentNote, gp, fixedMtd, monthlyFixedBase, bufferPct, fixedPctOfRevenue, refGmPct, breakevenRevenue }: {
   monthLabel: string; isCurrent: boolean
   net: number; netProjected: number
   daysPassed: number; daysInMonth: number
   headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
   revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
-  supplierPayments: number; supplierPaymentsRemaining: number; supplierConsignment: number
+  supplierPayments: number; supplierPaymentsRemaining: number; supplierConsignment: number; consignmentNote: string | null
   gp: number; fixedMtd: number; monthlyFixedBase: number
   bufferPct: number; fixedPctOfRevenue: number
   refGmPct: number
@@ -863,6 +811,12 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
               <NMORow label="PO" value={supplierPayments - supplierConsignment} sign="↳" />
               <NMORow label="Consignment" value={supplierConsignment} sign="↳" />
             </>
+          )}
+          {consignmentNote && (
+            <div className="flex items-baseline gap-2 pl-3">
+              <span className="w-3 text-[10px] shrink-0 text-amber-gold">⚠</span>
+              <div className="text-[10px] text-amber-gold/90 leading-snug">{consignmentNote}</div>
+            </div>
           )}
           <NMORow label={`Gross Profit · GM% ref ${refGmPct.toFixed(1)}%`} value={gp} sign="=" bold />
           <NMORow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" sub={fixedSub} />
