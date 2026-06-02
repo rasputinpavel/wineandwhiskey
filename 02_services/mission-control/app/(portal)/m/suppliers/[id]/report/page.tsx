@@ -18,11 +18,19 @@ function shiftMonth(period: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-function periodRange(period: string): { startIso: string; endExclIso: string; label: string } {
+// A supplier's billing cycle may start on a day other than the 1st (e.g.
+// Harvest settles 5th-to-5th). Period "YYYY-MM" then covers
+// [startDay of that month, startDay of the next month).
+function periodRange(period: string, startDay: number): { startIso: string; endExclIso: string; label: string } {
   const [y, m] = period.split('-').map(Number)
-  const start = new Date(Date.UTC(y, m - 1, 1))
-  const endExcl = new Date(Date.UTC(y, m, 1))
-  const label = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} ${y}`
+  const d = Math.min(28, Math.max(1, Math.round(startDay) || 1))
+  const start = new Date(Date.UTC(y, m - 1, d))
+  const endExcl = new Date(Date.UTC(y, m, d))   // day d of the next month
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const endY = m === 12 ? y + 1 : y
+  const label = d === 1
+    ? `${MON[m - 1]} ${y}`
+    : `${d} ${MON[m - 1]} – ${d} ${MON[m % 12]} ${endY}`
   return { startIso: start.toISOString(), endExclIso: endExcl.toISOString(), label }
 }
 
@@ -35,17 +43,19 @@ export default async function SupplierMonthlyReportPage({
   const { id } = await params
   const sp = await searchParams
   const period = (sp.period && /^\d{4}-\d{2}$/.test(sp.period)) ? sp.period : lastClosedMonth()
-  const { startIso, endExclIso, label } = periodRange(period)
   const prevPeriod = shiftMonth(period, -1)
 
   const [supRes, pricesRes] = await Promise.all([
-    sbInventory.from('supplier').select('id, name, type').eq('id', id).maybeSingle(),
+    sbInventory.from('supplier').select('id, name, type, monthly_cycle_start_day').eq('id', id).maybeSingle(),
     sbInventory.from('consignment_price').select('sku_id, sku:sku(id, name, loyverse_product_code, category)').eq('supplier_id', id).limit(2000),
   ])
   if (supRes.error) return <SchemaError error={supRes.error.message} />
   if (!supRes.data) return <div className="text-graphite">Supplier not found.</div>
   if (pricesRes.error) return <SchemaError error={pricesRes.error.message} />
   const s = supRes.data as Supplier
+  // Billing-cycle start day (1 = calendar month; Harvest = 5 → 5th-to-5th).
+  const cycleStartDay = Number((supRes.data as { monthly_cycle_start_day?: number }).monthly_cycle_start_day ?? 1)
+  const { startIso, endExclIso, label } = periodRange(period, cycleStartDay)
 
   type PriceRow = { sku_id: string; sku: { id: string; name: string; loyverse_product_code: string | null; category: string | null } | null }
   const priceRows = (pricesRes.data ?? []) as unknown as PriceRow[]

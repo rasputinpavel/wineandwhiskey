@@ -71,6 +71,7 @@ export type Supplier = {
   name: string
   type: SupplierType
   payment_terms_days: number
+  monthly_cycle_start_day: number   // 1 = calendar month; e.g. Harvest = 5 (5th-to-5th)
   notes: string | null
   created_at: string
   updated_at: string
