@@ -21,10 +21,11 @@ export const dynamic = 'force-dynamic'
 //                     payment_date = paid_at if set, else order_date +
 //                     supplier.payment_terms_days (0 if unknown). For POs
 //                     without an explicit paid_at, payment_date ≤ today is
-//                     assumed paid. PLUS consignment (Harvest): the manually
-//                     CONFIRMED invoice total per 5th-to-5th period, booked in
-//                     the month the invoice issues (the 5th). Not auto-computed
-//                     from receipts (handover carve-outs); pre-May-2026 excluded.
+//                     assumed paid. PLUS consignment (Harvest): the monthly
+//                     settlement PO total (one Harvest PO per month = the
+//                     invoice; deliveries are stock adjustments, not POs),
+//                     booked by payment date. Pre-handover POs (before 2026-05)
+//                     excluded.
 //
 //   GP                Revenue − Supplier payments. NOT "cost of goods sold"
 //                     in the bookkeeping sense — it's the cash margin after
@@ -223,50 +224,56 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += Number(p.total_thb ?? 0)
   }
 
-  // ─── Harvest consignment — manually confirmed per booking month ────────────
-  // Auto-recomputing from POS receipts does NOT reproduce the real Harvest
-  // invoice: the invoice is built from physical stock reconciliation, and during
-  // the ownership handover (we bought the store) the invoices carve out sales
-  // the previous owner already paid for. So the obligation is a CONFIRMED figure
-  // taken from the actual invoice, booked in the month the invoice is issued.
-  // (Harvest bills on a 5th-to-5th cycle: the invoice dated the 5th of month Y
-  // covers sales in [5th of Y-1, 5th of Y) and is a cash obligation of month Y.)
+  // ─── Harvest consignment — sourced from the monthly settlement PO ──────────
+  // Going forward Harvest raises exactly ONE purchase order per month = the
+  // agreed settlement between us and Harvest (the consignment invoice). Other
+  // stock arrivals are recorded in Loyverse as stock adjustments ("receive
+  // items"), NOT as POs — so every Harvest PO is a real settlement and is the
+  // SOURCE OF TRUTH. We can't recompute it from POS receipts (the invoice comes
+  // from physical stock reconciliation, and the totals already reflect any
+  // handover carve-outs), so we read the PO total directly and book it by
+  // payment date (5th-to-5th cycle → invoice issued/paid ~the 5th–7th).
   //
-  //   • before 2026-05 (pre-handover): EXCLUDED — previous owner's liability,
-  //     to be reconciled later from the bank statement (note shown in the UI).
-  //   • 2026-05  = first invoice under new ownership (PO2916, ฿20,824), already
-  //     net of the previous owner's share. Transitional.
-  //   • 2026-06  = transitional — manual exclusions still needed; amount TBD.
-  //   • 2026-07+ = clean.
-  //
-  // TODO: move these confirmed totals into an editable field on the Harvest
-  // Monthly Report so the report is the single source of truth (needs a schema
-  // migration). For now they live here and are edited by hand.
-  const HARVEST_START_YM = '2026-05'
-  const HARVEST_CONFIRMED_BY_MONTH: Record<string, number> = {
-    '2026-05': 20824,   // Apr 5 – May 5 invoice (PO2916)
-  }
-  const consignmentSupplierId = suppliers.find(s => s.type === 'consignment')?.id ?? null
-  function consignObligationTotal(ym: string): number {
-    return HARVEST_CONFIRMED_BY_MONTH[ym] ?? 0
+  // Handover: the store was purchased, so consignment POs settled BEFORE the
+  // first invoice under new ownership are the previous owner's liability / old
+  // deliveries — excluded (flagged on the hero), pending bank reconciliation.
+  //   • before 2026-05: EXCLUDED (39 legacy POs).
+  //   • 2026-05 onward: real settlements (first = PO2916, ฿20,824, paid 07.05).
+  const HARVEST_PO_CUTOFF = '2026-05-01'   // first settlement under new ownership
+  const HARVEST_START_YM  = '2026-05'
+  // obligationMonth(YYYY-MM) → supplierId → settlement total, from consignment
+  // POs settled on/after the handover cutoff, bucketed by payment date.
+  const consignObligationByMonth = new Map<string, Map<string, number>>()
+  for (const p of posAll) {
+    const sup = p.supplier ? supByName.get(p.supplier.trim().toLowerCase()) : undefined
+    if (sup?.type !== 'consignment' || !sup.id) continue
+    const pd = payDate(p)
+    if (!pd || pd < HARVEST_PO_CUTOFF) continue          // pre-handover → excluded
+    const ym = pd.slice(0, 7)
+    let bucket = consignObligationByMonth.get(ym)
+    if (!bucket) { bucket = new Map(); consignObligationByMonth.set(ym, bucket) }
+    bucket.set(sup.id, (bucket.get(sup.id) ?? 0) + Number(p.total_thb ?? 0))
   }
   function consignObligationBySupId(ym: string): Map<string, number> {
-    const amt = consignObligationTotal(ym)
-    return amt > 0 && consignmentSupplierId ? new Map([[consignmentSupplierId, amt]]) : new Map<string, number>()
+    return consignObligationByMonth.get(ym) ?? new Map<string, number>()
+  }
+  function consignObligationTotal(ym: string): number {
+    return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
   }
   // Note for months where consignment is intentionally absent (excluded during
-  // handover, or not yet confirmed) — surfaced on the hero so the bottom line
-  // isn't misread as final/complete.
+  // handover, or the settlement PO not recorded yet) — surfaced on the hero so
+  // the bottom line isn't misread as final/complete.
   function harvestNote(ym: string): string | null {
     if (consignObligationTotal(ym) > 0) return null
     if (ym < HARVEST_START_YM) return 'Excludes Harvest consignment (pre-handover — previous owner’s liability, pending bank reconciliation)'
-    return 'Harvest consignment for this month not yet confirmed'
+    return 'Harvest settlement PO for this month not recorded yet'
   }
   // Settlements table reads this for the selected month.
   const consignDebtBySupId = consignObligationBySupId(selectedYm)
-  // Fold each month's confirmed consignment obligation into its supplier-payments
-  // bucket so trend bars + closed-month P&L carry it. The current month also adds
-  // the same obligation into supplierPaymentsMtd for its headline.
+  // Fold each month's settlement into its supplier-payments bucket so trend bars
+  // + closed-month P&L carry it. The current month also adds the same obligation
+  // into supplierPaymentsMtd for its headline. (Consignment POs are kept out of
+  // the normal PO path by includedInCashflow, so there's no double-count.)
   for (const m of months) {
     const ym = m.fromDate.slice(0, 7)
     const b = byMonth.get(ym)
@@ -675,7 +682,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <div className="px-4 pb-4 pt-1 text-graphite space-y-2 leading-relaxed">
           <p><span className="text-deep-black">Basis</span> — cash. Revenue is recognised when money lands in Loyverse (B2C cash/card and B2B bank transfers). Unpaid FA tax invoices are AR (visible in Cash control), not revenue.</p>
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
-          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is NOT auto-computed from receipts (POS units don&apos;t match the real invoice, which is built from physical stock reconciliation and, during the ownership handover, excludes the previous owner&apos;s sales). Instead the confirmed Harvest invoice total is entered per 5th-to-5th billing period and booked in the month its invoice issues (the 5th). Months before the first invoice (May 2026) are flagged as excluding Harvest.</p>
+          <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is taken from the monthly settlement PO — Harvest raises one PO per month (the invoice; other arrivals are Loyverse stock adjustments, not POs), so the PO is the source of truth. It&apos;s booked by payment date. POs settled before the ownership handover (before May 2026) are excluded and flagged.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
           <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) × (1 + buffer%) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. The buffer and the pct list are configured in Settings. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
