@@ -72,71 +72,96 @@
   <h2>Payroll for May 2026</h2>
 </div>
 
-<div class="actual">COMPUTED — internal commission schedule</div>
+<div class="actual">ACTUAL</div>
 
 <table>
   <thead>
     <tr>
-      <th>No.</th>
-      <th>Name</th>
-      <th>ID</th>
-      <th>Salary</th>
-      <th>Commission<br>(1% B2C)</th>
-      <th>Total</th>
-      <th>Advances<br>paid</th>
-      <th>Net to<br>Transfer</th>
+      <th rowspan="2">No.</th>
+      <th rowspan="2">Name</th>
+      <th rowspan="2">ID</th>
+      <th rowspan="2">Salary</th>
+      <th rowspan="2">Commission</th>
+      <th rowspan="2">Total</th>
+      <th colspan="3">Deduct</th>
+      <th rowspan="2">Net<br>Received</th>
+    </tr>
+    <tr>
+      <th>Wht</th>
+      <th>SSO_5%</th>
+      <th>Other</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>1</td>
-      <td class="name">Ms. Nutsaphorn (Grace) Sakulsrisuk</td>
+      <td class="name">Ms. Suparada Dansurin <span style="color:#c00;font-weight:bold;">Dummy</span></td>
+      <td>1 8301 00092 64 1</td>
+      <td class="num"></td><td class="num"></td><td class="num"></td>
+      <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td class="name">Mr. Taned Geerangsumon <span style="color:#c00;font-weight:bold;">Dummy</span></td>
+      <td>1 8399 00453 62 1</td>
+      <td class="num"></td><td class="num"></td><td class="num"></td>
+      <td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td class="name">Ms. Nutsaphorn (Grace) Sakulsrisurin</td>
       <td>1 3014 00147 77 3</td>
       <td class="num">18,000.00</td>
       <td class="num">991.22</td>
       <td class="num">18,991.22</td>
-      <td class="num">14,000.00</td>
-      <td class="num">4,991.22</td>
+      <td class="num">—</td>
+      <td class="num">875.00</td>
+      <td class="num">—</td>
+      <td class="num">18,116.22</td>
     </tr>
     <tr>
-      <td>2</td>
-      <td class="name">Ms. Nattaporn (Som) Nattakanpong</td>
+      <td>4</td>
+      <td class="name">Ms. Nattaporn Nattakanpong</td>
       <td>1 5601 00454 04 0</td>
       <td class="num">20,000.00</td>
       <td class="num">847.57</td>
       <td class="num">20,847.57</td>
       <td class="num">—</td>
-      <td class="num">20,847.57</td>
+      <td class="num">875.00</td>
+      <td class="num">—</td>
+      <td class="num">19,972.57</td>
     </tr>
     <tr>
-      <td>3</td>
+      <td>5</td>
       <td class="name">Mr. Iurii Prudnikov</td>
       <td>0 9910 23117 31 4</td>
-      <td class="num">—</td>
-      <td class="num">—</td>
-      <td class="num">—</td>
-      <td class="num">—</td>
-      <td class="num">—</td>
+      <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
     </tr>
     <tr class="total-row">
       <td colspan="3">TOTAL</td>
       <td class="num">38,000.00</td>
       <td class="num">1,838.79</td>
       <td class="num">39,838.79</td>
-      <td class="num">14,000.00</td>
-      <td class="num">25,838.79</td>
+      <td class="num">—</td>
+      <td class="num">1,750.00</td>
+      <td class="num">—</td>
+      <td class="num">38,088.79</td>
     </tr>
   </tbody>
 </table>
 
 <div class="footnote">
+  Per official New Latitude payroll sheet for May 2026
+  (<code>.inbox/005_New Latitude_Salary_May 2026_actual.pdf</code>).
   Commission = 1% of net B2C revenue on each manager's shifts (B2B receipts
-  excluded — bank-transfer or named-account customers). Source:
-  <code>08_config/manager_schedules/2026-05.json</code>.
-  Commission base — Grace ฿99,122.22, Som ฿84,757.15.<br>
-  SSO (5%) and withholding tax are contributed by the employer; the figures
-  above are net to the employee. Store closed 31 May (Visakha Bucha Day).<br>
-  Pending the official New Latitude payroll sheet for May.
+  excluded — bank-transfer or named-account customers); base — Grace ฿99,122.22,
+  Som ฿84,757.15, source <code>08_config/manager_schedules/2026-05.json</code>.<br>
+  <strong>Grace</strong> was paid ฿14,000.00 in advances during May (฿10,000 on
+  13 May + ฿4,000 on 25 May), so the balance to transfer is
+  ฿18,116.22 − ฿14,000.00 = <strong>฿4,116.22</strong>.
+  <strong>Som</strong> — full ฿19,972.57 to transfer.
+  Store closed 31 May (Visakha Bucha Day).
 </div>
 
 </body>
