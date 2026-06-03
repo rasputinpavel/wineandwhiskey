@@ -5,6 +5,7 @@ import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/componen
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
 import { CustomerLoyverseCell } from '@/components/modules/customers/CustomerLoyverseCell'
+import { DeliveryRowActions } from '@/components/modules/customers/DeliveryRowActions'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -352,9 +353,7 @@ async function DeliveriesPanel({ customerId, sp }: { customerId: string; sp: Sea
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_qty}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{n.total_money ? `฿${n.total_money.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}</td>
                   <td className="py-2 px-4 text-right">
-                    <Link href={`/print/dn/${n.id}`} target="_blank" className="text-xs text-graphite hover:text-wine-red">
-                      Print ↗
-                    </Link>
+                    <DeliveryRowActions customerId={customerId} noteId={n.id} number={n.number} />
                   </td>
                 </tr>
               ))}

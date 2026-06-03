@@ -4,12 +4,19 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SkuPickerInline } from './SkuPickerInline'
 
-type Line = {
+export type Line = {
   key: number
   sku_id: string | null
   sku_name: string | null
   qty: string
   unit_price: string
+}
+
+export type DeliveryNoteInitial = {
+  number: string
+  issuedAt: string
+  withVat: boolean
+  lines: Line[]
 }
 
 const newLine = (key: number): Line => ({
@@ -21,16 +28,19 @@ const VAT_RATE = 0.07
 const money = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
-export function DeliveryNoteForm({ customerId, suggestedNumber }: {
+export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial }: {
   customerId: string
-  suggestedNumber: string
+  suggestedNumber?: string
+  // When set, the form edits an existing note (PUT) instead of creating one (POST).
+  noteId?: string
+  initial?: DeliveryNoteInitial
 }) {
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
-  const [issuedAt, setIssuedAt] = useState(today)
-  const [number, setNumber]     = useState(suggestedNumber)
-  const [lines, setLines]       = useState<Line[]>([newLine(1)])
-  const [addVat, setAddVat]     = useState(true)
+  const [issuedAt, setIssuedAt] = useState(initial?.issuedAt ?? today)
+  const [number, setNumber]     = useState(initial?.number ?? suggestedNumber ?? '')
+  const [lines, setLines]       = useState<Line[]>(initial?.lines?.length ? initial.lines : [newLine(1)])
+  const [addVat, setAddVat]     = useState(initial?.withVat ?? true)
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
 
@@ -63,8 +73,11 @@ export function DeliveryNoteForm({ customerId, suggestedNumber }: {
         setErr('Add at least one SKU line with qty > 0')
         return
       }
-      const res = await fetch(`/api/m/customers/${customerId}/delivery-notes`, {
-        method: 'POST',
+      const url = noteId
+        ? `/api/m/customers/${customerId}/delivery-notes/${noteId}`
+        : `/api/m/customers/${customerId}/delivery-notes`
+      const res = await fetch(url, {
+        method: noteId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
