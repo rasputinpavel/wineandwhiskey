@@ -23,7 +23,9 @@ export default async function SkuDetail({
   searchParams: Promise<SearchParams>
 }) {
   const { code: codeParts } = await params
-  const code = codeParts.join('/')
+  // Коды с слэшем (08081564/22) приходят как один сегмент с %2F — Next.js
+  // не декодирует encoded-slash сам, поэтому декодируем каждую часть вручную.
+  const code = codeParts.map(decodeURIComponent).join('/')
   const sp = await searchParams
 
   // Single fast query so the page header renders immediately on click.
@@ -74,7 +76,7 @@ export default async function SkuDetail({
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title="B2B продажи (FlowAccount)" />}>
-        <B2bSection skuId={sku.id} sp={sp} />
+        <B2bSection skuId={sku.id} code={code} sp={sp} />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton title="Consignment" />}>
@@ -259,8 +261,8 @@ async function B2cSection({ variantId, sp }: { variantId: string; sp: SearchPara
   )
 }
 
-async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
-  const [linesRes, custRes] = await Promise.all([
+async function B2bSection({ skuId, code, sp }: { skuId: string; code: string; sp: SearchParams }) {
+  const [linesRes, custRes, posRes] = await Promise.all([
     sbInventory
       .from('flowaccount_invoice_line')
       .select('id, qty, amount, raw_text, flowaccount_invoice(number, customer_id, customer_name, issued_at, due_at, status, total)')
@@ -268,8 +270,16 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
     sbInventory
       .from('b2b_customer')
       .select('id, payment_terms_days'),
+    // B2B-продажи, прошедшие через кассу Loyverse (клиент-B2B или банк-перевод),
+    // без FlowAccount-инвойса — иначе они выпадают и из B2C, и из B2B.
+    sbInventory
+      .from('loyverse_receipt_line')
+      .select('id, qty, price, line_total, loyverse_receipt!inner(receipt_number, receipt_date, customer_name, is_bank_transfer, receipt_type)')
+      .eq('sku', code)
+      .eq('loyverse_receipt.is_b2b', true),
   ])
   const { data, error } = linesRes
+  const posRows = (posRes.data ?? []) as any[]
   const termsByCustomer: Record<string, number> = {}
   for (const c of (custRes.data ?? []) as { id: string; payment_terms_days: number }[]) {
     termsByCustomer[c.id] = c.payment_terms_days ?? 0
@@ -305,13 +315,15 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
 
   return (
     <Section
-      title="B2B продажи (FlowAccount)"
-      subtitle="Все строки инвойсов где встречается этот SKU. Не-Paid строки подсвечены — физически SKU всё ещё на нашей стороне (in-transit / на точке)."
+      title="B2B продажи"
+      subtitle="FlowAccount-инвойсы (не-Paid подсвечены — SKU физически ещё на нашей стороне) + B2B-продажи, прошедшие напрямую через кассу Loyverse без инвойса."
     >
-      {(error || (rows.length === 0)) ? (
+      {(rows.length === 0 && posRows.length === 0) ? (
         <Empty>{error?.message ?? 'B2B продаж по этому SKU нет.'}</Empty>
       ) : (
         <>
+          {rows.length > 0 && (
+          <>
           <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
             <table className="w-full text-[13px]">
               <thead className="text-graphite border-b border-pale-stone bg-cream/40">
@@ -361,6 +373,58 @@ async function B2bSection({ skuId, sp }: { skuId: string; sp: SearchParams }) {
                   </span>
                 )}
                 <span>Сумма: <span className="text-deep-black tabular-nums">฿{fmt(totalMoney)}</span></span>
+              </div>
+            )
+          })()}
+          </>
+          )}
+
+          {posRows.length > 0 && (() => {
+            const sorted = [...posRows].sort((a, b) =>
+              String(b.loyverse_receipt?.receipt_date ?? '').localeCompare(String(a.loyverse_receipt?.receipt_date ?? '')))
+            const posQty   = posRows.reduce((s, r) => s + Number(r.qty || 0), 0)
+            const posMoney = posRows.reduce((s, r) => s + Number(r.line_total || 0), 0)
+            return (
+              <div className="mt-6">
+                <div className="text-sm text-deep-black font-medium mb-1">B2B через кассу (Loyverse)</div>
+                <div className="text-xs text-graphite mb-2">
+                  Чеки Loyverse, помеченные как B2B (клиент-юрлицо или банк-перевод), но без инвойса в FlowAccount.
+                </div>
+                <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+                  <table className="w-full text-[13px]">
+                    <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+                      <tr>
+                        <th className="py-2 px-4 text-left font-medium">Receipt #</th>
+                        <th className="py-2 px-4 text-left font-medium">Customer</th>
+                        <th className="py-2 px-4 text-left font-medium">Date</th>
+                        <th className="py-2 px-4 text-left font-medium">Payment</th>
+                        <th className="py-2 px-4 text-right font-medium">Qty</th>
+                        <th className="py-2 px-4 text-right font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((row, i) => {
+                        const rc = row.loyverse_receipt
+                        const sign = rc?.receipt_type === 'REFUND' ? -1 : 1
+                        return (
+                          <tr key={i} className="border-b border-pale-stone/40 last:border-0">
+                            <td className="py-2 px-4 font-mono">{rc?.receipt_number ?? '—'}</td>
+                            <td className="py-2 px-4">{rc?.customer_name ?? '—'}</td>
+                            <td className="py-2 px-4">{fmtDate(rc?.receipt_date)}</td>
+                            <td className="py-2 px-4">{rc?.is_bank_transfer ? 'Bank transfer' : 'Cash/Card'}</td>
+                            <td className="py-2 px-4 text-right tabular-nums">{fmt(sign * Number(row.qty || 0))}</td>
+                            <td className="py-2 px-4 text-right tabular-nums">฿{fmt(sign * Number(row.line_total || 0))}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex items-center justify-end gap-4 text-xs text-graphite">
+                  <span>Всего POS-B2B ({posRows.length} строк)</span>
+                  <span>Qty: <span className="text-deep-black font-medium tabular-nums">{posQty}</span></span>
+                  <span>Сумма: <span className="text-deep-black tabular-nums">฿{fmt(posMoney)}</span></span>
+                </div>
               </div>
             )
           })()}
