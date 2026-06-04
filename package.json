@@ -22,7 +22,8 @@
     "inv:receipts": "tsx 03_automation/sync_loyverse_receipts.ts",
     "inv:all": "tsx 03_automation/sync_inventory_loyverse.ts && tsx 03_automation/sync_inventory_flow.ts && tsx 03_automation/sync_loyverse_receipts.ts",
     "sync:sku-wine": "tsx 03_automation/sync_sku_wine_attrs.ts",
-    "check:b2b": "tsx 03_automation/check_b2b_sync.ts"
+    "check:b2b": "tsx 03_automation/check_b2b_sync.ts",
+    "reconcile": "tsx 03_automation/reconcile.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
