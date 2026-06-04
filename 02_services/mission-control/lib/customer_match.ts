@@ -2,8 +2,9 @@
 //
 // Имена в FA и LV редко совпадают точно (регистр, пробелы, суффиксы Co./Ltd,
 // branch-suffixes в скобках). Используем токен-нормализацию + B2B-паттерны
-// из 03_automation/lib/b2b.ts (продублированы здесь, в идеале вынесли бы в
-// общий пакет, но monorepo для этого не настроен).
+// из общего модуля lib/b2b.ts (зеркало 03_automation/lib/b2b.ts).
+
+import { B2B_PATTERNS as CLASSIFIER_PATTERNS } from './b2b'
 
 const COMPANY_SUFFIX_RE = /\b(co|ltd|company|limited|inc|incorporated|corp|llc|cl)\b/g
 
@@ -18,15 +19,17 @@ export function normalizeName(name: string): { full: string; tokens: Set<string>
   return { full: lower, tokens }
 }
 
-// B2B_PATTERNS — продубликат из 03_automation/lib/b2b.ts (синхронизировать вручную при изменениях).
-// Это substring-паттерны для Loyverse customer-имён; используются для усиления
-// уверенности при матчинге (если паттерн содержится в обоих именах — сильный bonus).
-export const B2B_PATTERNS: string[] = [
-  'arthouse', 'bella chao', 'crepes', 'fifth element', 'fine cusine', 'french home',
-  'golden brew', 'great glory', 'isak(', 'jetradar', 'karon par', 'kusnakafe',
-  'layan paradise', 'lazy avocado', 'milimon', 'next real', 'olabar', 'phuket kachatip',
-  'pinz', 'q-squad', 'q squad', 'seaview', 'sukmesum', 'tbilisi', 'titov', 'volna pool',
+// MATCH_ONLY_TOKENS — дополнительные паттерны, которые используются ТОЛЬКО для
+// бонуса при матчинге FA↔Loyverse, но НЕ для классификации чеков. Многие из них
+// (например «titov» — фамилия) безопасны при сравнении имён двух компаний, но
+// в классификаторе чеков пометили бы физлицо как B2B, поэтому в lib/b2b.ts их нет.
+// Реальные B2B-клиенты, найденные ручной разметкой; см. также b2b_overrides.ts.
+const MATCH_ONLY_TOKENS: string[] = [
+  'olabar', 'phuket kachatip', 'pinz', 'q squad', 'sukmesum', 'titov', 'volna pool',
 ]
+
+// Полный набор паттернов для матчинга = каноничные классификаторные ∪ matching-only.
+export const B2B_PATTERNS: string[] = [...CLASSIFIER_PATTERNS, ...MATCH_ONLY_TOKENS]
 
 function jaccard(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 || b.size === 0) return 0

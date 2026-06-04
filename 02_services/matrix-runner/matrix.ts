@@ -14,6 +14,12 @@
  *   7. Write matrix to "Закупочная матрица" tab.
  *
  * Usage: npx tsx 03_automation/build_purchase_matrix.ts
+ *
+ * ⚠️ FORK: this is a hand-copy of 03_automation/build_purchase_matrix.ts so the
+ * Google-Sheets "Пересчитать матрицу" button can run it as a Railway service.
+ * Keep the sales-aggregation logic in sync with the canonical script — in
+ * particular the B2C-only velocity (B2B receipts excluded via classifyReceipt,
+ * mirror in ./b2b.ts, guarded by `npm run check:b2b`).
  */
 
 import dotenv from "dotenv";
@@ -28,6 +34,7 @@ import {
   Grape, detectGrape,
   RedCountry, detectRedCountryRegion,
 } from "./wine_detect.js";
+import { classifyReceipt } from "./b2b.js";
 
 const SHEET_ID             = "10EfJl0cfWj1GLoFXq9nHfZ4ZrlLcQloXs4ANRbt8HBg";
 const PARAMS_TAB           = "Параметры-матрица";
@@ -498,11 +505,32 @@ export async function runMatrix() {
   );
   console.log(`  ${receipts.length} receipts.`);
 
-  // 4. Aggregate by item
-  console.log("\n[2/4] Aggregating sales...");
+  // Resolve customer names so we can run the B2B classifier per receipt.
+  // The matrix uses B2C-only velocity — B2B feeds the separate "B2B-резерв" sheet.
+  // (Mirrors 03_automation/build_purchase_matrix.ts — keep in sync.)
+  const custIds = new Set<string>();
+  for (const r of receipts) if (r.customer_id) custIds.add(r.customer_id);
+  const custNames = new Map<string, string>();
+  await Promise.all([...custIds].map(async id => {
+    try {
+      const r = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
+        headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` },
+      });
+      if (!r.ok) return;
+      const c: any = await r.json();
+      custNames.set(id, ((c.name ?? "").trim() || c.email || id.slice(0, 8)));
+    } catch {}
+  }));
+
+  // 4. Aggregate by item — B2C-only (B2B excluded)
+  console.log("\n[2/4] Aggregating B2C sales (B2B excluded)...");
   interface Agg { units: number; revenue: number; cost: number; }
   const acc = new Map<string, Agg>();
+  let b2cReceipts = 0, b2bReceipts = 0;
   for (const r of receipts) {
+    const customerName = r.customer_id ? (custNames.get(r.customer_id) ?? "") : "";
+    if (classifyReceipt({ payments: r.payments, customerName }).isB2B) { b2bReceipts++; continue; }
+    b2cReceipts++;
     for (const li of r.line_items ?? []) {
       const id = li.item_id as string;
       if (!id) continue;
@@ -516,7 +544,8 @@ export async function runMatrix() {
       acc.set(id, cur);
     }
   }
-  console.log(`  ${acc.size} wine items with sales.`);
+  console.log(`  ${b2cReceipts} B2C receipts used, ${b2bReceipts} B2B excluded.`);
+  console.log(`  ${acc.size} wine items with B2C sales.`);
 
   // 5. Build raw candidates (everything that passes basic filters)
   const weeksFactor = params.target_weeks_of_stock / 4.345;

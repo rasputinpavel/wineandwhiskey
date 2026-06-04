@@ -12,22 +12,9 @@
 //   - the receipt's customer name matches one of B2B_PATTERNS.
 // This MUST stay in sync with 03_automation/lib/b2b.ts — see comment there.
 
+import { classifyReceipt } from './b2b'
+
 const BASE = 'https://api.loyverse.com/v1.0'
-
-// Keep these two constants in sync with 03_automation/lib/b2b.ts.
-const BANK_TRANSFER_TYPE_ID = '6bafa324-92d9-45c9-80d8-0539a65de4cc'
-const B2B_PATTERNS: string[] = [
-  'arthouse', 'bella chao', 'crepes', 'fifth element', 'fine cusine',
-  'french home', 'golden brew', 'great glory', 'isak(', 'jetradar',
-  'karon par', 'kusnakafe', 'layan paradise', 'lazy avocado', 'milimon',
-  'next real', 'pinzerai', 'q-squad', 'secret spot', 'shaman phuket',
-  'tbilisi', 'seaview',
-]
-
-function isB2BCustomerName(name: string): boolean {
-  const n = name.toLowerCase()
-  return B2B_PATTERNS.some(p => n.includes(p))
-}
 
 type ReceiptsPage = { receipts: Receipt[]; cursor?: string }
 
@@ -90,9 +77,7 @@ async function getCustomerNames(): Promise<Map<string, string>> {
 }
 
 function isB2BReceipt(r: Receipt, customerName: string | null): boolean {
-  if ((r.payments ?? []).some(p => p.payment_type_id === BANK_TRANSFER_TYPE_ID)) return true
-  if (customerName && isB2BCustomerName(customerName)) return true
-  return false
+  return classifyReceipt({ payments: r.payments, customerName }).isB2B
 }
 
 export type SkuB2cSalesWindow = {

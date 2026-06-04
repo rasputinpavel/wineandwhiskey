@@ -157,20 +157,46 @@ function isB2BReceipt(r: any, b2bIds: Set<string>): boolean {
   return hasBankTransfer || (!!r.customer_id && b2bIds.has(r.customer_id));
 }
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+// Loyverse изредка отдаёт пустое/битое тело при 2xx или транзиентный 429/5xx.
+// Ретраим каждую страницу с экспоненциальным бэкоффом, иначе одна осечка валит весь прогон.
+async function loyversePage(url: string): Promise<any> {
+  const MAX = 5;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 25_000);
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
+      const body = await r.text();
+      if (!r.ok) {
+        const err = new Error(`Loyverse ${r.status}: ${body.slice(0, 200)}`);
+        // 429/5xx — транзиентные, ретраим; 4xx (кроме 429) — фатально, не повторяем
+        if (r.status !== 429 && r.status < 500) throw Object.assign(err, { fatal: true });
+        throw err;
+      }
+      if (!body.trim()) throw new Error(`Loyverse → пустое тело при ${r.status}`);
+      return JSON.parse(body);
+    } catch (e) {
+      lastErr = e;
+      if ((e as any)?.fatal || attempt === MAX) break;
+      const wait = 500 * 2 ** (attempt - 1); // 0.5s, 1s, 2s, 4s
+      console.warn(`[loyverse]   retry ${attempt}/${MAX - 1} after error: ${String((e as any)?.message ?? e)} (wait ${wait}ms)`);
+      await sleep(wait);
+    } finally { clearTimeout(t); }
+  }
+  throw lastErr;
+}
+
 async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
   const out: T[] = [];
   let cursor: string | undefined;
   do {
     const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 25_000);
-    try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
-      if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
-      const d = await r.json();
-      out.push(...(d[key] ?? []));
-      cursor = d.cursor;
-    } finally { clearTimeout(t); }
+    const d = await loyversePage(url);
+    out.push(...(d[key] ?? []));
+    cursor = d.cursor;
   } while (cursor);
   return out;
 }
@@ -193,12 +219,14 @@ async function fetchPeriod(from: string, to: string): Promise<PeriodStats> {
   let revenue = 0, gp = 0, checks = 0, retailRevenue = 0, b2bRevenue = 0;
   const customers = new Set<string>();
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     let cost = 0;
     for (const li of r.line_items ?? []) cost += li.cost_total ?? 0;
-    const rev = r.total_money ?? 0;
+    const rev = (r.total_money ?? 0) * sign;
     revenue += rev;
-    gp += rev - cost;
-    checks++;
+    gp += rev - cost * sign;
+    if (sign > 0) checks++;                              // refunds aren't transactions
     if (r.customer_id) customers.add(r.customer_id);
     if (isB2BReceipt(r, b2bIds)) b2bRevenue += rev;
     else retailRevenue += rev;
@@ -219,14 +247,16 @@ async function fetchMonth(ym: string): Promise<{ byDay: Map<number,DayData>; tot
   const customers = new Set<string>();
   let total = 0, totalGP = 0, checks = 0, retailTotal = 0, b2bTotal = 0;
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     const d = new Date(new Date(r.receipt_date).getTime() + 7 * 3600_000).getUTCDate();
     let cost = 0;
     for (const li of r.line_items ?? []) cost += li.cost_total ?? 0;
-    const rev = r.total_money ?? 0;
-    const gp  = rev - cost;
+    const rev = (r.total_money ?? 0) * sign;
+    const gp  = rev - cost * sign;
     const cur = byDay.get(d) ?? { revenue: 0, gp: 0, checks: 0 };
-    byDay.set(d, { revenue: cur.revenue + rev, gp: cur.gp + gp, checks: cur.checks + 1 });
-    total += rev; totalGP += gp; checks++;
+    byDay.set(d, { revenue: cur.revenue + rev, gp: cur.gp + gp, checks: cur.checks + (sign > 0 ? 1 : 0) });
+    total += rev; totalGP += gp; if (sign > 0) checks++;  // refunds aren't transactions
     if (r.customer_id) customers.add(r.customer_id);
     if (isB2BReceipt(r, b2bIds)) b2bTotal += rev;
     else retailTotal += rev;
@@ -260,6 +290,8 @@ async function fetchWeeklyHistory(numWeeks: number): Promise<WeeklyFact[]> {
   }
 
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     // Bangkok-локальная дата чека → Monday той же недели (ISO).
     const ts = new Date(new Date(r.receipt_date).getTime() + 7 * 3600_000);
     const dow = ts.getUTCDay();
@@ -268,7 +300,7 @@ async function fetchWeeklyHistory(numWeeks: number): Promise<WeeklyFact[]> {
     const weekStart = new Date(monMs).toISOString().slice(0, 10);
     const bucket = buckets.get(weekStart);
     if (!bucket) continue;
-    const rev = r.total_money ?? 0;
+    const rev = (r.total_money ?? 0) * sign;
     bucket.total += rev;
     if (isB2BReceipt(r, b2bIds)) bucket.b2b += rev;
     else bucket.retail += rev;
