@@ -2,8 +2,11 @@
 
 This is the operating system for managing the Wine & Whiskey retail store.
 
+> **Project docs:** see [`docs/`](docs/) — architecture, source-of-truth reference, data model, cross-cutting conventions, service catalog, and the latest audit. Start with [`docs/README.md`](docs/README.md). Keep these updated when the system changes.
+
 ## What lives here
 
+- **docs/** — Project documentation: ARCHITECTURE, DATA_SOURCES (source of truth), DATA_MODEL, CROSS_CUTTING (shared logic & conventions), SERVICES, and dated audits.
 - **.inbox/** — Incoming materials for any area: files to process, references, drafts.
 - **01_agents/** — Виртуальные сотрудники (Telegram bots on Railway).
   - `bot/` — Staff operations bot (Chip & Dale).
@@ -31,6 +34,7 @@ These rules apply to all work in this repo. Follow them strictly. If a new file 
 
 | What | Where | Notes |
 |------|-------|-------|
+| Project documentation | `docs/` | Architecture, source-of-truth, data model, conventions, service catalog, audits |
 | Anything incoming / unprocessed | `.inbox/` | Temporary landing zone — not knowledge, not output |
 | Telegram bot code | `01_agents/<name>/` | Each bot is its own subdirectory |
 | Web service code | `02_services/<name>/` | Each service is its own subdirectory |
