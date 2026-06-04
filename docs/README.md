@@ -12,6 +12,7 @@ Living documentation for the Wine & Whiskey Store OS monorepo. Generated and ver
 | [CROSS_CUTTING.md](CROSS_CUTTING.md) | Shared-logic & conventions guide. For each cross-cutting concern (B2B classification, sales aggregation, Loyverse client, SKU/customer matching, money/VAT/date formatting, billing cycle, price/Vivino) — its canonical home, where it lives today, and duplicates to eliminate. Plus the project conventions/rules. |
 | [SERVICES.md](SERVICES.md) | Reference catalog of every service, agent, and automation script — path, purpose, deploy status, entry points, and the npm-script → file → upstream-source table. |
 | [AUDIT_2026-06.md](AUDIT_2026-06.md) | **The June 2026 architecture audit** — executive summary, prioritized actions, findings by area, themes, and a phased scalability roadmap. The deliverable to read first. |
+| [MIGRATION_shared_package.md](MIGRATION_shared_package.md) | Runbook for the `@ww/shared` keystone migration (branch `chore/shared-package`): what landed, remaining per-service steps, and the required Railway changes. |
 
 ## Governing principles (the lens the audit applies)
 
