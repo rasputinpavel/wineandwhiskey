@@ -11,13 +11,13 @@
 
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
+import { loyverseFetch } from "./lib/loyverse.js";
 
 const SHEET_ID             = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 const MATRIX_TAB           = "Матрица";
 const STOCK_TAB            = "Склад-C";
 const PREMIUM_THRESHOLD    = 3000; // THB avg price per bottle → premium segment
 const MIN_UNITS_FOR_AB     = 4;    // min bottles sold per year to be eligible for A or B
-const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN!;
@@ -69,24 +69,6 @@ async function writeValues(tab: string, range: string, values: any[][]) {
 }
 
 // ─── Loyverse ──────────────────────────────────────────────────────────────
-
-async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
-  const out: T[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 25_000);
-    try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
-      if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
-      const d = await r.json();
-      out.push(...(d[key] ?? []));
-      cursor = d.cursor;
-    } finally { clearTimeout(t); }
-  } while (cursor);
-  return out;
-}
 
 // ─── Wine color detection ──────────────────────────────────────────────────
 
@@ -227,16 +209,18 @@ async function main() {
   interface Acc { name: string; revenue: number; units: number; gp: number; checks: number; }
   const acc = new Map<string, Acc>();
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     for (const li of r.line_items ?? []) {
       const id = li.item_id as string;
       if (!id) continue;
       const cur = acc.get(id) ?? { name: li.item_name ?? id, revenue: 0, units: 0, gp: 0, checks: 0 };
-      const rev  = li.total_money ?? 0;
-      const cost = li.cost_total  ?? 0;
+      const rev  = (li.total_money ?? 0) * sign;
+      const cost = (li.cost_total  ?? 0) * sign;
       cur.revenue += rev;
-      cur.units   += li.quantity ?? 0;
+      cur.units   += (li.quantity ?? 0) * sign;
       cur.gp      += rev - cost;
-      cur.checks  += 1;
+      cur.checks  += sign;   // refunds back out a check
       acc.set(id, cur);
     }
   }

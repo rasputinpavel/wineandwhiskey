@@ -20,7 +20,8 @@
  */
 
 import dotenv from "dotenv";
-import { isB2BCustomerName } from "./lib/b2b.js";
+import { classifyReceipt } from "./lib/b2b.js";
+import { loyverseFetch } from "./lib/loyverse.js";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID             = "10EfJl0cfWj1GLoFXq9nHfZ4ZrlLcQloXs4ANRbt8HBg";
@@ -143,24 +144,6 @@ async function loadParams(): Promise<Params> {
 }
 
 // ─── Loyverse ──────────────────────────────────────────────────────────────
-
-async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
-  const out: T[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 25_000);
-    try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
-      if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
-      const d = await r.json();
-      out.push(...(d[key] ?? []));
-      cursor = d.cursor;
-    } finally { clearTimeout(t); }
-  } while (cursor);
-  return out;
-}
 
 async function fetchCustomerNames(ids: Set<string>): Promise<Map<string, string>> {
   const map = new Map<string, string>();
@@ -289,11 +272,14 @@ async function main() {
   const threeMonthsAgo = new Date(todayBkk.getTime() - 90 * 86_400_000);
   const acc = new Map<string, ItemAgg>();
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     const created = new Date(r.created_at);
     const bkkDate = new Date(created.getTime() + 7 * 3_600_000);
     const isLast3m = bkkDate >= threeMonthsAgo;
     const customerName = r.customer_id ? (customerNames.get(r.customer_id) ?? "") : "";
-    const isB2B = customerName ? isB2BCustomerName(customerName) : false;
+    // Full B2B rule: bank-transfer OR known customer name (was name-only).
+    const isB2B = classifyReceipt({ payments: r.payments, customerName }).isB2B;
     const weekKey = isoWeekKey(bkkDate);
     const dateIso = bkkDate.toISOString().slice(0, 10);
 
@@ -320,13 +306,13 @@ async function main() {
         stock: itemStock.get(id) ?? 0,
         avgPrice: 0,
       };
-      const qty  = li.quantity ?? 0;
-      const rev  = li.total_money ?? 0;
-      const cost = li.cost_total  ?? 0;
+      const qty  = (li.quantity ?? 0) * sign;
+      const rev  = (li.total_money ?? 0) * sign;
+      const cost = (li.cost_total  ?? 0) * sign;
       cur.units    += qty;
       cur.revenue  += rev;
       cur.cost     += cost;
-      cur.weeksWithSales.add(weekKey);
+      if (sign > 0) cur.weeksWithSales.add(weekKey);
       if (isLast3m) cur.unitsLast3m += qty;
       if (isB2B) cur.b2bUnits += qty;
       if (!cur.lastSaleDate || dateIso > cur.lastSaleDate) cur.lastSaleDate = dateIso;

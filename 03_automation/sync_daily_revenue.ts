@@ -18,13 +18,13 @@
 
 import dotenv from "dotenv";
 import { BANK_TRANSFER_TYPE_ID, isB2BCustomerName } from "./lib/b2b.js";
+import { loyverseFetch } from "./lib/loyverse.js";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
 const TAB      = "Daily";
 const BACKFILL_START = "2026-04-01";
 
-const LOYVERSE_TOKEN       = process.env.LOYVERSE_API_TOKEN!;
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN!;
@@ -175,24 +175,6 @@ function isB2BReceipt(r: any, b2bIds: Set<string>): boolean {
   return isBankTransfer(r) || (!!r.customer_id && b2bIds.has(r.customer_id));
 }
 
-async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
-  const out: T[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 25_000);
-    try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
-      if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
-      const d = await r.json();
-      out.push(...(d[key] ?? []));
-      cursor = d.cursor;
-    } finally { clearTimeout(t); }
-  } while (cursor);
-  return out;
-}
-
 interface DayStats { revenue: number; gp: number; b2c: number; b2b: number; }
 
 async function fetchRange(fromYMD: string, toYMD: string): Promise<Map<string, DayStats>> {
@@ -207,12 +189,14 @@ async function fetchRange(fromYMD: string, toYMD: string): Promise<Map<string, D
   ]);
   const byDay = new Map<string, DayStats>();
   for (const r of receipts) {
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
     const bkk = new Date(new Date(r.receipt_date).getTime() + 7 * 3600_000);
     const day = ymd(bkk);
     let cost = 0;
     for (const li of r.line_items ?? []) cost += li.cost_total ?? 0;
-    const rev = r.total_money ?? 0;
-    const gp  = rev - cost;
+    const rev = (r.total_money ?? 0) * sign;
+    const gp  = rev - cost * sign;
     const cur = byDay.get(day) ?? { revenue: 0, gp: 0, b2c: 0, b2b: 0 };
     cur.revenue += rev;
     cur.gp      += gp;

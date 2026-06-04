@@ -16,6 +16,7 @@
 
 import dotenv from "dotenv";
 import { BANK_TRANSFER_TYPE_ID, isB2BCustomerName } from "./lib/b2b.js";
+import { loyverseFetch } from "./lib/loyverse.js";
 dotenv.config({ path: ".env.local" });
 
 const SHEET_ID = "10EfJl0cfWj1GLoFXq9nHfZ4ZrlLcQloXs4ANRbt8HBg";
@@ -98,19 +99,6 @@ async function writeRows(sheetId: number, startRow: number, startCol: number, ro
 
 // ─── Loyverse ─────────────────────────────────────────────────────────────
 
-async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
-  const out: T[] = [];
-  let cursor: string | undefined;
-  do {
-    const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
-    if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
-    const d = await r.json();
-    out.push(...(d[key] ?? []));
-    cursor = d.cursor;
-  } while (cursor);
-  return out;
-}
 
 async function fetchCustomerNames(ids: Set<string>): Promise<Map<string, string>> {
   const map = new Map<string, string>();
@@ -243,7 +231,9 @@ async function main() {
 
   let totalReceipts = 0, b2bReceipts = 0;
   for (const r of receipts) {
-    totalReceipts++;
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
+    if (sign > 0) totalReceipts++;
     const created = new Date(r.created_at);
     const bkk = bangkokDate(created);
     const ym  = ymKey(bkk);
@@ -252,14 +242,14 @@ async function main() {
     const hasBankTransfer = (r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID);
     const customerName = r.customer_id ? (customerNames.get(r.customer_id) ?? "") : "";
     const isB2B = hasBankTransfer || (customerName && isB2BCustomerName(customerName));
-    if (isB2B) b2bReceipts++;
+    if (isB2B && sign > 0) b2bReceipts++;
 
     for (const li of r.line_items ?? []) {
       const id = li.item_id; if (!id) continue;
       const catId = itemCat.get(id); if (!catId) continue;
       const group = catGroup.get(catId); if (!group) continue;
-      const rev = li.total_money ?? 0;
-      const cost = li.cost_total  ?? 0;
+      const rev = (li.total_money ?? 0) * sign;
+      const cost = (li.cost_total  ?? 0) * sign;
       const key = `${ym}|${group}`;
       if (isB2B) addTo(accB2B, key, rev, cost);
       else       addTo(acc,    key, rev, cost);
