@@ -45,14 +45,42 @@ function defaultWindow(): { from: string; to: string } {
   return { from: iso(from), to: iso(to) };
 }
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+// Loyverse изредка отдаёт пустое/битое тело при 2xx или транзиентный 429/5xx.
+// Ретраим с экспоненциальным бэкоффом, иначе одна осечка валит весь прогон.
+async function loyverseGet(url: string): Promise<any> {
+  const MAX = 5;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
+      const body = await r.text();
+      if (!r.ok) {
+        const err = new Error(`Loyverse ${r.status}: ${body.slice(0, 200)}`);
+        // 429/5xx — транзиентные, ретраим; 4xx (кроме 429) — фатально, не повторяем
+        if (r.status !== 429 && r.status < 500) throw Object.assign(err, { fatal: true });
+        throw err;
+      }
+      if (!body.trim()) throw new Error("Loyverse вернул пустое тело при 2xx");
+      return JSON.parse(body);
+    } catch (e) {
+      lastErr = e;
+      if ((e as any)?.fatal || attempt === MAX) break;
+      const wait = 500 * 2 ** (attempt - 1); // 0.5s, 1s, 2s, 4s
+      console.warn(`[receipts]   retry ${attempt}/${MAX - 1} after error: ${String((e as any)?.message ?? e)} (wait ${wait}ms)`);
+      await sleep(wait);
+    }
+  }
+  throw lastErr;
+}
+
 async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
   const out: T[] = [];
   let cursor: string | undefined;
   do {
     const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
-    if (!r.ok) throw new Error(`Loyverse ${r.status} ${path}: ${await r.text()}`);
-    const d = await r.json();
+    const d = await loyverseGet(url);
     out.push(...(d[key] ?? []));
     cursor = d.cursor;
   } while (cursor);
