@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; }
+
+/* Kiosk runs full-screen on the device. No selection, no zoom, no callouts.
+   We want every tap to feel like a button press, not text interaction. */
+html, body {
+  background-color: #F5F0EB;
+  color: #1A1A1A;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* Hide scrollbars on the kiosk — content still scrolls by touch. */
+::-webkit-scrollbar { display: none; }
+
+.overline {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
+}
