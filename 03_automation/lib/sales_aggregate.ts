@@ -11,7 +11,9 @@
 
 import { classifyReceipt } from "./b2b.js";
 
-const LOYVERSE_TOKEN = process.env.LOYVERSE_API_TOKEN!;
+// Lazy token read — this module may be imported (hoisted) before the caller's
+// dotenv.config() runs, so capturing process.env at load time would freeze undefined.
+const LOYVERSE_TOKEN = () => process.env.LOYVERSE_API_TOKEN!;
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -65,7 +67,7 @@ async function loyFetch<T>(path: string, key: string): Promise<T[]> {
   let cursor: string | undefined;
   do {
     const url = `https://api.loyverse.com/v1.0${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN()}` } });
     if (!r.ok) throw new Error(`Loyverse ${r.status}: ${path}`);
     const d = await r.json();
     out.push(...(d[key] ?? []));
@@ -79,7 +81,7 @@ async function fetchCustomerNames(ids: Set<string>): Promise<Map<string, string>
   await Promise.all([...ids].map(async id => {
     try {
       const r = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
-        headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` },
+        headers: { Authorization: `Bearer ${LOYVERSE_TOKEN()}` },
       });
       if (!r.ok) return;
       const c = await r.json();

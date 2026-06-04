@@ -5,8 +5,12 @@
 // rest hard-failed when Loyverse occasionally returns an empty/garbled body on
 // a 2xx or a transient 429/5xx. This is the one place that talks to /v1.0.
 
-const LOYVERSE_TOKEN = process.env.LOYVERSE_API_TOKEN!;
 const BASE = "https://api.loyverse.com/v1.0";
+
+// Read the token lazily (NOT at module load): ES-module imports are hoisted, so
+// this module's body runs before the importing script's dotenv.config() call.
+// Capturing process.env at load time would freeze an undefined token → 401.
+const token = () => process.env.LOYVERSE_API_TOKEN!;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -16,7 +20,7 @@ export async function loyverseGet(url: string): Promise<any> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX; attempt++) {
     try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
       const body = await r.text();
       if (!r.ok) {
         const err = new Error(`Loyverse ${r.status}: ${body.slice(0, 200)}`);
