@@ -19,13 +19,13 @@ export function normalizeName(name: string): { full: string; tokens: Set<string>
   return { full: lower, tokens }
 }
 
-// MATCH_ONLY_TOKENS — дополнительные паттерны, которые используются ТОЛЬКО для
-// бонуса при матчинге FA↔Loyverse, но НЕ для классификации чеков. Многие из них
-// (например «titov» — фамилия) безопасны при сравнении имён двух компаний, но
-// в классификаторе чеков пометили бы физлицо как B2B, поэтому в lib/b2b.ts их нет.
-// Реальные B2B-клиенты, найденные ручной разметкой; см. также b2b_overrides.ts.
+// MATCH_ONLY_TOKENS — паттерны, нужные ТОЛЬКО для бонуса при матчинге FA↔Loyverse,
+// но не входящие в каноничный классификатор чеков (lib/b2b.ts). 'pinz' — более
+// широкий вариант 'pinzerai'; 'q squad' — вариант написания 'q-squad' с пробелом
+// (нормализация имён убирает дефис). Остальные ранее-локальные имена (olabar,
+// volna pool, sukmesum, phuket kachatip, titov) теперь в каноне — отсюда убраны.
 const MATCH_ONLY_TOKENS: string[] = [
-  'olabar', 'phuket kachatip', 'pinz', 'q squad', 'sukmesum', 'titov', 'volna pool',
+  'pinz', 'q squad',
 ]
 
 // Полный набор паттернов для матчинга = каноничные классификаторные ∪ matching-only.

@@ -36,14 +36,22 @@ export const B2B_PATTERNS: string[] = [
   "shaman phuket",     // Shaman Phuket co.,Ltd
   "tbilisi",           // Tbilisi CO.,LTD (Head Office)
   "seaview",           // The Seaview Destination
+  // Known B2B clients from manual tagging / FlowAccount. As of 2026-06 these
+  // do NOT match any Loyverse customer name (they pay without customer_id, so
+  // today they're caught by the bank-transfer rule); listed here as a safety
+  // net for when they get registered as Loyverse customers. Verified 2026-06
+  // that none collide with an individual customer name (incl. "titov").
+  "olabar",            // OLA Bar
+  "volna pool",        // Volna Pool
+  "sukmesum",          // Sukmesum
+  "phuket kachatip",   // Phuket Kachatip
+  "titov",             // Titov (no individual named Titov in Loyverse customers)
 ];
 
-// Known B2B clients that are NOT registered as Loyverse customers
-// (they pay without customer_id, so they fall through to B2C unless we
-// catch them another way — flagged here for awareness):
-//   - Bella Chao Trade Co., Ltd.
+// Other known B2B clients that are NOT registered as Loyverse customers and
+// have no safe name pattern (caught only via bank-transfer payments):
+//   - Bella Chao Trade Co., Ltd. (also has 'bella chao' pattern above)
 //   - Kusnacafe Co., Ltd.
-//   - Titov
 
 export function isB2BCustomerName(name: string): boolean {
   const n = name.toLowerCase();

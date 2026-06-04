@@ -40,6 +40,13 @@ export const B2B_PATTERNS: string[] = [
   'shaman phuket',     // Shaman Phuket co.,Ltd
   'tbilisi',           // Tbilisi CO.,LTD (Head Office)
   'seaview',           // The Seaview Destination
+  // Known B2B clients from manual tagging / FlowAccount (no Loyverse customer
+  // match as of 2026-06; safety net for when they get registered).
+  'olabar',            // OLA Bar
+  'volna pool',        // Volna Pool
+  'sukmesum',          // Sukmesum
+  'phuket kachatip',   // Phuket Kachatip
+  'titov',             // Titov
 ]
 
 export function isB2BCustomerName(name: string): boolean {
