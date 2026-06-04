@@ -58,10 +58,15 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-// id → name. Cached per process — Loyverse customer list changes rarely.
-let _customerNameCache: Map<string, string> | null = null
+// id → name. Cached per process with a TTL so a newly-added B2B customer is
+// picked up without a process restart (was a lifetime cache → new B2B clients
+// were misclassified as B2C until redeploy).
+let _customerNameCache: { map: Map<string, string>; at: number } | null = null
+const CUSTOMER_CACHE_TTL_MS = 30 * 60 * 1000 // 30 min
 async function getCustomerNames(): Promise<Map<string, string>> {
-  if (_customerNameCache) return _customerNameCache
+  if (_customerNameCache && Date.now() - _customerNameCache.at < CUSTOMER_CACHE_TTL_MS) {
+    return _customerNameCache.map
+  }
   const map = new Map<string, string>()
   let cursor: string | undefined
   for (let page = 0; page < 30; page++) {
@@ -72,7 +77,7 @@ async function getCustomerNames(): Promise<Map<string, string>> {
     if (!data.cursor) break
     cursor = data.cursor
   }
-  _customerNameCache = map
+  _customerNameCache = { map, at: Date.now() }
   return map
 }
 

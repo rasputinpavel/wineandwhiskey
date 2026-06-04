@@ -47,20 +47,27 @@ export async function getSales(dateFrom: string, dateTo: string): Promise<string
 
   if (receipts.length === 0) return `За период ${dateFrom} — ${dateTo} продаж не найдено.`;
 
+  // Loyverse ignores receipt_type=SALE and returns REFUND rows too. Net them
+  // out (REFUND → −1) and drop cancelled receipts so revenue/GP/checks match
+  // the native Dashboard (see lib/dashboard.ts). Refunds aren't transactions.
   let totalRevenue = 0;
   let totalCost = 0;
+  let checks = 0;
 
   const itemSales = new Map<string, { qty: number; revenue: number; cost: number }>();
   for (const r of receipts) {
-    totalRevenue += r.total_money;
+    if (r.cancelled_at) continue;                       // voided — never a sale
+    const sign = r.receipt_type === "REFUND" ? -1 : 1;  // refunds reduce net sales
+    if (sign > 0) checks++;
+    totalRevenue += r.total_money * sign;
     for (const li of r.line_items ?? []) {
       const name = li.item_name;
       const cur = itemSales.get(name) ?? { qty: 0, revenue: 0, cost: 0 };
-      const lineCost = li.cost_total ?? 0;
+      const lineCost = (li.cost_total ?? 0) * sign;
       totalCost += lineCost;
       itemSales.set(name, {
-        qty: cur.qty + li.quantity,
-        revenue: cur.revenue + li.total_money,
+        qty: cur.qty + li.quantity * sign,
+        revenue: cur.revenue + li.total_money * sign,
         cost: cur.cost + lineCost,
       });
     }
@@ -80,7 +87,7 @@ export async function getSales(dateFrom: string, dateTo: string): Promise<string
 
   return [
     `Период: ${dateFrom} — ${dateTo}`,
-    `Чеков: ${receipts.length}`,
+    `Чеков: ${checks}`,
     `Выручка: ${totalRevenue.toFixed(0)} THB`,
     `Себестоимость: ${totalCost.toFixed(0)} THB`,
     `Gross Profit: ${grossProfit.toFixed(0)} THB (маржа ${margin}%)`,
