@@ -295,7 +295,7 @@ export function ReceiptExclusions({ supplierId, period, excluded, tableMissing }
 }
 
 export function ExportCsvButton({ rows, period, supplierName }: {
-  rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; hc: number; amount: number }>
+  rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; hc: number | string; amount: number | string }>
   period: string
   supplierName: string
 }) {

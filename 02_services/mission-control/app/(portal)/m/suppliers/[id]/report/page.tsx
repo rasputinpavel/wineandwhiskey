@@ -59,13 +59,40 @@ export default async function SupplierMonthlyReportPage({
   const cycleStartDay = Number((supRes.data as { monthly_cycle_start_day?: number }).monthly_cycle_start_day ?? 1)
   const { startIso, endExclIso, label } = periodRange(period, cycleStartDay)
 
-  type PriceRow = { sku_id: string; price_hc: number | null; sku: { id: string; name: string; loyverse_product_code: string | null; category: string | null } | null }
+  type SkuInfo = { id: string; name: string; loyverse_product_code: string | null; category: string | null }
+  type PriceRow = { sku_id: string; price_hc: number | null; sku: SkuInfo | null }
   const priceRows = (pricesRes.data ?? []) as unknown as PriceRow[]
-  const skuById = new Map(priceRows.map(p => [p.sku_id, p.sku]).filter(([, v]) => v != null) as Array<[string, NonNullable<PriceRow['sku']>]>)
-  const hcBySkuId = new Map(priceRows.map(p => [p.sku_id, Number(p.price_hc ?? 0)]))
-  const codeBySkuId = new Map(priceRows.map(p => [p.sku_id, p.sku?.loyverse_product_code ?? null]))
+  const pricedIds = new Set(priceRows.map(p => p.sku_id))
+
+  // Report cells (current + previous period; prev for opening-stock pre-fill).
+  const { data: cellsRaw, error: cellsErr } = await sbInventory
+    .from('consignment_report_cell')
+    .select('sku_id, period, opening_stock, closing_stock, tastings, b2c_override, b2b_override, notes')
+    .eq('supplier_id', id)
+    .in('period', [period, prevPeriod])
+  if (cellsErr) return <SchemaError error={cellsErr.message} />
+  type Cell = { sku_id: string; period: string; opening_stock: number | null; closing_stock: number | null; tastings: number; b2c_override: number | null; b2b_override: number | null; notes: string | null }
+  const cells = (cellsRaw ?? []) as Cell[]
+  const cellByKey = new Map(cells.map(c => [`${c.sku_id}|${c.period}`, c]))
+
+  // SKUs that have report cells but aren't priced yet — still show them with
+  // HC = n/a so opening/closing reconcile; prices get added to the list later.
+  const extraIds = [...new Set(cells.map(c => c.sku_id).filter(sid => !pricedIds.has(sid)))]
+  const extraInfo = new Map<string, SkuInfo>()
+  if (extraIds.length) {
+    const { data } = await sbInventory.from('sku').select('id, name, loyverse_product_code, category').in('id', extraIds)
+    for (const sk of (data ?? []) as SkuInfo[]) extraInfo.set(sk.id, sk)
+  }
+
+  // Unified SKU list: priced (with HC) first, then unpriced cell SKUs (HC null).
+  type ReportSku = { sku_id: string; info: SkuInfo; hc: number | null }
+  const reportSkus: ReportSku[] = []
+  for (const p of priceRows) if (p.sku) reportSkus.push({ sku_id: p.sku_id, info: p.sku, hc: p.price_hc == null ? null : Number(p.price_hc) })
+  for (const sid of extraIds) { const info = extraInfo.get(sid); if (info) reportSkus.push({ sku_id: sid, info, hc: null }) }
+
+  const codeBySkuId = new Map(reportSkus.map(r => [r.sku_id, r.info.loyverse_product_code ?? null]))
   const skuIdByCode = new Map<string, string>()
-  for (const [id_, code] of codeBySkuId) if (code) skuIdByCode.set(code, id_)
+  for (const [sid, code] of codeBySkuId) if (code) skuIdByCode.set(code, sid)
 
   // Receipts excluded from this period's settlement (e.g. off-consignment B2B
   // batches). Defensive: if migration 021 isn't applied yet, treat as empty.
@@ -118,17 +145,6 @@ export default async function SupplierMonthlyReportPage({
     }
   }
 
-  // Pull report cells for current + previous period (prev for opening-stock pre-fill).
-  const { data: cellsRaw, error: cellsErr } = await sbInventory
-    .from('consignment_report_cell')
-    .select('sku_id, period, opening_stock, closing_stock, tastings, b2c_override, b2b_override, notes')
-    .eq('supplier_id', id)
-    .in('period', [period, prevPeriod])
-  if (cellsErr) return <SchemaError error={cellsErr.message} />
-  type Cell = { sku_id: string; period: string; opening_stock: number | null; closing_stock: number | null; tastings: number; b2c_override: number | null; b2b_override: number | null; notes: string | null }
-  const cells = (cellsRaw ?? []) as Cell[]
-  const cellByKey = new Map(cells.map(c => [`${c.sku_id}|${c.period}`, c]))
-
   // Deliveries (stock arrivals booked outside POs) within the period, summed
   // per SKU by delivery date. Defensive if migration 022 isn't applied yet.
   const deliveredBySku = new Map<string, number>()
@@ -145,16 +161,15 @@ export default async function SupplierMonthlyReportPage({
     }
   }
 
-  // Build rows sorted by SKU name.
-  const rows = priceRows
-    .filter(p => p.sku != null)
-    .map(p => {
-      const sku = p.sku!
+  // Build rows.
+  const rows = reportSkus
+    .map(rs => {
+      const sku = rs.info
       const code = sku.loyverse_product_code ?? ''
       const b2cAuto = Math.round(b2cBySku.get(code) ?? 0)
       const b2bAuto = Math.round(b2bBySku.get(code) ?? 0)
-      const thisCell = cellByKey.get(`${p.sku_id}|${period}`)
-      const prevCell = cellByKey.get(`${p.sku_id}|${prevPeriod}`)
+      const thisCell = cellByKey.get(`${rs.sku_id}|${period}`)
+      const prevCell = cellByKey.get(`${rs.sku_id}|${prevPeriod}`)
       const opening = thisCell?.opening_stock ?? prevCell?.closing_stock ?? null
       const closingManual = thisCell?.closing_stock ?? null
       const tastings = thisCell?.tastings ?? 0
@@ -162,21 +177,23 @@ export default async function SupplierMonthlyReportPage({
       const b2bOverride = thisCell?.b2b_override ?? null
       const b2c = b2cOverride ?? b2cAuto
       const b2b = b2bOverride ?? b2bAuto
-      const delivered = deliveredBySku.get(p.sku_id) ?? 0
+      const delivered = deliveredBySku.get(rs.sku_id) ?? 0
       const sold = b2c + b2b                               // billable units
       const closingAuto = opening != null ? opening + delivered - sold - tastings : null
       const closing = closingManual ?? closingAuto
-      const hc = hcBySkuId.get(p.sku_id) ?? 0
-      const amount = sold * hc                             // tastings are free → excluded
-      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount }
+      const hc = rs.hc                                     // null = not priced yet (n/a)
+      const amount = hc == null ? null : sold * hc         // tastings are free → excluded
+      return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount }
     })
     .sort((a, b) => (b.sold + b.tastings + b.delivered) - (a.sold + a.tastings + a.delivered) || a.sku_name.localeCompare(b.sku_name))
 
   const totals = rows.reduce((acc, r) => {
     acc.b2c += r.b2c; acc.b2b += r.b2b; acc.tastings += r.tastings; acc.sold += r.sold; acc.delivered += r.delivered
-    acc.opening += r.opening ?? 0; acc.closing += r.closing ?? 0; acc.amount += r.amount
+    acc.opening += r.opening ?? 0; acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0
     return acc
   }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, tastings: 0, sold: 0, closing: 0, amount: 0 })
+
+  const unpricedSold = rows.filter(r => r.hc == null && r.sold > 0).length
 
   const subtotal = totals.amount
   const vat = subtotal * VAT_RATE
@@ -205,7 +222,7 @@ export default async function SupplierMonthlyReportPage({
             className="text-xs px-2 py-1 border border-pale-stone rounded-sm hover:border-wine-red hover:text-wine-red"
           >next →</Link>
           <ExportCsvButton
-            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, hc: r.hc, amount: Math.round(r.amount) }))}
+            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, hc: r.hc == null ? 'n/a' : r.hc, amount: r.amount == null ? 'n/a' : Math.round(r.amount) }))}
             period={period}
             supplierName={s.name}
           />
@@ -263,8 +280,8 @@ export default async function SupplierMonthlyReportPage({
                 <td className="py-2 px-3 text-right">
                   <ClosingCell supplierId={id} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.hc ? r.hc.toLocaleString('en-US') : <span className="text-graphite/40">—</span>}</td>
-                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.amount ? `฿${Math.round(r.amount).toLocaleString('en-US')}` : <span className="text-graphite/40">—</span>}</td>
+                <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.hc == null ? <span className="text-amber-gold">n/a</span> : r.hc.toLocaleString('en-US')}</td>
+                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.amount == null ? <span className="text-amber-gold">n/a</span> : r.amount ? `฿${Math.round(r.amount).toLocaleString('en-US')}` : <span className="text-graphite/40">—</span>}</td>
               </tr>
             ))}
             {rows.length > 0 && (
@@ -302,6 +319,11 @@ export default async function SupplierMonthlyReportPage({
               <span className="text-deep-black">Total due to {s.name}</span>
               <span className="tabular-nums text-wine-red">฿{Math.round(grandTotal).toLocaleString('en-US')}</span>
             </div>
+            {unpricedSold > 0 && (
+              <div className="px-4 py-2 text-[11px] text-amber-gold border-t border-pale-stone/40">
+                {unpricedSold} sold SKU{unpricedSold > 1 ? 's' : ''} with no HC price (n/a) — not in this total. Add prices on the Consignment prices tab.
+              </div>
+            )}
           </div>
         </div>
       )}
