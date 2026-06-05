@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { ExportCsvButton, ReceiptExclusions } from '@/components/modules/suppliers/ConsignmentReportCells'
+import { ExportCsvButton, ReceiptExclusions, ClosePeriodButton } from '@/components/modules/suppliers/ConsignmentReportCells'
 import { ConsignmentReportTable } from '@/components/modules/suppliers/ConsignmentReportTable'
 
 const VAT_RATE = 0.07
@@ -196,6 +196,16 @@ export default async function SupplierMonthlyReportPage({
 
   const unpricedSold = rows.filter(r => r.hc == null && r.sold > 0).length
 
+  // Closed-period state (migration 023). Defensive if table missing.
+  let closedAt: string | null = null
+  {
+    const { data } = await sbInventory
+      .from('consignment_report_period').select('closed_at')
+      .eq('supplier_id', id).eq('period', period).maybeSingle()
+    closedAt = (data as { closed_at?: string } | null)?.closed_at ?? null
+  }
+  const closings = rows.filter(r => r.closing != null).map(r => ({ sku_id: r.sku_id, closing: r.closing as number }))
+
   const subtotal = totals.amount
   const vat = subtotal * VAT_RATE
   const grandTotal = subtotal + vat
@@ -222,6 +232,7 @@ export default async function SupplierMonthlyReportPage({
             href={`/m/suppliers/${id}/report?period=${shiftMonth(period, 1)}`}
             className="text-xs px-2 py-1 border border-pale-stone rounded-sm hover:border-wine-red hover:text-wine-red"
           >next →</Link>
+          <ClosePeriodButton supplierId={id} period={period} closedAt={closedAt} closings={closings} />
           <ExportCsvButton
             rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, hc: r.hc == null ? 'n/a' : r.hc, amount: r.amount == null ? 'n/a' : Math.round(r.amount) }))}
             period={period}

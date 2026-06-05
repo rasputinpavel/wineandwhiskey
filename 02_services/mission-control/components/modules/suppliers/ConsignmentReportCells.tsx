@@ -294,6 +294,61 @@ export function ReceiptExclusions({ supplierId, period, excluded, tableMissing }
   )
 }
 
+// Close / reopen the period. Closing persists each SKU's effective closing
+// stock (→ next month's opening) and marks the report agreed.
+export function ClosePeriodButton({ supplierId, period, closings, closedAt }: {
+  supplierId: string; period: string
+  closings: Array<{ sku_id: string; closing: number }>
+  closedAt: string | null
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function close() {
+    if (!confirm(`Close ${period}? Closing stock is saved and carried to next month as Opening.`)) return
+    setBusy(true); setErr(null)
+    try {
+      const res = await fetch('/api/m/consignment-report/close', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplier_id: supplierId, period, closings }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`)
+      router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'failed') }
+    finally { setBusy(false) }
+  }
+
+  async function reopen() {
+    setBusy(true); setErr(null)
+    try {
+      const qs = new URLSearchParams({ supplier_id: supplierId, period })
+      const res = await fetch(`/api/m/consignment-report/close?${qs}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`)
+      router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'failed') }
+    finally { setBusy(false) }
+  }
+
+  if (closedAt) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="text-xs px-2 py-1 rounded-sm bg-amber-gold/20 text-deep-black border border-amber-gold/60">Closed {closedAt.slice(0, 10)}</span>
+        <button onClick={reopen} disabled={busy} className="text-xs text-graphite hover:text-wine-red disabled:opacity-50">{busy ? '…' : 'Reopen'}</button>
+        {err && <span className="text-[10px] text-wine-red">{err}</span>}
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <button onClick={close} disabled={busy} className="text-xs px-3 py-1 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
+        {busy ? 'Closing…' : 'Close period'}
+      </button>
+      {err && <span className="text-[10px] text-wine-red">{err}</span>}
+    </span>
+  )
+}
+
 export function ExportCsvButton({ rows, period, supplierName }: {
   rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; hc: number | string; amount: number | string }>
   period: string
