@@ -295,20 +295,21 @@ export function ReceiptExclusions({ supplierId, period, excluded, tableMissing }
 }
 
 export function ExportCsvButton({ rows, period, supplierName }: {
-  rows: Array<{ sku: string; opening: number | null; b2c: number; b2b: number; tastings: number; total: number; closing: number | null; hc: number; amount: number }>
+  rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; hc: number; amount: number }>
   period: string
   supplierName: string
 }) {
   function download() {
-    const header = ['SKU', `Opening (${period})`, 'Sold B2C', 'Sold B2B', 'Tastings', 'TOTAL', `Closing (${period})`, 'HC price', 'Amount (HC)']
+    const header = ['SKU', `Opening (${period})`, 'Delivered', 'Sold B2C', 'Sold B2B', 'TOTAL', 'Tastings', `Closing (${period})`, 'HC price', 'Amount (HC)']
     const csv = [header.join(',')].concat(
       rows.map(r => [
         JSON.stringify(r.sku),
         r.opening ?? '',
+        r.delivered,
         r.b2c,
         r.b2b,
-        r.tastings,
         r.total,
+        r.tastings,
         r.closing ?? '',
         r.hc,
         r.amount,

@@ -129,6 +129,22 @@ export default async function SupplierMonthlyReportPage({
   const cells = (cellsRaw ?? []) as Cell[]
   const cellByKey = new Map(cells.map(c => [`${c.sku_id}|${c.period}`, c]))
 
+  // Deliveries (stock arrivals booked outside POs) within the period, summed
+  // per SKU by delivery date. Defensive if migration 022 isn't applied yet.
+  const deliveredBySku = new Map<string, number>()
+  let delTableMissing = false
+  {
+    const startDate = startIso.slice(0, 10)
+    const endExclDate = endExclIso.slice(0, 10)
+    const { data, error } = await sbInventory
+      .from('consignment_delivery').select('sku_id, qty')
+      .eq('supplier_id', id).gte('delivered_at', startDate).lt('delivered_at', endExclDate)
+    if (error) delTableMissing = true
+    else for (const d of (data ?? []) as Array<{ sku_id: string; qty: number }>) {
+      deliveredBySku.set(d.sku_id, (deliveredBySku.get(d.sku_id) ?? 0) + Number(d.qty))
+    }
+  }
+
   // Build rows sorted by SKU name.
   const rows = priceRows
     .filter(p => p.sku != null)
@@ -146,20 +162,21 @@ export default async function SupplierMonthlyReportPage({
       const b2bOverride = thisCell?.b2b_override ?? null
       const b2c = b2cOverride ?? b2cAuto
       const b2b = b2bOverride ?? b2bAuto
-      const total = b2c + b2b + tastings
-      const closingAuto = opening != null ? opening - total : null
+      const delivered = deliveredBySku.get(p.sku_id) ?? 0
+      const sold = b2c + b2b                               // billable units
+      const closingAuto = opening != null ? opening + delivered - sold - tastings : null
       const closing = closingManual ?? closingAuto
       const hc = hcBySkuId.get(p.sku_id) ?? 0
-      const amount = total * hc
-      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, total, hc, amount }
+      const amount = sold * hc                             // tastings are free → excluded
+      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount }
     })
-    .sort((a, b) => (b.b2c + b.b2b + b.tastings) - (a.b2c + a.b2b + a.tastings) || a.sku_name.localeCompare(b.sku_name))
+    .sort((a, b) => (b.sold + b.tastings + b.delivered) - (a.sold + a.tastings + a.delivered) || a.sku_name.localeCompare(b.sku_name))
 
   const totals = rows.reduce((acc, r) => {
-    acc.b2c += r.b2c; acc.b2b += r.b2b; acc.tastings += r.tastings; acc.total += r.total
+    acc.b2c += r.b2c; acc.b2b += r.b2b; acc.tastings += r.tastings; acc.sold += r.sold; acc.delivered += r.delivered
     acc.opening += r.opening ?? 0; acc.closing += r.closing ?? 0; acc.amount += r.amount
     return acc
-  }, { opening: 0, b2c: 0, b2b: 0, tastings: 0, total: 0, closing: 0, amount: 0 })
+  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, tastings: 0, sold: 0, closing: 0, amount: 0 })
 
   const subtotal = totals.amount
   const vat = subtotal * VAT_RATE
@@ -172,7 +189,9 @@ export default async function SupplierMonthlyReportPage({
           <Link href={`/m/suppliers/${id}`} className="text-xs text-graphite hover:text-wine-red">← Back to {s.name}</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{s.name} · Monthly sales report</h2>
           <p className="text-graphite text-sm mt-1 max-w-3xl">
-            Auto-aggregates Loyverse sales (B2C + B2B) per SKU and prices them at consignment HC + 7% VAT. Closing = opening − sold (click to override). Set opening / tastings inline.
+            Auto-aggregates Loyverse sales (B2C + B2B) per SKU and prices the billable units at consignment HC + 7% VAT.
+            <strong> TOTAL</strong> = billable (B2C + B2B); tastings are free and excluded from the bill.
+            Closing = Opening + Delivered − TOTAL − Tastings (click to override). Set opening / tastings inline; log arrivals on the Deliveries tab.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -186,12 +205,16 @@ export default async function SupplierMonthlyReportPage({
             className="text-xs px-2 py-1 border border-pale-stone rounded-sm hover:border-wine-red hover:text-wine-red"
           >next →</Link>
           <ExportCsvButton
-            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, b2c: r.b2c, b2b: r.b2b, tastings: r.tastings, total: r.total, closing: r.closing, hc: r.hc, amount: Math.round(r.amount) }))}
+            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, hc: r.hc, amount: Math.round(r.amount) }))}
             period={period}
             supplierName={s.name}
           />
         </div>
       </div>
+
+      {delTableMissing && (
+        <p className="mb-3 text-[12px] text-wine-red">Deliveries table missing — apply migration 022_consignment_delivery.sql in Supabase (the Delivered column reads 0 until then).</p>
+      )}
 
       <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
         <table className="w-full text-[13px]">
@@ -199,10 +222,11 @@ export default async function SupplierMonthlyReportPage({
             <tr>
               <th className="py-2 px-3 text-left font-normal">SKU</th>
               <th className="py-2 px-3 text-right font-normal">Opening</th>
+              <th className="py-2 px-3 text-right font-normal">Delivered</th>
               <th className="py-2 px-3 text-right font-normal">Sold B2C</th>
               <th className="py-2 px-3 text-right font-normal">Sold B2B</th>
-              <th className="py-2 px-3 text-right font-normal">Tastings</th>
               <th className="py-2 px-3 text-right font-normal">TOTAL</th>
+              <th className="py-2 px-3 text-right font-normal">Tastings</th>
               <th className="py-2 px-3 text-right font-normal">Closing</th>
               <th className="py-2 px-3 text-right font-normal">HC ฿</th>
               <th className="py-2 px-3 text-right font-normal">Amount ฿</th>
@@ -210,7 +234,7 @@ export default async function SupplierMonthlyReportPage({
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={9} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
+              <tr><td colSpan={10} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
             )}
             {rows.map(r => (
               <tr key={r.sku_id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
@@ -221,6 +245,7 @@ export default async function SupplierMonthlyReportPage({
                 <td className="py-2 px-3 text-right">
                   <NumCell supplierId={id} skuId={r.sku_id} period={period} field="opening_stock" initial={r.opening} />
                 </td>
+                <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.delivered || <span className="text-graphite/40">—</span>}</td>
                 <td className="py-2 px-3 text-right">
                   <OverrideNumCell supplierId={id} skuId={r.sku_id} period={period} field="b2c_override"
                     auto={r.b2cAuto} override={r.b2cOverride}
@@ -231,10 +256,10 @@ export default async function SupplierMonthlyReportPage({
                     auto={r.b2bAuto} override={r.b2bOverride}
                     salesHref={`/m/suppliers/${id}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2b`} />
                 </td>
+                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.sold || <span className="text-graphite/40">—</span>}</td>
                 <td className="py-2 px-3 text-right">
                   <NumCell supplierId={id} skuId={r.sku_id} period={period} field="tastings" initial={r.tastings || null} />
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.total || <span className="text-graphite/40">—</span>}</td>
                 <td className="py-2 px-3 text-right">
                   <ClosingCell supplierId={id} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
                 </td>
@@ -246,10 +271,11 @@ export default async function SupplierMonthlyReportPage({
               <tr className="bg-cream/60 font-medium">
                 <td className="py-2 px-3 text-graphite text-xs uppercase tracking-overline">Total</td>
                 <td className="py-2 px-3 text-right tabular-nums">{totals.opening}</td>
+                <td className="py-2 px-3 text-right tabular-nums">{totals.delivered}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{totals.b2c}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{totals.b2b}</td>
+                <td className="py-2 px-3 text-right tabular-nums">{totals.sold}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{totals.tastings}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.total}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{totals.closing}</td>
                 <td className="py-2 px-3"></td>
                 <td className="py-2 px-3 text-right tabular-nums">฿{Math.round(totals.amount).toLocaleString('en-US')}</td>
