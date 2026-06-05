@@ -7,6 +7,7 @@ This is the operating system for managing the Wine & Whiskey retail store.
 ## What lives here
 
 - **docs/** — Project documentation: ARCHITECTURE, DATA_SOURCES (source of truth), DATA_MODEL, CROSS_CUTTING (shared logic & conventions), SERVICES, and dated audits.
+- **packages/** — Shared internal packages consumed across the monorepo (npm workspaces). `packages/shared` = `@ww/shared`: B2B classification, Loyverse client, sales aggregation — the single home for cross-cutting source-of-truth logic.
 - **.inbox/** — Incoming materials for any area: files to process, references, drafts.
 - **01_agents/** — Виртуальные сотрудники (Telegram bots on Railway).
   - `bot/` — Staff operations bot (Chip & Dale).
@@ -35,6 +36,7 @@ These rules apply to all work in this repo. Follow them strictly. If a new file 
 | What | Where | Notes |
 |------|-------|-------|
 | Project documentation | `docs/` | Architecture, source-of-truth, data model, conventions, service catalog, audits |
+| Shared internal package | `packages/shared` (`@ww/shared`) | Cross-cutting logic (B2B, Loyverse client, sales aggregation). Edit here, not the copies |
 | Anything incoming / unprocessed | `.inbox/` | Temporary landing zone — not knowledge, not output |
 | Telegram bot code | `01_agents/<name>/` | Each bot is its own subdirectory |
 | Web service code | `02_services/<name>/` | Each service is its own subdirectory |

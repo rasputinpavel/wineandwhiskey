@@ -1,12 +1,20 @@
 # Migration: shared `@ww/shared` package (keystone #1)
 
-Status: **foundation landed on branch `chore/shared-package`** — `packages/shared`
+Status: **foundation landed on `main`** (commit `00832ca`) — `packages/shared`
 exists, the repo is an npm workspace, and the `03_automation` layer is fully
-migrated and verified. The web services and Telegram bots are **not yet
-converted** because each builds from its own directory on Railway and switching
-them requires Railway dashboard changes that must be applied and deploy-tested.
+migrated and verified (`npm ci` + `npm run check:b2b` + `npm run reconcile` all
+pass; CI does the same `npm ci` + tsx at root). The web services and Telegram
+bots are **not yet converted** because each builds from its own directory on
+Railway and switching them requires Railway dashboard changes that must be
+applied and deploy-tested — do that **per service**, on a branch, before merging.
 
 This doc is the runbook for finishing the migration.
+
+⚠️ Per-service rule: do NOT push a service's `@ww/shared` conversion to `main`
+until that service's Railway **Root Directory** is already switched to the repo
+root — otherwise its next auto-deploy builds from its own subdir, can't find
+`@ww/shared`, and fails. Convert on a branch → switch Railway root + Build/Start
+→ deploy that branch → verify → merge.
 
 ## Why this exists
 
