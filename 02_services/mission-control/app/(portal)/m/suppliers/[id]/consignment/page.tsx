@@ -8,18 +8,26 @@ export const dynamic = 'force-dynamic'
 export default async function SupplierConsignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const [supRes, pricesRes, skusRes] = await Promise.all([
+  const [supRes, pricesRes] = await Promise.all([
     sbInventory.from('supplier').select('id, name, type, payment_terms_days').eq('id', id).maybeSingle(),
     sbInventory.from('consignment_price').select('id, supplier_id, sku_id, price_hc, price_retail, notes, created_at, updated_at').eq('supplier_id', id).limit(2000),
-    sbInventory.from('sku').select('id, loyverse_product_code, name, category').order('name').limit(5000),
   ])
   if (supRes.error) return <SchemaError error={supRes.error.message} />
   if (!supRes.data)   return <div className="text-graphite">Supplier not found.</div>
   if (pricesRes.error) return <SchemaError error={pricesRes.error.message} />
-  if (skusRes.error)   return <SchemaError error={skusRes.error.message} />
 
   const s = supRes.data as Supplier
   const prices = (pricesRes.data ?? []) as ConsignmentPrice[]
+
+  // Resolve names only for the SKUs actually priced here — fetching the whole
+  // catalog and capping at a limit would drop late-alphabet SKUs (e.g. "Vodka…")
+  // and render them as "(unknown SKU)".
+  const skuIds = [...new Set(prices.map(p => p.sku_id))]
+  const skusRes = skuIds.length
+    ? await sbInventory.from('sku').select('id, loyverse_product_code, name, category').in('id', skuIds)
+    : { data: [] as Sku[], error: null }
+  if (skusRes.error)   return <SchemaError error={skusRes.error.message} />
+
   const skus   = (skusRes.data ?? []) as Sku[]
   const skuById = new Map(skus.map(k => [k.id, k]))
 
