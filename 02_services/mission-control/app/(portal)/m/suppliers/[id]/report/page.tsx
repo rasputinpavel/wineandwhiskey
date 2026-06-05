@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { NumCell, OverrideNumCell, ClosingCell, ExportCsvButton, ReceiptExclusions } from '@/components/modules/suppliers/ConsignmentReportCells'
+import { ExportCsvButton, ReceiptExclusions } from '@/components/modules/suppliers/ConsignmentReportCells'
+import { ConsignmentReportTable } from '@/components/modules/suppliers/ConsignmentReportTable'
 
 const VAT_RATE = 0.07
 
@@ -233,74 +234,7 @@ export default async function SupplierMonthlyReportPage({
         <p className="mb-3 text-[12px] text-wine-red">Deliveries table missing — apply migration 022_consignment_delivery.sql in Supabase (the Delivered column reads 0 until then).</p>
       )}
 
-      <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="text-graphite border-b border-pale-stone bg-cream/40">
-            <tr>
-              <th className="py-2 px-3 text-left font-normal">SKU</th>
-              <th className="py-2 px-3 text-right font-normal">Opening</th>
-              <th className="py-2 px-3 text-right font-normal">Delivered</th>
-              <th className="py-2 px-3 text-right font-normal">Sold B2C</th>
-              <th className="py-2 px-3 text-right font-normal">Sold B2B</th>
-              <th className="py-2 px-3 text-right font-normal">TOTAL</th>
-              <th className="py-2 px-3 text-right font-normal">Tastings</th>
-              <th className="py-2 px-3 text-right font-normal">Closing</th>
-              <th className="py-2 px-3 text-right font-normal">HC ฿</th>
-              <th className="py-2 px-3 text-right font-normal">Amount ฿</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
-            )}
-            {rows.map(r => (
-              <tr key={r.sku_id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
-                <td className="py-2 px-3 truncate max-w-[22rem]" title={r.sku_name}>
-                  {r.sku_name}
-                  {r.sku_code && <span className="ml-2 text-[10px] text-graphite/70 font-mono">{r.sku_code}</span>}
-                </td>
-                <td className="py-2 px-3 text-right">
-                  <NumCell supplierId={id} skuId={r.sku_id} period={period} field="opening_stock" initial={r.opening} />
-                </td>
-                <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.delivered || <span className="text-graphite/40">—</span>}</td>
-                <td className="py-2 px-3 text-right">
-                  <OverrideNumCell supplierId={id} skuId={r.sku_id} period={period} field="b2c_override"
-                    auto={r.b2cAuto} override={r.b2cOverride}
-                    salesHref={`/m/suppliers/${id}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2c`} />
-                </td>
-                <td className="py-2 px-3 text-right">
-                  <OverrideNumCell supplierId={id} skuId={r.sku_id} period={period} field="b2b_override"
-                    auto={r.b2bAuto} override={r.b2bOverride}
-                    salesHref={`/m/suppliers/${id}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2b`} />
-                </td>
-                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.sold || <span className="text-graphite/40">—</span>}</td>
-                <td className="py-2 px-3 text-right">
-                  <NumCell supplierId={id} skuId={r.sku_id} period={period} field="tastings" initial={r.tastings || null} />
-                </td>
-                <td className="py-2 px-3 text-right">
-                  <ClosingCell supplierId={id} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
-                </td>
-                <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.hc == null ? <span className="text-amber-gold">n/a</span> : r.hc.toLocaleString('en-US')}</td>
-                <td className="py-2 px-3 text-right tabular-nums font-medium">{r.amount == null ? <span className="text-amber-gold">n/a</span> : r.amount ? `฿${Math.round(r.amount).toLocaleString('en-US')}` : <span className="text-graphite/40">—</span>}</td>
-              </tr>
-            ))}
-            {rows.length > 0 && (
-              <tr className="bg-cream/60 font-medium">
-                <td className="py-2 px-3 text-graphite text-xs uppercase tracking-overline">Total</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.opening}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.delivered}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.b2c}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.b2b}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.sold}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.tastings}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{totals.closing}</td>
-                <td className="py-2 px-3"></td>
-                <td className="py-2 px-3 text-right tabular-nums">฿{Math.round(totals.amount).toLocaleString('en-US')}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ConsignmentReportTable supplierId={id} period={period} rows={rows} />
 
       <ReceiptExclusions supplierId={id} period={period} excluded={excluded} tableMissing={exclTableMissing} />
 
