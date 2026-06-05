@@ -15,6 +15,14 @@ import type { ReactivationCustomer } from '@/lib/reactivation/data'
 const BANNER_URL = '/creative/reactivation-rainy-season_2026-05.png'
 
 type LapsedFilter = 'all' | '30' | '60' | '90' | '180'
+type SortKey = 'name' | 'last' | 'days' | 'visits' | 'spent' | 'category'
+type SortDir = 'asc' | 'desc'
+
+// First-click direction per column: numeric/date columns descend (biggest /
+// most recent first), name and category ascend.
+const FIRST_DIR: Record<SortKey, SortDir> = {
+  name: 'asc', last: 'desc', days: 'desc', visits: 'desc', spent: 'desc', category: 'asc',
+}
 
 function fmt(n: number): string {
   return Math.round(n).toLocaleString('en-US')
@@ -28,23 +36,52 @@ function topProductsLabel(c: ReactivationCustomer): string {
   return c.topProducts.slice(0, 3).map(p => `${p.name} ×${Math.round(p.qty)}`).join('; ') || '—'
 }
 
+function compareBy(sort: SortKey, dir: SortDir) {
+  const mult = dir === 'asc' ? 1 : -1
+  return (a: ReactivationCustomer, b: ReactivationCustomer): number => {
+    let cmp = 0
+    switch (sort) {
+      case 'name':     cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); break
+      case 'last':     cmp = a.lastVisit.localeCompare(b.lastVisit); break
+      case 'days':     cmp = a.daysSinceLastVisit - b.daysSinceLastVisit; break
+      case 'visits':   cmp = a.receipts - b.receipts; break
+      case 'spent':    cmp = a.totalSpent - b.totalSpent; break
+      case 'category': cmp = topCategory(a).localeCompare(topCategory(b)); break
+    }
+    return cmp * mult
+  }
+}
+
 export function ReactivationTable({ customers }: { customers: ReactivationCustomer[] }) {
   const [search, setSearch] = useState('')
   const [lapsed, setLapsed] = useState<LapsedFilter>('30')
+  const [sort, setSort] = useState<SortKey>('spent')
+  const [dir, setDir] = useState<SortDir>('desc')
   const [modal, setModal] = useState<{ customer: ReactivationCustomer; message: string | null; loading: boolean; error: string | null } | null>(null)
   const [copied, setCopied] = useState(false)
+
+  function onHeaderClick(col: SortKey) {
+    if (col === sort) {
+      setDir(dir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSort(col)
+      setDir(FIRST_DIR[col])
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     const minDays = lapsed === 'all' ? -Infinity : Number(lapsed)
-    return customers.filter(c => {
+    const result = customers.filter(c => {
       if (c.daysSinceLastVisit < minDays) return false
       if (!q) return true
       return c.name.toLowerCase().includes(q) ||
              (c.phone ?? '').toLowerCase().includes(q) ||
              (c.email ?? '').toLowerCase().includes(q)
     })
-  }, [customers, search, lapsed])
+    result.sort(compareBy(sort, dir))
+    return result
+  }, [customers, search, lapsed, sort, dir])
 
   async function openMessage(c: ReactivationCustomer) {
     setCopied(false)
@@ -115,12 +152,12 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
           <thead className="bg-cream/50 border-b border-pale-stone text-graphite text-left">
             <tr>
               <th className="px-3 py-2 font-medium w-10 text-right">#</th>
-              <th className="px-3 py-2 font-medium">Customer</th>
-              <th className="px-3 py-2 font-medium">Last visit</th>
-              <th className="px-3 py-2 font-medium text-right">Days</th>
-              <th className="px-3 py-2 font-medium text-right">Visits</th>
-              <th className="px-3 py-2 font-medium text-right">Spent (THB)</th>
-              <th className="px-3 py-2 font-medium">Top category</th>
+              <SortableTh col="name"     label="Customer"    align="left"  sort={sort} dir={dir} onClick={onHeaderClick} />
+              <SortableTh col="last"     label="Last visit"  align="left"  sort={sort} dir={dir} onClick={onHeaderClick} />
+              <SortableTh col="days"     label="Days"        align="right" sort={sort} dir={dir} onClick={onHeaderClick} />
+              <SortableTh col="visits"   label="Visits"      align="right" sort={sort} dir={dir} onClick={onHeaderClick} />
+              <SortableTh col="spent"    label="Spent (THB)" align="right" sort={sort} dir={dir} onClick={onHeaderClick} />
+              <SortableTh col="category" label="Top category" align="left" sort={sort} dir={dir} onClick={onHeaderClick} />
               <th className="px-3 py-2 font-medium">Top products</th>
               <th className="px-3 py-2 font-medium w-32"></th>
             </tr>
@@ -250,5 +287,31 @@ export function ReactivationTable({ customers }: { customers: ReactivationCustom
         </div>
       )}
     </>
+  )
+}
+
+function SortableTh({
+  col, label, align, sort, dir, onClick,
+}: {
+  col: SortKey
+  label: string
+  align: 'left' | 'right'
+  sort: SortKey
+  dir: SortDir
+  onClick: (col: SortKey) => void
+}) {
+  const active = sort === col
+  const arrow = active ? (dir === 'asc' ? '↑' : '↓') : ''
+  return (
+    <th className={`px-3 py-2 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onClick(col)}
+        className={`inline-flex items-center gap-1 hover:text-wine-red ${active ? 'text-deep-black' : ''}`}
+      >
+        {label}
+        <span className="text-[10px] opacity-70 w-2 inline-block text-center">{arrow}</span>
+      </button>
+    </th>
   )
 }
