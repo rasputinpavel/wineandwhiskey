@@ -46,7 +46,7 @@ export default async function SupplierMonthlyReportPage({
   const s = supRes.data as Supplier
   // Billing-cycle start day (1 = calendar month; Harvest = 5 → 5th-to-5th).
   const cycleStartDay = Number((supRes.data as { monthly_cycle_start_day?: number }).monthly_cycle_start_day ?? 1)
-  const { startIso, endExclIso, label } = cyclePeriodRange(period, cycleStartDay)
+  const { startIso, endExclIso, startDate, endExclDate, label } = cyclePeriodRange(period, cycleStartDay)
 
   type SkuInfo = { id: string; name: string; loyverse_product_code: string | null; category: string | null }
   type PriceRow = { sku_id: string; price_hc: number | null; sku: SkuInfo | null }
@@ -139,8 +139,6 @@ export default async function SupplierMonthlyReportPage({
   const deliveredBySku = new Map<string, number>()
   let delTableMissing = false
   {
-    const startDate = startIso.slice(0, 10)
-    const endExclDate = endExclIso.slice(0, 10)
     const { data, error } = await sbInventory
       .from('consignment_delivery').select('sku_id, qty')
       .eq('supplier_id', id).gte('delivered_at', startDate).lt('delivered_at', endExclDate)
