@@ -91,6 +91,77 @@ export function OverrideNumCell({ supplierId, skuId, period, field, auto, overri
   )
 }
 
+// Closing stock = opening − sold (auto), with optional manual override.
+// `auto` is the computed value (may be null if opening is unknown); `override`
+// is the stored closing_stock. Click to override, clear the input to revert.
+export function ClosingCell({ supplierId, skuId, period, auto, override }: {
+  supplierId: string; skuId: string; period: string
+  auto: number | null; override: number | null
+}) {
+  const router = useRouter()
+  const initial = override ?? auto
+  const [value, setValue] = useState(initial == null ? '' : String(initial))
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save(next: number | null) {
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch(API, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplier_id: supplierId, sku_id: skuId, period, field: 'closing_stock', value: next }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`)
+      setEditing(false); router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'save failed') }
+    finally { setSaving(false) }
+  }
+
+  function submit() {
+    const t = value.trim()
+    if (t === '') return save(null)  // clear → revert to auto
+    const n = Number(t)
+    if (!Number.isFinite(n) || n < 0) { setErr('≥ 0'); return }
+    save(Math.round(n))
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className={`text-right tabular-nums hover:text-wine-red w-full ${override != null ? 'text-wine-red' : 'text-deep-black'}`}
+        title={override != null ? `Manual (auto = ${auto ?? '—'}). Click to edit.` : 'Auto = opening − sold. Click to override.'}
+      >
+        {initial == null ? <span className="text-graphite/40">—</span> : initial.toLocaleString('en-US')}
+      </button>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number" min={0} step={1} autoFocus
+        value={value} onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') submit()
+          if (e.key === 'Escape') { setEditing(false); setValue(initial == null ? '' : String(initial)); setErr(null) }
+        }}
+        placeholder={auto == null ? '' : String(auto)}
+        className="w-16 px-1.5 py-0.5 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
+        disabled={saving}
+      />
+      <button onClick={submit} disabled={saving} className="text-[10px] px-1.5 py-0.5 bg-wine-red text-warm-white rounded-sm disabled:opacity-50">{saving ? '…' : '✓'}</button>
+      {override != null && (
+        <button onClick={() => save(null)} disabled={saving} className="text-[10px] text-graphite hover:text-wine-red" title="Revert to auto">↻</button>
+      )}
+      <button onClick={() => { setEditing(false); setValue(initial == null ? '' : String(initial)); setErr(null) }} disabled={saving} className="text-[10px] text-graphite hover:text-wine-red">✕</button>
+      {err && <span className="text-[10px] text-wine-red ml-1">{err}</span>}
+    </span>
+  )
+}
+
 export function NumCell({ supplierId, skuId, period, field, initial }: {
   supplierId: string; skuId: string; period: string
   field: 'opening_stock' | 'closing_stock' | 'tastings'

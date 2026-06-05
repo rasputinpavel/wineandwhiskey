@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { NumCell, OverrideNumCell, ExportCsvButton, ReceiptExclusions } from '@/components/modules/suppliers/ConsignmentReportCells'
+import { NumCell, OverrideNumCell, ClosingCell, ExportCsvButton, ReceiptExclusions } from '@/components/modules/suppliers/ConsignmentReportCells'
 
 const VAT_RATE = 0.07
 
@@ -140,16 +140,18 @@ export default async function SupplierMonthlyReportPage({
       const thisCell = cellByKey.get(`${p.sku_id}|${period}`)
       const prevCell = cellByKey.get(`${p.sku_id}|${prevPeriod}`)
       const opening = thisCell?.opening_stock ?? prevCell?.closing_stock ?? null
-      const closing = thisCell?.closing_stock ?? null
+      const closingManual = thisCell?.closing_stock ?? null
       const tastings = thisCell?.tastings ?? 0
       const b2cOverride = thisCell?.b2c_override ?? null
       const b2bOverride = thisCell?.b2b_override ?? null
       const b2c = b2cOverride ?? b2cAuto
       const b2b = b2bOverride ?? b2bAuto
       const total = b2c + b2b + tastings
+      const closingAuto = opening != null ? opening - total : null
+      const closing = closingManual ?? closingAuto
       const hc = hcBySkuId.get(p.sku_id) ?? 0
       const amount = total * hc
-      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, closing, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, total, hc, amount }
+      return { sku_id: p.sku_id, sku_name: sku.name, sku_code: code, opening, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, total, hc, amount }
     })
     .sort((a, b) => (b.b2c + b.b2b + b.tastings) - (a.b2c + a.b2b + a.tastings) || a.sku_name.localeCompare(b.sku_name))
 
@@ -170,7 +172,7 @@ export default async function SupplierMonthlyReportPage({
           <Link href={`/m/suppliers/${id}`} className="text-xs text-graphite hover:text-wine-red">← Back to {s.name}</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{s.name} · Monthly sales report</h2>
           <p className="text-graphite text-sm mt-1 max-w-3xl">
-            Auto-aggregates Loyverse sales (B2C + B2B) per SKU for the period. Edit opening / closing stock and tasting counts inline.
+            Auto-aggregates Loyverse sales (B2C + B2B) per SKU and prices them at consignment HC + 7% VAT. Closing = opening − sold (click to override). Set opening / tastings inline.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -234,7 +236,7 @@ export default async function SupplierMonthlyReportPage({
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums font-medium">{r.total || <span className="text-graphite/40">—</span>}</td>
                 <td className="py-2 px-3 text-right">
-                  <NumCell supplierId={id} skuId={r.sku_id} period={period} field="closing_stock" initial={r.closing} />
+                  <ClosingCell supplierId={id} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.hc ? r.hc.toLocaleString('en-US') : <span className="text-graphite/40">—</span>}</td>
                 <td className="py-2 px-3 text-right tabular-nums font-medium">{r.amount ? `฿${Math.round(r.amount).toLocaleString('en-US')}` : <span className="text-graphite/40">—</span>}</td>
