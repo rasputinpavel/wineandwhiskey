@@ -17,8 +17,8 @@ import type { ReactivationCustomer, ReactivationProduct } from './data'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const MessageSchema = z.object({
-  message: z.string().min(80).max(900).describe(
-    "Short personal reactivation message for WhatsApp, in either English or Russian (whichever the brief specifies). 3–5 short sentences. Real paragraph breaks between thought groups. *Single asterisks* for bold. No emojis. No exclamation marks. No prices. MUST end with the language-appropriate STOP opt-out line and a 'Wine & Whiskey' signature on its own line.",
+  message: z.string().min(100).max(1000).describe(
+    "Short personal reactivation message for WhatsApp, in either English or Russian (whichever the brief specifies). 4–6 short sentences. Real paragraph breaks between thought groups. *Single asterisks* for bold. 1–2 subtle emojis only (🌧 / 🍷 / 🥂 / 🤍 — never decorate every line). No exclamation marks. No prices. MUST end with the language-appropriate STOP opt-out line and a 'Wine & Whiskey' signature on its own line.",
   ),
 })
 
@@ -135,18 +135,24 @@ LANGUAGE — pick from the brief, write the entire message in that ONE language.
 
 Voice (both languages):
 - Warm, calm, personal. Like a familiar shopkeeper writing one specific person, not a marketer running a campaign.
-- 3–5 short sentences total. Never longer. No filler. No exclamation marks. No emojis. No hashtags. No "Dear Customer". No "We hope this finds you well".
+- 4–6 short sentences total. Never longer. No filler. No exclamation marks. No hashtags. No "Dear Customer". No "We hope this finds you well".
 - The given name from the brief MUST appear in the very first sentence. A message without the name reads as a mass blast and is a failure.
 - Reference something CONCRETE from their history — name the specific drink or the category they actually buy. The loyalty profile in the brief tells you whether to lead with a specific SKU (loyalist) or with a category/style note (explorer).
 - Lifetime tier sets the warmth dial: "vip" — write like you genuinely remember them; "regular" — friendly familiar; "light" — polite, not over-familiar.
 - Never invent a discount, promo, price, or product the brief doesn't mention.
 - Never mention a product unless the brief explicitly marks it [in stock]. If nothing is in stock, mention the category or the style they like.
+- Include a brief, soft mention that it's rainy season on Phuket (en: "rainy season" / "the rain"; ru: "сезон дождей" / "дождь"). One natural sentence — not a weather report. Skip it only if it truly can't fit the message naturally.
 
 Formatting:
 - Use real blank lines between thought groups (2–3 short paragraphs is normal).
 - *Single asterisks* for bold on the brand name first mention AND the specific drink or category mention. Nothing else bolded.
 - Include the catalog URL exactly once, inline: *wine-whiskey.com/catalog* (lowercase, no protocol, no trailing slash, bolded with single asterisks).
 - Order CTA: a single short line telling them to just reply to this message to order.
+
+Emojis: 1–2 total, placed naturally, never decorating every line:
+- 🌧 inside the rainy-season sentence — strong fit
+- one of 🍷 / 🥂 / 🤍 near the pitch or close — optional, only if it feels right
+- Never use 😀 / 🙂 / 👍 / 🎉 or any food emoji other than the wine ones above
 
 REQUIRED CLOSING (one line, mandatory, in the message's language):
 - English:  "If your tastes or plans have changed, or you'd rather not hear from us — just reply STOP and we won't message again."
