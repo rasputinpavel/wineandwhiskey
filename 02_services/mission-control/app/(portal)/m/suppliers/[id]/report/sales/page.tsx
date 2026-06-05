@@ -1,22 +1,11 @@
 import Link from 'next/link'
 import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
+import { cyclePeriodRange } from '@/lib/billing-cycle'
 
 export const dynamic = 'force-dynamic'
 
 type SearchParams = { period?: string; sku_id?: string; channel?: 'b2c' | 'b2b' }
-
-// Mirror the parent report's billing-cycle window (1 = calendar; Harvest = 5).
-function periodRange(period: string, startDay: number): { startIso: string; endExclIso: string; label: string } {
-  const [y, m] = period.split('-').map(Number)
-  const d = Math.min(28, Math.max(1, Math.round(startDay) || 1))
-  const start = new Date(Date.UTC(y, m - 1, d))
-  const endExcl = new Date(Date.UTC(y, m, d))
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  const endY = m === 12 ? y + 1 : y
-  const label = d === 1 ? `${MON[m - 1]} ${y}` : `${d} ${MON[m - 1]} – ${d} ${MON[m % 12]} ${endY}`
-  return { startIso: start.toISOString(), endExclIso: endExcl.toISOString(), label }
-}
 
 const THB = (n: number) => '฿' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 
@@ -45,7 +34,7 @@ export default async function SupplierReportSalesPage({
   if (!skuRes.data) return <div className="text-graphite">SKU not found.</div>
   const s = supRes.data as Supplier
   const cycleStartDay = Number((supRes.data as { monthly_cycle_start_day?: number }).monthly_cycle_start_day ?? 1)
-  const { startIso, endExclIso, label } = periodRange(period, cycleStartDay)
+  const { startIso, endExclIso, label } = cyclePeriodRange(period, cycleStartDay)
   const sku = skuRes.data as { id: string; name: string; loyverse_product_code: string | null }
   if (!sku.loyverse_product_code) return <div className="text-graphite">SKU has no Loyverse product code — receipt lines can&apos;t be matched.</div>
 

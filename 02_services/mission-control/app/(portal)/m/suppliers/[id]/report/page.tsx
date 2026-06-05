@@ -3,6 +3,7 @@ import { sbInventory, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { ExportCsvButton, ReceiptExclusions, ClosePeriodButton } from '@/components/modules/suppliers/ConsignmentReportCells'
 import { ConsignmentReportTable } from '@/components/modules/suppliers/ConsignmentReportTable'
+import { cyclePeriodRange } from '@/lib/billing-cycle'
 
 const VAT_RATE = 0.07
 
@@ -21,21 +22,8 @@ function shiftMonth(period: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-// A supplier's billing cycle may start on a day other than the 1st (e.g.
-// Harvest settles 5th-to-5th). Period "YYYY-MM" then covers
-// [startDay of that month, startDay of the next month).
-function periodRange(period: string, startDay: number): { startIso: string; endExclIso: string; label: string } {
-  const [y, m] = period.split('-').map(Number)
-  const d = Math.min(28, Math.max(1, Math.round(startDay) || 1))
-  const start = new Date(Date.UTC(y, m - 1, d))
-  const endExcl = new Date(Date.UTC(y, m, d))   // day d of the next month
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  const endY = m === 12 ? y + 1 : y
-  const label = d === 1
-    ? `${MON[m - 1]} ${y}`
-    : `${d} ${MON[m - 1]} – ${d} ${MON[m % 12]} ${endY}`
-  return { startIso: start.toISOString(), endExclIso: endExcl.toISOString(), label }
-}
+// Billing-cycle period math lives in lib/billing-cycle.ts (shared with the
+// sales-detail page so the settlement window can't drift between screens).
 
 export default async function SupplierMonthlyReportPage({
   params, searchParams,
@@ -58,7 +46,7 @@ export default async function SupplierMonthlyReportPage({
   const s = supRes.data as Supplier
   // Billing-cycle start day (1 = calendar month; Harvest = 5 → 5th-to-5th).
   const cycleStartDay = Number((supRes.data as { monthly_cycle_start_day?: number }).monthly_cycle_start_day ?? 1)
-  const { startIso, endExclIso, label } = periodRange(period, cycleStartDay)
+  const { startIso, endExclIso, label } = cyclePeriodRange(period, cycleStartDay)
 
   type SkuInfo = { id: string; name: string; loyverse_product_code: string | null; category: string | null }
   type PriceRow = { sku_id: string; price_hc: number | null; sku: SkuInfo | null }
