@@ -8,11 +8,9 @@
 
 import * as canonical from "./lib/b2b";
 import * as mcMirror from "../02_services/mission-control/lib/b2b";
-import * as matrixMirror from "../02_services/matrix-runner/b2b";
 
 const MIRRORS: { name: string; mod: typeof canonical }[] = [
   { name: "02_services/mission-control/lib/b2b.ts", mod: mcMirror },
-  { name: "02_services/matrix-runner/b2b.ts", mod: matrixMirror },
 ];
 
 const a = canonical.B2B_PATTERNS;

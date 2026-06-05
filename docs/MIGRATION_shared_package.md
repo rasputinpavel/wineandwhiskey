@@ -56,12 +56,9 @@ build step is needed for the shared package.
    `npm ci`, Start = `npm --workspace 01_agents/bot run start` (and the
    barrymore equivalent). Deploy-test one bot first.
 
-### B. `02_services/matrix-runner` — tsx
+### B. ~~`02_services/matrix-runner`~~ — RETIRED 2026-06-05
 
-1. Add `"02_services/*"` to root `workspaces`; add `"@ww/shared": "*"` to its `package.json`.
-2. Replace `matrix-runner/b2b.ts` (mirror) with `import { classifyReceipt } from "@ww/shared/b2b"`.
-3. Long term: also import the shared matrix logic so `matrix.ts` stops being a fork.
-4. Railway: Root Directory = repo root; Start = `npm --workspace 02_services/matrix-runner run start`.
+No longer applicable: the service was removed (Google-Sheet purchase matrix dropped; Wine Matrix is native in the portal). Nothing to migrate.
 
 ### C. Next.js apps (`mission-control`, `price-service`, `kiosk`, `trendwatch`)
 
@@ -144,13 +141,9 @@ Run it in CI / pre-push.
    Build = `npm ci`, Start = `npm --workspace 01_agents/bot run start` (и аналог
    для barrymore). Сначала проверить деплоем один бот.
 
-### B. `02_services/matrix-runner` — на tsx
+### B. ~~`02_services/matrix-runner`~~ — RETIRED 2026-06-05
 
-1. Дописать `"02_services/*"` в `workspaces` корня; добавить `"@ww/shared": "*"` в его `package.json`.
-2. Заменить `matrix-runner/b2b.ts` (зеркало) на `import { classifyReceipt } from "@ww/shared/b2b"`.
-3. В перспективе — импортировать и общую логику матрицы, чтобы `matrix.ts`
-   перестал быть форком `build_purchase_matrix.ts`.
-4. Railway: Root Directory = корень репо; Start = `npm --workspace 02_services/matrix-runner run start`.
+Неактуально: сервис удалён (Google-таблица «Закупочная матрица» больше не используется; Wine Matrix теперь нативная в портале). Мигрировать нечего.
 
 ### C. Next.js-приложения (`mission-control`, `price-service`, `kiosk`, `trendwatch`)
 

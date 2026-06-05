@@ -14,7 +14,7 @@ The repo is a single Git repo (`github.com/rasputinpavel/wineandwhiskey`) organi
 |------|---------|
 | `.inbox/` | Incoming, unprocessed materials (files to triage). Not knowledge, not output. |
 | `01_agents/` | Virtual employees — Telegram bots running on Railway. `bot/` (Chip & Dale, ops) and `barrymore/` (secretary). |
-| `02_services/` | Web services on Railway. `mission-control` (core portal), `price-service`, `trendwatch`, `matrix-runner`, `kiosk`. |
+| `02_services/` | Web services on Railway. `mission-control` (core portal), `price-service`, `trendwatch`, `kiosk`. (`matrix-runner` retired 2026-06-05 — Wine Matrix is native in the portal.) |
 | `03_automation/` | ~40 standalone `.tsx` sync/build scripts run via root `package.json` npm scripts, plus a shared `lib/`. |
 | `04_brand/` | Design system, tokens, logo, product images, visual references. |
 | `05_creative/` | Creative output: `social/`, `catalog/`, dated `output/` exports. |
@@ -59,8 +59,8 @@ Notable couplings/divergences: `lib/sync/loyverse.ts` (the portal's "Sync now" w
 ### 02_services/price-service — price list manager (live)
 Next.js. Parses supplier price lists and serves **Vivino enrichment** to the external storefront via a key-gated public API (`app/api/public/vivino/lookup`, `STOREFRONT_API_KEY`). Per `CLAUDE.md` this is the storefront's designated Vivino source. Its `lib/parsers` + Vivino libs are duplicated byte-for-byte inside mission-control.
 
-### 02_services/matrix-runner — purchase matrix webhook (live)
-Tiny Express service. A Google Sheets menu button POSTs to `/run`, which executes the purchase-matrix logic in-process and streams stdout back to Apps Script. `matrix.ts` and `wine_detect.ts` are **manual forks** of the `03_automation` originals and have drifted — the runner currently lacks the B2C-only velocity (B2B-exclusion) fix the CLI has.
+### 02_services/matrix-runner — RETIRED 2026-06-05
+Was a tiny Express webhook for the Google-Sheets "Пересчитать матрицу" purchase-matrix button (a manual fork of `03_automation/build_purchase_matrix.ts`). The Google-Sheet purchase-matrix flow is no longer used; the portal's native **Wine Matrix** page is the interface now. Service removed from the repo and Railway.
 
 ### 02_services/kiosk — in-store sommelier display (built, NOT committed to git)
 Read-only Next.js app reading `v_sku_breakdown` + `public.wine_items` with name-normalization joins. Has its own `railway.json`, `.gitignore`, `.env.example`. **0 files are tracked in git** — so it cannot deploy through the push-to-main pipeline until committed.
@@ -165,7 +165,7 @@ flowchart TD
 |-----------|------|--------|
 | mission-control portal | Web service | **Live** |
 | price-service | Web service | **Live** |
-| matrix-runner | Web service (webhook) | **Live** (runs a drifted fork) |
+| ~~matrix-runner~~ | Web service (webhook) | **RETIRED 2026-06-05** — Google-Sheet purchase matrix dropped; Wine Matrix is native in the portal now |
 | 03_automation scripts | CLI / scheduled | **Live** |
 | Chip & Dale ops bot | Telegram bot | **Live** |
 | Storefront (separate repo) | Web app | **Live** |
