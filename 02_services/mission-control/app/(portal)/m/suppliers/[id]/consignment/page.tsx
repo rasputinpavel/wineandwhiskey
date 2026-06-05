@@ -23,22 +23,6 @@ export default async function SupplierConsignmentPage({ params }: { params: Prom
   const skus   = (skusRes.data ?? []) as Sku[]
   const skuById = new Map(skus.map(k => [k.id, k]))
 
-  // Pre-sort the SKU picker: Russia category first (most common for Harvest),
-  // then everything else alphabetically. Strip SKUs already priced for this supplier.
-  const usedSkuIds = new Set(prices.map(p => p.sku_id))
-  const skuOptions = skus
-    .filter(k => !usedSkuIds.has(k.id))
-    .map(k => ({
-      id: k.id,
-      label: `${k.loyverse_product_code ? `[${k.loyverse_product_code}] ` : ''}${k.name}${k.category ? ` · ${k.category}` : ''}`,
-      isRussia: (k.category ?? '').toLowerCase() === 'russia',
-    }))
-    .sort((a, b) => {
-      if (a.isRussia !== b.isRussia) return a.isRussia ? -1 : 1
-      return a.label.localeCompare(b.label)
-    })
-    .map(({ id, label }) => ({ id, label }))
-
   const enriched = prices.map(p => {
     const sku = skuById.get(p.sku_id)
     return {
@@ -81,9 +65,7 @@ export default async function SupplierConsignmentPage({ params }: { params: Prom
                 <td className="py-2 px-4 text-graphite text-xs">{p.sku_category ?? '—'}</td>
                 <td className="py-2 px-4 text-right"><PriceCell id={p.id} initial={Number(p.price_hc)} field="price_hc" /></td>
                 <td className="py-2 px-4 text-right">
-                  {p.price_retail != null
-                    ? <PriceCell id={p.id} initial={Number(p.price_retail)} field="price_retail" />
-                    : <span className="text-graphite/50">—</span>}
+                  <PriceCell id={p.id} initial={p.price_retail != null ? Number(p.price_retail) : null} field="price_retail" />
                 </td>
                 <td className="py-2 px-4 text-right"><DeletePriceCell id={p.id} name={p.sku_name} /></td>
               </tr>
@@ -97,7 +79,7 @@ export default async function SupplierConsignmentPage({ params }: { params: Prom
         </table>
       </div>
 
-      <NewPriceRow supplierId={id} skus={skuOptions} />
+      <NewPriceRow supplierId={id} />
     </>
   )
 }

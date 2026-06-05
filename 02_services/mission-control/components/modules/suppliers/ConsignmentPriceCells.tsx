@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { SkuPickerInline } from '@/components/modules/customers/SkuPickerInline'
 
 const API = '/api/m/consignment-prices'
 
@@ -10,10 +11,10 @@ const API = '/api/m/consignment-prices'
 // is a server component, each cell PATCHes and asks Next to refresh.
 
 export function PriceCell({ id, initial, field }: {
-  id: string; initial: number; field: 'price_hc' | 'price_retail'
+  id: string; initial: number | null; field: 'price_hc' | 'price_retail'
 }) {
   const router = useRouter()
-  const [value, setValue] = useState(String(initial))
+  const [value, setValue] = useState(initial == null ? '' : String(initial))
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -39,8 +40,12 @@ export function PriceCell({ id, initial, field }: {
 
   if (!editing) {
     return (
-      <button onClick={() => setEditing(true)} className="text-right tabular-nums text-deep-black hover:text-wine-red w-full" title="Click to edit">
-        ฿{Math.round(initial).toLocaleString('en-US')}
+      <button
+        onClick={() => setEditing(true)}
+        className={`text-right tabular-nums w-full hover:text-wine-red ${initial == null ? 'text-graphite/50' : 'text-deep-black'}`}
+        title={initial == null ? 'Click to set' : 'Click to edit'}
+      >
+        {initial == null ? '—' : `฿${Math.round(initial).toLocaleString('en-US')}`}
       </button>
     )
   }
@@ -50,7 +55,7 @@ export function PriceCell({ id, initial, field }: {
       <input
         type="number" min={0} step={1} autoFocus
         value={value} onChange={e => setValue(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setValue(String(initial)) } }}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setValue(initial == null ? '' : String(initial)) } }}
         className="w-20 px-1.5 py-0.5 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
         disabled={saving}
       />
@@ -79,12 +84,13 @@ export function DeletePriceCell({ id, name }: { id: string; name: string }) {
   )
 }
 
-export function NewPriceRow({ supplierId, skus }: {
+export function NewPriceRow({ supplierId }: {
   supplierId: string
-  skus: { id: string; label: string }[]
 }) {
   const router = useRouter()
   const [skuId, setSkuId] = useState('')
+  const [skuName, setSkuName] = useState('')
+  const [pickerKey, setPickerKey] = useState(0)
   const [priceHc, setPriceHc] = useState('')
   const [priceRetail, setPriceRetail] = useState('')
   const [saving, setSaving] = useState(false)
@@ -108,21 +114,22 @@ export function NewPriceRow({ supplierId, skus }: {
         const j = await res.json().catch(() => ({}))
         throw new Error(j?.error || `HTTP ${res.status}`)
       }
-      setSkuId(''); setPriceHc(''); setPriceRetail(''); router.refresh()
+      setSkuId(''); setSkuName(''); setPriceHc(''); setPriceRetail('')
+      setPickerKey(k => k + 1) // remount picker to clear its query input
+      router.refresh()
     } catch (e: any) { setErr(e?.message ?? 'add failed') }
     finally { setSaving(false) }
   }
 
   return (
     <div className="flex items-center gap-2 mt-4 p-3 bg-cream/40 border border-pale-stone rounded-sm flex-wrap">
-      <select
-        value={skuId} onChange={e => setSkuId(e.target.value)}
-        className="flex-1 min-w-[16rem] px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red bg-warm-white"
-        disabled={saving}
-      >
-        <option value="">— pick SKU —</option>
-        {skus.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-      </select>
+      <div className="flex-1 min-w-[16rem]">
+        <SkuPickerInline
+          key={pickerKey}
+          onPick={sku => { setSkuId(sku.id); setSkuName(sku.name); setErr(null) }}
+        />
+        {skuName && <p className="mt-1 text-[11px] text-graphite">Selected: <span className="text-deep-black">{skuName}</span></p>}
+      </div>
       <input
         type="number" min={0} step={1} placeholder="HC price"
         value={priceHc} onChange={e => setPriceHc(e.target.value)}
