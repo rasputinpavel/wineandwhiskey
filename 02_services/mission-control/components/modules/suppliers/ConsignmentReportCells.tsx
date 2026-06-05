@@ -153,13 +153,83 @@ export function NumCell({ supplierId, skuId, period, field, initial }: {
   )
 }
 
+// Manage the per-period list of Loyverse receipts excluded from the
+// settlement. Add accepts comma/space-separated numbers (e.g. paste
+// "5-8639, 5-8643"). Each chip removes on ✕.
+const EXCL_API = '/api/m/consignment-report/exclusions'
+export function ReceiptExclusions({ supplierId, period, excluded, tableMissing }: {
+  supplierId: string; period: string; excluded: string[]; tableMissing?: boolean
+}) {
+  const router = useRouter()
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function add() {
+    const v = value.trim()
+    if (!v) return
+    setBusy(true); setErr(null)
+    try {
+      const res = await fetch(EXCL_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplier_id: supplierId, period, receipt_number: v }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`)
+      setValue(''); router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'failed') }
+    finally { setBusy(false) }
+  }
+
+  async function remove(num: string) {
+    setBusy(true); setErr(null)
+    try {
+      const qs = new URLSearchParams({ supplier_id: supplierId, period, receipt_number: num })
+      const res = await fetch(`${EXCL_API}?${qs}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`)
+      router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'failed') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-4 p-3 bg-cream/40 border border-pale-stone rounded-sm">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-graphite">Excluded receipts ({period}):</span>
+        {excluded.length === 0 && <span className="text-xs text-graphite/50">none</span>}
+        {excluded.map(num => (
+          <span key={num} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono bg-warm-white border border-pale-stone rounded-sm">
+            {num}
+            <button onClick={() => remove(num)} disabled={busy} className="text-graphite hover:text-wine-red disabled:opacity-50" title="Remove">✕</button>
+          </span>
+        ))}
+        <span className="flex items-center gap-1 ml-auto">
+          <input
+            value={value} onChange={e => setValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') add() }}
+            placeholder="5-8639, 5-8643…"
+            className="w-44 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red bg-warm-white"
+            disabled={busy}
+          />
+          <button onClick={add} disabled={busy} className="text-xs px-3 py-1 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
+            {busy ? '…' : 'Exclude'}
+          </button>
+        </span>
+      </div>
+      {tableMissing && <p className="mt-2 text-[11px] text-wine-red">Exclusions table missing — apply migration 021_consignment_report_exclusion.sql in Supabase.</p>}
+      {err && <p className="mt-2 text-[11px] text-wine-red">{err}</p>}
+      <p className="mt-2 text-[11px] text-graphite/70">Units on these receipts are dropped from the per-SKU totals and the settlement below.</p>
+    </div>
+  )
+}
+
 export function ExportCsvButton({ rows, period, supplierName }: {
-  rows: Array<{ sku: string; opening: number | null; b2c: number; b2b: number; tastings: number; total: number; closing: number | null }>
+  rows: Array<{ sku: string; opening: number | null; b2c: number; b2b: number; tastings: number; total: number; closing: number | null; hc: number; amount: number }>
   period: string
   supplierName: string
 }) {
   function download() {
-    const header = ['SKU', `Opening (${period})`, 'Sold B2C', 'Sold B2B', 'Tastings', 'TOTAL', `Closing (${period})`]
+    const header = ['SKU', `Opening (${period})`, 'Sold B2C', 'Sold B2B', 'Tastings', 'TOTAL', `Closing (${period})`, 'HC price', 'Amount (HC)']
     const csv = [header.join(',')].concat(
       rows.map(r => [
         JSON.stringify(r.sku),
@@ -169,6 +239,8 @@ export function ExportCsvButton({ rows, period, supplierName }: {
         r.tastings,
         r.total,
         r.closing ?? '',
+        r.hc,
+        r.amount,
       ].join(','))
     ).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
