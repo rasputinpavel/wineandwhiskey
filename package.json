@@ -2,6 +2,9 @@
   "name": "wine-whiskey-scripts",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dashboard": "tsx 03_automation/sync_dashboard.ts",
     "matrix": "tsx 03_automation/wine_matrix.ts",
@@ -26,6 +29,7 @@
     "reconcile": "tsx 03_automation/reconcile.ts"
   },
   "dependencies": {
+    "@ww/shared": "*",
     "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.0",

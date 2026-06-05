@@ -1,0 +1,13 @@
+{
+  "name": "@ww/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared cross-cutting source-of-truth logic for the Wine & Whiskey monorepo: B2B classification, the Loyverse client, sales aggregation.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./b2b": "./src/b2b.ts",
+    "./loyverse": "./src/loyverse.ts",
+    "./sales_aggregate": "./src/sales_aggregate.ts"
+  }
+}
