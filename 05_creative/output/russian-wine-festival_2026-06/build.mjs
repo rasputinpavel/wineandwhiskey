@@ -5,10 +5,12 @@
  *   Side 1 (front) — Russian
  *   Side 2 (back)  — English
  *
- * One simple message: Russian wine & spirits are stocked at the Wine & Whiskey
- * store on Rawai. Three QR codes per side: WhatsApp · Russian-wine catalog ·
- * how to find us (Google Maps). Light festival mention (Russian Food Festival ×
- * Central Phuket, 12–14 June 2026, Phuket Outdoor Arena).
+ * Main headline on top: "Russian wine & spirits in Phuket". Below it the two
+ * categories (Wine / Spirits), each listing its styles AND its producers
+ * (wine houses under Wine; Ladoga & Barrister under Spirits). Then the three
+ * QR codes (WhatsApp · Russian-wine catalog · Maps). The WINE & WHISKEY
+ * wordmark sits at the very bottom as the store sign-off, next to the address —
+ * the flyer leads with the Russian offer, not the store brand.
  *
  * Outputs (committed so Railway/printer can see them):
  *   russian_wine_flyer_2026-06.pdf      — 2-page print PDF (154×216mm, 3mm bleed)
@@ -61,7 +63,6 @@ const FONT_FACE = `
 `;
 
 // ─── Targets (the three QR codes) ───────────────────────────────────────────
-// NOTE: confirm the two TODO urls before the final print run, then re-run.
 const LINKS = {
   // Store WhatsApp — Pavel / general store line (same as business cards).
   whatsapp: 'https://wa.me/66809020550',
@@ -115,7 +116,7 @@ function glassImg({ stroke = '#C9A84C', wineColor = '#8C1C1C', widthMm = 30, hei
 }
 
 // ─── Logo lockup (manual wordmark — wordmark PNGs are deprecated) ────────────
-function logo(size = 54) {
+function logo(size = 30) {
   return `
     <div class="logo" style="--logo-size:${size}px;">
       <span class="logo-wine">WINE</span>
@@ -126,40 +127,53 @@ function logo(size = 54) {
 // ─── Copy (RU / EN) ─────────────────────────────────────────────────────────
 const COPY = {
   ru: {
-    overline: 'Вино и крепкие напитки из России',
     h1a: 'РУССКОЕ ВИНО',
     h1b: 'И КРЕПКИЕ НАПИТКИ',
     loc: 'на Пхукете',
     cats: [
-      ['Вино',   'игристое · красное · белое · розе'],
-      ['Крепкое', 'водка · джин'],
+      { key: 'Вино',    types: 'игристое · красное · белое · розе',
+        houses: 'Абрау-Дюрсо · Шато Тамань · Аристов · Ведерниковъ · Высокий Берег · Sikory' },
+      { key: 'Крепкое', types: 'водка · джин',
+        houses: 'Ladoga · Barrister' },
     ],
-    producers: 'Абрау-Дюрсо · Шато Тамань · Аристов · Ведерниковъ · Высокий Берег · Ladoga · Barrister',
     qr: {
       whatsapp: ['WhatsApp', 'Написать нам'],
       catalog:  ['Каталог', 'Русские вина'],
       maps:     ['Как добраться', 'Мы на карте'],
     },
-    store: 'Wine & Whiskey · Rawai, Пхукет · Ежедневно 11:00–22:00',
+    addr: 'Rawai, Пхукет',
+    hours: 'Ежедневно 11:00–22:00',
   },
   en: {
-    overline: 'Wine & spirits of Russia',
     h1a: 'RUSSIAN WINE',
     h1b: '& SPIRITS',
     loc: 'in Phuket',
     cats: [
-      ['Wine',    'sparkling · red · white · rosé'],
-      ['Spirits', 'vodka · gin'],
+      { key: 'Wine',    types: 'sparkling · red · white · rosé',
+        houses: 'Abrau-Durso · Château Tamagne · Aristov · Vedernikov · Visokiy Bereg · Sikory' },
+      { key: 'Spirits', types: 'vodka · gin',
+        houses: 'Ladoga · Barrister' },
     ],
-    producers: 'Abrau-Durso · Château Tamagne · Aristov · Vedernikov · Visokiy Bereg · Ladoga · Barrister',
     qr: {
       whatsapp: ['WhatsApp', 'Message us'],
       catalog:  ['Catalog', 'Russian wines'],
       maps:     ['Find us', 'On the map'],
     },
-    store: 'Wine & Whiskey · Rawai, Phuket · Open daily 11:00–22:00',
+    addr: 'Rawai, Phuket',
+    hours: 'Open daily 11:00–22:00',
   },
 };
+
+function catBlock({ key, types, houses }) {
+  return `
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-key">${key}</span>
+        <span class="cat-types">${types}</span>
+      </div>
+      <div class="cat-houses">${houses}</div>
+    </div>`;
+}
 
 function qrBlock(kind, labels) {
   return `
@@ -172,29 +186,21 @@ function qrBlock(kind, labels) {
 
 function renderSide(lang) {
   const c = COPY[lang];
-  const cats = c.cats.map(([k, v]) =>
-    `<div class="cat-row"><span class="cat-key">${k}</span><span class="cat-val">${v}</span></div>`
-  ).join('');
   return `
   <div class="page page-${lang}">
     <div class="bg"></div>
     ${glassImg()}
     <div class="safe">
 
-      <div class="top-group">
-        <header class="top">
-          ${logo(54)}
-          <div class="overline">${c.overline}</div>
-        </header>
+      <section class="hero">
+        <h1><span class="h1a">${c.h1a}</span><span class="h1b">${c.h1b}</span></h1>
+        <div class="h1loc">${c.loc}</div>
+        <div class="rule"></div>
+      </section>
 
-        <section class="hero">
-          <h1><span class="h1a">${c.h1a}</span><span class="h1b">${c.h1b}</span></h1>
-          <div class="h1loc">${c.loc}</div>
-          <div class="rule"></div>
-          <div class="cats">${cats}</div>
-          <p class="producers">${c.producers}</p>
-        </section>
-      </div>
+      <section class="cats">
+        ${c.cats.map(catBlock).join('')}
+      </section>
 
       <div class="bottom-group">
         <section class="qr-row">
@@ -202,7 +208,10 @@ function renderSide(lang) {
           ${qrBlock('catalog',  c.qr.catalog)}
           ${qrBlock('maps',     c.qr.maps)}
         </section>
-        <footer class="store">${c.store}</footer>
+        <footer class="foot">
+          ${logo(30)}
+          <div class="addr"><span>${c.addr}</span><span class="dim">${c.hours}</span></div>
+        </footer>
       </div>
 
     </div>
@@ -219,7 +228,7 @@ const CSS = `
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { background:#2a2a2a; }
 
-  /* A5 trim 148×210mm + 3mm bleed → 154×216mm. Safe inset 8mm from bleed. */
+  /* A5 trim 148×210mm + 3mm bleed → 154×216mm. Safe inset 14mm from bleed. */
   .page {
     position:relative; width:154mm; height:216mm; overflow:hidden;
     color:var(--black);
@@ -235,8 +244,8 @@ const CSS = `
       linear-gradient(180deg, #F7F2EC 0%, #EFE3D4 100%);
   }
   .glass-img {
-    position:absolute; right:0; top:54mm; width:30mm; height:150mm;
-    opacity:0.5; pointer-events:none; z-index:1;
+    position:absolute; right:0; top:78mm; width:30mm; height:150mm;
+    opacity:0.42; pointer-events:none; z-index:1;
   }
 
   .safe {
@@ -245,55 +254,40 @@ const CSS = `
     z-index:2;
   }
 
-  /* ── Logo ── */
-  .logo { display:inline-flex; flex-direction:column; align-items:flex-start; line-height:0.92; }
-  .logo-wine   { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--wine); }
-  .logo-whisky { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--black); margin-top:-0.06em; }
-
-  .top { display:flex; flex-direction:column; gap:3mm; }
-  .overline {
-    font-family:'Inter'; font-weight:500; font-size:3mm; letter-spacing:0.26em;
-    text-transform:uppercase; color:var(--graphite);
-  }
-
   /* Display typeface: Bebas Neue for EN, Oswald (has Cyrillic) for RU. */
-  .page-en .h1a, .page-en .h1b, .page-en .cat-key, .page-en .qr-cap, .page-en .store {
+  .page-en .h1a, .page-en .h1b, .page-en .cat-key, .page-en .qr-cap {
     font-family:'Bebas Neue';
   }
-  .page-ru .h1a, .page-ru .h1b, .page-ru .cat-key, .page-ru .qr-cap, .page-ru .store {
+  .page-ru .h1a, .page-ru .h1b, .page-ru .cat-key, .page-ru .qr-cap {
     font-family:'Oswald'; font-weight:500;
   }
 
-  /* ── Layout groups (clear gap between content and the QR block) ── */
-  .top-group    { display:flex; flex-direction:column; gap:11mm; }
-  .bottom-group { display:flex; flex-direction:column; gap:7mm; }
-
-  /* ── Hero ── */
+  /* ── Hero (headline leads at the very top) ── */
   .hero { max-width:122mm; }
   h1 { display:flex; flex-direction:column; line-height:0.94; }
-  .h1a { font-size:18mm; letter-spacing:0.005em; color:var(--black); }
-  .h1b { font-size:18mm; letter-spacing:0.005em; color:var(--wine); margin-top:-0.01em; }
-  .page-ru .h1a, .page-ru .h1b { font-size:13mm; letter-spacing:0; }
+  .h1a { font-size:19mm; letter-spacing:0.005em; color:var(--black); }
+  .h1b { font-size:19mm; letter-spacing:0.005em; color:var(--wine); margin-top:-0.01em; }
+  .page-ru .h1a, .page-ru .h1b { font-size:14mm; letter-spacing:0; }
   .h1loc {
-    font-family:'Inter'; font-weight:500; font-size:4.6mm; letter-spacing:0.02em;
-    color:var(--graphite); margin-top:2.4mm;
+    font-family:'Inter'; font-weight:500; font-size:4.8mm; letter-spacing:0.02em;
+    color:var(--graphite); margin-top:2.6mm;
   }
-  .rule { width:22mm; height:0; border-top:0.6mm solid var(--amber); margin:7mm 0 6mm; }
+  .rule { width:24mm; height:0; border-top:0.6mm solid var(--amber); margin-top:7mm; }
 
-  /* ── Category block — wine and spirits on separate rows ── */
-  .cats { display:flex; flex-direction:column; gap:3.6mm; }
-  .cat-row { display:flex; align-items:baseline; gap:5mm; }
+  /* ── Categories — each lists its styles AND its producers ── */
+  .cats { display:flex; flex-direction:column; gap:9mm; max-width:120mm; }
+  .cat-head { display:flex; align-items:baseline; gap:5mm; }
   .cat-key {
-    font-size:6.4mm; letter-spacing:0.03em; color:var(--wine);
-    text-transform:uppercase; min-width:32mm;
+    font-size:7mm; letter-spacing:0.03em; color:var(--wine);
+    text-transform:uppercase; min-width:30mm;
   }
-  .cat-val {
-    font-family:'Inter'; font-weight:500; font-size:3.8mm; letter-spacing:0.01em;
-    color:var(--graphite);
+  .cat-types {
+    font-family:'Inter'; font-weight:500; font-size:3.6mm; letter-spacing:0.01em;
+    color:var(--graphite); text-transform:uppercase; letter-spacing:0.04em;
   }
-  .producers {
-    font-family:'Inter'; font-weight:500; font-size:3mm; letter-spacing:0.02em;
-    color:var(--graphite); opacity:0.75; margin-top:9mm; max-width:118mm;
+  .cat-houses {
+    font-family:'Inter'; font-weight:500; font-size:4.1mm; line-height:1.4;
+    letter-spacing:0.005em; color:var(--black); margin-top:2.8mm;
   }
 
   /* ── QR row ── */
@@ -313,11 +307,21 @@ const CSS = `
     color:var(--graphite); margin-top:0.6mm;
   }
 
-  /* ── Store footer ── */
-  .store {
-    font-size:4.4mm; letter-spacing:0.04em; color:var(--black);
-    text-transform:uppercase; padding-top:4mm; border-top:0.3mm solid var(--stone);
+  /* ── Store sign-off (brand goes to the bottom) ── */
+  .bottom-group { display:flex; flex-direction:column; gap:11mm; }
+  .foot {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding-top:5mm; border-top:0.3mm solid var(--stone);
   }
+  .logo { display:inline-flex; flex-direction:column; align-items:flex-start; line-height:0.9; }
+  .logo-wine   { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--wine); }
+  .logo-whisky { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--black); margin-top:-0.06em; }
+  .addr {
+    display:flex; flex-direction:column; text-align:right; gap:0.8mm;
+    font-family:'Inter'; font-weight:500;
+  }
+  .addr span { font-size:3.4mm; letter-spacing:0.01em; color:var(--black); }
+  .addr .dim { font-size:3mm; color:var(--graphite); }
 
   @page { size:154mm 216mm; margin:0; }
 

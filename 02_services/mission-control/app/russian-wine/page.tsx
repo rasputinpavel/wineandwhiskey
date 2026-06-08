@@ -132,7 +132,6 @@ export default function RussianWinePage() {
         />
         <div className="relative max-w-6xl mx-auto px-5 py-20 sm:py-28">
           <div className="overline text-amber-gold mb-5">{T.festival[lang]}</div>
-          <div className="overline text-pale-stone/80 mb-3">{T.heroKicker[lang]}</div>
           <h1 className={`${disp} tracking-display leading-[0.95] ${lang === 'ru' ? 'text-5xl sm:text-7xl' : 'text-6xl sm:text-8xl'}`}>
             <span className="block text-warm-white">{lang === 'ru' ? 'РУССКОЕ ВИНО' : 'RUSSIAN WINE'}</span>
             <span className="block text-wine-red">{lang === 'ru' ? 'И КРЕПКИЕ НАПИТКИ' : '& SPIRITS'}</span>

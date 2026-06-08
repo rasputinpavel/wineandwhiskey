@@ -30,7 +30,7 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { background:#2a2a2a; }
 
-  /* A5 trim 148×210mm + 3mm bleed → 154×216mm. Safe inset 8mm from bleed. */
+  /* A5 trim 148×210mm + 3mm bleed → 154×216mm. Safe inset 14mm from bleed. */
   .page {
     position:relative; width:154mm; height:216mm; overflow:hidden;
     color:var(--black);
@@ -46,8 +46,8 @@
       linear-gradient(180deg, #F7F2EC 0%, #EFE3D4 100%);
   }
   .glass-img {
-    position:absolute; right:0; top:54mm; width:30mm; height:150mm;
-    opacity:0.5; pointer-events:none; z-index:1;
+    position:absolute; right:0; top:78mm; width:30mm; height:150mm;
+    opacity:0.42; pointer-events:none; z-index:1;
   }
 
   .safe {
@@ -56,55 +56,40 @@
     z-index:2;
   }
 
-  /* ── Logo ── */
-  .logo { display:inline-flex; flex-direction:column; align-items:flex-start; line-height:0.92; }
-  .logo-wine   { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--wine); }
-  .logo-whisky { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--black); margin-top:-0.06em; }
-
-  .top { display:flex; flex-direction:column; gap:3mm; }
-  .overline {
-    font-family:'Inter'; font-weight:500; font-size:3mm; letter-spacing:0.26em;
-    text-transform:uppercase; color:var(--graphite);
-  }
-
   /* Display typeface: Bebas Neue for EN, Oswald (has Cyrillic) for RU. */
-  .page-en .h1a, .page-en .h1b, .page-en .cat-key, .page-en .qr-cap, .page-en .store {
+  .page-en .h1a, .page-en .h1b, .page-en .cat-key, .page-en .qr-cap {
     font-family:'Bebas Neue';
   }
-  .page-ru .h1a, .page-ru .h1b, .page-ru .cat-key, .page-ru .qr-cap, .page-ru .store {
+  .page-ru .h1a, .page-ru .h1b, .page-ru .cat-key, .page-ru .qr-cap {
     font-family:'Oswald'; font-weight:500;
   }
 
-  /* ── Layout groups (clear gap between content and the QR block) ── */
-  .top-group    { display:flex; flex-direction:column; gap:11mm; }
-  .bottom-group { display:flex; flex-direction:column; gap:7mm; }
-
-  /* ── Hero ── */
+  /* ── Hero (headline leads at the very top) ── */
   .hero { max-width:122mm; }
   h1 { display:flex; flex-direction:column; line-height:0.94; }
-  .h1a { font-size:18mm; letter-spacing:0.005em; color:var(--black); }
-  .h1b { font-size:18mm; letter-spacing:0.005em; color:var(--wine); margin-top:-0.01em; }
-  .page-ru .h1a, .page-ru .h1b { font-size:13mm; letter-spacing:0; }
+  .h1a { font-size:19mm; letter-spacing:0.005em; color:var(--black); }
+  .h1b { font-size:19mm; letter-spacing:0.005em; color:var(--wine); margin-top:-0.01em; }
+  .page-ru .h1a, .page-ru .h1b { font-size:14mm; letter-spacing:0; }
   .h1loc {
-    font-family:'Inter'; font-weight:500; font-size:4.6mm; letter-spacing:0.02em;
-    color:var(--graphite); margin-top:2.4mm;
+    font-family:'Inter'; font-weight:500; font-size:4.8mm; letter-spacing:0.02em;
+    color:var(--graphite); margin-top:2.6mm;
   }
-  .rule { width:22mm; height:0; border-top:0.6mm solid var(--amber); margin:7mm 0 6mm; }
+  .rule { width:24mm; height:0; border-top:0.6mm solid var(--amber); margin-top:7mm; }
 
-  /* ── Category block — wine and spirits on separate rows ── */
-  .cats { display:flex; flex-direction:column; gap:3.6mm; }
-  .cat-row { display:flex; align-items:baseline; gap:5mm; }
+  /* ── Categories — each lists its styles AND its producers ── */
+  .cats { display:flex; flex-direction:column; gap:9mm; max-width:120mm; }
+  .cat-head { display:flex; align-items:baseline; gap:5mm; }
   .cat-key {
-    font-size:6.4mm; letter-spacing:0.03em; color:var(--wine);
-    text-transform:uppercase; min-width:32mm;
+    font-size:7mm; letter-spacing:0.03em; color:var(--wine);
+    text-transform:uppercase; min-width:30mm;
   }
-  .cat-val {
-    font-family:'Inter'; font-weight:500; font-size:3.8mm; letter-spacing:0.01em;
-    color:var(--graphite);
+  .cat-types {
+    font-family:'Inter'; font-weight:500; font-size:3.6mm; letter-spacing:0.01em;
+    color:var(--graphite); text-transform:uppercase; letter-spacing:0.04em;
   }
-  .producers {
-    font-family:'Inter'; font-weight:500; font-size:3mm; letter-spacing:0.02em;
-    color:var(--graphite); opacity:0.75; margin-top:9mm; max-width:118mm;
+  .cat-houses {
+    font-family:'Inter'; font-weight:500; font-size:4.1mm; line-height:1.4;
+    letter-spacing:0.005em; color:var(--black); margin-top:2.8mm;
   }
 
   /* ── QR row ── */
@@ -124,11 +109,21 @@
     color:var(--graphite); margin-top:0.6mm;
   }
 
-  /* ── Store footer ── */
-  .store {
-    font-size:4.4mm; letter-spacing:0.04em; color:var(--black);
-    text-transform:uppercase; padding-top:4mm; border-top:0.3mm solid var(--stone);
+  /* ── Store sign-off (brand goes to the bottom) ── */
+  .bottom-group { display:flex; flex-direction:column; gap:11mm; }
+  .foot {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding-top:5mm; border-top:0.3mm solid var(--stone);
   }
+  .logo { display:inline-flex; flex-direction:column; align-items:flex-start; line-height:0.9; }
+  .logo-wine   { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--wine); }
+  .logo-whisky { font-family:'Bebas Neue'; font-size:var(--logo-size); letter-spacing:0.01em; color:var(--black); margin-top:-0.06em; }
+  .addr {
+    display:flex; flex-direction:column; text-align:right; gap:0.8mm;
+    font-family:'Inter'; font-weight:500;
+  }
+  .addr span { font-size:3.4mm; letter-spacing:0.01em; color:var(--black); }
+  .addr .dim { font-size:3mm; color:var(--graphite); }
 
   @page { size:154mm 216mm; margin:0; }
 
@@ -144,24 +139,29 @@
     <img class="glass-img" src="data:image/svg+xml;utf8,%0A%20%20%3Csvg%20width%3D%2230mm%22%20height%3D%22150mm%22%20viewBox%3D%220%200%2060%20320%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20preserveAspectRatio%3D%22xMinYMid%20meet%22%3E%0A%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%3ClinearGradient%20id%3D%22w1%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%238C1C1C%22%20stop-opacity%3D%220.22%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238C1C1C%22%20stop-opacity%3D%220.72%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%235C1010%22%20stop-opacity%3D%220.9%22%2F%3E%0A%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2042%2018%20C%2030%2028%2C%2018%2055%2C%2020%2095%20C%2022%20130%2C%2038%20162%2C%2060%20170%20C%2082%20162%2C%2098%20130%2C%20100%2095%20C%20102%2055%2C%2090%2028%2C%2078%2018%20Z%22%0A%20%20%20%20%20%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%2218%22%20rx%3D%2218%22%20ry%3D%222.8%22%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2024%2080%20C%2024%20128%2C%2040%20161%2C%2060%20168%20C%2080%20161%2C%2096%20128%2C%2096%2080%20C%2088%2095%2C%2072%20100%2C%2060%20100%20C%2048%20100%2C%2032%2095%2C%2024%2080%20Z%22%0A%20%20%20%20%20%20fill%3D%22url(%23w1)%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%2282%22%20rx%3D%2232%22%20ry%3D%223%22%20fill%3D%22%235C1010%22%2F%3E%0A%20%20%20%20%3Cline%20x1%3D%2260%22%20y1%3D%22170%22%20x2%3D%2260%22%20y2%3D%22285%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%22288%22%20rx%3D%2226%22%20ry%3D%223.2%22%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%20%20%3Cline%20x1%3D%2234%22%20y1%3D%22288%22%20x2%3D%2286%22%20y2%3D%22288%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%3C%2Fsvg%3E" alt="" />
     <div class="safe">
 
-      <div class="top-group">
-        <header class="top">
-          
-    <div class="logo" style="--logo-size:54px;">
-      <span class="logo-wine">WINE</span>
-      <span class="logo-whisky">&amp; WHISKEY</span>
-    </div>
-          <div class="overline">Вино и крепкие напитки из России</div>
-        </header>
+      <section class="hero">
+        <h1><span class="h1a">РУССКОЕ ВИНО</span><span class="h1b">И КРЕПКИЕ НАПИТКИ</span></h1>
+        <div class="h1loc">на Пхукете</div>
+        <div class="rule"></div>
+      </section>
 
-        <section class="hero">
-          <h1><span class="h1a">РУССКОЕ ВИНО</span><span class="h1b">И КРЕПКИЕ НАПИТКИ</span></h1>
-          <div class="h1loc">на Пхукете</div>
-          <div class="rule"></div>
-          <div class="cats"><div class="cat-row"><span class="cat-key">Вино</span><span class="cat-val">игристое · красное · белое · розе</span></div><div class="cat-row"><span class="cat-key">Крепкое</span><span class="cat-val">водка · джин</span></div></div>
-          <p class="producers">Абрау-Дюрсо · Шато Тамань · Аристов · Ведерниковъ · Высокий Берег · Ladoga · Barrister</p>
-        </section>
+      <section class="cats">
+        
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-key">Вино</span>
+        <span class="cat-types">игристое · красное · белое · розе</span>
       </div>
+      <div class="cat-houses">Абрау-Дюрсо · Шато Тамань · Аристов · Ведерниковъ · Высокий Берег · Sikory</div>
+    </div>
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-key">Крепкое</span>
+        <span class="cat-types">водка · джин</span>
+      </div>
+      <div class="cat-houses">Ladoga · Barrister</div>
+    </div>
+      </section>
 
       <div class="bottom-group">
         <section class="qr-row">
@@ -184,7 +184,14 @@
       <div class="qr-sub">Мы на карте</div>
     </div>
         </section>
-        <footer class="store">Wine & Whiskey · Rawai, Пхукет · Ежедневно 11:00–22:00</footer>
+        <footer class="foot">
+          
+    <div class="logo" style="--logo-size:30px;">
+      <span class="logo-wine">WINE</span>
+      <span class="logo-whisky">&amp; WHISKEY</span>
+    </div>
+          <div class="addr"><span>Rawai, Пхукет</span><span class="dim">Ежедневно 11:00–22:00</span></div>
+        </footer>
       </div>
 
     </div>
@@ -195,24 +202,29 @@
     <img class="glass-img" src="data:image/svg+xml;utf8,%0A%20%20%3Csvg%20width%3D%2230mm%22%20height%3D%22150mm%22%20viewBox%3D%220%200%2060%20320%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20preserveAspectRatio%3D%22xMinYMid%20meet%22%3E%0A%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%3ClinearGradient%20id%3D%22w2%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%238C1C1C%22%20stop-opacity%3D%220.22%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238C1C1C%22%20stop-opacity%3D%220.72%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%235C1010%22%20stop-opacity%3D%220.9%22%2F%3E%0A%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2042%2018%20C%2030%2028%2C%2018%2055%2C%2020%2095%20C%2022%20130%2C%2038%20162%2C%2060%20170%20C%2082%20162%2C%2098%20130%2C%20100%2095%20C%20102%2055%2C%2090%2028%2C%2078%2018%20Z%22%0A%20%20%20%20%20%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%2218%22%20rx%3D%2218%22%20ry%3D%222.8%22%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2024%2080%20C%2024%20128%2C%2040%20161%2C%2060%20168%20C%2080%20161%2C%2096%20128%2C%2096%2080%20C%2088%2095%2C%2072%20100%2C%2060%20100%20C%2048%20100%2C%2032%2095%2C%2024%2080%20Z%22%0A%20%20%20%20%20%20fill%3D%22url(%23w2)%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%2282%22%20rx%3D%2232%22%20ry%3D%223%22%20fill%3D%22%235C1010%22%2F%3E%0A%20%20%20%20%3Cline%20x1%3D%2260%22%20y1%3D%22170%22%20x2%3D%2260%22%20y2%3D%22285%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2260%22%20cy%3D%22288%22%20rx%3D%2226%22%20ry%3D%223.2%22%20fill%3D%22none%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%20%20%3Cline%20x1%3D%2234%22%20y1%3D%22288%22%20x2%3D%2286%22%20y2%3D%22288%22%20stroke%3D%22%23C9A84C%22%20stroke-width%3D%221.4%22%2F%3E%0A%20%20%3C%2Fsvg%3E" alt="" />
     <div class="safe">
 
-      <div class="top-group">
-        <header class="top">
-          
-    <div class="logo" style="--logo-size:54px;">
-      <span class="logo-wine">WINE</span>
-      <span class="logo-whisky">&amp; WHISKEY</span>
-    </div>
-          <div class="overline">Wine & spirits of Russia</div>
-        </header>
+      <section class="hero">
+        <h1><span class="h1a">RUSSIAN WINE</span><span class="h1b">& SPIRITS</span></h1>
+        <div class="h1loc">in Phuket</div>
+        <div class="rule"></div>
+      </section>
 
-        <section class="hero">
-          <h1><span class="h1a">RUSSIAN WINE</span><span class="h1b">& SPIRITS</span></h1>
-          <div class="h1loc">in Phuket</div>
-          <div class="rule"></div>
-          <div class="cats"><div class="cat-row"><span class="cat-key">Wine</span><span class="cat-val">sparkling · red · white · rosé</span></div><div class="cat-row"><span class="cat-key">Spirits</span><span class="cat-val">vodka · gin</span></div></div>
-          <p class="producers">Abrau-Durso · Château Tamagne · Aristov · Vedernikov · Visokiy Bereg · Ladoga · Barrister</p>
-        </section>
+      <section class="cats">
+        
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-key">Wine</span>
+        <span class="cat-types">sparkling · red · white · rosé</span>
       </div>
+      <div class="cat-houses">Abrau-Durso · Château Tamagne · Aristov · Vedernikov · Visokiy Bereg · Sikory</div>
+    </div>
+    <div class="cat">
+      <div class="cat-head">
+        <span class="cat-key">Spirits</span>
+        <span class="cat-types">vodka · gin</span>
+      </div>
+      <div class="cat-houses">Ladoga · Barrister</div>
+    </div>
+      </section>
 
       <div class="bottom-group">
         <section class="qr-row">
@@ -235,7 +247,14 @@
       <div class="qr-sub">On the map</div>
     </div>
         </section>
-        <footer class="store">Wine & Whiskey · Rawai, Phuket · Open daily 11:00–22:00</footer>
+        <footer class="foot">
+          
+    <div class="logo" style="--logo-size:30px;">
+      <span class="logo-wine">WINE</span>
+      <span class="logo-whisky">&amp; WHISKEY</span>
+    </div>
+          <div class="addr"><span>Rawai, Phuket</span><span class="dim">Open daily 11:00–22:00</span></div>
+        </footer>
       </div>
 
     </div>
