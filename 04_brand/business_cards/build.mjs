@@ -48,13 +48,25 @@ const WHATSAPP = {
 // Dark mode card  → dark dots on cream tile (cream tile sits on black bg)
 // Light mode card → cream dots on dark tile (dark tile sits on cream bg)
 async function makeQr(url, dark, light) {
+  // 'H' (30% recovery) so the centered WhatsApp logo never breaks the scan.
   const svg = await QRCode.toString(url, {
     type: 'svg',
-    errorCorrectionLevel: 'M',
+    errorCorrectionLevel: 'H',
     margin: 0,
     color: { dark, light },
   });
   return svg.replace(/<\?xml.*?\?>/, '').trim();
+}
+
+// WhatsApp glyph (bubble + handset) on a bright disc — dropped into the QR
+// center so it reads unmistakably as "scan to chat on WhatsApp".
+function waLogo() {
+  return `
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div>`;
 }
 const QR = {};
 for (const [key, { url }] of Object.entries(WHATSAPP)) {
@@ -139,8 +151,8 @@ function logoLockup({ wineColor = '#8C1C1C', whiskyColor = '#F5F0EB', size = 38 
 // ─── Card content ─────────────────────────────────────────────────────────────
 // Mode is set per build run — see MODE constant below.
 const PEOPLE = {
-  pavel: { name: 'Pavel Rasputin', role: 'Co-owner & Managing Director', phone: '+66 80 902 0550', email: 'p@wine-whiskey.com' },
-  irina: { name: 'Irina Rasputina', role: 'Co-owner & Operational Director', phone: '+66 93 914 0004', email: 'i@wine-whiskey.com' },
+  pavel: { name: 'Pavel Rasputin', role: 'Owner', phone: '+66 80 902 0550', email: 'p@wine-whiskey.com' },
+  irina: { name: 'Irina Rasputina', role: 'Owner', phone: '+66 93 914 0004', email: 'i@wine-whiskey.com' },
 };
 const COMPANY = { tagline: 'Fine wine and spirits', address: 'Phuket, Rawai', hours: 'Open daily 11:00 — 22:00' };
 
@@ -217,7 +229,6 @@ function renderFrontGeneric({ tagline, address, hours }, mode) {
 function renderBackWholesale(mode, who) {
   const lc = logoColors(mode);
   const qrInner = QR[who][mode];
-  const { display } = WHATSAPP[who];
   return `
     <div class="card card-${mode} card-back">
       <div class="bleed-bg"></div>
@@ -227,9 +238,10 @@ function renderBackWholesale(mode, who) {
           <div class="back-email">wholesale@wine-whiskey.com</div>
         </div>
         <div class="qr-wrap">
-          <div class="qr">${qrInner}</div>
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr-url">${display}</div>
+          <div class="qr">${qrInner}${waLogo()}</div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           ${logoLockup({ ...lc, size: 16 })}
@@ -241,17 +253,15 @@ function renderBackWholesale(mode, who) {
 function renderBackGeneric(mode, who) {
   const lc = logoColors(mode);
   const qrInner = QR[who][mode];
-  const { display } = WHATSAPP[who];
   return `
     <div class="card card-${mode} card-back">
       <div class="bleed-bg"></div>
       <div class="safe safe-back">
-        <div class="back-header">
-          <div class="overline">MESSAGE US ON WHATSAPP</div>
-        </div>
         <div class="qr-wrap qr-wrap-large">
-          <div class="qr qr-large">${qrInner}</div>
-          <div class="qr-url">${display}</div>
+          <div class="qr-caption">Message us on WhatsApp</div>
+          <div class="qr qr-large">${qrInner}${waLogo()}</div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           ${logoLockup({ ...lc, size: 16 })}
@@ -468,6 +478,7 @@ const CSS = `
     display: flex; flex-direction: column; align-items: center; gap: 2mm;
   }
   .qr {
+    position: relative;
     width: 26mm; height: 26mm;
     background: var(--warm-white);
     padding: 2mm;
@@ -475,7 +486,19 @@ const CSS = `
     box-shadow: 0 0 0 0.3mm rgba(201,168,76,0.6);
   }
   .qr-large { width: 32mm; height: 32mm; padding: 2.5mm; }
-  .qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+  .qr > svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+  /* WhatsApp logo punched into the QR center (QR uses 'H' recovery). */
+  .qr-logo {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 28%; height: 28%;
+    background: #FFFFFF;
+    border-radius: 22%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 0.4mm #FFFFFF;
+  }
+  .qr-logo svg { width: 80%; height: 80%; display: block; shape-rendering: auto; }
   .qr-caption {
     font-family: 'Inter', sans-serif;
     font-weight: 500;
@@ -483,9 +506,19 @@ const CSS = `
     color: var(--pale-stone);
     letter-spacing: 0.04em;
   }
+  .qr-sub {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 2.2mm;
+    line-height: 1.3;
+    color: var(--pale-stone);
+    letter-spacing: 0.01em;
+    max-width: 40mm;
+  }
+  .card-light .qr-sub { color: var(--graphite); }
   .qr-url {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 4mm;
+    font-size: 3.6mm;
     letter-spacing: 0.06em;
     color: var(--warm-white);
     text-transform: uppercase;

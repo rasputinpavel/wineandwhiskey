@@ -212,6 +212,7 @@
     display: flex; flex-direction: column; align-items: center; gap: 2mm;
   }
   .qr {
+    position: relative;
     width: 26mm; height: 26mm;
     background: var(--warm-white);
     padding: 2mm;
@@ -219,7 +220,19 @@
     box-shadow: 0 0 0 0.3mm rgba(201,168,76,0.6);
   }
   .qr-large { width: 32mm; height: 32mm; padding: 2.5mm; }
-  .qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+  .qr > svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+  /* WhatsApp logo punched into the QR center (QR uses 'H' recovery). */
+  .qr-logo {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 28%; height: 28%;
+    background: #FFFFFF;
+    border-radius: 22%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 0.4mm #FFFFFF;
+  }
+  .qr-logo svg { width: 80%; height: 80%; display: block; shape-rendering: auto; }
   .qr-caption {
     font-family: 'Inter', sans-serif;
     font-weight: 500;
@@ -227,9 +240,19 @@
     color: var(--pale-stone);
     letter-spacing: 0.04em;
   }
+  .qr-sub {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 2.2mm;
+    line-height: 1.3;
+    color: var(--pale-stone);
+    letter-spacing: 0.01em;
+    max-width: 40mm;
+  }
+  .card-light .qr-sub { color: var(--graphite); }
   .qr-url {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 4mm;
+    font-size: 3.6mm;
     letter-spacing: 0.06em;
     color: var(--warm-white);
     text-transform: uppercase;
@@ -298,7 +321,7 @@
         <div class="card-bottom">
           <div class="hairline"></div>
           <div class="name">Pavel Rasputin</div>
-          <div class="role">Co-owner & Managing Director</div>
+          <div class="role">Owner</div>
           <div class="contact">
             <div>+66 80 902 0550</div>
             <div>p@wine-whiskey.com</div>
@@ -321,7 +344,7 @@
         <div class="card-bottom">
           <div class="hairline"></div>
           <div class="name">Irina Rasputina</div>
-          <div class="role">Co-owner & Operational Director</div>
+          <div class="role">Owner</div>
           <div class="contact">
             <div>+66 93 914 0004</div>
             <div>i@wine-whiskey.com</div>
@@ -358,9 +381,15 @@
           <div class="back-email">wholesale@wine-whiskey.com</div>
         </div>
         <div class="qr-wrap">
-          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h25v25H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m2 0h1m2 0h1m1 0h2m2 0h7M0 1.5h1m5 0h1m3 0h1m2 0h3m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h2m2 0h2m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h3m1 0h1m1 0h1m3 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h1m2 0h1m1 0h1m2 0h1M0 8.5h1m1 0h5m2 0h1m2 0h1m1 0h1m3 0h5M0 9.5h1m2 0h2m2 0h1m1 0h1m1 0h1m2 0h1m4 0h1m3 0h1M1 10.5h9m3 0h3m2 0h4m1 0h2M0 11.5h1m1 0h1m2 0h1m2 0h2m1 0h2m2 0h1m1 0h3m4 0h1M2 12.5h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h3m1 0h3M0 13.5h2m2 0h1m2 0h2m1 0h1m4 0h1m3 0h1m1 0h1m1 0h1M0 14.5h1m1 0h1m2 0h2m3 0h3m2 0h3m1 0h3m1 0h2M0 15.5h1m6 0h3m1 0h1m4 0h1m2 0h2m3 0h1M0 16.5h1m1 0h3m1 0h2m1 0h1m1 0h1m4 0h5m1 0h1M8 17.5h3m1 0h2m1 0h2m3 0h2M0 18.5h7m3 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3M0 19.5h1m5 0h1m1 0h1m3 0h2m1 0h2m3 0h2M0 20.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m1 0h2m7 0h2m1 0h3m1 0h1M0 22.5h1m1 0h3m1 0h1m1 0h1m1 0h3m8 0h2m1 0h1M0 23.5h1m5 0h1m3 0h2m2 0h4m1 0h3m2 0h1M0 24.5h7m1 0h2m1 0h1m5 0h8"/></svg></div>
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr-url">+66 80 902 0550</div>
+          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h29v29H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m7 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m2 0h1m4 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h2m3 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m1 0h4m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m3 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h1m1 0h1m2 0h2m1 0h1M2 8.5h1m2 0h6m2 0h1m3 0h1m1 0h3m1 0h5M2 9.5h2m1 0h1m4 0h1m1 0h5m3 0h1m3 0h5M0 10.5h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m2 0h3m1 0h2m1 0h1m4 0h1M3 11.5h2m4 0h3m2 0h2m1 0h4m1 0h2M0 12.5h1m2 0h1m2 0h2m2 0h3m2 0h2m1 0h1m1 0h3m3 0h2M0 13.5h1m1 0h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M0 14.5h2m1 0h1m1 0h2m1 0h1m1 0h4m2 0h1m1 0h2m5 0h4M0 15.5h2m2 0h1m3 0h5m1 0h1m2 0h1m1 0h2m4 0h1m1 0h1M0 16.5h3m3 0h3m1 0h3m3 0h5m3 0h1m3 0h1M1 17.5h2m1 0h2m1 0h1m1 0h4m1 0h1m1 0h1m1 0h1m2 0h1m6 0h1M0 18.5h3m3 0h2m1 0h1m3 0h1m3 0h4m2 0h4m1 0h1M2 19.5h4m1 0h1m2 0h2m4 0h1m1 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h3m1 0h2m1 0h3m1 0h1m1 0h8M8 21.5h1m2 0h2m2 0h1m1 0h4m3 0h2m2 0h1M0 22.5h7m1 0h2m1 0h2m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m1 0h2m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m3 0h2m3 0h2m2 0h6M0 25.5h1m1 0h3m1 0h1m4 0h2m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h5m1 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m2 0h1m4 0h1M0 28.5h7m5 0h1m2 0h1m2 0h1m1 0h2m1 0h2m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
@@ -380,9 +409,15 @@
           <div class="back-email">wholesale@wine-whiskey.com</div>
         </div>
         <div class="qr-wrap">
-          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h25v25H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m2 0h6m3 0h7M0 1.5h1m5 0h1m1 0h4m4 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h7m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m6 0h1m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m2 0h1m1 0h5m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h2m4 0h3M0 8.5h1m5 0h1m1 0h1m8 0h2m2 0h3M0 9.5h5m2 0h1m2 0h1m3 0h3m2 0h5M1 10.5h2m3 0h3m6 0h1m2 0h4m1 0h2M2 11.5h2m1 0h1m2 0h2m3 0h1m3 0h3m1 0h1m2 0h1M0 12.5h7m1 0h3m1 0h4m1 0h2m5 0h1M0 13.5h2m2 0h2m3 0h1m9 0h1m3 0h1M0 14.5h1m1 0h2m2 0h2m3 0h2m2 0h3m1 0h3m1 0h2M0 15.5h1m3 0h2m1 0h1m2 0h2m2 0h2m3 0h1m1 0h2m1 0h1M0 16.5h1m1 0h1m3 0h1m2 0h1m1 0h1m4 0h5m1 0h1M8 17.5h2m2 0h2m2 0h1m3 0h1M0 18.5h7m3 0h2m4 0h1m1 0h1m1 0h1m3 0h1M0 19.5h1m5 0h1m2 0h2m1 0h2m2 0h1m3 0h1M0 20.5h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m7 0h5m5 0h1M0 22.5h1m1 0h3m1 0h1m2 0h4m8 0h2m1 0h1M0 23.5h1m5 0h1m2 0h3m2 0h1m1 0h2m1 0h2m3 0h1M0 24.5h7m1 0h1m1 0h1m2 0h2m1 0h1m1 0h1m2 0h1m2 0h1"/></svg></div>
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr-url">+66 93 914 0004</div>
+          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h29v29H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m3 0h1m1 0h1m1 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m5 0h1m1 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m2 0h3m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m1 0h1m1 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h3m2 0h2m1 0h1M2 8.5h1m2 0h5m2 0h1m1 0h1m1 0h2m1 0h3m1 0h5M2 9.5h2m3 0h2m1 0h1m2 0h4m3 0h2m1 0h6M0 10.5h1m3 0h1m1 0h2m4 0h2m1 0h1m1 0h2m1 0h2m2 0h1m3 0h1M3 11.5h2m2 0h4m1 0h1m1 0h7m1 0h1M0 12.5h1m2 0h1m2 0h1m3 0h1m1 0h1m3 0h1m1 0h1m1 0h3m3 0h2M2 13.5h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M1 14.5h1m1 0h2m1 0h1m1 0h1m2 0h4m1 0h2m1 0h1m1 0h1m3 0h4M1 15.5h1m2 0h1m3 0h2m1 0h2m5 0h4m3 0h1m1 0h1M0 16.5h3m1 0h4m3 0h2m4 0h1m1 0h5m4 0h1M2 17.5h3m4 0h1m2 0h1m2 0h2m6 0h1m4 0h1M0 18.5h4m2 0h2m1 0h1m1 0h3m1 0h6m3 0h3m1 0h1M4 19.5h2m4 0h2m6 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h2m2 0h2m1 0h3m1 0h1m1 0h8M8 21.5h2m1 0h2m2 0h1m2 0h3m3 0h2m2 0h1M0 22.5h7m1 0h1m2 0h2m2 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m2 0h1m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h3m2 0h7M0 25.5h1m1 0h3m1 0h1m3 0h1m1 0h1m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h2m2 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m7 0h1M0 28.5h7m5 0h1m5 0h2m1 0h4m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
@@ -397,12 +432,16 @@
     <div class="card card-dark card-back">
       <div class="bleed-bg"></div>
       <div class="safe safe-back">
-        <div class="back-header">
-          <div class="overline">MESSAGE US ON WHATSAPP</div>
-        </div>
         <div class="qr-wrap qr-wrap-large">
-          <div class="qr qr-large"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h25v25H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m2 0h1m2 0h1m1 0h2m2 0h7M0 1.5h1m5 0h1m3 0h1m2 0h3m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h2m2 0h2m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h3m1 0h1m1 0h1m3 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h1m2 0h1m1 0h1m2 0h1M0 8.5h1m1 0h5m2 0h1m2 0h1m1 0h1m3 0h5M0 9.5h1m2 0h2m2 0h1m1 0h1m1 0h1m2 0h1m4 0h1m3 0h1M1 10.5h9m3 0h3m2 0h4m1 0h2M0 11.5h1m1 0h1m2 0h1m2 0h2m1 0h2m2 0h1m1 0h3m4 0h1M2 12.5h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h3m1 0h3M0 13.5h2m2 0h1m2 0h2m1 0h1m4 0h1m3 0h1m1 0h1m1 0h1M0 14.5h1m1 0h1m2 0h2m3 0h3m2 0h3m1 0h3m1 0h2M0 15.5h1m6 0h3m1 0h1m4 0h1m2 0h2m3 0h1M0 16.5h1m1 0h3m1 0h2m1 0h1m1 0h1m4 0h5m1 0h1M8 17.5h3m1 0h2m1 0h2m3 0h2M0 18.5h7m3 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3M0 19.5h1m5 0h1m1 0h1m3 0h2m1 0h2m3 0h2M0 20.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m1 0h2m7 0h2m1 0h3m1 0h1M0 22.5h1m1 0h3m1 0h1m1 0h1m1 0h3m8 0h2m1 0h1M0 23.5h1m5 0h1m3 0h2m2 0h4m1 0h3m2 0h1M0 24.5h7m1 0h2m1 0h1m5 0h8"/></svg></div>
-          <div class="qr-url">+66 80 902 0550</div>
+          <div class="qr-caption">Message us on WhatsApp</div>
+          <div class="qr qr-large"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#F5F0EB" d="M0 0h29v29H0z"/><path stroke="#1A1A1A" d="M0 0.5h7m7 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m2 0h1m4 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h2m3 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m1 0h4m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m3 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h1m1 0h1m2 0h2m1 0h1M2 8.5h1m2 0h6m2 0h1m3 0h1m1 0h3m1 0h5M2 9.5h2m1 0h1m4 0h1m1 0h5m3 0h1m3 0h5M0 10.5h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m2 0h3m1 0h2m1 0h1m4 0h1M3 11.5h2m4 0h3m2 0h2m1 0h4m1 0h2M0 12.5h1m2 0h1m2 0h2m2 0h3m2 0h2m1 0h1m1 0h3m3 0h2M0 13.5h1m1 0h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M0 14.5h2m1 0h1m1 0h2m1 0h1m1 0h4m2 0h1m1 0h2m5 0h4M0 15.5h2m2 0h1m3 0h5m1 0h1m2 0h1m1 0h2m4 0h1m1 0h1M0 16.5h3m3 0h3m1 0h3m3 0h5m3 0h1m3 0h1M1 17.5h2m1 0h2m1 0h1m1 0h4m1 0h1m1 0h1m1 0h1m2 0h1m6 0h1M0 18.5h3m3 0h2m1 0h1m3 0h1m3 0h4m2 0h4m1 0h1M2 19.5h4m1 0h1m2 0h2m4 0h1m1 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h3m1 0h2m1 0h3m1 0h1m1 0h8M8 21.5h1m2 0h2m2 0h1m1 0h4m3 0h2m2 0h1M0 22.5h7m1 0h2m1 0h2m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m1 0h2m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m3 0h2m3 0h2m2 0h6M0 25.5h1m1 0h3m1 0h1m4 0h2m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h5m1 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m2 0h1m4 0h1M0 28.5h7m5 0h1m2 0h1m2 0h1m1 0h2m1 0h2m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
@@ -429,7 +468,7 @@
         <div class="card-bottom">
           <div class="hairline"></div>
           <div class="name">Pavel Rasputin</div>
-          <div class="role">Co-owner & Managing Director</div>
+          <div class="role">Owner</div>
           <div class="contact">
             <div>+66 80 902 0550</div>
             <div>p@wine-whiskey.com</div>
@@ -452,7 +491,7 @@
         <div class="card-bottom">
           <div class="hairline"></div>
           <div class="name">Irina Rasputina</div>
-          <div class="role">Co-owner & Operational Director</div>
+          <div class="role">Owner</div>
           <div class="contact">
             <div>+66 93 914 0004</div>
             <div>i@wine-whiskey.com</div>
@@ -489,9 +528,15 @@
           <div class="back-email">wholesale@wine-whiskey.com</div>
         </div>
         <div class="qr-wrap">
-          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h25v25H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m2 0h1m2 0h1m1 0h2m2 0h7M0 1.5h1m5 0h1m3 0h1m2 0h3m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h2m2 0h2m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h3m1 0h1m1 0h1m3 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h1m2 0h1m1 0h1m2 0h1M0 8.5h1m1 0h5m2 0h1m2 0h1m1 0h1m3 0h5M0 9.5h1m2 0h2m2 0h1m1 0h1m1 0h1m2 0h1m4 0h1m3 0h1M1 10.5h9m3 0h3m2 0h4m1 0h2M0 11.5h1m1 0h1m2 0h1m2 0h2m1 0h2m2 0h1m1 0h3m4 0h1M2 12.5h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h3m1 0h3M0 13.5h2m2 0h1m2 0h2m1 0h1m4 0h1m3 0h1m1 0h1m1 0h1M0 14.5h1m1 0h1m2 0h2m3 0h3m2 0h3m1 0h3m1 0h2M0 15.5h1m6 0h3m1 0h1m4 0h1m2 0h2m3 0h1M0 16.5h1m1 0h3m1 0h2m1 0h1m1 0h1m4 0h5m1 0h1M8 17.5h3m1 0h2m1 0h2m3 0h2M0 18.5h7m3 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3M0 19.5h1m5 0h1m1 0h1m3 0h2m1 0h2m3 0h2M0 20.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m1 0h2m7 0h2m1 0h3m1 0h1M0 22.5h1m1 0h3m1 0h1m1 0h1m1 0h3m8 0h2m1 0h1M0 23.5h1m5 0h1m3 0h2m2 0h4m1 0h3m2 0h1M0 24.5h7m1 0h2m1 0h1m5 0h8"/></svg></div>
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr-url">+66 80 902 0550</div>
+          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h29v29H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m7 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m2 0h1m4 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h2m3 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m1 0h4m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m3 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h1m1 0h1m2 0h2m1 0h1M2 8.5h1m2 0h6m2 0h1m3 0h1m1 0h3m1 0h5M2 9.5h2m1 0h1m4 0h1m1 0h5m3 0h1m3 0h5M0 10.5h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m2 0h3m1 0h2m1 0h1m4 0h1M3 11.5h2m4 0h3m2 0h2m1 0h4m1 0h2M0 12.5h1m2 0h1m2 0h2m2 0h3m2 0h2m1 0h1m1 0h3m3 0h2M0 13.5h1m1 0h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M0 14.5h2m1 0h1m1 0h2m1 0h1m1 0h4m2 0h1m1 0h2m5 0h4M0 15.5h2m2 0h1m3 0h5m1 0h1m2 0h1m1 0h2m4 0h1m1 0h1M0 16.5h3m3 0h3m1 0h3m3 0h5m3 0h1m3 0h1M1 17.5h2m1 0h2m1 0h1m1 0h4m1 0h1m1 0h1m1 0h1m2 0h1m6 0h1M0 18.5h3m3 0h2m1 0h1m3 0h1m3 0h4m2 0h4m1 0h1M2 19.5h4m1 0h1m2 0h2m4 0h1m1 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h3m1 0h2m1 0h3m1 0h1m1 0h8M8 21.5h1m2 0h2m2 0h1m1 0h4m3 0h2m2 0h1M0 22.5h7m1 0h2m1 0h2m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m1 0h2m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m3 0h2m3 0h2m2 0h6M0 25.5h1m1 0h3m1 0h1m4 0h2m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h5m1 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m2 0h1m4 0h1M0 28.5h7m5 0h1m2 0h1m2 0h1m1 0h2m1 0h2m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
@@ -511,9 +556,15 @@
           <div class="back-email">wholesale@wine-whiskey.com</div>
         </div>
         <div class="qr-wrap">
-          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h25v25H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m2 0h6m3 0h7M0 1.5h1m5 0h1m1 0h4m4 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h7m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m6 0h1m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m2 0h1m1 0h5m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h2m4 0h3M0 8.5h1m5 0h1m1 0h1m8 0h2m2 0h3M0 9.5h5m2 0h1m2 0h1m3 0h3m2 0h5M1 10.5h2m3 0h3m6 0h1m2 0h4m1 0h2M2 11.5h2m1 0h1m2 0h2m3 0h1m3 0h3m1 0h1m2 0h1M0 12.5h7m1 0h3m1 0h4m1 0h2m5 0h1M0 13.5h2m2 0h2m3 0h1m9 0h1m3 0h1M0 14.5h1m1 0h2m2 0h2m3 0h2m2 0h3m1 0h3m1 0h2M0 15.5h1m3 0h2m1 0h1m2 0h2m2 0h2m3 0h1m1 0h2m1 0h1M0 16.5h1m1 0h1m3 0h1m2 0h1m1 0h1m4 0h5m1 0h1M8 17.5h2m2 0h2m2 0h1m3 0h1M0 18.5h7m3 0h2m4 0h1m1 0h1m1 0h1m3 0h1M0 19.5h1m5 0h1m2 0h2m1 0h2m2 0h1m3 0h1M0 20.5h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m7 0h5m5 0h1M0 22.5h1m1 0h3m1 0h1m2 0h4m8 0h2m1 0h1M0 23.5h1m5 0h1m2 0h3m2 0h1m1 0h2m1 0h2m3 0h1M0 24.5h7m1 0h1m1 0h1m2 0h2m1 0h1m1 0h1m2 0h1m2 0h1"/></svg></div>
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr-url">+66 93 914 0004</div>
+          <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h29v29H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m3 0h1m1 0h1m1 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m5 0h1m1 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m2 0h3m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m1 0h1m1 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h3m2 0h2m1 0h1M2 8.5h1m2 0h5m2 0h1m1 0h1m1 0h2m1 0h3m1 0h5M2 9.5h2m3 0h2m1 0h1m2 0h4m3 0h2m1 0h6M0 10.5h1m3 0h1m1 0h2m4 0h2m1 0h1m1 0h2m1 0h2m2 0h1m3 0h1M3 11.5h2m2 0h4m1 0h1m1 0h7m1 0h1M0 12.5h1m2 0h1m2 0h1m3 0h1m1 0h1m3 0h1m1 0h1m1 0h3m3 0h2M2 13.5h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M1 14.5h1m1 0h2m1 0h1m1 0h1m2 0h4m1 0h2m1 0h1m1 0h1m3 0h4M1 15.5h1m2 0h1m3 0h2m1 0h2m5 0h4m3 0h1m1 0h1M0 16.5h3m1 0h4m3 0h2m4 0h1m1 0h5m4 0h1M2 17.5h3m4 0h1m2 0h1m2 0h2m6 0h1m4 0h1M0 18.5h4m2 0h2m1 0h1m1 0h3m1 0h6m3 0h3m1 0h1M4 19.5h2m4 0h2m6 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h2m2 0h2m1 0h3m1 0h1m1 0h8M8 21.5h2m1 0h2m2 0h1m2 0h3m3 0h2m2 0h1M0 22.5h7m1 0h1m2 0h2m2 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m2 0h1m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h3m2 0h7M0 25.5h1m1 0h3m1 0h1m3 0h1m1 0h1m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h2m2 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m7 0h1M0 28.5h7m5 0h1m5 0h2m1 0h4m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
@@ -528,12 +579,16 @@
     <div class="card card-light card-back">
       <div class="bleed-bg"></div>
       <div class="safe safe-back">
-        <div class="back-header">
-          <div class="overline">MESSAGE US ON WHATSAPP</div>
-        </div>
         <div class="qr-wrap qr-wrap-large">
-          <div class="qr qr-large"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h25v25H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m2 0h1m2 0h1m1 0h2m2 0h7M0 1.5h1m5 0h1m3 0h1m2 0h3m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h2m2 0h2m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h3m1 0h1m1 0h1m3 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h1m2 0h1m1 0h1m2 0h1M0 8.5h1m1 0h5m2 0h1m2 0h1m1 0h1m3 0h5M0 9.5h1m2 0h2m2 0h1m1 0h1m1 0h1m2 0h1m4 0h1m3 0h1M1 10.5h9m3 0h3m2 0h4m1 0h2M0 11.5h1m1 0h1m2 0h1m2 0h2m1 0h2m2 0h1m1 0h3m4 0h1M2 12.5h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h3m1 0h3M0 13.5h2m2 0h1m2 0h2m1 0h1m4 0h1m3 0h1m1 0h1m1 0h1M0 14.5h1m1 0h1m2 0h2m3 0h3m2 0h3m1 0h3m1 0h2M0 15.5h1m6 0h3m1 0h1m4 0h1m2 0h2m3 0h1M0 16.5h1m1 0h3m1 0h2m1 0h1m1 0h1m4 0h5m1 0h1M8 17.5h3m1 0h2m1 0h2m3 0h2M0 18.5h7m3 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h3M0 19.5h1m5 0h1m1 0h1m3 0h2m1 0h2m3 0h2M0 20.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m1 0h2M0 21.5h1m1 0h3m1 0h1m1 0h2m7 0h2m1 0h3m1 0h1M0 22.5h1m1 0h3m1 0h1m1 0h1m1 0h3m8 0h2m1 0h1M0 23.5h1m5 0h1m3 0h2m2 0h4m1 0h3m2 0h1M0 24.5h7m1 0h2m1 0h1m5 0h8"/></svg></div>
-          <div class="qr-url">+66 80 902 0550</div>
+          <div class="qr-caption">Message us on WhatsApp</div>
+          <div class="qr qr-large"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#1A1A1A" d="M0 0h29v29H0z"/><path stroke="#F5F0EB" d="M0 0.5h7m7 0h3m2 0h2m1 0h7M0 1.5h1m5 0h1m1 0h2m2 0h1m4 0h2m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h2m3 0h1m1 0h4m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h4m1 0h1m1 0h4m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m2 0h3m1 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m3 0h3m1 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h1m1 0h1m2 0h2m1 0h1M2 8.5h1m2 0h6m2 0h1m3 0h1m1 0h3m1 0h5M2 9.5h2m1 0h1m4 0h1m1 0h5m3 0h1m3 0h5M0 10.5h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m2 0h3m1 0h2m1 0h1m4 0h1M3 11.5h2m4 0h3m2 0h2m1 0h4m1 0h2M0 12.5h1m2 0h1m2 0h2m2 0h3m2 0h2m1 0h1m1 0h3m3 0h2M0 13.5h1m1 0h3m4 0h4m1 0h7m1 0h1m2 0h1m2 0h1M0 14.5h2m1 0h1m1 0h2m1 0h1m1 0h4m2 0h1m1 0h2m5 0h4M0 15.5h2m2 0h1m3 0h5m1 0h1m2 0h1m1 0h2m4 0h1m1 0h1M0 16.5h3m3 0h3m1 0h3m3 0h5m3 0h1m3 0h1M1 17.5h2m1 0h2m1 0h1m1 0h4m1 0h1m1 0h1m1 0h1m2 0h1m6 0h1M0 18.5h3m3 0h2m1 0h1m3 0h1m3 0h4m2 0h4m1 0h1M2 19.5h4m1 0h1m2 0h2m4 0h1m1 0h1m2 0h4m3 0h1M0 20.5h2m1 0h1m1 0h3m1 0h2m1 0h3m1 0h1m1 0h8M8 21.5h1m2 0h2m2 0h1m1 0h4m3 0h2m2 0h1M0 22.5h7m1 0h2m1 0h2m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M0 23.5h1m5 0h1m1 0h1m1 0h2m1 0h1m3 0h4m3 0h2m1 0h1M0 24.5h1m1 0h3m1 0h1m3 0h2m3 0h2m2 0h6M0 25.5h1m1 0h3m1 0h1m4 0h2m3 0h1m2 0h2m2 0h4M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h5m1 0h2m2 0h1m2 0h2m1 0h2M0 27.5h1m5 0h1m2 0h4m1 0h1m1 0h3m2 0h1m4 0h1M0 28.5h7m5 0h1m2 0h1m2 0h1m1 0h2m1 0h2m1 0h1m1 0h1"/></svg>
+    <div class="qr-logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#25D366" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+      </svg>
+    </div></div>
+          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
           
