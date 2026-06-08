@@ -14,10 +14,10 @@ const T = {
     ru: 'Russian Food Festival × Central Phuket · 12–14 июня 2026 · Phuket Outdoor Arena',
     en: 'Russian Food Festival × Central Phuket · 12–14 June 2026 · Phuket Outdoor Arena',
   },
-  heroKicker: { ru: 'Вино и спириты России', en: 'Wine & spirits of Russia' },
+  heroKicker: { ru: 'Вино и крепкие напитки из России', en: 'Wine & spirits of Russia' },
   heroLead: {
-    ru: 'Игристое, красное, белое, розе и водка из Краснодара, Тамани, долины Дона и Абрау. Всё это — в нашем магазине Wine & Whiskey на Раваи. Заходите познакомиться.',
-    en: 'Sparkling, red, white, rosé and vodka from Krasnodar, Taman, the Don and Abrau valley. All of it at our Wine & Whiskey store in Rawai. Come and discover it.',
+    ru: 'Игристое, красное, белое и розе из Краснодара, Тамани, долины Дона и Абрау — а также водка и джин из Санкт-Петербурга. Всё это в нашем магазине Wine & Whiskey на Раваи. Заходите познакомиться.',
+    en: 'Sparkling, red, white and rosé from Krasnodar, Taman, the Don and Abrau valley — plus vodka and gin from St. Petersburg. All of it at our Wine & Whiskey store in Rawai. Come and discover it.',
   },
   ctaWa: { ru: 'Написать в WhatsApp', en: 'Message us on WhatsApp' },
   ctaMap: { ru: 'Как добраться', en: 'Find the store' },
@@ -99,6 +99,9 @@ function BottleCard({ b, lang }: { b: Bottle; lang: Lang }) {
 export default function RussianWinePage() {
   const [lang, setLang] = useState<Lang>('ru')
 
+  // Bebas Neue has no Cyrillic, so Russian display text uses Oswald instead.
+  const disp = lang === 'ru' ? "font-['Oswald'] font-semibold" : 'font-display'
+
   const byCat = (c: Category) => BOTTLES.filter((b) => b.category === c)
 
   return (
@@ -130,9 +133,9 @@ export default function RussianWinePage() {
         <div className="relative max-w-6xl mx-auto px-5 py-20 sm:py-28">
           <div className="overline text-amber-gold mb-5">{T.festival[lang]}</div>
           <div className="overline text-pale-stone/80 mb-3">{T.heroKicker[lang]}</div>
-          <h1 className="font-display tracking-display leading-[0.9] text-6xl sm:text-8xl">
+          <h1 className={`${disp} tracking-display leading-[0.95] ${lang === 'ru' ? 'text-5xl sm:text-7xl' : 'text-6xl sm:text-8xl'}`}>
             <span className="block text-warm-white">{lang === 'ru' ? 'РУССКОЕ ВИНО' : 'RUSSIAN WINE'}</span>
-            <span className="block text-wine-red">{lang === 'ru' ? '& СПИРИТЫ' : '& SPIRITS'}</span>
+            <span className="block text-wine-red">{lang === 'ru' ? 'И КРЕПКИЕ НАПИТКИ' : '& SPIRITS'}</span>
           </h1>
           <div className="w-24 h-px bg-amber-gold/70 my-7" />
           <p className="max-w-2xl text-lg text-pale-stone leading-relaxed">{T.heroLead[lang]}</p>
@@ -157,7 +160,7 @@ export default function RussianWinePage() {
           return (
             <section key={cat} className="mb-16">
               <div className="flex items-center gap-4 mb-8">
-                <h2 className="font-display tracking-display text-4xl text-deep-black">{CATEGORY_LABEL[cat][lang]}</h2>
+                <h2 className={`${disp} tracking-display text-4xl text-deep-black`}>{CATEGORY_LABEL[cat][lang]}</h2>
                 <div className="flex-1 h-px bg-pale-stone/60" />
                 <span className="overline text-graphite/60">{items.length}</span>
               </div>
@@ -173,7 +176,7 @@ export default function RussianWinePage() {
       <section className="bg-deep-black text-warm-white">
         <div className="max-w-6xl mx-auto px-5 py-16 sm:py-20 text-center">
           <Logo light />
-          <h2 className="font-display tracking-display text-4xl sm:text-5xl mt-6 mb-4">{T.outroTitle[lang]}</h2>
+          <h2 className={`${disp} tracking-display text-4xl sm:text-5xl mt-6 mb-4`}>{T.outroTitle[lang]}</h2>
           <p className="max-w-xl mx-auto text-pale-stone leading-relaxed mb-2">{T.outroLead[lang]}</p>
           <p className="text-amber-gold font-medium mb-8">{T.address[lang]} · {T.hours[lang]}</p>
           <div className="flex flex-wrap justify-center gap-3">

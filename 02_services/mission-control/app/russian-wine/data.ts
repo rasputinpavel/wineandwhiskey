@@ -28,7 +28,7 @@ export const CATEGORY_LABEL: Record<Category, Loc> = {
   red:       { ru: 'Красное',  en: 'Red' },
   white:     { ru: 'Белое',    en: 'White' },
   rose:      { ru: 'Розовое',  en: 'Rosé' },
-  spirit:    { ru: 'Спириты',  en: 'Spirits' },
+  spirit:    { ru: 'Крепкие напитки', en: 'Spirits' },
 }
 
 export const CATEGORY_ORDER: Category[] = ['sparkling', 'red', 'white', 'rose', 'spirit']
