@@ -118,6 +118,12 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'native' },
       },
       {
+        slug: 'income', name: 'Income / Cash', icon: '💵', status: 'building',
+        description: 'Кошельки Счёт/Касса/Личный: приходы, переводы между кошельками, остатки и ликвидность. Расходы читаются из Expenses.',
+        route: m('income'),
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'dashboard-sheet', name: 'Dashboard (Google Sheet)', icon: '📑', status: 'live',
         description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Переносится в портал поэтапно.',
         route: m('dashboard-sheet'),

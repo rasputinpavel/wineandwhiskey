@@ -8,11 +8,22 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export type ExpenseCategory = "Операционные" | "Обязательные" | "Кредиторка";
 
+// Which wallet the money came out of. Mirrors mission-control's Income module
+// (account = company bank, cash = register, personal = owner). Replaces the old
+// binary isCompany flag so cash payments stop being lumped into "personal".
+export type Wallet = "account" | "cash" | "personal";
+
+export const WALLET_LABEL: Record<Wallet, string> = {
+  account:  "🏢 Счёт компании",
+  cash:     "💵 Касса",
+  personal: "👤 Личный",
+};
+
 export interface PendingExpense {
   amount:      string; // raw number, e.g. "856"
   description: string;
   date:        string; // DD.MM.YYYY Bangkok
-  isCompany:   boolean;
+  wallet:      Wallet;
   hasDocs:     boolean;
   category:    ExpenseCategory;
 }
@@ -174,11 +185,19 @@ export function parseExpenseFromMessage(text: string): PendingExpense | null {
     text.match(/Категория:\s*✅?\s*Обязательные/) ? "Обязательные" :
     text.match(/Категория:\s*✅?\s*Кредиторка/)   ? "Кредиторка"   :
                                                     "Операционные";
+  // Wallet from the "Откуда оплатили" line. Legacy messages only had the binary
+  // "✅ Со счёта компании / С налички/личных" → map to account / personal.
+  const wallet: Wallet =
+    text.includes(WALLET_LABEL.account)  ? "account"  :
+    text.includes(WALLET_LABEL.cash)     ? "cash"     :
+    text.includes(WALLET_LABEL.personal) ? "personal" :
+    text.includes("✅ Со счёта компании") ? "account"  :
+                                            "cash";
   return {
     date:        dateMatch[1],
     amount:      amountMatch[1].replace(",", "."),
     description: descMatch[1].trim(),
-    isCompany:   text.includes("✅ Со счёта компании"),
+    wallet,
     hasDocs:     text.includes("✅ Есть"),
     category,
   }
@@ -187,7 +206,6 @@ export function parseExpenseFromMessage(text: string): PendingExpense | null {
 // ─── UI builders ─────────────────────────────────────────────────────────────
 
 export function buildExpenseMessage(e: PendingExpense): string {
-  const company = e.isCompany ? "✅ Со счёта компании" : "☐ С налички / личных";
   const docs    = e.hasDocs   ? "✅ Есть"               : "☐ Нет";
   return [
     `📋 <b>Проверь расход:</b>`,
@@ -197,23 +215,25 @@ export function buildExpenseMessage(e: PendingExpense): string {
     `📝 <b>На что:</b> ${e.description}`,
     ``,
     `<b>Категория:</b> ✅ ${e.category}`,
-    `<b>Откуда оплатили:</b> ${company}`,
+    `<b>Откуда оплатили:</b> ${WALLET_LABEL[e.wallet]}`,
     `<b>Документы:</b> ${docs}`,
   ].join("\n");
 }
 
 export function buildExpenseKeyboard(
-  isCompany: boolean,
+  wallet:    Wallet,
   hasDocs:   boolean,
   category:  ExpenseCategory,
 ): InlineKeyboard {
+  const w = (id: Wallet, label: string) => (wallet === id ? `✅ ${label}` : label);
   return new InlineKeyboard()
     .text(category === "Операционные" ? "✅ Операц." : "Операц.", "exp_cat_op")
     .text(category === "Обязательные" ? "✅ Обяз."   : "Обяз.",   "exp_cat_oblig")
     .text(category === "Кредиторка"   ? "✅ Кредит." : "Кредит.", "exp_cat_cred")
     .row()
-    .text(isCompany  ? "✅ Со счёта компании" : "Со счёта компании", "exp_company_yes")
-    .text(!isCompany ? "✅ С налички/личных"  : "С налички/личных",  "exp_company_no")
+    .text(w("account",  "🏢 Счёт"), "exp_wallet_account")
+    .text(w("cash",     "💵 Касса"), "exp_wallet_cash")
+    .text(w("personal", "👤 Личный"), "exp_wallet_personal")
     .row()
     .text(hasDocs    ? "✅ Документы есть" : "Документы есть", "exp_docs_yes")
     .text(!hasDocs   ? "✅ Без документов" : "Без документов", "exp_docs_no")
@@ -256,7 +276,10 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
   }
   const targetRow = firstEmptyIdx + 2; // 1-based sheet row (row 1 = header)
 
-  const range = `Expenses!A${targetRow}:G${targetRow}`;
+  // Column F stays the legacy "Со счёта компании" boolean (TRUE only for the
+  // account wallet) so the existing Income-sheet formulas keep working; the new
+  // column H carries the full 3-way wallet that mission-control's Income page reads.
+  const range = `Expenses!A${targetRow}:H${targetRow}`;
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {
@@ -271,8 +294,9 @@ export async function addExpenseRow(e: PendingExpense): Promise<void> {
           e.description,
           e.hasDocs   ? "TRUE" : "FALSE",
           "FALSE",
-          e.isCompany ? "TRUE" : "FALSE",
+          e.wallet === "account" ? "TRUE" : "FALSE",
           e.category,
+          e.wallet,
         ]],
       }),
     }

@@ -116,6 +116,32 @@ export type PulseSettings = {
   updated_at: string
 }
 
+// ─── Income / Cash module (migration 024) ───────────────────────────────────
+
+export type WalletId = 'account' | 'cash' | 'personal'
+
+export type MoneyWallet = {
+  id: WalletId
+  name: string
+  opening_balance: number
+  opening_date: string          // 'YYYY-MM-DD'
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type MoneyMovement = {
+  id: string
+  occurred_on: string           // 'YYYY-MM-DD'
+  kind: 'inflow' | 'outflow' | 'transfer'
+  amount: number
+  wallet_id: WalletId | null    // inflow / outflow target
+  from_wallet_id: WalletId | null
+  to_wallet_id: WalletId | null
+  note: string | null
+  created_at: string
+}
+
 export type LoyverseCustomer = {
   id: string
   name: string
@@ -138,6 +164,7 @@ export type LoyverseReceipt = {
   cost_total: number
   is_b2b: boolean
   is_bank_transfer: boolean
+  payment_method: 'cash' | 'card' | 'qr' | 'transfer' | 'other' | null
   scraped_at: string
 }
 

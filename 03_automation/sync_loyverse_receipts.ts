@@ -45,6 +45,22 @@ function defaultWindow(): { from: string; to: string } {
   return { from: iso(from), to: iso(to) };
 }
 
+// Classify a receipt's payment method from its payments[] (Loyverse returns
+// type + name inline). The dominant (largest-amount) payment wins for split
+// payments. Used by mission-control's Income page to route inflows to a wallet:
+// cash → Cash register, everything else → company Account.
+function classifyPayment(payments: any[] | undefined): "cash" | "card" | "qr" | "transfer" | "other" {
+  if (!payments?.length) return "other";
+  const top = payments.reduce((a, b) => (Number(b.money_amount ?? 0) > Number(a.money_amount ?? 0) ? b : a));
+  const type = String(top.type ?? "").toUpperCase();
+  const name = String(top.name ?? "").toLowerCase();
+  if (type === "CASH") return "cash";
+  if (type.includes("CARD")) return "card";
+  if (name.includes("qr")) return "qr";
+  if (name.includes("bank") || name.includes("transfer")) return "transfer";
+  return "other";
+}
+
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 // Loyverse изредка отдаёт пустое/битое тело при 2xx или транзиентный 429/5xx.
@@ -179,6 +195,7 @@ async function syncReceipts(fromIso: string, toIso: string) {
           cost_total:          costTotal,
           is_b2b:              isB2B,
           is_bank_transfer:    isBankTransfer,
+          payment_method:      classifyPayment(r.payments),
           scraped_at:          new Date().toISOString(),
         };
       });

@@ -7,7 +7,7 @@ import cron from "node-cron";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
 import {
-  PendingExpense, PendingPhoto,
+  PendingExpense, PendingPhoto, WALLET_LABEL,
   bangkokDate, looksLikeExpense,
   extractExpenseFromText, extractExpenseFromPhoto,
   downloadTelegramPhoto,
@@ -66,14 +66,14 @@ async function startExpenseFlow(
     amount:      extracted.amount,
     description: extracted.description,
     date:        extracted.date ?? bangkokDate(),
-    isCompany:   false,
+    wallet:      "cash",
     hasDocs:     false,
     category:    "Операционные",
   };
   pendingExpenses.set(chatId, expense);
   await bot.api.sendMessage(chatId, buildExpenseMessage(expense), {
     parse_mode:   "HTML",
-    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs, expense.category),
+    reply_markup: buildExpenseKeyboard(expense.wallet, expense.hasDocs, expense.category),
   });
 }
 
@@ -455,8 +455,9 @@ bot.on("callback_query:data", async (ctx) => {
     return;
   }
 
-  if (data === "exp_company_yes") expense.isCompany = true;
-  if (data === "exp_company_no")  expense.isCompany = false;
+  if (data === "exp_wallet_account")  expense.wallet = "account";
+  if (data === "exp_wallet_cash")     expense.wallet = "cash";
+  if (data === "exp_wallet_personal") expense.wallet = "personal";
   if (data === "exp_docs_yes")    expense.hasDocs   = true;
   if (data === "exp_docs_no")     expense.hasDocs   = false;
   if (data === "exp_cat_op")      expense.category  = "Операционные";
@@ -483,7 +484,7 @@ bot.on("callback_query:data", async (ctx) => {
         `📅 ${expense.date} | ฿${expense.amount}\n` +
         `📝 ${expense.description}\n` +
         `🏷 ${expense.category}\n` +
-        `${expense.isCompany ? "🏢 Со счёта компании" : "👤 С налички/личных"} · ` +
+        `${WALLET_LABEL[expense.wallet]} · ` +
         `${expense.hasDocs ? "📄 Есть доки" : "📭 Без доков"}`,
       );
     } catch (editErr) { console.error("confirmation edit failed:", editErr); }
@@ -494,7 +495,7 @@ bot.on("callback_query:data", async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.editMessageText(buildExpenseMessage(expense), {
     parse_mode:   "HTML",
-    reply_markup: buildExpenseKeyboard(expense.isCompany, expense.hasDocs, expense.category),
+    reply_markup: buildExpenseKeyboard(expense.wallet, expense.hasDocs, expense.category),
   });
 });
 
