@@ -76,6 +76,13 @@ for (const [key, { url }] of Object.entries(WHATSAPP)) {
   };
 }
 
+// Website QR — shared across all cards, shown as the second (lower) code.
+const WEB_URL = 'https://wine-whiskey.com';
+const QR_WEB = {
+  dark:  await makeQr(WEB_URL, '#1A1A1A', '#F5F0EB'),
+  light: await makeQr(WEB_URL, '#F5F0EB', '#1A1A1A'),
+};
+
 // ─── Wine glass SVG ───────────────────────────────────────────────────────────
 // Bordeaux-style red wine glass: wide rounded bowl, narrow rim, long stem.
 // Path covers full glass (x: 0..120). viewBox is clipped to the LEFT half
@@ -226,48 +233,38 @@ function renderFrontGeneric({ tagline, address, hours }, mode) {
     </div>`;
 }
 
-function renderBackWholesale(mode, who) {
+// Two stacked QR codes: WhatsApp (with center logo) on top, website below.
+function renderDualBack(mode, who) {
   const lc = logoColors(mode);
-  const qrInner = QR[who][mode];
+  const wa = QR[who][mode];
+  const web = QR_WEB[mode];
   return `
     <div class="card card-${mode} card-back">
       <div class="bleed-bg"></div>
-      <div class="safe safe-back">
-        <div class="back-header">
-          <div class="overline">WHOLESALE INQUIRIES</div>
-          <div class="back-email">wholesale@wine-whiskey.com</div>
-        </div>
-        <div class="qr-wrap">
+      <div class="safe safe-back safe-back-dual">
+        <div class="qr-block">
           <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr">${qrInner}${waLogo()}</div>
-          <div class="qr-sub">More wine and wine events in Phuket</div>
+          <div class="qr qr-dual">${wa}${waLogo()}</div>
+        </div>
+        <div class="qr-divider"></div>
+        <div class="qr-block">
+          <div class="qr-caption">More wine and wine events in Phuket</div>
+          <div class="qr qr-dual">${web}</div>
           <div class="qr-url">wine-whiskey.com</div>
         </div>
         <div class="back-footer">
-          ${logoLockup({ ...lc, size: 16 })}
+          ${logoLockup({ ...lc, size: 14 })}
         </div>
       </div>
     </div>`;
 }
 
+function renderBackWholesale(mode, who) {
+  return renderDualBack(mode, who);
+}
+
 function renderBackGeneric(mode, who) {
-  const lc = logoColors(mode);
-  const qrInner = QR[who][mode];
-  return `
-    <div class="card card-${mode} card-back">
-      <div class="bleed-bg"></div>
-      <div class="safe safe-back">
-        <div class="qr-wrap qr-wrap-large">
-          <div class="qr-caption">Message us on WhatsApp</div>
-          <div class="qr qr-large">${qrInner}${waLogo()}</div>
-          <div class="qr-sub">More wine and wine events in Phuket</div>
-          <div class="qr-url">wine-whiskey.com</div>
-        </div>
-        <div class="back-footer">
-          ${logoLockup({ ...lc, size: 16 })}
-        </div>
-      </div>
-    </div>`;
+  return renderDualBack(mode, who);
 }
 
 function renderCard(c, mode) {
@@ -486,7 +483,17 @@ const CSS = `
     box-shadow: 0 0 0 0.3mm rgba(201,168,76,0.6);
   }
   .qr-large { width: 32mm; height: 32mm; padding: 2.5mm; }
+  .qr-dual  { width: 21mm; height: 21mm; padding: 1.6mm; }
   .qr > svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+
+  /* Two-QR back layout */
+  .safe-back-dual { justify-content: space-between; gap: 1mm; }
+  .qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.4mm; }
+  .qr-divider {
+    width: 10mm; height: 0;
+    border-top: 0.25mm solid rgba(201,168,76,0.5);
+  }
+  .card-light .qr-divider { border-top-color: rgba(140,28,28,0.45); }
   /* WhatsApp logo punched into the QR center (QR uses 'H' recovery). */
   .qr-logo {
     position: absolute;
