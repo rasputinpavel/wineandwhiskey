@@ -139,7 +139,7 @@ const COPY = {
     qr: {
       whatsapp: ['WhatsApp', 'Написать нам'],
       catalog:  ['Каталог', 'Русские вина'],
-      maps:     ['Как добраться', 'Мы на карте'],
+      maps:     ['Мы на карте', ''],
     },
     addr: 'Rawai, Пхукет',
     hours: 'Ежедневно 11:00–22:00',
@@ -176,11 +176,12 @@ function catBlock({ key, types, houses }) {
 }
 
 function qrBlock(kind, labels) {
+  const sub = labels[1] ? `<div class="qr-sub">${labels[1]}</div>` : '';
   return `
     <div class="qr-cell">
       <div class="qr">${QR[kind]}</div>
       <div class="qr-cap">${labels[0]}</div>
-      <div class="qr-sub">${labels[1]}</div>
+      ${sub}
     </div>`;
 }
 
