@@ -35,11 +35,20 @@ const FONT_FACE = `
   }
 `;
 
-// ─── QR (single payload, two color variants — picked per mode) ──────────────
+// ─── WhatsApp targets (per card) ────────────────────────────────────────────
+// Each card's QR opens a direct WhatsApp chat. wa.me wants the number in
+// international format with no '+' and no spaces.
+const WHATSAPP = {
+  pavel:   { url: 'https://wa.me/66809020550', display: '+66 80 902 0550' },
+  irina:   { url: 'https://wa.me/66939140004', display: '+66 93 914 0004' },
+  general: { url: 'https://wa.me/66809020550', display: '+66 80 902 0550' },
+};
+
+// ─── QR (per target, two color variants — picked per mode) ──────────────────
 // Dark mode card  → dark dots on cream tile (cream tile sits on black bg)
 // Light mode card → cream dots on dark tile (dark tile sits on cream bg)
-async function makeQr(dark, light) {
-  const svg = await QRCode.toString('https://wine-whiskey.com', {
+async function makeQr(url, dark, light) {
+  const svg = await QRCode.toString(url, {
     type: 'svg',
     errorCorrectionLevel: 'M',
     margin: 0,
@@ -47,11 +56,13 @@ async function makeQr(dark, light) {
   });
   return svg.replace(/<\?xml.*?\?>/, '').trim();
 }
-const QR = {
-  dark:  await makeQr('#1A1A1A', '#F5F0EB'),
-  light: await makeQr('#F5F0EB', '#1A1A1A'),
-};
-let qrInner = QR.dark; // overwritten per mode below
+const QR = {};
+for (const [key, { url }] of Object.entries(WHATSAPP)) {
+  QR[key] = {
+    dark:  await makeQr(url, '#1A1A1A', '#F5F0EB'),
+    light: await makeQr(url, '#F5F0EB', '#1A1A1A'),
+  };
+}
 
 // ─── Wine glass SVG ───────────────────────────────────────────────────────────
 // Bordeaux-style red wine glass: wide rounded bowl, narrow rim, long stem.
@@ -135,11 +146,11 @@ const COMPANY = { tagline: 'Fine wine and spirits', address: 'Phuket, Rawai', ho
 
 const cards = [
   { id: 'pavel-front',   side: 'front',         person: PEOPLE.pavel },
-  { id: 'pavel-back',    side: 'back' },
+  { id: 'pavel-back',    side: 'back',          who: 'pavel' },
   { id: 'irina-front',   side: 'front',         person: PEOPLE.irina },
-  { id: 'irina-back',    side: 'back' },
+  { id: 'irina-back',    side: 'back',          who: 'irina' },
   { id: 'generic-front', side: 'front-generic', company: COMPANY },
-  { id: 'generic-back',  side: 'back-generic' },
+  { id: 'generic-back',  side: 'back-generic',  who: 'general' },
 ];
 
 // ─── Glass as <img src="data:image/svg+xml;..."> ────────────────────────────
@@ -203,8 +214,10 @@ function renderFrontGeneric({ tagline, address, hours }, mode) {
     </div>`;
 }
 
-function renderBackWholesale(mode) {
+function renderBackWholesale(mode, who) {
   const lc = logoColors(mode);
+  const qrInner = QR[who][mode];
+  const { display } = WHATSAPP[who];
   return `
     <div class="card card-${mode} card-back">
       <div class="bleed-bg"></div>
@@ -215,8 +228,8 @@ function renderBackWholesale(mode) {
         </div>
         <div class="qr-wrap">
           <div class="qr">${qrInner}</div>
-          <div class="qr-caption">Visit our website</div>
-          <div class="qr-url">wine-whiskey.com</div>
+          <div class="qr-caption">Message us on WhatsApp</div>
+          <div class="qr-url">${display}</div>
         </div>
         <div class="back-footer">
           ${logoLockup({ ...lc, size: 16 })}
@@ -225,18 +238,20 @@ function renderBackWholesale(mode) {
     </div>`;
 }
 
-function renderBackGeneric(mode) {
+function renderBackGeneric(mode, who) {
   const lc = logoColors(mode);
+  const qrInner = QR[who][mode];
+  const { display } = WHATSAPP[who];
   return `
     <div class="card card-${mode} card-back">
       <div class="bleed-bg"></div>
       <div class="safe safe-back">
         <div class="back-header">
-          <div class="overline">CHECK WINES &amp; RESERVE</div>
+          <div class="overline">MESSAGE US ON WHATSAPP</div>
         </div>
         <div class="qr-wrap qr-wrap-large">
           <div class="qr qr-large">${qrInner}</div>
-          <div class="qr-url">wine-whiskey.com</div>
+          <div class="qr-url">${display}</div>
         </div>
         <div class="back-footer">
           ${logoLockup({ ...lc, size: 16 })}
@@ -248,8 +263,8 @@ function renderBackGeneric(mode) {
 function renderCard(c, mode) {
   if (c.side === 'front') return renderFrontPersonal(c.person, mode);
   if (c.side === 'front-generic') return renderFrontGeneric(c.company, mode);
-  if (c.side === 'back') return renderBackWholesale(mode);
-  if (c.side === 'back-generic') return renderBackGeneric(mode);
+  if (c.side === 'back') return renderBackWholesale(mode, c.who);
+  if (c.side === 'back-generic') return renderBackGeneric(mode, c.who);
   return '';
 }
 
@@ -523,7 +538,6 @@ const CSS = `
 
 // ─── HTML pages ───────────────────────────────────────────────────────────────
 function buildPrintHtml(mode) {
-  qrInner = QR[mode];
   const body = cards.map((c) => renderCard(c, mode)).join('\n');
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>W&W Business Cards — Print (${mode})</title>
@@ -535,7 +549,6 @@ ${body}
 }
 
 function buildSinglePrintHtml(card, mode) {
-  qrInner = QR[mode];
   const body = renderCard(card, mode);
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>W&W ${card.id} (${mode})</title>
@@ -565,7 +578,6 @@ function buildPreviewHtml() {
     ['pavel-back',    'irina-back',    'generic-back'],
   ];
   function rowBlock(mode) {
-    qrInner = QR[mode];
     return rowOrder.map((row) =>
       row.map((id) => {
         const c = cards.find((x) => x.id === id);
