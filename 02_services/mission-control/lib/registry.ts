@@ -112,8 +112,14 @@ export const SECTIONS: Section[] = [
     description: 'Дашборды, метрики, отчёты',
     items: [
       {
-        slug: 'dashboard-sheet', name: 'Главный Dashboard', icon: '📊', status: 'live',
-        description: 'Cashflow, daily revenue, B2B, поставщики, остатки.',
+        slug: 'dashboard', name: 'Dashboard', icon: '📊', status: 'building',
+        description: 'Годовой план, выручка/GP по периодам, помесячная динамика, дневная выручка. Нативно из Loyverse.',
+        route: m('dashboard'),
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'dashboard-sheet', name: 'Dashboard (Google Sheet)', icon: '📑', status: 'live',
+        description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Переносится в портал поэтапно.',
         route: m('dashboard-sheet'),
         embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS), openHref: sheetEdit(SHEET_OPS) },
       },
