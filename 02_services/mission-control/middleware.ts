@@ -3,7 +3,10 @@ import type { NextRequest } from 'next/server'
 import { verifyToken, hasAccess, COOKIE_NAME } from '@/lib/auth'
 import { ITEMS } from '@/lib/registry'
 
-const PUBLIC = ['/login', '/api/auth/login', '/api/health', '/api/public/']
+// Public, unauthenticated routes. `/russian-wine` is the consumer-facing
+// Russian-wine festival landing (QR target) — must bypass the portal login,
+// and `/brand/products/` serves the bottle images it embeds.
+const PUBLIC = ['/login', '/api/auth/login', '/api/health', '/api/public/', '/russian-wine', '/brand/products/']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
