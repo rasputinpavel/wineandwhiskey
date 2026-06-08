@@ -67,7 +67,7 @@ const LINKS = {
   // Store WhatsApp — Pavel / general store line (same as business cards).
   whatsapp: 'https://wa.me/66809020550',
   // Russian-wine catalog landing (public route on the portal).
-  catalog:  'https://price-service.up.railway.app/russian-wine',
+  catalog:  'https://mission-control-production-e1ab.up.railway.app/russian-wine',
   // Google Maps pin for the Rawai store (share link from the user).
   maps:     'https://maps.app.goo.gl/KjDb42GC4AAZ6mKKA',
 };
