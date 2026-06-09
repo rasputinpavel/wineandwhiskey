@@ -1,8 +1,9 @@
 import { sbInventory, type MoneyWallet, type MoneyMovement, type WalletId, type LoyverseReceipt } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, todayBkk } from '@/lib/kpi'
-import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type DayBreakdown, type DayCell, type IncomeReceipt } from '@/lib/income'
-import { MovementForm, DeleteMovementButton, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
+import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
+import { MovementForm, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
+import { LedgerTable, DailyTable, type LedgerRowData } from '@/components/modules/income/IncomeTables'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,35 @@ export default async function IncomePage() {
   const summary = computeBalances(wallets, movements, expenses, auto)
   const daily = dailyBreakdown(wallets, movements, expenses, today, auto)
 
+  // Combined ledger rows (manual movements + sheet expenses) — sorting/search
+  // happen client-side in <LedgerTable>.
+  const ledgerRows: LedgerRowData[] = []
+  for (const m of movements) {
+    if (m.kind === 'transfer') {
+      ledgerRows.push({
+        date: m.occurred_on, label: m.note || 'Transfer',
+        tag: `${WALLET_LABELS[m.from_wallet_id as WalletId]} → ${WALLET_LABELS[m.to_wallet_id as WalletId]}`,
+        amount: m.amount, amountText: fmtThb(m.amount), negative: false, manualId: m.id,
+      })
+    } else {
+      const w = WALLET_LABELS[m.wallet_id as WalletId]
+      const inflow = m.kind === 'inflow'
+      ledgerRows.push({
+        date: m.occurred_on, label: m.note || (inflow ? 'Income' : 'Withdrawal'),
+        tag: inflow ? `→ ${w}` : `${w} →`,
+        amount: inflow ? m.amount : -m.amount,
+        amountText: (inflow ? '+' : '−') + fmtThb(m.amount), negative: !inflow, manualId: m.id,
+      })
+    }
+  }
+  for (const e of expenses) {
+    ledgerRows.push({
+      date: e.date, label: e.description || 'Expense',
+      tag: `${WALLET_LABELS[e.wallet]} · ${e.category || 'expense'}`,
+      amount: -e.amount, amountText: '−' + fmtThb(e.amount), negative: true, manualId: null,
+    })
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="font-heading text-xl text-deep-black">Income / Cash</h2>
@@ -83,9 +113,9 @@ export default async function IncomePage() {
 
       <MovementForm today={today} />
 
-      <Ledger movements={movements} expenses={expenses} />
+      <LedgerTable rows={ledgerRows} />
 
-      <DailyBreakdown days={daily} />
+      <DailyTable days={daily} />
 
       <Footnote />
     </div>
@@ -116,131 +146,6 @@ function WalletCard({ w }: { w: WalletBalance }) {
 
 function Line({ label, v, sign }: { label: string; v: number; sign: '+' | '−' }) {
   return <div className="flex justify-between"><span>{label}</span><span className={sign === '−' ? 'text-wine-red' : 'text-deep-black'}>{sign}{fmtThb(v).replace('฿', '฿')}</span></div>
-}
-
-// ─── Combined ledger (manual movements + sheet expenses) ─────────────────────
-
-type LedgerRow = {
-  date: string
-  label: string
-  tag: string
-  amountText: string
-  negative: boolean
-  manualId: string | null
-}
-
-function Ledger({ movements, expenses }: { movements: MoneyMovement[]; expenses: WalletExpense[] }) {
-  const rows: LedgerRow[] = []
-
-  for (const m of movements) {
-    if (m.kind === 'transfer') {
-      rows.push({
-        date: m.occurred_on, label: m.note || 'Transfer',
-        tag: `${WALLET_LABELS[m.from_wallet_id as WalletId]} → ${WALLET_LABELS[m.to_wallet_id as WalletId]}`,
-        amountText: fmtThb(m.amount), negative: false, manualId: m.id,
-      })
-    } else {
-      const w = WALLET_LABELS[m.wallet_id as WalletId]
-      const inflow = m.kind === 'inflow'
-      rows.push({
-        date: m.occurred_on, label: m.note || (inflow ? 'Income' : 'Withdrawal'),
-        tag: inflow ? `→ ${w}` : `${w} →`,
-        amountText: (inflow ? '+' : '−') + fmtThb(m.amount), negative: !inflow, manualId: m.id,
-      })
-    }
-  }
-  for (const e of expenses) {
-    rows.push({
-      date: e.date, label: e.description || 'Expense',
-      tag: `${WALLET_LABELS[e.wallet]} · ${e.category || 'expense'}`,
-      amountText: '−' + fmtThb(e.amount), negative: true, manualId: null,
-    })
-  }
-
-  rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-  const shown = rows.slice(0, 80)
-
-  return (
-    <section className="bg-warm-white border border-pale-stone rounded-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-pale-stone flex items-baseline justify-between">
-        <h3 className="font-heading text-base text-deep-black">Ledger</h3>
-        <span className="text-[11px] text-graphite">manual + expenses (from sheet) · {rows.length} entries</span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={r.manualId ?? `e${i}`} className="border-b border-pale-stone/50 last:border-0 hover:bg-cream/40">
-                <td className="px-4 py-2 text-graphite whitespace-nowrap w-24">{r.date}</td>
-                <td className="px-2 py-2 text-deep-black">{r.label}</td>
-                <td className="px-2 py-2"><span className="text-[11px] text-graphite bg-cream rounded-sm px-1.5 py-0.5 whitespace-nowrap">{r.tag}</span></td>
-                <td className={`px-2 py-2 text-right tabular-nums whitespace-nowrap ${r.negative ? 'text-wine-red' : 'text-deep-black'}`}>{r.amountText}</td>
-                <td className="px-4 py-2 text-right w-8">{r.manualId && <DeleteMovementButton id={r.manualId} />}</td>
-              </tr>
-            ))}
-            {shown.length === 0 && (
-              <tr><td className="px-4 py-6 text-center text-graphite text-sm" colSpan={5}>No entries yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
-// ─── Daily breakdown (collapsible, like the Google sheet) ────────────────────
-
-function DailyBreakdown({ days }: { days: DayBreakdown[] }) {
-  // Most recent day first; each row carries that day's end-of-day running balance.
-  const rows = days.slice().reverse()
-  return (
-    <details className="bg-warm-white border border-pale-stone rounded-sm overflow-hidden">
-      <summary className="px-4 py-3 cursor-pointer select-none flex items-baseline justify-between">
-        <span className="font-heading text-base text-deep-black">Daily breakdown</span>
-        <span className="text-[11px] text-graphite">{days.length} days · running balance per wallet (since opening date)</span>
-      </summary>
-      <div className="overflow-x-auto border-t border-pale-stone">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-graphite border-b border-pale-stone">
-              <th className="px-3 py-2 text-left font-normal overline">Date</th>
-              <th className="px-3 py-2 text-right font-normal overline">Account</th>
-              <th className="px-3 py-2 text-right font-normal overline">Cash</th>
-              <th className="px-3 py-2 text-right font-normal overline">Personal</th>
-              <th className="px-3 py-2 text-right font-normal overline">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(d => (
-              <tr key={d.date} className="border-b border-pale-stone/50 last:border-0 hover:bg-cream/40">
-                <td className="px-3 py-2 text-graphite whitespace-nowrap">{d.date}</td>
-                <DayWalletCell c={d.account} />
-                <DayWalletCell c={d.cash} />
-                <DayWalletCell c={d.personal} />
-                <td className={`px-3 py-2 text-right tabular-nums whitespace-nowrap font-medium ${d.total < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(d.total)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td className="px-4 py-6 text-center text-graphite" colSpan={5}>No activity yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </details>
-  )
-}
-
-function DayWalletCell({ c }: { c: DayCell }) {
-  return (
-    <td className="px-3 py-2 text-right whitespace-nowrap">
-      <span className={`tabular-nums ${c.balance < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(c.balance)}</span>
-      {c.delta !== 0 && (
-        <span className={`ml-1.5 text-[10px] tabular-nums ${c.delta < 0 ? 'text-wine-red' : 'text-graphite'}`}>
-          {c.delta > 0 ? '+' : '−'}{fmtThb(Math.abs(c.delta)).replace('฿', '')}
-        </span>
-      )}
-    </td>
-  )
 }
 
 function Footnote() {
