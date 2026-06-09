@@ -1,22 +1,21 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Rolling cashflow — forward weekly forecast to year-end.
+// Rolling cashflow — weekly plan/fact chain, anchored at the Income opening.
 //
-// Native port of the Google-Sheet "Rolling" tab. Forecast only (history lives in
-// Dashboard / Income): the chain starts at today's liquidity and projects each
-// week's closing balance forward, so you can see which week runs tight.
+// Starts at the wallet opening balance/date (the reconciled anchor) and chains
+// every Mon–Sun week to year-end. Each day in a week is treated as ACTUAL if it
+// is before today, PROJECTED if today-or-later — so a week automatically flips
+// from forecast to fact as it closes, and the running balance recomputes on real
+// numbers:
 //
-//   period 1   = [today … Sunday of this week]   (partial)
-//   period 2…N = full Mon–Sun weeks until Dec 31
+//   ACTUAL  (day < today):  revenue (Loyverse B2C+B2B) + manual in − manual out
+//                           − expenses (sheet); owner contributions surfaced.
+//   PROJECT (day ≥ today):  retail avg/day × days + AR due − supplier (AP) due
+//                           − fixed (pro-rated) − big payments.
 //
-//   income   = retail projection (avg retail/day × days) + AR collected (B2B
-//              invoices due in the period)
-//   outflow  = supplier payments due (AP) + fixed costs (pro-rated) + big
-//              one-off payments scheduled in the period
-//   closing  = opening + income − outflow,  carried as next period's opening
+//   closing = opening + income + owner intake − outflow,  carried forward.
 //
-// All source extraction (AP payment dates, unpaid invoices, fixed model, big
-// payments) happens in the page; this module just buckets dated amounts and
-// runs the chain — pure and testable.
+// The last actual day's running balance reconciles with today's liquidity, so
+// fact (closed weeks) and forecast (ahead) join seamlessly at today.
 // ════════════════════════════════════════════════════════════════════════════
 
 const DAYS_PER_MONTH_AVG = 365 / 12
@@ -24,28 +23,26 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 
 export type DatedAmount = { date: string; amount: number }
 export type RollingFixed = { baseMonthly: number; pctRate: number }
+export type WeekStatus = 'closed' | 'current' | 'forecast'
 
 export type RollingWeek = {
   start: string
   end: string
   label: string
-  days: number
-  opening: number          // business-only opening (excludes owner financing)
-  retailProj: number
-  ar: number
-  ownerIntake: number      // owner financing added this week — not business income
-  ap: number
-  fixed: number
-  big: number
-  income: number           // business income only (retail + AR)
+  status: WeekStatus
+  opening: number
+  income: number           // business income (actual revenue or retail+AR projection)
+  incomeNote: string       // breakdown for tooltip
+  ownerIntake: number      // owner financing (not business income)
   outflow: number
-  closing: number          // real running balance (incl. owner financing)
+  outflowNote: string
+  closing: number
 }
 
 export type RollingForecast = {
   weeks: RollingWeek[]
-  minClosing: number
-  firstNegative: string | null   // label of first week the balance goes < 0
+  minClosing: number        // lowest closing across current+future weeks
+  firstNegative: string | null
 }
 
 // ─── Date helpers ('YYYY-MM-DD', UTC-anchored) ───────────────────────────────
@@ -58,6 +55,7 @@ function addDays(ymd: string, n: number): string {
 function dow(ymd: string): number { return new Date(ymd + 'T00:00:00Z').getUTCDay() } // 0=Sun
 function sundayOf(ymd: string): string { return addDays(ymd, (7 - dow(ymd)) % 7) }
 function daysInclusive(from: string, to: string): number {
+  if (to < from) return 0
   const a = new Date(from + 'T00:00:00Z').getTime()
   const b = new Date(to + 'T00:00:00Z').getTime()
   return Math.round((b - a) / 86_400_000) + 1
@@ -67,66 +65,102 @@ function label(start: string, end: string): string {
   const [, em, ed] = end.split('-').map(Number)
   return sm === em ? `${MONTH_ABBR[sm - 1]} ${sd}–${ed}` : `${MONTH_ABBR[sm - 1]} ${sd} – ${MONTH_ABBR[em - 1]} ${ed}`
 }
+const minStr = (a: string, b: string) => (a < b ? a : b)
 
-// Generate forecast periods: partial current week, then full Mon–Sun to Dec 31.
-export function forecastPeriods(today: string): { start: string; end: string }[] {
-  const yearEnd = `${today.slice(0, 4)}-12-31`
-  const out: { start: string; end: string }[] = []
-  let start = today
-  while (start <= yearEnd) {
-    const end = minStr(sundayOf(start), yearEnd)
-    out.push({ start, end })
-    start = addDays(end, 1)
+// Weeks: first one starts at `start` (may be a partial week), then full Mon–Sun
+// until Dec 31 of the start year-or-later.
+function periodsFrom(start: string): { s: string; e: string }[] {
+  const yearEnd = `${Math.max(Number(start.slice(0, 4)), new Date().getUTCFullYear())}-12-31`
+  const out: { s: string; e: string }[] = []
+  let s = start
+  let guard = 0
+  while (s <= yearEnd && guard++ < 100) {
+    out.push({ s, e: minStr(sundayOf(s), yearEnd) })
+    s = addDays(minStr(sundayOf(s), yearEnd), 1)
   }
   return out
 }
-function minStr(a: string, b: string): string { return a < b ? a : b }
 
-function sumIn(items: DatedAmount[], from: string, to: string): number {
-  return items.reduce((s, it) => (it.date >= from && it.date <= to ? s + it.amount : s), 0)
+// Σ amounts dated in [from,to] and matching the actual/projected side of `today`.
+function sumSide(items: DatedAmount[], from: string, to: string, today: string, side: 'actual' | 'proj'): number {
+  return items.reduce((acc, it) => {
+    if (it.date < from || it.date > to) return acc
+    const isActual = it.date < today
+    if (side === 'actual' ? isActual : !isActual) return acc + it.amount
+    return acc
+  }, 0)
 }
+
+const fmt = (n: number) => '฿' + Math.round(n).toLocaleString('en-US')
 
 export function buildRolling(input: {
   today: string
-  openingLiquidity: number      // real total liquidity now (incl. owner financing)
+  openingBalance: number
+  openingDate: string
+  // actuals (dated):
+  revenueActual: DatedAmount[]
+  manualInflows: DatedAmount[]
+  manualOutflows: DatedAmount[]
+  ownerIntake: DatedAmount[]
+  expensesActual: DatedAmount[]
+  // projection inputs:
   avgRetailPerDay: number
   ar: DatedAmount[]
   ap: DatedAmount[]
   big: DatedAmount[]
-  ownerIntake: DatedAmount[]    // owner financing by date (past clamped to today)
   fixed: RollingFixed
 }): RollingForecast {
-  const { today, openingLiquidity, avgRetailPerDay, ar, ap, big, ownerIntake, fixed } = input
-  const periods = forecastPeriods(today)
+  const { today, openingBalance, openingDate, revenueActual, manualInflows, manualOutflows,
+    ownerIntake, expensesActual, avgRetailPerDay, ar, ap, big, fixed } = input
+
+  const periods = periodsFrom(openingDate)
   const weeks: RollingWeek[] = []
-  // Decompose the starting balance: owner money already injected is carried
-  // separately so the chain shows the business position and the owner cushion
-  // explicitly. Subtracting it then re-adding it per week leaves closing real.
-  const ownerAlreadyIn = ownerIntake.reduce((s, o) => (o.date <= today ? s + o.amount : s), 0)
-  let opening = openingLiquidity - ownerAlreadyIn   // business-only opening
+  let opening = openingBalance
   let minClosing = Infinity
   let firstNegative: string | null = null
 
   for (const p of periods) {
-    const days = daysInclusive(p.start, p.end)
-    const retailProj = avgRetailPerDay * days
-    const arSum = sumIn(ar, p.start, p.end)
-    const apSum = sumIn(ap, p.start, p.end)
-    const bigSum = sumIn(big, p.start, p.end)
-    const ownerSum = sumIn(ownerIntake, p.start, p.end)
-    const fixedSum = fixed.baseMonthly * (days / DAYS_PER_MONTH_AVG) + fixed.pctRate * retailProj
-    const income = retailProj + arSum
-    const outflow = apSum + fixedSum + bigSum
-    const closing = opening + income + ownerSum - outflow
-    const lbl = label(p.start, p.end)
-    if (closing < minClosing) minClosing = closing
-    if (firstNegative === null && closing < 0) firstNegative = lbl
+    const status: WeekStatus = p.e < today ? 'closed' : p.s > today ? 'forecast' : 'current'
+    const futureDays = p.e >= today ? daysInclusive(minStr(p.s, today) < today ? today : p.s, p.e) : 0
+
+    // Income — actual revenue (before today) + projection (today on).
+    const revAct = sumSide(revenueActual, p.s, p.e, today, 'actual')
+    const inAct = sumSide(manualInflows, p.s, p.e, today, 'actual')
+    const retailProj = avgRetailPerDay * futureDays
+    const arProj = sumSide(ar, p.s, p.e, today, 'proj')
+    const income = revAct + inAct + retailProj + arProj
+
+    // Owner intake — actual contributions this week (+ any future-dated).
+    const ownerIn = sumSide(ownerIntake, p.s, p.e, today, 'actual') + sumSide(ownerIntake, p.s, p.e, today, 'proj')
+
+    // Outflow — actual expenses/withdrawals (before today) + projection (today on).
+    const expAct = sumSide(expensesActual, p.s, p.e, today, 'actual')
+    const outAct = sumSide(manualOutflows, p.s, p.e, today, 'actual')
+    const apProj = sumSide(ap, p.s, p.e, today, 'proj')
+    const fixedProj = fixed.baseMonthly * (futureDays / DAYS_PER_MONTH_AVG) + fixed.pctRate * retailProj
+    const bigProj = sumSide(big, p.s, p.e, today, 'proj')
+    const outflow = expAct + outAct + apProj + fixedProj + bigProj
+
+    const closing = opening + income + ownerIn - outflow
+
+    const incomeNote = status === 'closed'
+      ? `actual revenue ${fmt(revAct + inAct)}`
+      : `retail ${fmt(retailProj)}${arProj ? ` + AR ${fmt(arProj)}` : ''}${revAct + inAct ? ` + actual ${fmt(revAct + inAct)}` : ''}`
+    const outflowNote = status === 'closed'
+      ? `actual expenses ${fmt(expAct + outAct)}`
+      : `${apProj ? `supplier ${fmt(apProj)} · ` : ''}fixed ${fmt(fixedProj)}${bigProj ? ` · big ${fmt(bigProj)}` : ''}${expAct + outAct ? ` · actual ${fmt(expAct + outAct)}` : ''}`
+
+    if (status !== 'closed') {
+      if (closing < minClosing) minClosing = closing
+      if (firstNegative === null && closing < 0) firstNegative = label(p.s, p.e)
+    }
+
     weeks.push({
-      start: p.start, end: p.end, label: lbl, days,
-      opening, retailProj, ar: arSum, ownerIntake: ownerSum, ap: apSum, fixed: fixedSum, big: bigSum,
-      income, outflow, closing,
+      start: p.s, end: p.e, label: label(p.s, p.e), status,
+      opening, income, incomeNote, ownerIntake: ownerIn, outflow, outflowNote, closing,
     })
     opening = closing
   }
-  return { weeks, minClosing: weeks.length ? minClosing : openingLiquidity, firstNegative }
+
+  return { weeks, minClosing: Number.isFinite(minClosing) ? minClosing : openingBalance, firstNegative }
 }

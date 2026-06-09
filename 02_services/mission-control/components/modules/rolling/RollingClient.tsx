@@ -11,24 +11,28 @@ const API = '/api/m/rolling/payment'
 
 // ─── Weekly forecast table ───────────────────────────────────────────────────
 
+function StatusBadge({ s }: { s: RollingWeek['status'] }) {
+  if (s === 'closed') return <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-cream text-graphite">fact</span>
+  if (s === 'current') return <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-gold/20 text-amber-gold">this week</span>
+  return <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-warm-white border border-pale-stone text-graphite">forecast</span>
+}
+
 export function WeeklyTable({ weeks }: { weeks: RollingWeek[] }) {
-  const num = (v: number) => <span className="tabular-nums text-graphite">{v ? fmtThb(v) : '—'}</span>
   const cols: Col<RollingWeek>[] = [
-    { key: 'week', header: 'Week', sort: w => w.start, text: w => w.label, cell: w => <span className="text-deep-black whitespace-nowrap">{w.label}</span> },
+    { key: 'week', header: 'Week', sort: w => w.start, text: w => w.label, cell: w => (
+      <span className="flex items-center gap-2 whitespace-nowrap"><span className="text-deep-black">{w.label}</span><StatusBadge s={w.status} /></span>
+    ) },
     { key: 'opening', header: 'Opening', align: 'right', sort: w => w.opening, cell: w => <span className={`tabular-nums ${w.opening < 0 ? 'text-wine-red' : 'text-graphite'}`}>{fmtThb(w.opening)}</span> },
-    { key: 'retail', header: 'Retail', align: 'right', sort: w => w.retailProj, cell: w => num(w.retailProj) },
-    { key: 'ar', header: 'AR in', align: 'right', sort: w => w.ar, cell: w => num(w.ar) },
+    { key: 'income', header: 'Income', align: 'right', sort: w => w.income, cell: w => <span className="tabular-nums text-deep-black" title={w.incomeNote}>{w.income ? '+' + fmtThb(w.income) : '—'}</span> },
     { key: 'owner', header: 'Owner in', align: 'right', sort: w => w.ownerIntake, cell: w => <span className="tabular-nums text-amber-gold">{w.ownerIntake ? '+' + fmtThb(w.ownerIntake) : '—'}</span> },
-    { key: 'ap', header: 'Supplier', align: 'right', sort: w => w.ap, cell: w => <span className="tabular-nums text-wine-red">{w.ap ? '−' + fmtThb(w.ap) : '—'}</span> },
-    { key: 'fixed', header: 'Fixed', align: 'right', sort: w => w.fixed, cell: w => <span className="tabular-nums text-wine-red">{w.fixed ? '−' + fmtThb(w.fixed) : '—'}</span> },
-    { key: 'big', header: 'Big', align: 'right', sort: w => w.big, cell: w => <span className="tabular-nums text-wine-red">{w.big ? '−' + fmtThb(w.big) : '—'}</span> },
+    { key: 'outflow', header: 'Outflow', align: 'right', sort: w => w.outflow, cell: w => <span className="tabular-nums text-wine-red" title={w.outflowNote}>{w.outflow ? '−' + fmtThb(w.outflow) : '—'}</span> },
     { key: 'closing', header: 'Closing', align: 'right', sort: w => w.closing, cell: w => <span className={`tabular-nums font-medium ${w.closing < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(w.closing)}</span> },
   ]
   return (
     <section className="bg-warm-white border border-pale-stone rounded-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-pale-stone flex items-baseline justify-between">
-        <h3 className="font-heading text-base text-deep-black">Weekly forecast</h3>
-        <span className="text-[11px] text-graphite">{weeks.length} weeks to year-end</span>
+        <h3 className="font-heading text-base text-deep-black">Weekly plan / fact</h3>
+        <span className="text-[11px] text-graphite">{weeks.length} weeks · hover Income / Outflow for the breakdown</span>
       </div>
       <DataTable rows={weeks} cols={cols} rowKey={w => w.start} initialSortKey="week" initialSortDir="asc" searchPlaceholder="Search week…" />
     </section>

@@ -125,16 +125,29 @@ export default async function RollingPage() {
     big.push({ date: maxDate(b.due_date, today), amount: Number(b.amount) })
   }
 
-  // Owner intake — owner-financing inflows, shown per week (past pulled to today).
+  // Actual flows (dated) — used for closed weeks. Anchor = earliest wallet
+  // opening; the chain reconciles with today's liquidity.
+  const openingDate = wallets.map(w => w.opening_date).sort()[0] ?? today
+  const openingBalance = wallets.reduce((s, w) => s + Number(w.opening_balance), 0)
+
+  const revenueActual: DatedAmount[] = receipts.map(r => ({
+    date: r.receipt_date.slice(0, 10),
+    amount: (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total),
+  }))
+  const manualInflows: DatedAmount[] = []
+  const manualOutflows: DatedAmount[] = []
   const ownerIntake: DatedAmount[] = []
   for (const m of movements) {
-    if (m.kind === 'inflow' && m.owner_contribution) {
-      ownerIntake.push({ date: maxDate(m.occurred_on, today), amount: Number(m.amount) })
-    }
+    if (m.kind === 'inflow') (m.owner_contribution ? ownerIntake : manualInflows).push({ date: m.occurred_on, amount: Number(m.amount) })
+    else if (m.kind === 'outflow') manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
+    // transfers net zero on total liquidity
   }
+  const expensesActual: DatedAmount[] = expenses.map(e => ({ date: e.date, amount: e.amount }))
 
   const forecast = buildRolling({
-    today, openingLiquidity, avgRetailPerDay, ar, ap, big, ownerIntake, fixed: fixedModel(fixedRes.data ?? []),
+    today, openingBalance, openingDate,
+    revenueActual, manualInflows, manualOutflows, ownerIntake, expensesActual,
+    avgRetailPerDay, ar, ap, big, fixed: fixedModel(fixedRes.data ?? []),
   })
 
   return (
@@ -182,9 +195,9 @@ function Banner({ tone, children }: { tone: 'red' | 'amber'; children: React.Rea
 function Footnote() {
   return (
     <div className="text-[11px] text-graphite leading-relaxed border-t border-pale-stone pt-4 space-y-1">
-      <p>Forward forecast. Each week: <span className="text-deep-black">opening + retail + AR + owner intake − supplier − fixed − big = closing</span>, carried to the next week.</p>
-      <p><span className="text-deep-black">Opening</span> is the <span className="text-deep-black">business-only</span> balance (excludes owner financing). <span className="text-amber-gold">Owner in</span> = your injections, shown on their week and folded into the real closing balance — they prop up the runway but are not business income, so the forecast (retail / AR / supplier / fixed) is unaffected. Follow <span className="text-deep-black">Closing</span> down to see how long the cushion lasts at the current business pace.</p>
-      <p><span className="text-deep-black">Retail</span> = avg retail/day (7d) × days. <span className="text-deep-black">AR</span> = unpaid B2B invoices by due date. <span className="text-deep-black">Supplier</span> = POs due (consignment excluded). Past flows are already in today&apos;s liquidity. History lives in Income / Dashboard.</p>
+      <p>Plan / fact chain anchored at the Income opening balance. Each week: <span className="text-deep-black">opening + income + owner intake − outflow = closing</span>, carried forward.</p>
+      <p><span className="bg-cream px-1 rounded-sm">fact</span> (closed weeks) use <span className="text-deep-black">actual</span> revenue (Loyverse B2C+B2B) and actual expenses. <span className="text-amber-gold bg-amber-gold/20 px-1 rounded-sm">this week</span> blends actual-so-far with the rest projected. <span className="border border-pale-stone px-1 rounded-sm">forecast</span> weeks project income (retail avg/day × days + AR due) and outflow (supplier POs due + fixed + big payments). Hover Income / Outflow for the breakdown.</p>
+      <p><span className="text-amber-gold">Owner in</span> = owner financing, shown on its real week and folded into the closing balance, but kept out of business income. Follow <span className="text-deep-black">Closing</span> to see the runway. Supplier payments are assumed on supplier terms (no confirmed-payment signal in the data).</p>
     </div>
   )
 }
