@@ -18,6 +18,7 @@ export function WeeklyTable({ weeks }: { weeks: RollingWeek[] }) {
     { key: 'opening', header: 'Opening', align: 'right', sort: w => w.opening, cell: w => <span className={`tabular-nums ${w.opening < 0 ? 'text-wine-red' : 'text-graphite'}`}>{fmtThb(w.opening)}</span> },
     { key: 'retail', header: 'Retail', align: 'right', sort: w => w.retailProj, cell: w => num(w.retailProj) },
     { key: 'ar', header: 'AR in', align: 'right', sort: w => w.ar, cell: w => num(w.ar) },
+    { key: 'owner', header: 'Owner in', align: 'right', sort: w => w.ownerIntake, cell: w => <span className="tabular-nums text-amber-gold">{w.ownerIntake ? '+' + fmtThb(w.ownerIntake) : '—'}</span> },
     { key: 'ap', header: 'Supplier', align: 'right', sort: w => w.ap, cell: w => <span className="tabular-nums text-wine-red">{w.ap ? '−' + fmtThb(w.ap) : '—'}</span> },
     { key: 'fixed', header: 'Fixed', align: 'right', sort: w => w.fixed, cell: w => <span className="tabular-nums text-wine-red">{w.fixed ? '−' + fmtThb(w.fixed) : '—'}</span> },
     { key: 'big', header: 'Big', align: 'right', sort: w => w.big, cell: w => <span className="tabular-nums text-wine-red">{w.big ? '−' + fmtThb(w.big) : '—'}</span> },

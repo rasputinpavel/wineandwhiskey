@@ -125,8 +125,16 @@ export default async function RollingPage() {
     big.push({ date: maxDate(b.due_date, today), amount: Number(b.amount) })
   }
 
+  // Owner intake — owner-financing inflows, shown per week (past pulled to today).
+  const ownerIntake: DatedAmount[] = []
+  for (const m of movements) {
+    if (m.kind === 'inflow' && m.owner_contribution) {
+      ownerIntake.push({ date: maxDate(m.occurred_on, today), amount: Number(m.amount) })
+    }
+  }
+
   const forecast = buildRolling({
-    today, openingLiquidity, avgRetailPerDay, ar, ap, big, fixed: fixedModel(fixedRes.data ?? []),
+    today, openingLiquidity, avgRetailPerDay, ar, ap, big, ownerIntake, fixed: fixedModel(fixedRes.data ?? []),
   })
 
   return (
@@ -174,8 +182,9 @@ function Banner({ tone, children }: { tone: 'red' | 'amber'; children: React.Rea
 function Footnote() {
   return (
     <div className="text-[11px] text-graphite leading-relaxed border-t border-pale-stone pt-4 space-y-1">
-      <p>Forward forecast from today&apos;s liquidity. Each week: <span className="text-deep-black">opening + retail projection + AR collected − supplier payments − fixed − big payments = closing</span>, carried to the next week.</p>
-      <p><span className="text-deep-black">Retail</span> = avg retail/day (last 7d) × days. <span className="text-deep-black">AR</span> = unpaid B2B invoices by due date. <span className="text-deep-black">Supplier</span> = purchase orders due (consignment excluded). <span className="text-deep-black">Fixed</span> = monthly fixed costs pro-rated. Past flows are already in today&apos;s liquidity. History lives in Income / Dashboard.</p>
+      <p>Forward forecast. Each week: <span className="text-deep-black">opening + retail + AR + owner intake − supplier − fixed − big = closing</span>, carried to the next week.</p>
+      <p><span className="text-deep-black">Opening</span> is the <span className="text-deep-black">business-only</span> balance (excludes owner financing). <span className="text-amber-gold">Owner in</span> = your injections, shown on their week and folded into the real closing balance — they prop up the runway but are not business income, so the forecast (retail / AR / supplier / fixed) is unaffected. Follow <span className="text-deep-black">Closing</span> down to see how long the cushion lasts at the current business pace.</p>
+      <p><span className="text-deep-black">Retail</span> = avg retail/day (7d) × days. <span className="text-deep-black">AR</span> = unpaid B2B invoices by due date. <span className="text-deep-black">Supplier</span> = POs due (consignment excluded). Past flows are already in today&apos;s liquidity. History lives in Income / Dashboard.</p>
     </div>
   )
 }

@@ -30,15 +30,16 @@ export type RollingWeek = {
   end: string
   label: string
   days: number
-  opening: number
+  opening: number          // business-only opening (excludes owner financing)
   retailProj: number
   ar: number
+  ownerIntake: number      // owner financing added this week — not business income
   ap: number
   fixed: number
   big: number
-  income: number
+  income: number           // business income only (retail + AR)
   outflow: number
-  closing: number
+  closing: number          // real running balance (incl. owner financing)
 }
 
 export type RollingForecast = {
@@ -87,18 +88,23 @@ function sumIn(items: DatedAmount[], from: string, to: string): number {
 
 export function buildRolling(input: {
   today: string
-  openingLiquidity: number
+  openingLiquidity: number      // real total liquidity now (incl. owner financing)
   avgRetailPerDay: number
   ar: DatedAmount[]
   ap: DatedAmount[]
   big: DatedAmount[]
+  ownerIntake: DatedAmount[]    // owner financing by date (past clamped to today)
   fixed: RollingFixed
 }): RollingForecast {
-  const { today, openingLiquidity, avgRetailPerDay, ar, ap, big, fixed } = input
+  const { today, openingLiquidity, avgRetailPerDay, ar, ap, big, ownerIntake, fixed } = input
   const periods = forecastPeriods(today)
   const weeks: RollingWeek[] = []
-  let opening = openingLiquidity
-  let minClosing = openingLiquidity
+  // Decompose the starting balance: owner money already injected is carried
+  // separately so the chain shows the business position and the owner cushion
+  // explicitly. Subtracting it then re-adding it per week leaves closing real.
+  const ownerAlreadyIn = ownerIntake.reduce((s, o) => (o.date <= today ? s + o.amount : s), 0)
+  let opening = openingLiquidity - ownerAlreadyIn   // business-only opening
+  let minClosing = Infinity
   let firstNegative: string | null = null
 
   for (const p of periods) {
@@ -107,19 +113,20 @@ export function buildRolling(input: {
     const arSum = sumIn(ar, p.start, p.end)
     const apSum = sumIn(ap, p.start, p.end)
     const bigSum = sumIn(big, p.start, p.end)
+    const ownerSum = sumIn(ownerIntake, p.start, p.end)
     const fixedSum = fixed.baseMonthly * (days / DAYS_PER_MONTH_AVG) + fixed.pctRate * retailProj
     const income = retailProj + arSum
     const outflow = apSum + fixedSum + bigSum
-    const closing = opening + income - outflow
+    const closing = opening + income + ownerSum - outflow
     const lbl = label(p.start, p.end)
     if (closing < minClosing) minClosing = closing
     if (firstNegative === null && closing < 0) firstNegative = lbl
     weeks.push({
       start: p.start, end: p.end, label: lbl, days,
-      opening, retailProj, ar: arSum, ap: apSum, fixed: fixedSum, big: bigSum,
+      opening, retailProj, ar: arSum, ownerIntake: ownerSum, ap: apSum, fixed: fixedSum, big: bigSum,
       income, outflow, closing,
     })
     opening = closing
   }
-  return { weeks, minClosing, firstNegative }
+  return { weeks, minClosing: weeks.length ? minClosing : openingLiquidity, firstNegative }
 }
