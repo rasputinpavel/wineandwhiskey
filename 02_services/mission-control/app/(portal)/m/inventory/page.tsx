@@ -7,8 +7,8 @@ import { SortHeader } from '@/components/shell/SortHeader'
 
 export const dynamic = 'force-dynamic'
 
-type SortKey = 'loyverse_product_code' | 'name' | 'category' | 'on_hand' | 'in_store' | 'b2b_in_transit' | 'on_consignment'
-const SORT_KEYS: SortKey[] = ['loyverse_product_code', 'name', 'category', 'on_hand', 'in_store', 'b2b_in_transit', 'on_consignment']
+type SortKey = 'loyverse_product_code' | 'name' | 'category' | 'on_hand' | 'in_store' | 'b2b_in_transit'
+const SORT_KEYS: SortKey[] = ['loyverse_product_code', 'name', 'category', 'on_hand', 'in_store', 'b2b_in_transit']
 const DEFAULT_SORT: SortKey = 'name'
 const DEFAULT_DIR: 'asc' | 'desc' = 'asc'
 
@@ -49,7 +49,7 @@ export default async function InventoryPage({
     req = req.eq('category', categoryFilter)
   }
   if (inStockOnly) {
-    req = req.or('on_hand.gt.0,in_store.gt.0,b2b_in_transit.gt.0,on_consignment.gt.0')
+    req = req.or('on_hand.gt.0,in_store.gt.0,b2b_in_transit.gt.0')
   }
   const { data, error } = await req.limit(500)
   const rows = (data ?? []) as SkuBreakdown[]
@@ -79,26 +79,26 @@ export default async function InventoryPage({
 
       {/* Filters row */}
       <div className="flex items-end gap-3 mb-4 flex-wrap text-xs">
-        <form className="flex items-end gap-3">
-          <label className="flex flex-col gap-1">
+        <form className="flex flex-wrap items-end gap-3 w-full sm:w-auto">
+          <label className="flex flex-col gap-1 w-full sm:w-auto">
             <span className="overline text-graphite">Category</span>
             <select
               name="category"
               defaultValue={categoryFilter}
-              className="px-2 py-1.5 border border-pale-stone bg-warm-white rounded-sm focus:outline-none focus:border-wine-red w-56"
+              className="px-2 py-1.5 border border-pale-stone bg-warm-white rounded-sm focus:outline-none focus:border-wine-red w-full sm:w-56"
             >
               <option value="">All categories ({categories.length})</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-1.5 py-1.5 cursor-pointer" title="Скрыть SKU где все колонки = 0">
+          <label className="flex items-center gap-1.5 py-1.5 cursor-pointer shrink-0" title="Скрыть SKU где все колонки = 0">
             <input
               type="checkbox"
               name="in_stock"
               defaultChecked={inStockOnly}
               className="accent-wine-red"
             />
-            <span className="text-deep-black">Только в наличии</span>
+            <span className="text-deep-black whitespace-nowrap">Только в наличии</span>
           </label>
           {/* Preserve current query + sort when applying filter */}
           {query && <input type="hidden" name="q" value={query} />}
@@ -131,7 +131,6 @@ export default async function InventoryPage({
                 <SortHeader col="on_hand"               label="On hand"        sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
                 <SortHeader col="in_store"              label="In store"       sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
                 <SortHeader col="b2b_in_transit"        label="B2B in transit" sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
-                <SortHeader col="on_consignment"        label="Consignment"    sort={sort} dir={dir} sp={sp} keep={['q','category','in_stock','_submitted']} align="right" />
               </tr>
             </thead>
             <tbody>
@@ -149,11 +148,10 @@ export default async function InventoryPage({
                   <td className="py-2 px-4 text-right tabular-nums">{fmt(r.on_hand)}</td>
                   <td className="py-2 px-4 text-right tabular-nums">{fmt(r.in_store)}</td>
                   <td className="py-2 px-4 text-right tabular-nums text-wine-red">{fmt(r.b2b_in_transit)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums">{fmt(r.on_consignment)}</td>
                 </tr>
               ))}
               {rows.length === 0 && !error && (
-                <tr><td colSpan={7} className="py-10 text-center text-graphite text-sm">
+                <tr><td colSpan={6} className="py-10 text-center text-graphite text-sm">
                   {query || categoryFilter
                     ? `Ничего не нашлось по фильтрам.`
                     : <>No SKUs yet — run <code className="font-mono">npm run inv:all</code>.</>}

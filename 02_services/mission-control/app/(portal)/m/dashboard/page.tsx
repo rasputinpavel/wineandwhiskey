@@ -84,9 +84,9 @@ function AnnualHero({ annual }: { annual: AnnualPlan }) {
   const pct = Math.max(0, Math.min(1, annual.pctOfPlan))
   return (
     <section className="bg-warm-white border border-pale-stone rounded-sm p-5">
-      <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h2 className="font-heading text-lg text-deep-black">Annual plan {annual.year}</h2>
-        <span className="text-xs text-graphite">Plan = last year × 1.25 (from Apr); earlier months locked at actual</span>
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-3 mb-3">
+        <h2 className="font-heading text-lg text-deep-black shrink-0">Annual plan {annual.year}</h2>
+        <span className="text-xs text-graphite sm:text-right">Plan = last year × 1.25 (from Apr); earlier months locked at actual</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Stat label="Fact YTD" value={fmtThbCompact(annual.factYtd)} accent />
