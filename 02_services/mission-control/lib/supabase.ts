@@ -139,6 +139,18 @@ export type MoneyMovement = {
   from_wallet_id: WalletId | null
   to_wallet_id: WalletId | null
   note: string | null
+  owner_contribution: boolean   // inflow that is owner financing, not business income
+  created_at: string
+}
+
+// Big one-off / annual payments for the Rolling forecast (migration 026).
+export type RollingBigPayment = {
+  id: string
+  name: string
+  amount: number
+  due_date: string | null       // 'YYYY-MM-DD' or null (unscheduled)
+  status: 'planned' | 'paid'
+  note: string | null
   created_at: string
 }
 

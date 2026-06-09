@@ -26,6 +26,7 @@ export function MovementForm({ today }: { today: string }) {
   const [to, setTo] = useState<WalletId>('account')
   const [date, setDate] = useState(today)
   const [note, setNote] = useState('')
+  const [owner, setOwner] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -37,7 +38,7 @@ export function MovementForm({ today }: { today: string }) {
     const body =
       kind === 'transfer'
         ? { occurred_on: date, kind, amount: amt, from_wallet_id: from, to_wallet_id: to, note }
-        : { occurred_on: date, kind, amount: amt, wallet_id: wallet, note }
+        : { occurred_on: date, kind, amount: amt, wallet_id: wallet, note, owner_contribution: kind === 'inflow' && owner }
     try {
       const res = await fetch(MV_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error || `HTTP ${res.status}`) }
@@ -85,6 +86,13 @@ export function MovementForm({ today }: { today: string }) {
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="optional"
             className="w-44 px-2 py-1.5 text-sm border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red" />
         </Field>
+
+        {kind === 'inflow' && (
+          <label className="flex items-center gap-1.5 self-center text-xs text-graphite cursor-pointer select-none">
+            <input type="checkbox" checked={owner} onChange={e => setOwner(e.target.checked)} className="accent-amber-gold" />
+            Owner contribution
+          </label>
+        )}
 
         <button onClick={submit} disabled={saving}
           className="px-4 py-1.5 text-sm bg-wine-red text-warm-white rounded-sm disabled:opacity-50 hover:bg-burgundy-deep transition-colors">

@@ -11,7 +11,7 @@ const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{
 
 export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}))
-  const { occurred_on, kind, amount, wallet_id, from_wallet_id, to_wallet_id, note } = b
+  const { occurred_on, kind, amount, wallet_id, from_wallet_id, to_wallet_id, note, owner_contribution } = b
 
   if (!isDate(occurred_on)) return bad('occurred_on must be YYYY-MM-DD')
   if (kind !== 'inflow' && kind !== 'outflow' && kind !== 'transfer') return bad('kind must be inflow|outflow|transfer')
@@ -21,6 +21,7 @@ export async function POST(req: Request) {
   const row: Record<string, unknown> = {
     occurred_on, kind, amount: amt,
     note: note == null ? null : String(note).trim() || null,
+    owner_contribution: kind === 'inflow' && !!owner_contribution,
     wallet_id: null, from_wallet_id: null, to_wallet_id: null,
   }
 

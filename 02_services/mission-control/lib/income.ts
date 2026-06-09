@@ -131,7 +131,8 @@ export type WalletBalance = {
   opening: number
   openingDate: string
   sales: number            // auto inflows from Loyverse
-  inflow: number           // manual inflows
+  inflow: number           // manual inflows (incl. owner contributions)
+  ownerContrib: number     // owner financing — subset of inflow, surfaced separately
   transferIn: number
   transferOut: number
   outflowManual: number
@@ -144,6 +145,7 @@ export type IncomeSummary = {
   byId: Record<WalletId, WalletBalance>
   total: number            // all three wallets (matches the sheet TOTAL)
   business: number         // account + cash (company liquidity for planning)
+  ownerContributions: number // total owner financing folded into liquidity
 }
 
 export function computeBalances(
@@ -159,7 +161,9 @@ export function computeBalances(
       const since = w.opening_date
       const mv = movements.filter(m => m.occurred_on >= since)
       const sales = auto.filter(a => a.wallet === w.id && a.date >= since).reduce((s, a) => s + a.amount, 0)
-      const inflow = sum(mv.filter(m => m.kind === 'inflow' && m.wallet_id === w.id))
+      const inflowMv = mv.filter(m => m.kind === 'inflow' && m.wallet_id === w.id)
+      const inflow = sum(inflowMv)
+      const ownerContrib = sum(inflowMv.filter(m => m.owner_contribution))
       const outflowManual = sum(mv.filter(m => m.kind === 'outflow' && m.wallet_id === w.id))
       const transferIn = sum(mv.filter(m => m.kind === 'transfer' && m.to_wallet_id === w.id))
       const transferOut = sum(mv.filter(m => m.kind === 'transfer' && m.from_wallet_id === w.id))
@@ -167,7 +171,7 @@ export function computeBalances(
       const opening = Number(w.opening_balance)
       return {
         id: w.id, name: w.name, opening, openingDate: since,
-        sales, inflow, transferIn, transferOut, outflowManual, expenses: exp,
+        sales, inflow, ownerContrib, transferIn, transferOut, outflowManual, expenses: exp,
         balance: opening + sales + inflow + transferIn - transferOut - outflowManual - exp,
       }
     })
@@ -179,6 +183,7 @@ export function computeBalances(
     byId,
     total: rows.reduce((s, r) => s + r.balance, 0),
     business: bal('account') + bal('cash'),
+    ownerContributions: rows.reduce((s, r) => s + r.ownerContrib, 0),
   }
 }
 

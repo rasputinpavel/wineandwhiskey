@@ -75,6 +75,12 @@ export const SECTIONS: Section[] = [
         route: m('income'),
         embed: { kind: 'native' },
       },
+      {
+        slug: 'rolling', name: 'Rolling cashflow', icon: '📈', status: 'building',
+        description: 'Недельный прогноз кэшфлоу до конца года: ликвидность, продажи, AR/AP, обязательные, крупные платежи.',
+        route: m('rolling'),
+        embed: { kind: 'native' },
+      },
     ],
   },
 

@@ -58,16 +58,17 @@ export default async function IncomePage() {
       ledgerRows.push({
         date: m.occurred_on, label: m.note || 'Transfer',
         tag: `${WALLET_LABELS[m.from_wallet_id as WalletId]} → ${WALLET_LABELS[m.to_wallet_id as WalletId]}`,
-        amount: m.amount, amountText: fmtThb(m.amount), negative: false, manualId: m.id,
+        amount: m.amount, amountText: fmtThb(m.amount), negative: false, owner: false, manualId: m.id,
       })
     } else {
       const w = WALLET_LABELS[m.wallet_id as WalletId]
       const inflow = m.kind === 'inflow'
+      const owner = inflow && m.owner_contribution
       ledgerRows.push({
-        date: m.occurred_on, label: m.note || (inflow ? 'Income' : 'Withdrawal'),
-        tag: inflow ? `→ ${w}` : `${w} →`,
+        date: m.occurred_on, label: m.note || (owner ? 'Owner financing' : inflow ? 'Income' : 'Withdrawal'),
+        tag: owner ? `↳ owner → ${w}` : inflow ? `→ ${w}` : `${w} →`,
         amount: inflow ? m.amount : -m.amount,
-        amountText: (inflow ? '+' : '−') + fmtThb(m.amount), negative: !inflow, manualId: m.id,
+        amountText: (inflow ? '+' : '−') + fmtThb(m.amount), negative: !inflow, owner, manualId: m.id,
       })
     }
   }
@@ -75,7 +76,7 @@ export default async function IncomePage() {
     ledgerRows.push({
       date: e.date, label: e.description || 'Expense',
       tag: `${WALLET_LABELS[e.wallet]} · ${e.category || 'expense'}`,
-      amount: -e.amount, amountText: '−' + fmtThb(e.amount), negative: true, manualId: null,
+      amount: -e.amount, amountText: '−' + fmtThb(e.amount), negative: true, owner: false, manualId: null,
     })
   }
 
@@ -98,6 +99,12 @@ export default async function IncomePage() {
           <div className="overline text-pale-stone mb-1">Business (account + cash)</div>
           <div className="font-display text-2xl leading-none">{fmtThb(summary.business)}</div>
         </div>
+        {summary.ownerContributions > 0 && (
+          <div className="pl-4 border-l border-amber-gold/40">
+            <div className="overline text-amber-gold mb-1">↳ incl. owner financing</div>
+            <div className="font-display text-2xl leading-none text-amber-gold">{fmtThb(summary.ownerContributions)}</div>
+          </div>
+        )}
       </div>
 
       {expensesError && (
@@ -134,7 +141,10 @@ function WalletCard({ w }: { w: WalletBalance }) {
       </div>
       <div className="mt-2 text-[10px] text-graphite leading-relaxed border-t border-pale-stone/60 pt-1.5">
         {w.sales !== 0 && <Line label="sales" v={Math.abs(w.sales)} sign={w.sales < 0 ? '−' : '+'} />}
-        {w.inflow > 0 && <Line label="in (manual)" v={w.inflow} sign="+" />}
+        {w.ownerContrib > 0 && (
+          <div className="flex justify-between text-amber-gold"><span>owner financing</span><span>+{fmtThb(w.ownerContrib).replace('฿', '฿')}</span></div>
+        )}
+        {w.inflow - w.ownerContrib > 0 && <Line label="in (manual)" v={w.inflow - w.ownerContrib} sign="+" />}
         {w.transferIn > 0 && <Line label="transfer in" v={w.transferIn} sign="+" />}
         {w.transferOut > 0 && <Line label="transfer out" v={w.transferOut} sign="−" />}
         {w.outflowManual > 0 && <Line label="withdrawn" v={w.outflowManual} sign="−" />}
