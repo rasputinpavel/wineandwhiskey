@@ -53,6 +53,15 @@ function dueDateLabel(days: number): string {
   return `через ${days} дн.`;
 }
 
+// Счета, которые висят в Кредиторке/Дебиторке, но платиться не будут —
+// исключаем из утреннего брифинга (не помечаем "paid", т.к. это не оплата).
+const SKIP_NAMES = ["titov", "титов"];
+
+function isSkipped(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return SKIP_NAMES.some(s => n.includes(s));
+}
+
 export interface PaymentAlert {
   tab:      "Дебиторка" | "Кредиторка";
   name:     string;
@@ -77,6 +86,7 @@ export async function getPaymentAlerts(withinDays = 3): Promise<PaymentAlert[]> 
     const amount  = row[2]?.trim() ?? "";
     const dateStr = row[3]?.trim() ?? "";
     if (!name || !dateStr) continue;
+    if (isSkipped(name)) continue;
     const days = daysUntil(dateStr);
     if (days === null) continue;
     if (days <= withinDays) {
@@ -94,6 +104,7 @@ export async function getPaymentAlerts(withinDays = 3): Promise<PaymentAlert[]> 
     const amount  = row[3]?.trim() ?? "";
     const dateStr = row[4]?.trim() ?? "";
     if (!name || !dateStr) continue;
+    if (isSkipped(name)) continue;
     const days = daysUntil(dateStr);
     if (days === null) continue;
     if (days <= withinDays) {
