@@ -139,7 +139,30 @@ function PeriodTable({ rows }: { rows: PeriodRow[] }) {
       <div className="px-5 py-3 border-b border-pale-stone">
         <h3 className="font-heading text-base text-deep-black">By period</h3>
       </div>
-      <div className="overflow-x-auto">
+
+      {/* Mobile: stacked cards (the 10-col table is unusable at 375px) */}
+      <div className="md:hidden divide-y divide-pale-stone/60">
+        {rows.map(r => (
+          <div key={r.key} className="px-4 py-3">
+            <div className="flex items-baseline justify-between mb-2 gap-3">
+              <span className="font-medium text-deep-black">{r.label}</span>
+              <span className="font-display text-lg text-deep-black tabular-nums">{fmtThb(r.total)}</span>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <CardRow k="Retail" v={fmtThb(r.retail)} />
+              <CardRow k="B2B" v={fmtThb(r.b2b)} />
+              <CardRow k="Receipts" v={r.checks.toLocaleString('en-US')} />
+              <CardRow k="Avg check" v={fmtThb(r.avgCheck)} />
+              <CardRow k="GP" v={`${fmtThb(r.gp)} · ${(r.gpPct * 100).toFixed(1)}%`} />
+              <CardRow k="Fixed" v={fmtThb(r.fixed)} />
+              <CardRow k="Profit" v={fmtThb(r.profit)} accent={r.profit < 0} />
+            </dl>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop: full table, unchanged */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-graphite border-b border-pale-stone">
@@ -175,6 +198,14 @@ function Th({ children, className = '' }: { children: React.ReactNode; className
 }
 function Td({ children, bold, className = '' }: { children: React.ReactNode; bold?: boolean; className?: string }) {
   return <td className={`px-3 py-2.5 text-right tabular-nums whitespace-nowrap ${bold ? 'font-medium text-deep-black' : 'text-graphite'} ${className}`}>{children}</td>
+}
+function CardRow({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-graphite">{k}</dt>
+      <dd className={`tabular-nums ${accent ? 'text-wine-red font-medium' : 'text-deep-black'}`}>{v}</dd>
+    </div>
+  )
 }
 
 // ─── Monthly progression (12 bars + plan ticks) ──────────────────────────────

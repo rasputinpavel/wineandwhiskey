@@ -11,7 +11,7 @@ export function PaneHeader({
 }) {
   const section = findSectionForItem(item.slug)
   return (
-    <header className="bg-warm-white border-b border-pale-stone px-6 py-3 flex items-center justify-between gap-4 shrink-0">
+    <header className="bg-warm-white border-b border-pale-stone px-4 md:px-6 py-3 flex items-center justify-between gap-3 md:gap-4 shrink-0">
       <div className="min-w-0 flex items-center gap-3">
         <span className="text-xl leading-none">{item.icon}</span>
         <div className="min-w-0">
@@ -19,10 +19,10 @@ export function PaneHeader({
           <h1 className="font-heading text-lg text-deep-black truncate leading-tight mt-0.5">{item.name}</h1>
         </div>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <span className="flex items-center gap-1.5 text-xs text-graphite">
           <span className={`w-1.5 h-1.5 rounded-full ${statusDotClasses(item.status)}`} />
-          {STATUS_LABEL[item.status]}
+          <span className="hidden md:inline">{STATUS_LABEL[item.status]}</span>
         </span>
         {rightSlot}
         {externalHref && (

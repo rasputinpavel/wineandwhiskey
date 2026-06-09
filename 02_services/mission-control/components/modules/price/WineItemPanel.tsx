@@ -276,7 +276,7 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
             <Field label="Производитель" editing={isEditing} value={isEditing ? form.winery : (item?.winery ?? '—')}
               input={<input className={INPUT} value={form.winery} onChange={e => set('winery', e.target.value)} placeholder="Winery" />}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Страна" editing={isEditing} value={isEditing ? form.country : (item?.country ?? '—')}
                 input={<input className={INPUT} value={form.country} onChange={e => set('country', e.target.value)} placeholder="Франция" />}
               />
@@ -298,7 +298,7 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
                 input={<input className={INPUT} type="number" value={form.price} onChange={e => set('price', e.target.value)} placeholder="0" />}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Категория" editing={isEditing} value={isEditing ? form.category : (item?.category ?? '—')}
                 input={
                   <select className={INPUT} value={form.category} onChange={e => set('category', e.target.value)}>

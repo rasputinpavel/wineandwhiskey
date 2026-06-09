@@ -1,9 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { NavTabs, type NavTab } from '@/components/shell/NavTabs'
 
-const TABS = [
+const TABS: NavTab[] = [
   { href: '/m/customers',              label: 'List' },
   { href: '/m/customers/outstanding',  label: 'Outstanding Invoices' },
   { href: '/m/customers/tax-invoices', label: 'Tax Invoices' },
@@ -15,28 +15,12 @@ const SUB_ROUTES = new Set(['outstanding', 'tax-invoices'])
 
 export function CustomersNav() {
   const pathname = usePathname() || ''
-  return (
-    <nav className="flex gap-1 px-6 py-2 bg-warm-white border-b border-pale-stone">
-      {TABS.map(t => {
-        const detailMatch = pathname.match(/^\/m\/customers\/([^/]+)$/)
-        const isDetail = detailMatch && !SUB_ROUTES.has(detailMatch[1])
-        const active = t.href === '/m/customers'
-          ? pathname === t.href || isDetail
-          : pathname === t.href || pathname.startsWith(t.href + '/')
-        return (
-          <Link
-            key={t.href}
-            href={t.href}
-            className={`px-3 py-1.5 text-xs rounded-sm transition-colors ${
-              active
-                ? 'bg-wine-red text-warm-white'
-                : 'text-graphite hover:text-wine-red hover:bg-cream'
-            }`}
-          >
-            {t.label}
-          </Link>
-        )
-      })}
-    </nav>
-  )
+  const isActive = (href: string) => {
+    const detailMatch = pathname.match(/^\/m\/customers\/([^/]+)$/)
+    const isDetail = !!detailMatch && !SUB_ROUTES.has(detailMatch[1])
+    return href === '/m/customers'
+      ? pathname === href || isDetail
+      : pathname === href || pathname.startsWith(href + '/')
+  }
+  return <NavTabs tabs={TABS} isActive={isActive} />
 }

@@ -84,7 +84,7 @@ export function MapLineCell({ lineId, defaultQuery }: {
           Map to SKU
         </button>
       ) : (
-        <div className="absolute right-0 top-0 z-30 w-[420px] bg-warm-white border border-pale-stone rounded-md shadow-card-hover">
+        <div className="absolute right-0 top-0 z-30 w-[min(92vw,420px)] bg-warm-white border border-pale-stone rounded-md shadow-card-hover">
           <div className="p-2 border-b border-pale-stone">
             <input
               type="text"

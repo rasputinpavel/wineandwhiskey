@@ -861,7 +861,9 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
         <div className="font-heading text-sm text-deep-black">Last 12 months + current · net profit</div>
         <div className="text-[10px] text-graphite">click a bar to drill into a month</div>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+      {/* Mobile: scroll at a legible size instead of shrinking labels to ~5px. Desktop unchanged. */}
+      <div className="overflow-x-auto md:overflow-visible no-scrollbar">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[34rem] md:min-w-0" preserveAspectRatio="xMidYMid meet">
         <line x1={padX} y1={zeroY} x2={w - padX} y2={zeroY} stroke="#D4C9BC" strokeWidth={0.5} />
 
         {months.map((m, i) => {
@@ -914,6 +916,7 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
           )
         })}
       </svg>
+      </div>
 
       {/* Trailing-year summary — closed months only, excludes in-progress current. */}
       <div className="mt-3 pt-3 border-t border-pale-stone grid grid-cols-2 gap-4 text-xs">

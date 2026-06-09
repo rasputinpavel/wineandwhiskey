@@ -98,7 +98,7 @@ function SourceBadge({ sourceKey, status, onSynced }: {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-[400px] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-4 text-left">
+        <div className="absolute right-0 top-full mt-1 z-30 w-[min(92vw,400px)] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-4 text-left">
           <div className="font-heading text-sm text-deep-black mb-1">{def.label}</div>
           <p className="text-xs text-graphite leading-relaxed mb-3">{def.description}</p>
 

@@ -100,7 +100,7 @@ export function NewPromoFormClient({ products }: { products: ProductImage[] }) {
         />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Starts">
           <input type="date" value={startsOn}
             onChange={e => {
@@ -133,7 +133,7 @@ export function NewPromoFormClient({ products }: { products: ProductImage[] }) {
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search products…"
-            className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-1 w-48"
+            className="text-xs border border-pale-stone bg-warm-white rounded-sm px-2 py-1 w-40 sm:w-48"
           />
         </div>
         {selected.size > 0 && (

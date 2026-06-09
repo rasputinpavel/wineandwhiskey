@@ -84,8 +84,8 @@ export function SkuSearchBox({
   }
 
   return (
-    <form ref={formRef} className="mb-6 flex gap-2 items-start">
-      <div ref={wrapRef} className="relative w-[360px]">
+    <form ref={formRef} className="mb-6 flex flex-wrap gap-2 items-start">
+      <div ref={wrapRef} className="relative w-full md:w-[360px]">
         <input
           name="q"
           value={query}

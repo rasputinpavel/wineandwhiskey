@@ -105,7 +105,7 @@ export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial 
 
   return (
     <form onSubmit={e => { e.preventDefault(); save() }} className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 max-w-md">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
         <label className="block">
           <span className="overline text-graphite">Number</span>
           <input

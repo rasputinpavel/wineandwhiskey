@@ -9,7 +9,7 @@ export default function PriceLayout({ children }: { children: React.ReactNode })
       <PaneHeader item={item} />
       <PriceNav />
       <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="px-6 py-6">
+        <div className="px-4 py-4 md:px-6 md:py-6">
           {children}
         </div>
       </div>

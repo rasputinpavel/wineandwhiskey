@@ -7,9 +7,12 @@ import { Item, Section, SECTIONS, statusDotClasses } from '@/lib/registry'
 type Props = {
   allowedSlugs: string[]
   userLogin: string
+  /** Mobile drawer state — ignored on md+ where the sidebar is always docked. */
+  open?: boolean
+  onClose?: () => void
 }
 
-export function Sidebar({ allowedSlugs, userLogin }: Props) {
+export function Sidebar({ allowedSlugs, userLogin, open = false, onClose }: Props) {
   const pathname = usePathname() || ''
   const allowed = new Set(allowedSlugs)
 
@@ -18,7 +21,21 @@ export function Sidebar({ allowedSlugs, userLogin }: Props) {
     .filter(s => s.items.length > 0)
 
   return (
-    <aside className="w-[260px] shrink-0 bg-warm-white border-r border-pale-stone overflow-y-auto h-screen sticky top-0">
+    <>
+      {/* Backdrop — mobile only, dismisses the drawer on tap */}
+      {open && (
+        <div
+          onClick={onClose}
+          aria-hidden
+          className="md:hidden fixed inset-0 z-40 bg-deep-black/40"
+        />
+      )}
+      <aside
+        className={`w-[260px] shrink-0 bg-warm-white border-r border-pale-stone overflow-y-auto h-screen
+          fixed inset-y-0 left-0 z-50 transition-transform duration-200
+          md:sticky md:top-0 md:translate-x-0 md:transition-none
+          ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      >
       <div className="px-5 py-5 border-b border-pale-stone">
         <Link href="/" className="flex items-baseline gap-1">
           <span className="font-display text-xl tracking-display text-wine-red leading-none">WINE</span>
@@ -41,7 +58,8 @@ export function Sidebar({ allowedSlugs, userLogin }: Props) {
           </button>
         </form>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }
 

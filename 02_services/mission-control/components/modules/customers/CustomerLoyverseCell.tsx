@@ -77,7 +77,7 @@ export function CustomerLoyverseCell({ customerId, initialLoyverseId, initialLoy
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 w-[340px] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-2">
+        <div className="absolute left-0 top-full mt-1 z-30 w-[min(92vw,340px)] bg-warm-white border border-pale-stone rounded-md shadow-card-hover p-2">
           <input
             autoFocus type="search" value={query}
             onChange={e => setQuery(e.target.value)}

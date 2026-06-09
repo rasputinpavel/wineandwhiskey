@@ -9,7 +9,7 @@ export default function WineMatrixLayout({ children }: { children: React.ReactNo
       <PaneHeader item={item} />
       <WineMatrixNav />
       <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1400px] mx-auto px-6 py-6">
+        <div className="max-w-[1400px] mx-auto px-4 py-4 md:px-6 md:py-6">
           {children}
         </div>
       </div>

@@ -18,6 +18,10 @@ html, body {
 ::-webkit-scrollbar-thumb { background: #D4C9BC; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3D3D3D; }
 
+/* Hide scrollbar on horizontally-scrollable rows (e.g. module nav tabs on mobile) */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* --- overline label per design system: Inter SemiBold 11px UPPERCASE --- */
 .overline {
   font-family: 'Inter', system-ui, sans-serif;
@@ -26,4 +30,22 @@ html, body {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   line-height: 1;
+}
+
+/* --- Mobile: wide data tables scroll horizontally instead of crushing columns.
+   Tables are near-universally a direct child of an overflow-{hidden,x-auto}
+   card wrapper, so we flip those to horizontal scroll and give the table a
+   readable floor width. Desktop (md+) is untouched. --- */
+@media (max-width: 767px) {
+  .overflow-hidden:has(> table),
+  .overflow-x-auto:has(> table),
+  .overflow-auto:has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .overflow-hidden:has(> table) > table,
+  .overflow-x-auto:has(> table) > table,
+  .overflow-auto:has(> table) > table {
+    min-width: 40rem;
+  }
 }

@@ -7,7 +7,7 @@ export default function IncomeLayout({ children }: { children: React.ReactNode }
     <>
       <PaneHeader item={item} />
       <div className="flex-1 overflow-y-auto bg-cream">
-        <div className="max-w-[1100px] mx-auto px-6 py-6">
+        <div className="max-w-[1100px] mx-auto px-4 py-4 md:px-6 md:py-6">
           {children}
         </div>
       </div>

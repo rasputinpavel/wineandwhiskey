@@ -184,7 +184,8 @@ export default async function B2bPage({
       {invoices.length === 0 ? (
         <div className="text-graphite text-sm">No outstanding invoices match the filters.</div>
       ) : (
-        <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+        <div className="bg-warm-white border border-pale-stone rounded-md overflow-x-auto">
+          <div className="min-w-[44rem]">
           {/* Header row — sortable */}
           <div className="grid grid-cols-[40px_140px_1fr_110px_110px_70px_110px_110px] gap-2 items-center text-[11px] py-2 px-2 border-b border-pale-stone bg-cream/40 text-graphite">
             <span />
@@ -219,6 +220,7 @@ export default async function B2bPage({
               </details>
             )
           })}
+          </div>
         </div>
       )}
     </>
@@ -280,14 +282,14 @@ function SetTermsHint({ customerId }: { customerId: string | null }) {
 function InvoiceLines({ lines, detailUrl }: { lines: Line[]; detailUrl: string | null }) {
   if (lines.length === 0) {
     return (
-      <div className="px-12 py-3 text-xs text-graphite bg-cream/30">
+      <div className="px-4 md:px-12 py-3 text-xs text-graphite bg-cream/30">
         Нет позиций — возможно, инвойс ещё не разобран.
         {detailUrl && <a href={detailUrl} target="_blank" className="text-wine-red hover:underline ml-1">Открыть в FlowAccount ↗</a>}
       </div>
     )
   }
   return (
-    <div className="px-12 py-3 bg-cream/30 border-t border-pale-stone/30">
+    <div className="px-4 md:px-12 py-3 bg-cream/30 border-t border-pale-stone/30">
       <table className="w-full text-[12px]">
         <thead className="text-graphite">
           <tr>

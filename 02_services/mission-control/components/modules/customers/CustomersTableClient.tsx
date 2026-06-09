@@ -168,7 +168,7 @@ export function CustomersTableClient({
 
       {/* Sticky action bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2.5 bg-deep-black text-warm-white rounded-md shadow-card-hover text-xs">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 max-w-[calc(100vw-1.5rem)] px-4 py-2.5 bg-deep-black text-warm-white rounded-md shadow-card-hover text-xs">
           <span><span className="font-medium tabular-nums">{selected.size}</span> selected</span>
 
           {!showNameInput ? (
@@ -208,7 +208,7 @@ export function CustomersTableClient({
                   if (e.key === 'Escape') { setShowNameInput(false); setGroupName('') }
                 }}
                 placeholder="Group name (e.g. Fine Cusine)"
-                className="px-2 py-1 bg-warm-white/10 border border-warm-white/40 rounded-sm text-warm-white placeholder:text-warm-white/40 w-56 focus:outline-none focus:border-warm-white"
+                className="px-2 py-1 bg-warm-white/10 border border-warm-white/40 rounded-sm text-warm-white placeholder:text-warm-white/40 w-40 md:w-56 focus:outline-none focus:border-warm-white"
               />
               <button onClick={createGroup} disabled={busy || !groupName.trim()}
                       className="px-3 py-1 bg-wine-red rounded-sm disabled:opacity-50">

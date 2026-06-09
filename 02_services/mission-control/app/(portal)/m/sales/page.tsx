@@ -241,7 +241,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </label>
 
             <input name="q" defaultValue={sp.q ?? ''} placeholder="Search name…"
-              className="ml-auto border border-pale-stone bg-warm-white rounded-sm px-2 py-0.5 w-48" />
+              className="ml-auto border border-pale-stone bg-warm-white rounded-sm px-2 py-0.5 w-full md:w-48" />
             <button type="submit" className="px-3 py-0.5 bg-deep-black text-warm-white rounded-sm">Apply</button>
             {hasActiveFilter(sp) && (
               <a href="/m/sales" className="text-graphite hover:text-wine-red">clear</a>
