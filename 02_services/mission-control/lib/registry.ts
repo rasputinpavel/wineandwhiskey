@@ -63,6 +63,18 @@ export const SECTIONS: Section[] = [
         route: m('pulse'),
         embed: { kind: 'native' },
       },
+      {
+        slug: 'dashboard', name: 'Dashboard', icon: '📊', status: 'building',
+        description: 'Годовой план, выручка/GP по периодам, помесячная динамика, дневная выручка. Нативно из Loyverse.',
+        route: m('dashboard'),
+        embed: { kind: 'native' },
+      },
+      {
+        slug: 'income', name: 'Income / Cash', icon: '💵', status: 'building',
+        description: 'Кошельки Счёт/Касса/Личный: приходы, переводы между кошельками, остатки и ликвидность. Расходы читаются из Expenses.',
+        route: m('income'),
+        embed: { kind: 'native' },
+      },
     ],
   },
 
@@ -111,18 +123,6 @@ export const SECTIONS: Section[] = [
     key: 'analytics', label: 'Аналитика',
     description: 'Дашборды, метрики, отчёты',
     items: [
-      {
-        slug: 'dashboard', name: 'Dashboard', icon: '📊', status: 'building',
-        description: 'Годовой план, выручка/GP по периодам, помесячная динамика, дневная выручка. Нативно из Loyverse.',
-        route: m('dashboard'),
-        embed: { kind: 'native' },
-      },
-      {
-        slug: 'income', name: 'Income / Cash', icon: '💵', status: 'building',
-        description: 'Кошельки Счёт/Касса/Личный: приходы, переводы между кошельками, остатки и ликвидность. Расходы читаются из Expenses.',
-        route: m('income'),
-        embed: { kind: 'native' },
-      },
       {
         slug: 'dashboard-sheet', name: 'Dashboard (Google Sheet)', icon: '📑', status: 'live',
         description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Переносится в портал поэтапно.',
