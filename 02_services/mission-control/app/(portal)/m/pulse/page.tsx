@@ -244,18 +244,31 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   // obligationMonth(YYYY-MM) → supplierId → settlement total, from consignment
   // POs settled on/after the handover cutoff, bucketed by payment date.
   const consignObligationByMonth = new Map<string, Map<string, number>>()
+  // Paid portion of each settlement, same on-time assumption as regular POs
+  // (payment_date ≤ today → paid). Tracked in parallel so the Settlements card
+  // can show "paid / total" for Harvest, not just the total owed.
+  const consignPaidByMonth = new Map<string, Map<string, number>>()
   for (const p of posAll) {
     const sup = p.supplier ? supByName.get(p.supplier.trim().toLowerCase()) : undefined
     if (sup?.type !== 'consignment' || !sup.id) continue
     const pd = payDate(p)
     if (!pd || pd < HARVEST_PO_CUTOFF) continue          // pre-handover → excluded
     const ym = pd.slice(0, 7)
+    const v = Number(p.total_thb ?? 0)
     let bucket = consignObligationByMonth.get(ym)
     if (!bucket) { bucket = new Map(); consignObligationByMonth.set(ym, bucket) }
-    bucket.set(sup.id, (bucket.get(sup.id) ?? 0) + Number(p.total_thb ?? 0))
+    bucket.set(sup.id, (bucket.get(sup.id) ?? 0) + v)
+    if (pd <= today) {
+      let paidBucket = consignPaidByMonth.get(ym)
+      if (!paidBucket) { paidBucket = new Map(); consignPaidByMonth.set(ym, paidBucket) }
+      paidBucket.set(sup.id, (paidBucket.get(sup.id) ?? 0) + v)
+    }
   }
   function consignObligationBySupId(ym: string): Map<string, number> {
     return consignObligationByMonth.get(ym) ?? new Map<string, number>()
+  }
+  function consignPaidBySupId(ym: string): Map<string, number> {
+    return consignPaidByMonth.get(ym) ?? new Map<string, number>()
   }
   function consignObligationTotal(ym: string): number {
     return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
@@ -270,6 +283,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   }
   // Settlements table reads this for the selected month.
   const consignDebtBySupId = consignObligationBySupId(selectedYm)
+  const consignPaidBySupIdSel = consignPaidBySupId(selectedYm)
   // Fold each month's settlement into its supplier-payments bucket so trend bars
   // + closed-month P&L carry it. The current month also adds the same obligation
   // into supplierPaymentsMtd for its headline. (Consignment POs are kept out of
@@ -459,6 +473,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     const name = sup?.name ?? '(unknown consignment)'
     const cur = supSettleMap.get(name) ?? { name, total: 0, paid: 0 }
     cur.total += debt
+    cur.paid += consignPaidBySupIdSel.get(supId) ?? 0
     supSettleMap.set(name, cur)
   }
 
