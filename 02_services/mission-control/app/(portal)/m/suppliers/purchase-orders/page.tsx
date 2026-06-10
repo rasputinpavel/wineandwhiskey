@@ -6,6 +6,7 @@ import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
+import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,13 +49,16 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   // Fetch suppliers for type lookup
   const { data: supRows } = await sbInventory
     .from('supplier')
-    .select('name,type')
-  const typeByName = new Map<string, Supplier['type']>()
+    .select('name,type,payment_terms_days')
+  const metaByName = new Map<string, { type: Supplier['type']; terms: number }>()
   for (const s of (supRows ?? []) as Supplier[]) {
-    typeByName.set(s.name.trim().toLowerCase(), s.type)
+    metaByName.set(s.name.trim().toLowerCase(), { type: s.type, terms: s.payment_terms_days ?? 0 })
   }
   function supType(name: string | null): Supplier['type'] {
-    return typeByName.get((name ?? '').trim().toLowerCase()) ?? 'regular'
+    return metaByName.get((name ?? '').trim().toLowerCase())?.type ?? 'regular'
+  }
+  function termsFor(name: string | null): number {
+    return metaByName.get((name ?? '').trim().toLowerCase())?.terms ?? 0
   }
 
   let pos = (poRows ?? []) as PurchaseOrder[]
@@ -81,6 +85,36 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   const outflow  = grand - inflow
   const paidSum  = pos.filter(p => p.paid_at != null).reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
 
+  // ── Кредиторка / платёжный календарь ──────────────────────────────────────
+  // Все НЕоплаченные closed-PO ПО ВСЕМ МЕСЯЦАМ (не только выбранному). Дата
+  // платежа = order_date + срок поставщика — та же формула, что в Pulse/Rolling.
+  // Консигнация и force-exclude сюда не идут — их не платим обычным счётом.
+  const today = todayBkk()
+  const { data: openRows } = await sbPublic
+    .from('purchase_orders')
+    .select('id,po_number,order_date,supplier,total_thb,status,url,cashflow_override,paid_at,docs_url')
+    .is('paid_at', null)
+    .order('order_date', { ascending: true })
+
+  type OpenPO = PurchaseOrder & { dueDate: string; daysToDue: number }
+  const openPos: OpenPO[] = []
+  for (const p of (openRows ?? []) as PurchaseOrder[]) {
+    if ((p.status ?? '').toLowerCase() !== 'closed') continue
+    if (supType(p.supplier) === 'consignment') continue
+    if (p.cashflow_override === 'exclude') continue
+    if (!p.order_date) continue
+    const dueDate = computeDueDate(p.order_date, termsFor(p.supplier))
+    openPos.push({ ...p, dueDate, daysToDue: daysBetween(dueDate, today) })
+  }
+
+  const overdue  = openPos.filter(p => p.daysToDue < 0)
+  const dueToday = openPos.filter(p => p.daysToDue === 0)
+  const dueWeek  = openPos.filter(p => p.daysToDue > 0 && p.daysToDue <= 7)
+  const dueLater = openPos.filter(p => p.daysToDue > 7)
+  const sumOf = (arr: OpenPO[]) => arr.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  // К оплате прямо сейчас — просрочка + сегодня, старые сверху.
+  const actionable = [...overdue, ...dueToday].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+
   // Month picker — 18 месяцев назад от ТЕКУЩЕГО (Bangkok), а не от выбранного,
   // иначе при переключении в прошлый месяц текущий уезжает за край ленты.
   const months: string[] = []
@@ -104,6 +138,49 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
             <span className="text-deep-black"> force exclude</span> — выкинуть (криво заведённая запись).
             Paid + Docs — для отметки фактической оплаты и ссылки на Drive с tax invoice + receipt.
           </p>
+
+          {/* Кредиторка — платёжный календарь (по всем месяцам, не только выбранному) */}
+          <section className="mb-5 border border-pale-stone rounded-md bg-warm-white overflow-hidden">
+            <div className="px-4 py-2 border-b border-pale-stone bg-cream/40 flex items-baseline justify-between gap-3 flex-wrap">
+              <h3 className="font-heading text-sm text-deep-black">Кредиторка · платёжный календарь</h3>
+              <span className="text-[11px] text-graphite">Неоплаченные PO по всем месяцам. Дата = заказ + отсрочка поставщика.</span>
+            </div>
+            <div className="grid grid-cols-4 divide-x divide-pale-stone">
+              <CalBucket label="Просрочено" sum={sumOf(overdue)}  n={overdue.length}  tone="overdue" />
+              <CalBucket label="Сегодня"    sum={sumOf(dueToday)} n={dueToday.length} tone="today" />
+              <CalBucket label="Эта неделя" sum={sumOf(dueWeek)}  n={dueWeek.length}  tone="week" />
+              <CalBucket label="Позже"      sum={sumOf(dueLater)} n={dueLater.length} tone="later" />
+            </div>
+            {actionable.length > 0 && (
+              <div className="border-t border-pale-stone overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <tbody>
+                    {actionable.map(p => (
+                      <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${
+                        p.daysToDue < 0 ? 'bg-wine-red/[0.05]' : 'bg-amber-gold/[0.10]'
+                      }`}>
+                        <td className="py-1.5 px-4 font-mono text-xs whitespace-nowrap">
+                          {p.url
+                            ? <a href={p.url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{p.po_number}</a>
+                            : p.po_number}
+                        </td>
+                        <td className="py-1.5 px-4 whitespace-nowrap">{p.supplier ?? '—'}</td>
+                        <td className="py-1.5 px-4 text-xs whitespace-nowrap">
+                          {p.daysToDue < 0
+                            ? <span className="text-wine-red">просрочено на {-p.daysToDue} дн · {fmtDate(p.dueDate)}</span>
+                            : <span className="text-deep-black">сегодня · {fmtDate(p.dueDate)}</span>}
+                        </td>
+                        <td className="py-1.5 px-4 text-right tabular-nums whitespace-nowrap">
+                          {p.total_thb ? `฿${fmt(p.total_thb)}` : '—'}
+                        </td>
+                        <td className="py-1.5 px-4"><PaidAtCell poId={p.id} initial={p.paid_at} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
           {/* KPI */}
           <div className="grid grid-cols-4 gap-3 mb-4">
@@ -172,8 +249,19 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
                 {pos.map(p => {
                   const t = supType(p.supplier)
                   const dimmed = !includedInCashflow(p)
+                  // Подсветка по факту оплаты: оплачено → зелёный, иначе по сроку
+                  // (просрочено → wine-red, сегодня → amber). Консигнация/exclude
+                  // не имеют срока платежа — остаются нейтральными.
+                  const payable = t !== 'consignment' && includedInCashflow(p) && p.order_date
+                  const due = payable ? computeDueDate(p.order_date!, termsFor(p.supplier)) : null
+                  const dDue = due ? daysBetween(due, today) : null
+                  const rowTone = p.paid_at != null
+                    ? 'bg-emerald-600/[0.07] border-l-2 border-l-emerald-600/50'
+                    : dDue != null && dDue < 0  ? 'bg-wine-red/[0.05] border-l-2 border-l-wine-red/60'
+                    : dDue != null && dDue === 0 ? 'bg-amber-gold/[0.10] border-l-2 border-l-amber-gold'
+                    : ''
                   return (
-                    <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${dimmed ? 'opacity-70' : ''}`}>
+                    <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${rowTone} ${dimmed ? 'opacity-70' : ''}`}>
                       <td className="py-2 px-4 font-mono">
                         {p.url
                           ? <a href={p.url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{p.po_number}</a>
@@ -225,6 +313,22 @@ const RU_MONTHS = ['Янв','Фев','Мар','Апр','Май','Июн','Июл
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
   return `${RU_MONTHS[m - 1]} ${y}`
+}
+
+function CalBucket({ label, sum, n, tone }: {
+  label: string; sum: number; n: number; tone: 'overdue' | 'today' | 'week' | 'later'
+}) {
+  const bg = tone === 'overdue' ? 'bg-wine-red/[0.05]' : tone === 'today' ? 'bg-amber-gold/[0.10]' : ''
+  const valueCls = tone === 'overdue' ? 'text-wine-red' : 'text-deep-black'
+  return (
+    <div className={`px-4 py-3 ${bg}`}>
+      <div className="text-[10px] uppercase tracking-wide text-graphite">{label}</div>
+      <div className={`text-lg font-medium tabular-nums ${n ? valueCls : 'text-graphite/50'}`}>
+        {n ? `฿${fmt(sum)}` : '—'}
+      </div>
+      <div className="text-[11px] text-graphite/70">{n} PO</div>
+    </div>
+  )
 }
 
 function KPI({ label, value, note, highlight, muted }: { label: string; value: string; note?: string; highlight?: boolean; muted?: boolean }) {
