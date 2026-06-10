@@ -110,13 +110,19 @@ export const SECTIONS: Section[] = [
       // Purchase Orders живёт под Suppliers (вкладка), не отдельным пунктом сайдбара.
       // Tax Invoices — под Customers (вкладка).
       {
+        slug: 'payment-calendar', name: 'Payment Calendar', icon: '🗓', status: 'building',
+        description: 'Кредиторка: неоплаченные PO по всем месяцам, сгруппированы по дате платежа (заказ + отсрочка поставщика).',
+        route: m('payment-calendar'),
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'price', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',
         route: m('price'),
         embed: { kind: 'native' },
       },
       {
-        slug: 'wine-matrix', name: 'Wine Matrix', icon: '🧮', status: 'building',
+        slug: 'wine-matrix', name: 'Wine Matrix', icon: '🧮', status: 'live',
         description: 'Полки по сортам, странам и типам игристого — для планирования закупок.',
         route: m('wine-matrix'),
         embed: { kind: 'native' },
