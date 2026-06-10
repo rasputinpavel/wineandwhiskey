@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sbInventory, sbPublic, type PurchaseOrder, type Supplier } from '@/lib/supabase'
+import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
@@ -9,9 +9,26 @@ import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
-// payDate = actual paid_at when paid, else computed (order_date + terms).
-type CalRow = PurchaseOrder & { payDate: string; daysToDue: number; paid: boolean }
-type Bucket = 'overdue' | 'today' | 'week' | 'later'
+// Двусторонний платёжный календарь: OUT — платежи поставщикам (кредиторка, PO),
+// IN — ожидаемые поступления от B2B-инвойсов (дебиторка). Единый таймлайн по дате
+// с бегущим NET. Дата OUT = paid_at | order_date + отсрочка поставщика; дата IN =
+// due_at | issued_at + отсрочка клиента. Консигнация-PO скрыта, инвойс наследует
+// недельную отсрочку клиента (Golden Brewery) автоматически.
+type Dir = 'out' | 'in'
+type Status = 'overdue' | 'today' | 'future' | 'paid'
+type CalRow = {
+  key: string
+  date: string            // ISO дата платежа/поступления
+  dir: Dir
+  who: string             // supplier | customer
+  label: string           // po_number | invoice number
+  href: string | null
+  amount: number          // всегда положительное
+  status: Status
+  net: number             // бегущий нетто, проставляется после сортировки
+  po?: PurchaseOrder      // OUT: для инлайн-ячеек paid_at / docs
+  inv?: { status: string; detailUrl: string | null }  // IN: для статуса/ссылки
+}
 type SearchParams = { month?: string }   // YYYY-MM; absent = "Open" (outstanding only)
 
 function bangkokYM(): string {
@@ -34,68 +51,131 @@ function monthLabel(ym: string): string {
   return `${RU_MONTHS[m - 1]} ${y}`
 }
 
+function statusFor(date: string, today: string): Exclude<Status, 'paid'> {
+  const dd = daysBetween(date, today)   // date - today
+  if (dd < 0) return 'overdue'
+  if (dd === 0) return 'today'
+  return 'future'
+}
+
 export default async function PaymentCalendarPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
   const month = (sp.month && /^\d{4}-\d{2}$/.test(sp.month)) ? sp.month : null
   const today = todayBkk()
 
-  const COLS = 'id,po_number,order_date,supplier,total_thb,status,url,cashflow_override,paid_at,docs_url'
+  const PO_COLS = 'id,po_number,order_date,supplier,total_thb,status,url,cashflow_override,paid_at,docs_url'
 
-  // Outstanding (unpaid) closed POs — drives the "Open" view and the unpaid part
-  // of a month. Pay date = order_date + supplier terms (the cashflow formula).
-  const { data: openRows, error: poErr } = await sbPublic
-    .from('purchase_orders').select(COLS)
+  // ── OUT: PO (кредиторка) ───────────────────────────────────────────────
+  const { data: openPoData, error: poErr } = await sbPublic
+    .from('purchase_orders').select(PO_COLS)
     .is('paid_at', null)
     .order('order_date', { ascending: true })
-  if (poErr) {
-    return <div className="p-6"><SchemaError error={poErr.message} /></div>
-  }
+  if (poErr) return <div className="p-6"><SchemaError error={poErr.message} /></div>
 
-  // When a month is selected, also pull POs actually PAID in that month so the
-  // tab reads as a full register (paid rows leave "Open" but stay in their month).
-  let paidRows: PurchaseOrder[] = []
+  // В месячном виде дотягиваем PO, фактически оплаченные в этом месяце (зелёные).
+  let paidPoData: PurchaseOrder[] = []
   if (month) {
     const { from, to } = monthBounds(month)
     const { data } = await sbPublic
-      .from('purchase_orders').select(COLS)
+      .from('purchase_orders').select(PO_COLS)
       .not('paid_at', 'is', null)
       .gte('paid_at', from).lte('paid_at', to)
       .order('paid_at', { ascending: true })
-    paidRows = (data ?? []) as PurchaseOrder[]
+    paidPoData = (data ?? []) as PurchaseOrder[]
   }
 
   const { data: supRows } = await sbInventory
     .from('supplier').select('name,type,payment_terms_days')
-  const metaByName = new Map<string, { type: Supplier['type']; terms: number }>()
+  const supByName = new Map<string, { type: Supplier['type']; terms: number }>()
   for (const s of (supRows ?? []) as Supplier[]) {
-    metaByName.set(s.name.trim().toLowerCase(), { type: s.type, terms: s.payment_terms_days ?? 0 })
+    supByName.set(s.name.trim().toLowerCase(), { type: s.type, terms: s.payment_terms_days ?? 0 })
   }
-  const supType  = (n: string | null): Supplier['type'] => metaByName.get((n ?? '').trim().toLowerCase())?.type ?? 'regular'
-  const termsFor = (n: string | null): number          => metaByName.get((n ?? '').trim().toLowerCase())?.terms ?? 0
+  const supType  = (n: string | null): Supplier['type'] => supByName.get((n ?? '').trim().toLowerCase())?.type ?? 'regular'
+  const supTerms = (n: string | null): number          => supByName.get((n ?? '').trim().toLowerCase())?.terms ?? 0
 
-  // Consignment + force-exclude POs are not paid by ordinary invoice — out.
-  function eligible(p: PurchaseOrder): boolean {
+  // Консигнация + force-exclude PO платятся не обычным инвойсом — наружу.
+  function poEligible(p: PurchaseOrder): boolean {
     if ((p.status ?? '').toLowerCase() !== 'closed') return false
     if (supType(p.supplier) === 'consignment') return false
     if (p.cashflow_override === 'exclude') return false
     return !!p.order_date
   }
 
-  const openPos: CalRow[] = []
-  for (const p of (openRows ?? []) as PurchaseOrder[]) {
-    if (!eligible(p)) continue
-    const payDate = computeDueDate(p.order_date!, termsFor(p.supplier))
-    openPos.push({ ...p, payDate, daysToDue: daysBetween(payDate, today), paid: false })
+  const outOpen: CalRow[] = []
+  for (const p of (openPoData ?? []) as PurchaseOrder[]) {
+    if (!poEligible(p)) continue
+    const date = computeDueDate(p.order_date!, supTerms(p.supplier))
+    outOpen.push({
+      key: `po-${p.id}`, date, dir: 'out', who: p.supplier ?? '—',
+      label: p.po_number, href: p.url, amount: Number(p.total_thb ?? 0),
+      status: statusFor(date, today), net: 0, po: p,
+    })
   }
-  openPos.sort((a, b) => a.payDate.localeCompare(b.payDate))
+  const outPaid: CalRow[] = paidPoData.filter(poEligible).map(p => ({
+    key: `po-${p.id}`, date: p.paid_at!, dir: 'out' as Dir, who: p.supplier ?? '—',
+    label: p.po_number, href: p.url, amount: Number(p.total_thb ?? 0),
+    status: 'paid' as Status, net: 0, po: p,
+  }))
 
-  const sumOf = (arr: CalRow[]) => arr.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+  // ── IN: B2B-инвойсы (дебиторка) ────────────────────────────────────────
+  const [{ data: invData, error: invErr }, { data: custData, error: custErr }] = await Promise.all([
+    sbInventory
+      .from('flowaccount_invoice')
+      .select('id, number, customer_id, customer_name, issued_at, due_at, status, total, detail_url, excluded')
+      .not('status', 'in', '(Paid,Cancelled)')
+      .eq('excluded', false)
+      .limit(500),
+    sbInventory.from('b2b_customer').select('id, payment_terms_days'),
+  ])
+  if (invErr)  return <div className="p-6"><SchemaError error={invErr.message} /></div>
+  if (custErr) return <div className="p-6"><SchemaError error={custErr.message} /></div>
 
-  // Month strip: 2 months forward (due dates can land next month) + 11 back.
+  const custTerms = new Map<string, number>()
+  for (const c of (custData ?? []) as { id: string; payment_terms_days: number }[]) {
+    custTerms.set(c.id, c.payment_terms_days ?? 0)
+  }
+  // due_at из FA часто = '' (не null) → || ловит оба случая.
+  function invoiceDue(inv: FlowInvoice): string | null {
+    const terms = inv.customer_id ? (custTerms.get(inv.customer_id) ?? 0) : 0
+    return (inv.due_at || (terms > 0 ? computeDueDate(inv.issued_at, terms) : null)) || null
+  }
+
+  const inOpen: CalRow[] = []
+  const inNoDate: FlowInvoice[] = []   // нет вычислимой даты — отдельным списком, не в NET
+  for (const inv of (invData ?? []) as FlowInvoice[]) {
+    const date = invoiceDue(inv)
+    if (!date) { inNoDate.push(inv); continue }
+    inOpen.push({
+      key: `inv-${inv.id}`, date, dir: 'in', who: inv.customer_name,
+      label: inv.number, href: inv.detail_url, amount: Number(inv.total ?? 0),
+      status: statusFor(date, today), net: 0,
+      inv: { status: inv.status, detailUrl: inv.detail_url },
+    })
+  }
+
+  // ── Сборка вида ────────────────────────────────────────────────────────
+  let rows: CalRow[]
+  if (month) {
+    const inMonth = (d: string) => d.slice(0, 7) === month
+    rows = [
+      ...outOpen.filter(r => inMonth(r.date)),
+      ...outPaid,                                  // уже отфильтрованы по paid_at месяца
+      ...inOpen.filter(r => inMonth(r.date)),
+    ]
+  } else {
+    rows = [...outOpen, ...inOpen]
+  }
+  rows.sort((a, b) => a.date.localeCompare(b.date) || (a.dir === b.dir ? 0 : a.dir === 'out' ? -1 : 1))
+  let net = 0
+  for (const r of rows) { net += r.dir === 'in' ? r.amount : -r.amount; r.net = net }
+
+  const sumOut = (arr: CalRow[]) => arr.filter(r => r.dir === 'out').reduce((s, r) => s + r.amount, 0)
+  const sumIn  = (arr: CalRow[]) => arr.filter(r => r.dir === 'in').reduce((s, r) => s + r.amount, 0)
+
+  // Month strip: 2 месяца вперёд (даты могут уезжать в след. месяц) + 11 назад.
   const months: string[] = []
-  const [curY, curM] = bangkokYM().split('-').map(Number)
-  let py = curY, pm = curM + 2
-  while (pm > 12) { pm -= 12; py++ }
+  let [py, pm] = bangkokYM().split('-').map(Number)
+  pm += 2; while (pm > 12) { pm -= 12; py++ }
   for (let i = 0; i < 14; i++) {
     months.push(`${py}-${String(pm).padStart(2, '0')}`)
     pm--; if (pm < 1) { pm = 12; py-- }
@@ -107,13 +187,14 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
         <h2 className="font-heading text-xl text-deep-black">
           Payment Calendar · {month ? monthLabel(month) : 'Open'}
         </h2>
-        <DataFreshness sources={['purchase_orders']} />
+        <DataFreshness sources={['purchase_orders', 'flowaccount_invoices']} />
       </div>
       <p className="text-graphite text-sm mb-4 max-w-3xl">
-        Платежи поставщикам по дате оплаты (<span className="text-deep-black">paid_at</span>, иначе
-        order_date + отсрочка). Консигнация и force-exclude скрыты.
-        <span className="text-deep-black"> Open</span> — оперативная сводка неоплаченного по срочности;
-        как только PO оплачен, он уходит из Open и остаётся во вкладке своего месяца (зелёным).
+        Платежи в обе стороны по дате. <span className="text-wine-red">OUT</span> — поставщикам
+        (PO + отсрочка), <span className="text-emerald-700">IN</span> — ожидаемые поступления от
+        B2B-инвойсов (issued + отсрочка клиента). Консигнация-PO и force-exclude скрыты; оплаченные
+        инвойсы уходят из календаря. <span className="text-deep-black">Open</span> — всё открытое по
+        дате с бегущим нетто.
       </p>
 
       {/* Month strip */}
@@ -138,136 +219,100 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
         ))}
       </div>
 
-      {month === null
-        ? <OpenView openPos={openPos} sumOf={sumOf} />
-        : <MonthView
-            month={month}
-            unpaid={openPos.filter(p => p.payDate.slice(0, 7) === month)}
-            paid={paidRows.filter(eligible).map(p => ({
-              ...p, payDate: p.paid_at!, daysToDue: daysBetween(p.paid_at!, today), paid: true,
-            }))}
-            sumOf={sumOf}
-          />}
-    </>
-  )
-}
-
-// ── Default "Open" view — outstanding only, bucketed by urgency vs today ──────
-function OpenView({ openPos, sumOf }: { openPos: CalRow[]; sumOf: (a: CalRow[]) => number }) {
-  function bucketOf(p: CalRow): Bucket {
-    if (p.daysToDue < 0) return 'overdue'
-    if (p.daysToDue === 0) return 'today'
-    if (p.daysToDue <= 7) return 'week'
-    return 'later'
-  }
-  const groups: Record<Bucket, CalRow[]> = { overdue: [], today: [], week: [], later: [] }
-  for (const p of openPos) groups[bucketOf(p)].push(p)
-
-  return (
-    <>
+      {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <KPI label="Просрочено" sum={sumOf(groups.overdue)} n={groups.overdue.length} tone="overdue" />
-        <KPI label="Сегодня"    sum={sumOf(groups.today)}   n={groups.today.length}   tone="today" />
-        <KPI label="Эта неделя" sum={sumOf(groups.week)}    n={groups.week.length}    tone="week" />
-        <KPI label="Позже"      sum={sumOf(groups.later)}   n={groups.later.length}   tone="later" />
+        {month ? (() => {
+          const unpaidOut = rows.filter(r => r.dir === 'out' && r.status !== 'paid')
+          const paidOut   = rows.filter(r => r.dir === 'out' && r.status === 'paid')
+          const inRows    = rows.filter(r => r.dir === 'in')
+          const m = sumIn(rows) - sumOut(rows)   // нетто месяца, как финал бегущего NET (вкл. оплаченные)
+          return <>
+            <KPI label="К оплате (OUT)" sum={sumOut(unpaidOut)} n={unpaidOut.length} tone="out" />
+            <KPI label="К получению (IN)" sum={sumIn(inRows)} n={inRows.length} tone="in" />
+            <KPI label="Оплачено (PO)" sum={sumOut(paidOut)} n={paidOut.length} tone="paid" />
+            <KPI label="NET" sum={m} n={rows.length} tone="net" />
+          </>
+        })() : (() => {
+          const o = sumOut(rows), i = sumIn(rows)
+          const overdueOut = rows.filter(r => r.dir === 'out' && r.status === 'overdue')
+          const overdueIn  = rows.filter(r => r.dir === 'in'  && r.status === 'overdue')
+          return <>
+            <KPI label="К оплате (OUT)" sum={o} n={rows.filter(r => r.dir === 'out').length} tone="out"
+              note={overdueOut.length ? `просрочено ฿${fmt(sumOut(overdueOut))}` : undefined} />
+            <KPI label="К получению (IN)" sum={i} n={rows.filter(r => r.dir === 'in').length} tone="in"
+              note={overdueIn.length ? `просрочено ฿${fmt(sumIn(overdueIn))}` : undefined} />
+            <KPI label="NET" sum={i - o} n={rows.length} tone="net" />
+            <KPI label="Без даты (IN)" sum={inNoDate.reduce((s, x) => s + Number(x.total ?? 0), 0)}
+              n={inNoDate.length} tone="muted" />
+          </>
+        })()}
       </div>
 
-      {openPos.length === 0 ? <Empty /> : (
-        <div className="space-y-5">
-          <POTable title="Просрочено" headTone="overdue" rows={groups.overdue} />
-          <POTable title="Сегодня"    headTone="today"   rows={groups.today} />
-          <POTable title="Эта неделя" headTone="week"    rows={groups.week} />
-          <POTable title="Позже"      headTone="later"   rows={groups.later} />
-        </div>
-      )}
-
-      <div className="mt-5 text-xs text-graphite/70 tabular-nums">
-        Всего открыто: ฿{fmt(sumOf(openPos))} · {openPos.length} PO
-      </div>
-    </>
-  )
-}
-
-// ── Month view — everything with a payment date in the month (paid + unpaid) ──
-function MonthView({ month, unpaid, paid, sumOf }: {
-  month: string; unpaid: CalRow[]; paid: CalRow[]; sumOf: (a: CalRow[]) => number
-}) {
-  const rows = [...unpaid, ...paid].sort((a, b) => a.payDate.localeCompare(b.payDate))
-  const overdue = unpaid.filter(p => p.daysToDue < 0)
-  return (
-    <>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
-        <KPI label="К оплате" sum={sumOf(unpaid)} n={unpaid.length} tone="later" />
-        <KPI label="из них просрочено" sum={sumOf(overdue)} n={overdue.length} tone="overdue" />
-        <KPI label="Оплачено" sum={sumOf(paid)} n={paid.length} tone="paid" />
-      </div>
       {rows.length === 0
         ? <Empty />
-        : <POTable title={monthLabel(month)} headTone="neutral" rows={rows} />}
+        : <Timeline rows={rows} today={today} />}
+
+      {/* Инвойсы без вычислимой даты оплаты — только в Open */}
+      {month === null && inNoDate.length > 0 && <NoDateList invoices={inNoDate} />}
     </>
   )
 }
 
-function Empty() {
-  return (
-    <div className="bg-warm-white border border-pale-stone rounded-md py-10 text-center text-graphite text-sm">
-      Нет PO с датой платежа в этом периоде.
-    </div>
-  )
-}
-
-function dueLabel(p: CalRow): React.ReactNode {
-  if (p.paid)            return <span className="text-emerald-700">оплачено · {fmtDate(p.payDate)}</span>
-  if (p.daysToDue < 0)   return <span className="text-wine-red">просрочено на {-p.daysToDue} дн · {fmtDate(p.payDate)}</span>
-  if (p.daysToDue === 0) return <span className="text-deep-black">сегодня · {fmtDate(p.payDate)}</span>
-  return <span className="text-graphite">через {p.daysToDue} дн · {fmtDate(p.payDate)}</span>
-}
-
-function POTable({ title, headTone, rows }: {
-  title: string; headTone: Bucket | 'neutral'; rows: CalRow[]
-}) {
-  if (rows.length === 0) return null
-  const headBg = headTone === 'overdue' ? 'bg-wine-red/[0.06]' : headTone === 'today' ? 'bg-amber-gold/[0.14]' : 'bg-cream/40'
-  const sum = rows.reduce((s, p) => s + Number(p.total_thb ?? 0), 0)
+// ── Единый нетто-таймлайн ───────────────────────────────────────────────────
+function Timeline({ rows, today }: { rows: CalRow[]; today: string }) {
   return (
     <section className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
-      <div className={`px-4 py-2 border-b border-pale-stone flex items-baseline justify-between ${headBg}`}>
-        <h3 className="font-heading text-sm text-deep-black">{title}</h3>
-        <span className="text-[11px] text-graphite tabular-nums">฿{fmt(sum)} · {rows.length} PO</span>
-      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead className="text-graphite border-b border-pale-stone bg-cream/40">
             <tr>
-              <th className="text-left py-2 px-4 font-medium">PO</th>
-              <th className="text-left py-2 px-4 font-medium">Ordered</th>
-              <th className="text-left py-2 px-4 font-medium">Supplier</th>
-              <th className="text-left py-2 px-4 font-medium">Pay date</th>
-              <th className="text-right py-2 px-4 font-medium">Total</th>
-              <th className="text-left py-2 px-4 font-medium">Paid</th>
-              <th className="text-left py-2 px-4 font-medium">Docs</th>
+              <th className="text-left  py-2 px-4 font-medium">Date</th>
+              <th className="text-left  py-2 px-4 font-medium">Doc</th>
+              <th className="text-left  py-2 px-4 font-medium">Counterparty</th>
+              <th className="text-right py-2 px-4 font-medium">OUT</th>
+              <th className="text-right py-2 px-4 font-medium">IN</th>
+              <th className="text-right py-2 px-4 font-medium">NET</th>
+              <th className="text-left  py-2 px-4 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(p => {
-              const tint = p.paid ? 'bg-emerald-600/[0.07]'
-                : p.daysToDue < 0 ? 'bg-wine-red/[0.05]'
-                : p.daysToDue === 0 ? 'bg-amber-gold/[0.10]' : ''
+            {rows.map(r => {
+              const tint = r.status === 'paid' ? 'bg-emerald-600/[0.07]'
+                : r.status === 'overdue' ? 'bg-wine-red/[0.05]'
+                : r.status === 'today' ? 'bg-amber-gold/[0.10]' : ''
+              const dirBorder = r.dir === 'out' ? 'border-l-2 border-l-wine-red/40' : 'border-l-2 border-l-emerald-600/40'
               return (
-                <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${tint}`}>
+                <tr key={r.key} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${dirBorder} ${tint}`}>
+                  <td className="py-2 px-4 whitespace-nowrap">
+                    <div className="text-xs">{fmtDate(r.date)}</div>
+                    <div className="text-[11px]">{whenLabel(r, today)}</div>
+                  </td>
                   <td className="py-2 px-4 font-mono text-xs whitespace-nowrap">
-                    {p.url
-                      ? <a href={p.url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{p.po_number}</a>
-                      : p.po_number}
+                    <span className={r.dir === 'out' ? 'text-wine-red' : 'text-emerald-700'}>
+                      {r.dir === 'out' ? '↗' : '↘'}
+                    </span>{' '}
+                    {r.href
+                      ? <a href={r.href} target="_blank" rel="noreferrer" className="hover:underline">{r.label}</a>
+                      : r.label}
                   </td>
-                  <td className="py-2 px-4 text-graphite text-xs whitespace-nowrap">{fmtDate(p.order_date)}</td>
-                  <td className="py-2 px-4 whitespace-nowrap">{p.supplier ?? '—'}</td>
-                  <td className="py-2 px-4 text-xs whitespace-nowrap">{dueLabel(p)}</td>
-                  <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">
-                    {p.total_thb ? `฿${fmt(p.total_thb)}` : '—'}
+                  <td className="py-2 px-4 whitespace-nowrap">{r.who}</td>
+                  <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap text-wine-red">
+                    {r.dir === 'out' ? `฿${fmt(r.amount)}` : ''}
                   </td>
-                  <td className="py-2 px-4"><PaidAtCell poId={p.id} initial={p.paid_at} /></td>
-                  <td className="py-2 px-4"><DocsUrlCell poId={p.id} initial={p.docs_url} /></td>
+                  <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap text-emerald-700">
+                    {r.dir === 'in' ? `฿${fmt(r.amount)}` : ''}
+                  </td>
+                  <td className={`py-2 px-4 text-right tabular-nums whitespace-nowrap ${r.net < 0 ? 'text-wine-red' : 'text-deep-black'}`}>
+                    {r.net < 0 ? `-฿${fmt(-r.net)}` : `฿${fmt(r.net)}`}
+                  </td>
+                  <td className="py-2 px-4 whitespace-nowrap">
+                    {r.dir === 'out'
+                      ? <div className="flex items-center gap-2">
+                          <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at} />
+                          <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
+                        </div>
+                      : <InvoiceStatus status={r.inv!.status} overdue={r.status === 'overdue'} detailUrl={r.inv!.detailUrl} />}
+                  </td>
                 </tr>
               )
             })}
@@ -278,18 +323,90 @@ function POTable({ title, headTone, rows }: {
   )
 }
 
-function KPI({ label, sum, n, tone }: { label: string; sum: number; n: number; tone: Bucket | 'paid' }) {
-  const bg = tone === 'overdue' ? 'bg-wine-red/[0.06]'
-    : tone === 'today' ? 'bg-amber-gold/[0.14]'
-    : tone === 'paid' ? 'bg-emerald-600/[0.07]' : 'bg-warm-white'
-  const valueCls = tone === 'overdue' ? 'text-wine-red' : tone === 'paid' ? 'text-emerald-700' : 'text-deep-black'
+function whenLabel(r: CalRow, today: string): React.ReactNode {
+  if (r.status === 'paid') return <span className="text-emerald-700">оплачено</span>
+  const dd = daysBetween(r.date, today)
+  if (dd < 0)   return <span className="text-wine-red">просрочено {-dd} дн</span>
+  if (dd === 0) return <span className="text-deep-black">сегодня</span>
+  return <span className="text-graphite">через {dd} дн</span>
+}
+
+function InvoiceStatus({ status, overdue, detailUrl }: { status: string; overdue: boolean; detailUrl: string | null }) {
+  const display = overdue ? 'Overdue' : (status || '—')
+  const cls = overdue
+    ? 'bg-wine-red/10 text-wine-red border-wine-red/40'
+    : 'bg-amber-gold/10 text-deep-black border-amber-gold/40'
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`inline-block px-2 py-0.5 text-[11px] rounded-sm border ${cls}`}>{display}</span>
+      {detailUrl && <a href={detailUrl} target="_blank" rel="noreferrer" className="text-[11px] text-graphite hover:text-wine-red">↗</a>}
+    </span>
+  )
+}
+
+function NoDateList({ invoices }: { invoices: FlowInvoice[] }) {
+  const total = invoices.reduce((s, x) => s + Number(x.total ?? 0), 0)
+  return (
+    <section className="mt-5 bg-warm-white border border-pale-stone rounded-md overflow-hidden">
+      <div className="px-4 py-2 border-b border-pale-stone bg-cream/40 flex items-baseline justify-between">
+        <h3 className="font-heading text-sm text-deep-black">IN без даты оплаты — нужно задать отсрочку клиента</h3>
+        <span className="text-[11px] text-graphite tabular-nums">฿{fmt(total)} · {invoices.length}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <tbody>
+            {invoices.map(inv => (
+              <tr key={inv.id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
+                <td className="py-2 px-4 font-mono text-xs whitespace-nowrap">
+                  {inv.detail_url
+                    ? <a href={inv.detail_url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{inv.number}</a>
+                    : inv.number}
+                </td>
+                <td className="py-2 px-4 whitespace-nowrap">{inv.customer_name}</td>
+                <td className="py-2 px-4 text-graphite text-xs whitespace-nowrap">{fmtDate(inv.issued_at)}</td>
+                <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap text-emerald-700">฿{fmt(Number(inv.total ?? 0))}</td>
+                <td className="py-2 px-4 text-xs">
+                  <Link href="/m/inventory/customers" className="text-graphite italic hover:text-wine-red">set terms</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function Empty() {
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md py-10 text-center text-graphite text-sm">
+      Нет платежей с датой в этом периоде.
+    </div>
+  )
+}
+
+function KPI({ label, sum, n, tone, note }: {
+  label: string; sum: number; n: number
+  tone: 'out' | 'in' | 'paid' | 'net' | 'muted'; note?: string
+}) {
+  const bg = tone === 'out' ? 'bg-wine-red/[0.06]'
+    : tone === 'in' ? 'bg-emerald-600/[0.06]'
+    : tone === 'paid' ? 'bg-emerald-600/[0.07]'
+    : 'bg-warm-white'
+  const valueCls = tone === 'out' ? 'text-wine-red'
+    : tone === 'in' || tone === 'paid' ? 'text-emerald-700'
+    : tone === 'net' ? (sum < 0 ? 'text-wine-red' : 'text-deep-black')
+    : 'text-graphite'
+  const money = tone === 'net'
+    ? (sum < 0 ? `-฿${fmt(-sum)}` : `฿${fmt(sum)}`)
+    : `฿${fmt(sum)}`
   return (
     <div className={`px-4 py-3 rounded-md border border-pale-stone ${bg}`}>
       <div className="text-[10px] uppercase tracking-wide text-graphite">{label}</div>
       <div className={`text-lg font-medium tabular-nums ${n ? valueCls : 'text-graphite/50'}`}>
-        {n ? `฿${fmt(sum)}` : '—'}
+        {n ? money : '—'}
       </div>
-      <div className="text-[11px] text-graphite/70">{n} PO</div>
+      <div className="text-[11px] text-graphite/70">{note ?? `${n} шт`}</div>
     </div>
   )
 }

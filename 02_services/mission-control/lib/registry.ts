@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'pulse' | 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
+export type SectionKey = 'pulse' | 'payments' | 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -84,6 +84,21 @@ export const SECTIONS: Section[] = [
     ],
   },
 
+  // ═══ PAYMENTS ═════════════════════════════════════════════════════════
+  // Двусторонний платёжный календарь — первым после Pulse.
+  {
+    key: 'payments', label: 'Payments',
+    description: 'Платежи в обе стороны: кредиторка и дебиторка',
+    items: [
+      {
+        slug: 'payment-calendar', name: 'Payment Calendar', icon: '🗓', status: 'building',
+        description: 'Платежи в обе стороны по датам: кредиторка (PO + отсрочка поставщика) и дебиторка (B2B-инвойсы + отсрочка клиента), с бегущим NET.',
+        route: m('payment-calendar'),
+        embed: { kind: 'native' },
+      },
+    ],
+  },
+
   // ═══ OPERATIONS ═══════════════════════════════════════════════════════
   {
     key: 'operations', label: 'Operations',
@@ -109,12 +124,7 @@ export const SECTIONS: Section[] = [
       },
       // Purchase Orders живёт под Suppliers (вкладка), не отдельным пунктом сайдбара.
       // Tax Invoices — под Customers (вкладка).
-      {
-        slug: 'payment-calendar', name: 'Payment Calendar', icon: '🗓', status: 'building',
-        description: 'Кредиторка: неоплаченные PO по всем месяцам, сгруппированы по дате платежа (заказ + отсрочка поставщика).',
-        route: m('payment-calendar'),
-        embed: { kind: 'native' },
-      },
+      // Payment Calendar вынесен в раздел Payments (первым после Pulse).
       {
         slug: 'price', name: 'Прайс-листы', icon: '🏷', status: 'live',
         description: 'Управление прайс-листом. Печать, экспорт, public Vivino API.',
