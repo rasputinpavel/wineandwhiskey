@@ -3,10 +3,11 @@ import { sbInventory, type FixedCost } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk } from '@/lib/kpi'
 import {
-  type DashReceipt, fixedModel, monthlyTotals, buildAnnualPlan,
+  type DashReceipt, fixedModel, monthlyTotals, monthlyBreakdown, monthlySeries, buildAnnualPlan,
   buildPeriodTable, currentMonthHeadline, dailySeries, addDays,
   type PeriodRow, type HeadlineMetric, type AnnualPlan,
 } from '@/lib/dashboard'
+import { RetailB2BChart, GpFixedChart } from '@/components/modules/dashboard/MonthlyCharts'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,7 @@ export default async function DashboardPage() {
   const periods = buildPeriodTable(receipts, fx, today)
   const headline = currentMonthHeadline(receipts, today)
   const daily = dailySeries(receipts, addDays(today, -59), today)
+  const chartMonths = monthlySeries(monthlyBreakdown(receipts), fx, '2025-03', `${today.slice(0, 4)}-12`)
 
   return (
     <div className="space-y-6">
@@ -67,6 +69,9 @@ export default async function DashboardPage() {
       </div>
 
       <PeriodTable rows={periods} />
+
+      <RetailB2BChart data={chartMonths} />
+      <GpFixedChart data={chartMonths} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <MonthlyProgression annual={annual} />

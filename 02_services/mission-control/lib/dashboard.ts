@@ -102,6 +102,40 @@ export function fixedFor(fx: FixedModel, months: number, revenue: number): numbe
   return fx.baseMonthly * months + revenue * fx.pctRate
 }
 
+// ─── Monthly breakdown (for the Retail/B2B and GP/Fixed charts) ──────────────
+
+export type MonthAgg = { retail: number; b2b: number; total: number; gp: number }
+
+export function monthlyBreakdown(receipts: DashReceipt[]): Map<string, MonthAgg> {
+  const m = new Map<string, MonthAgg>()
+  for (const r of receipts) {
+    const ym = r.receipt_date.slice(0, 7)
+    const cur = m.get(ym) ?? { retail: 0, b2b: 0, total: 0, gp: 0 }
+    const sign = r.receipt_type === 'REFUND' ? -1 : 1
+    const total = sign * Number(r.total)
+    cur.total += total
+    cur.gp += sign * (Number(r.total) - Number(r.cost_total ?? 0))
+    if (r.is_b2b) cur.b2b += total; else cur.retail += total
+    m.set(ym, cur)
+  }
+  return m
+}
+
+// Chart series for [startYm … endYm] inclusive, fixed = baseMonthly + pct×revenue.
+export type ChartMonth = MonthAgg & { ym: string; label: string; year: string; fixed: number }
+
+export function monthlySeries(monthly: Map<string, MonthAgg>, fx: FixedModel, startYm: string, endYm: string): ChartMonth[] {
+  const out: ChartMonth[] = []
+  let [y, mo] = startYm.split('-').map(Number)
+  while (`${y}-${String(mo).padStart(2, '0')}` <= endYm) {
+    const ym = `${y}-${String(mo).padStart(2, '0')}`
+    const a = monthly.get(ym) ?? { retail: 0, b2b: 0, total: 0, gp: 0 }
+    out.push({ ...a, ym, label: MONTH_ABBR[mo - 1], year: String(y).slice(2), fixed: fx.baseMonthly + a.total * fx.pctRate })
+    mo++; if (mo > 12) { mo = 1; y++ }
+  }
+  return out
+}
+
 // ─── Period table ──────────────────────────────────────────────────────────
 
 export type PeriodKey = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'ytd' | 'last-year'
