@@ -49,7 +49,7 @@ Payment Calendar и месячный P&L (Pulse). Плюс трекинг **фа
 Расширяем существующую `inventory.fixed_cost` (она уже хранит шаблон), новых «шаблонных»
 таблиц не плодим.
 
-### Миграция `024_mandatory_dates.sql`
+### Миграция `029_mandatory_dates.sql`
 
 ```sql
 alter table inventory.fixed_cost
@@ -203,7 +203,7 @@ reconcile(obs: Obligation[], expenses: WalletExpense[], overrides: MandatoryActu
 
 ## Файлы
 
-- `supabase/migrations/024_mandatory_dates.sql` — `fixed_cost` + `due_day`, `match_category`;
+- `supabase/migrations/029_mandatory_dates.sql` — `fixed_cost` + `due_day`, `match_category`;
   таблица `mandatory_actual`.
 - `lib/mandatory.ts` (новый) — `generateObligations`, `reconcile`, типы.
 - `app/(portal)/m/fixed-costs/` (новый раздел) — виды Template + Month.
@@ -218,7 +218,7 @@ reconcile(obs: Obligation[], expenses: WalletExpense[], overrides: MandatoryActu
 
 ## Фазы (один спек, три отгружаемых плана)
 
-1. **Модель + трекер** — миграция `024`, `lib/mandatory.ts`, раздел Fixed Costs (Template +
+1. **Модель + трекер** — миграция `029`, `lib/mandatory.ts`, раздел Fixed Costs (Template +
    Month), API override. Чинит источник правды; Rolling/Pulse/Calendar пока без изменений
    (fallback на старое размазывание сохраняется, т.к. `due_day` nullable).
 2. **Rolling** — датированные обязательные + структурная разбивка по вёдрам. **Чинит баг ฿22K.**

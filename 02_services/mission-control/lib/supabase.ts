@@ -103,10 +103,25 @@ export type FixedCost = {
   category: string
   amount_thb: number | null        // null when percent_revenue is set
   percent_revenue: number | null   // 0-100; non-null → pct-of-revenue, amount_thb ignored
+  due_day: number | null           // 1-31, day-of-month the obligation falls due; null → legacy smear
+  match_category: string | null    // Expenses-sheet category label(s), comma-separated; null → match on `category`
   active: boolean
   notes: string | null
   sort_order: number
   created_at: string
+  updated_at: string
+}
+
+// Manual override of a mandatory obligation's actual (migration 029). A row
+// exists only when the owner corrects the auto-matched fact; absent → fact is
+// derived live from the Expenses sheet.
+export type MandatoryActual = {
+  fixed_cost_id: string
+  period: string                   // 'YYYY-MM'
+  paid: boolean
+  amount_thb: number | null        // null → use the Expenses-sheet sum
+  paid_at: string | null
+  note: string | null
   updated_at: string
 }
 

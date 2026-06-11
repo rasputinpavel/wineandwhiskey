@@ -815,7 +815,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
       <div className="px-5 py-4 flex-1">
         <div className="flex items-baseline justify-between mb-2 gap-2">
           <div className="text-[10px] uppercase tracking-overline text-graphite">Inputs</div>
-          <Link href="/m/pulse/settings" className="text-[10px] text-graphite hover:text-wine-red">edit fixed costs →</Link>
+          <Link href="/m/fixed-costs" className="text-[10px] text-graphite hover:text-wine-red">edit fixed costs →</Link>
         </div>
         <div className="space-y-1.5 text-xs">
           <NMORow label="Revenue" value={revenue} sign="+" />

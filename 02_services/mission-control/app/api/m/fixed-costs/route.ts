@@ -18,9 +18,18 @@ export async function GET() {
   return NextResponse.json({ items: data ?? [] })
 }
 
+// Validate a due_day field shared by POST/PATCH. Returns the normalized value
+// (1..31 int, or null), or an Error message string when invalid.
+function normDueDay(v: unknown): number | null | { err: string } {
+  if (v === null) return null
+  const n = Math.floor(Number(v))
+  if (!Number.isFinite(n) || n < 1 || n > 31) return { err: 'due_day must be 1..31 or null' }
+  return n
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
-  const { category, amount_thb, percent_revenue, notes, sort_order, active } = body
+  const { category, amount_thb, percent_revenue, notes, sort_order, active, due_day, match_category } = body
 
   if (typeof category !== 'string' || !category.trim()) {
     return NextResponse.json({ error: 'category (non-empty string) required' }, { status: 400 })
@@ -39,6 +48,14 @@ export async function POST(req: Request) {
   if (notes !== undefined)      row.notes      = notes === null ? null : String(notes)
   if (sort_order !== undefined) row.sort_order = Math.max(0, Math.floor(Number(sort_order) || 100))
   if (active !== undefined)     row.active     = !!active
+  if (due_day !== undefined) {
+    const d = normDueDay(due_day)
+    if (d && typeof d === 'object') return NextResponse.json({ error: d.err }, { status: 400 })
+    row.due_day = d
+  }
+  if (match_category !== undefined) {
+    row.match_category = match_category === null || String(match_category).trim() === '' ? null : String(match_category).trim()
+  }
 
   const { data, error } = await sbInventory.from('fixed_cost').insert(row).select('*').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -47,7 +64,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({}))
-  const { id, category, amount_thb, percent_revenue, notes, sort_order, active } = body
+  const { id, category, amount_thb, percent_revenue, notes, sort_order, active, due_day, match_category } = body
   if (typeof id !== 'string') {
     return NextResponse.json({ error: 'id (string) required' }, { status: 400 })
   }
@@ -86,6 +103,14 @@ export async function PATCH(req: Request) {
   if (notes !== undefined)      patch.notes      = notes === null ? null : String(notes)
   if (sort_order !== undefined) patch.sort_order = Math.max(0, Math.floor(Number(sort_order) || 100))
   if (active !== undefined)     patch.active     = !!active
+  if (due_day !== undefined) {
+    const d = normDueDay(due_day)
+    if (d && typeof d === 'object') return NextResponse.json({ error: d.err }, { status: 400 })
+    patch.due_day = d
+  }
+  if (match_category !== undefined) {
+    patch.match_category = match_category === null || String(match_category).trim() === '' ? null : String(match_category).trim()
+  }
 
   if (Object.keys(patch).length === 1) {
     return NextResponse.json({ error: 'no fields to update' }, { status: 400 })

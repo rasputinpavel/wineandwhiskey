@@ -5,7 +5,7 @@
 //   - iframe:   third-party tool embedded via <iframe>; route /m/<slug> renders the embed
 //   - external: third-party tool that blocks framing; route /m/<slug> renders an "Open ↗" card
 
-export type SectionKey = 'pulse' | 'payments' | 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
+export type SectionKey = 'pulse' | 'payments' | 'fixed' | 'operations' | 'analytics' | 'brand' | 'marketing' | 'sales' | 'agents' | 'knowledge' | 'tech'
 export type ItemStatus = 'live' | 'building' | 'planned'
 
 export type Embed =
@@ -94,6 +94,22 @@ export const SECTIONS: Section[] = [
         slug: 'payment-calendar', name: 'Payment Calendar', icon: '🗓', status: 'building',
         description: 'Платежи в обе стороны по датам: кредиторка (PO + отсрочка поставщика) и дебиторка (B2B-инвойсы + отсрочка клиента), с бегущим NET.',
         route: m('payment-calendar'),
+        embed: { kind: 'native' },
+      },
+    ],
+  },
+
+  // ═══ FIXED COSTS ══════════════════════════════════════════════════════
+  // Обязательные регулярные расходы — датированный шаблон + план/факт по месяцам.
+  // Источник правды для Rolling, Payment Calendar и месячного P&L.
+  {
+    key: 'fixed', label: 'Fixed Costs',
+    description: 'Обязательные расходы: шаблон + план/факт по датам',
+    items: [
+      {
+        slug: 'fixed-costs', name: 'Fixed Costs', icon: '📌', status: 'building',
+        description: 'Регулярные обязательства (аренда, зарплата, налоги, utilities) по датам: месячный шаблон и план/факт по месяцам. Источник для Rolling и Payment Calendar.',
+        route: m('fixed-costs'),
         embed: { kind: 'native' },
       },
     ],

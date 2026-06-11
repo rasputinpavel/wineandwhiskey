@@ -182,6 +182,104 @@ export function BufferCell({ initial }: { initial: number }) {
   )
 }
 
+// Day-of-month the obligation falls due (1–31). Empty → undated (legacy smear).
+export function DueDayCell({ id, initial }: { id: string; initial: number | null }) {
+  const router = useRouter()
+  const [value, setValue] = useState(initial == null ? '' : String(initial))
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    const trimmed = value.trim()
+    let payload: number | null
+    if (trimmed === '') payload = null
+    else {
+      const n = Number(trimmed)
+      if (!Number.isInteger(n) || n < 1 || n > 31) { setErr('1–31'); return }
+      payload = n
+    }
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch(API, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, due_day: payload }),
+      })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error || `HTTP ${res.status}`) }
+      setEditing(false); router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'save failed') }
+    finally { setSaving(false) }
+  }
+
+  if (!editing) {
+    return (
+      <button onClick={() => setEditing(true)} className="tabular-nums text-deep-black hover:text-wine-red" title="Day of month due — click to edit">
+        {initial == null ? <span className="text-graphite">—</span> : <>{initial}<span className="text-graphite text-[10px] ml-0.5">th</span></>}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 justify-center">
+      <input
+        type="number" min={1} max={31} step={1} autoFocus placeholder="—"
+        value={value} onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setValue(initial == null ? '' : String(initial)) } }}
+        className="w-14 px-1.5 py-0.5 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-center tabular-nums"
+        disabled={saving}
+      />
+      <button onClick={save} disabled={saving} className="text-[10px] px-1.5 py-0.5 bg-wine-red text-warm-white rounded-sm disabled:opacity-50">{saving ? '…' : '✓'}</button>
+      <button onClick={() => { setEditing(false); setValue(initial == null ? '' : String(initial)); setErr(null) }} disabled={saving} className="text-[10px] text-graphite hover:text-wine-red">✕</button>
+      {err && <span className="text-[10px] text-wine-red ml-1">{err}</span>}
+    </span>
+  )
+}
+
+// Expenses-sheet category label(s) that reconcile to this row (comma-separated).
+// Empty → match on the row's own category name.
+export function MatchCategoryCell({ id, initial }: { id: string; initial: string | null }) {
+  const router = useRouter()
+  const [value, setValue] = useState(initial ?? '')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch(API, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, match_category: value.trim() === '' ? null : value.trim() }),
+      })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error || `HTTP ${res.status}`) }
+      setEditing(false); router.refresh()
+    } catch (e: any) { setErr(e?.message ?? 'save failed') }
+    finally { setSaving(false) }
+  }
+
+  if (!editing) {
+    return (
+      <button onClick={() => setEditing(true)} className="text-left text-graphite hover:text-wine-red truncate text-xs" title="Expenses-sheet category to match — click to edit">
+        {initial?.trim() ? initial : <span className="italic">= name</span>}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        autoFocus placeholder="Rent,Аренда" value={value} onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setValue(initial ?? '') } }}
+        className="w-32 px-1.5 py-0.5 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red"
+        disabled={saving}
+      />
+      <button onClick={save} disabled={saving} className="text-[10px] px-1.5 py-0.5 bg-wine-red text-warm-white rounded-sm disabled:opacity-50">{saving ? '…' : '✓'}</button>
+      <button onClick={() => { setEditing(false); setValue(initial ?? ''); setErr(null) }} disabled={saving} className="text-[10px] text-graphite hover:text-wine-red">✕</button>
+      {err && <span className="text-[10px] text-wine-red ml-1">{err}</span>}
+    </span>
+  )
+}
+
 export function ActiveCell({ id, initial }: { id: string; initial: boolean }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -233,6 +331,7 @@ export function NewCostRow() {
   const router = useRouter()
   const [category, setCategory] = useState('')
   const [amount, setAmount] = useState('')
+  const [dueDay, setDueDay] = useState('')
   const [kind, setKind] = useState<'fixed' | 'pct'>('fixed')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -242,9 +341,15 @@ export function NewCostRow() {
     if (!category.trim()) { setErr('category'); return }
     if (!Number.isFinite(n) || n < 0) { setErr('amount ≥ 0'); return }
     if (kind === 'pct' && n > 100) { setErr('% ≤ 100'); return }
+    let due: number | null = null
+    if (dueDay.trim() !== '') {
+      const d = Number(dueDay)
+      if (!Number.isInteger(d) || d < 1 || d > 31) { setErr('day 1–31'); return }
+      due = d
+    }
     setSaving(true); setErr(null)
     try {
-      const payload: Record<string, unknown> = { category: category.trim() }
+      const payload: Record<string, unknown> = { category: category.trim(), due_day: due }
       if (kind === 'pct') payload.percent_revenue = n
       else payload.amount_thb = n
       const res = await fetch(API, {
@@ -256,7 +361,7 @@ export function NewCostRow() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j?.error || `HTTP ${res.status}`)
       }
-      setCategory(''); setAmount(''); setKind('fixed'); router.refresh()
+      setCategory(''); setAmount(''); setDueDay(''); setKind('fixed'); router.refresh()
     } catch (e: any) { setErr(e?.message ?? 'add failed') }
     finally { setSaving(false) }
   }
@@ -288,6 +393,14 @@ export function NewCostRow() {
         value={amount} onChange={e => setAmount(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') add() }}
         className="w-32 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
+        disabled={saving}
+      />
+      <input
+        type="number" min={1} max={31} step={1} placeholder="day"
+        value={dueDay} onChange={e => setDueDay(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') add() }}
+        className="w-16 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-center tabular-nums"
+        title="Day of month due (optional)"
         disabled={saving}
       />
       <button
