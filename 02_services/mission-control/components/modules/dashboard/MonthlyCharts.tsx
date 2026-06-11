@@ -1,4 +1,4 @@
-import type { ChartMonth } from '@/lib/dashboard'
+import type { ChartMonth, ProgressChartData, FactPlanMonth } from '@/lib/dashboard'
 
 // Monthly charts ported from the Google-Sheet dashboard. Pure server-rendered
 // SVG (no interactivity) — responsive via viewBox.
@@ -44,7 +44,7 @@ function Grid({ max }: { max: number }) {
   )
 }
 
-function MonthLabels({ data, step }: { data: ChartMonth[]; step: number }) {
+function MonthLabels({ data, step }: { data: { ym: string; label: string; year: string }[]; step: number }) {
   return (
     <g>
       {data.map((m, i) => {
@@ -133,6 +133,75 @@ export function GpFixedChart({ data }: { data: ChartMonth[] }) {
           )
         })}
         <polyline points={pts} fill="none" stroke={COL.fixed} strokeWidth={1.5} strokeDasharray="4 3" />
+        <MonthLabels data={data} step={step} />
+      </Chart>
+    </section>
+  )
+}
+
+// ─── Cumulative month progress (fact vs LY vs plan, by day) ──────────────────
+
+export function ProgressChart({ d }: { d: ProgressChartData }) {
+  const { points, daysInMonth, todayDay, curLabel, lyLabel } = d
+  const max = niceMax(Math.max(1, ...points.map(p => Math.max(p.ly, p.plan, p.fact ?? 0))))
+  const xFor = (day: number) => L + (daysInMonth > 1 ? (day - 1) / (daysInMonth - 1) : 0) * PLOT_W
+  const yFor = (v: number) => BASE - (v / max) * PLOT_H
+  const line = (sel: (p: typeof points[number]) => number | null) =>
+    points.filter(p => sel(p) != null).map(p => `${xFor(p.day)},${yFor(sel(p) as number)}`).join(' ')
+  const ticks = [5, 10, 15, 20, 25, daysInMonth]
+  return (
+    <section className="bg-warm-white border border-pale-stone rounded-sm p-4">
+      <div className="flex items-baseline justify-between mb-2">
+        <h3 className="font-heading text-base text-deep-black">Plan progress · {curLabel}</h3>
+        <span className="text-[11px] text-graphite"><span style={{ color: COL.fixed }}>fact</span> · <span style={{ color: COL.b2b }}>plan LY×1.25</span> · <span style={{ color: COL.grid }}>{lyLabel}</span> · cumulative ฿k</span>
+      </div>
+      <Chart>
+        <Grid max={max} />
+        <polyline points={line(p => p.plan)} fill="none" stroke={COL.b2b} strokeWidth={1.5} strokeDasharray="5 3" />
+        <polyline points={line(p => p.ly)} fill="none" stroke="#9aa0a6" strokeWidth={1.2} strokeDasharray="1.5 2.5" />
+        <polyline points={line(p => p.fact)} fill="none" stroke={COL.fixed} strokeWidth={2} />
+        {ticks.map((t, i) => (
+          <text key={i} x={xFor(t)} y={BASE + 14} textAnchor="middle" fontSize={8} fill={COL.text}>{t}</text>
+        ))}
+        <text x={L + PLOT_W / 2} y={BASE + 30} textAnchor="middle" fontSize={8} fill={COL.text}>day of month · {todayDay} elapsed</text>
+      </Chart>
+    </section>
+  )
+}
+
+// ─── Monthly fact → plan (actual bars; LY+25% stacked for planned months) ────
+
+export function FactPlanChart({ data }: { data: FactPlanMonth[] }) {
+  const max = niceMax(Math.max(1, ...data.map(m => Math.max(m.base + m.increment, m.factLine ?? 0))))
+  const step = PLOT_W / data.length
+  const barW = step * 0.6
+  const sc = (v: number) => (v / max) * PLOT_H
+  const factPts = data.filter(m => m.factLine != null).map((m, _i) => {
+    const idx = data.indexOf(m)
+    return `${L + idx * step + step / 2},${BASE - sc(m.factLine as number)}`
+  }).join(' ')
+  return (
+    <section className="bg-warm-white border border-pale-stone rounded-sm p-4">
+      <div className="flex items-baseline justify-between mb-2">
+        <h3 className="font-heading text-base text-deep-black">Monthly · fact → plan (LY+25% from Apr)</h3>
+        <span className="text-[11px] text-graphite"><span style={{ color: COL.retail }}>actual / LY</span> + <span style={{ color: COL.b2b }}>+25%</span> · <span style={{ color: COL.fixed }}>2026 fact</span> · ฿k</span>
+      </div>
+      <Chart>
+        <Grid max={max} />
+        {data.map((m, i) => {
+          const x = L + i * step + (step - barW) / 2
+          const baseH = Math.max(0, sc(m.base)), incH = Math.max(0, sc(m.increment))
+          const total = m.base + m.increment
+          return (
+            <g key={m.ym}>
+              <title>{`${m.label} 20${m.year}: ${m.planned ? `LY ฿${k(m.base)}k + 25% ฿${k(m.increment)}k = plan ฿${k(total)}k${m.factLine != null ? ` · fact ฿${k(m.factLine)}k` : ''}` : `฿${k(m.base)}k`}`}</title>
+              {baseH > 0 && <rect x={x} y={BASE - baseH} width={barW} height={baseH} fill={COL.retail} opacity={0.55} />}
+              {incH > 0 && <rect x={x} y={BASE - baseH - incH} width={barW} height={incH} fill={COL.b2b} />}
+              {total > 0 && <text x={x + barW / 2} y={BASE - baseH - incH - 3} textAnchor="middle" fontSize={7.5} fill={COL.text}>{k(total)}</text>}
+            </g>
+          )
+        })}
+        {factPts && <polyline points={factPts} fill="none" stroke={COL.fixed} strokeWidth={2} />}
         <MonthLabels data={data} step={step} />
       </Chart>
     </section>

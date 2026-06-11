@@ -228,6 +228,67 @@ export function buildAnnualPlan(monthly: Map<string, number>, today: string): An
   return { year: PLAN_YEAR, months, goal, factYtd, remaining: goal - factYtd, pctOfPlan: goal ? factYtd / goal : 0 }
 }
 
+// ─── Cumulative current-month progress (fact vs LY vs plan, by day) ──────────
+
+export type ProgressPoint = { day: number; fact: number | null; ly: number; plan: number }
+export type ProgressChartData = {
+  points: ProgressPoint[]; daysInMonth: number; todayDay: number; curLabel: string; lyLabel: string
+}
+
+export function cumulativeProgress(receipts: DashReceipt[], today: string): ProgressChartData {
+  const [y, mo] = today.slice(0, 7).split('-').map(Number)
+  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate()
+  const todayDay = Number(today.slice(8, 10))
+  const curYm = today.slice(0, 7)
+  const lyYm = `${y - 1}-${String(mo).padStart(2, '0')}`
+  const cur = new Array(daysInMonth + 1).fill(0)
+  const ly = new Array(daysInMonth + 1).fill(0)
+  for (const r of receipts) {
+    const ym = r.receipt_date.slice(0, 7)
+    const day = Number(r.receipt_date.slice(8, 10))
+    if (day < 1 || day > daysInMonth) continue
+    const t = (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total)
+    if (ym === curYm) cur[day] += t
+    else if (ym === lyYm) ly[day] += t
+  }
+  const points: ProgressPoint[] = []
+  let cf = 0, cl = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    cf += cur[d]; cl += ly[d]
+    points.push({ day: d, fact: d <= todayDay ? cf : null, ly: cl, plan: cl * PLAN_MULT })
+  }
+  return { points, daysInMonth, todayDay, curLabel: `${MONTH_ABBR[mo - 1]} ${y}`, lyLabel: `${MONTH_ABBR[mo - 1]} ${y - 1}` }
+}
+
+// ─── Monthly fact → plan (actual bars, then LY+25% stacked from PLAN_START) ───
+
+export type FactPlanMonth = {
+  ym: string; label: string; year: string
+  base: number          // actual (history) or LY base (planned months)
+  increment: number     // +25% over LY for planned months, else 0
+  planned: boolean
+  factLine: number | null  // 2026 actual for planned months
+}
+
+export function factPlanSeries(monthly: Map<string, number>, startYm: string, endYm: string): FactPlanMonth[] {
+  const out: FactPlanMonth[] = []
+  let [y, mo] = startYm.split('-').map(Number)
+  while (`${y}-${String(mo).padStart(2, '0')}` <= endYm) {
+    const ym = `${y}-${String(mo).padStart(2, '0')}`
+    const planned = ym >= PLAN_START_YM
+    const actual = monthly.has(ym) ? (monthly.get(ym) as number) : null
+    const ly = monthly.get(`${y - 1}-${String(mo).padStart(2, '0')}`) ?? 0
+    out.push({
+      ym, label: MONTH_ABBR[mo - 1], year: String(y).slice(2),
+      base: planned ? ly : (actual ?? 0),
+      increment: planned ? ly * (PLAN_MULT - 1) : 0,
+      planned, factLine: planned ? actual : null,
+    })
+    mo++; if (mo > 12) { mo = 1; y++ }
+  }
+  return out
+}
+
 // ─── Current-month headline (revenue + GP vs LY vs plan) ─────────────────────
 
 export type HeadlineMetric = { actual: number; lastYear: number; plan: number; pctOfPlan: number }

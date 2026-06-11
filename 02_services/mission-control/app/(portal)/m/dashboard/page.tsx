@@ -4,10 +4,10 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk } from '@/lib/kpi'
 import {
   type DashReceipt, fixedModel, monthlyTotals, monthlyBreakdown, monthlySeries, buildAnnualPlan,
-  buildPeriodTable, currentMonthHeadline, dailySeries, addDays,
+  buildPeriodTable, currentMonthHeadline, cumulativeProgress, factPlanSeries,
   type PeriodRow, type HeadlineMetric, type AnnualPlan,
 } from '@/lib/dashboard'
-import { RetailB2BChart, GpFixedChart } from '@/components/modules/dashboard/MonthlyCharts'
+import { RetailB2BChart, GpFixedChart, ProgressChart, FactPlanChart } from '@/components/modules/dashboard/MonthlyCharts'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,8 +56,10 @@ export default async function DashboardPage() {
   const annual = buildAnnualPlan(monthly, today)
   const periods = buildPeriodTable(receipts, fx, today)
   const headline = currentMonthHeadline(receipts, today)
-  const daily = dailySeries(receipts, addDays(today, -59), today)
-  const chartMonths = monthlySeries(monthlyBreakdown(receipts), fx, '2025-03', `${today.slice(0, 4)}-12`)
+  const endYm = `${today.slice(0, 4)}-12`
+  const chartMonths = monthlySeries(monthlyBreakdown(receipts), fx, '2025-03', endYm)
+  const progress = cumulativeProgress(receipts, today)
+  const factPlan = factPlanSeries(monthly, '2025-03', endYm)
 
   return (
     <div className="space-y-6">
@@ -73,10 +75,8 @@ export default async function DashboardPage() {
       <RetailB2BChart data={chartMonths} />
       <GpFixedChart data={chartMonths} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <MonthlyProgression annual={annual} />
-        <DailyRevenue points={daily} />
-      </div>
+      <ProgressChart d={progress} />
+      <FactPlanChart data={factPlan} />
 
       <Footnote />
     </div>
@@ -210,63 +210,6 @@ function CardRow({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
       <dt className="text-graphite">{k}</dt>
       <dd className={`tabular-nums ${accent ? 'text-wine-red font-medium' : 'text-deep-black'}`}>{v}</dd>
     </div>
-  )
-}
-
-// ─── Monthly progression (12 bars + plan ticks) ──────────────────────────────
-
-function MonthlyProgression({ annual }: { annual: AnnualPlan }) {
-  const max = Math.max(1, ...annual.months.map(m => Math.max(m.actual ?? 0, m.plan)))
-  const H = 120
-  return (
-    <section className="bg-warm-white border border-pale-stone rounded-sm p-5">
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="font-heading text-base text-deep-black">Monthly · {annual.year}</h3>
-        <span className="text-[11px] text-graphite">bar = actual · tick = plan</span>
-      </div>
-      <div className="flex items-end gap-1.5" style={{ height: H + 28 }}>
-        {annual.months.map(m => {
-          const aH = ((m.actual ?? 0) / max) * H
-          const pY = H - (m.plan / max) * H
-          return (
-            <div key={m.ym} className="flex-1 flex flex-col items-center justify-end" title={`${m.label}: actual ${fmtThbCompact(m.actual ?? 0)} · plan ${fmtThbCompact(m.plan)}`}>
-              <div className="relative w-full flex justify-center" style={{ height: H }}>
-                <div className="absolute bottom-0 w-[70%] bg-wine-red rounded-t-sm" style={{ height: Math.max(0, aH) }} />
-                <div className="absolute left-1/2 -translate-x-1/2 w-[80%] border-t-2 border-amber-gold" style={{ top: pY }} />
-              </div>
-              <div className="overline text-graphite mt-1.5">{m.label}</div>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-// ─── Daily revenue (last 60 days, retail + B2B stacked) ──────────────────────
-
-function DailyRevenue({ points }: { points: { ymd: string; retail: number; b2b: number; total: number }[] }) {
-  const max = Math.max(1, ...points.map(p => p.total))
-  const H = 120
-  return (
-    <section className="bg-warm-white border border-pale-stone rounded-sm p-5">
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="font-heading text-base text-deep-black">Daily revenue · last 60d</h3>
-        <span className="text-[11px] text-graphite"><span className="text-wine-red">retail</span> + <span className="text-amber-gold">B2B</span></span>
-      </div>
-      <div className="flex items-end gap-px" style={{ height: H }}>
-        {points.map(p => {
-          const rH = (Math.max(0, p.retail) / max) * H
-          const bH = (Math.max(0, p.b2b) / max) * H
-          return (
-            <div key={p.ymd} className="flex-1 flex flex-col justify-end" title={`${p.ymd}: ${fmtThb(p.total)} (retail ${fmtThb(p.retail)} · B2B ${fmtThb(p.b2b)})`}>
-              <div className="w-full bg-amber-gold" style={{ height: bH }} />
-              <div className="w-full bg-wine-red" style={{ height: rH }} />
-            </div>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
