@@ -8,40 +8,20 @@ import {
   type PeriodRow, type HeadlineMetric, type AnnualPlan,
 } from '@/lib/dashboard'
 import { RetailB2BChart, GpFixedChart, ProgressChart, FactPlanChart } from '@/components/modules/dashboard/MonthlyCharts'
+import { getReceiptHistory } from '@/lib/receipts-cache'
 
 export const dynamic = 'force-dynamic'
-
-// History start — need full last year for the LY×1.25 plan base and the
-// "last year" period row.
-const HISTORY_START = '2025-01-01'
 
 export default async function DashboardPage() {
   const today = todayBkk()
 
-  // PostgREST caps at 1000 rows — page through the full history.
-  async function fetchAllReceipts(): Promise<DashReceipt[]> {
-    const all: DashReceipt[] = []
-    const PAGE = 1000
-    for (let from = 0; from < 200000; from += PAGE) {
-      const { data, error } = await sbInventory
-        .from('loyverse_receipt')
-        .select('receipt_date, receipt_type, total, cost_total, is_b2b')
-        .gte('receipt_date', HISTORY_START)
-        .order('receipt_date', { ascending: true })
-        .range(from, from + PAGE - 1)
-      if (error) throw error
-      if (!data || data.length === 0) break
-      all.push(...(data as DashReceipt[]))
-      if (data.length < PAGE) break
-    }
-    return all
-  }
-
+  // Full history (cached, shared across the analytics pages) — the dashboard's
+  // '2025-01-01' base is the cache's superset start, so no slice needed here.
   let receipts: DashReceipt[] = []
   let fixedRows: FixedCost[] = []
   try {
     const [r, fc] = await Promise.all([
-      fetchAllReceipts(),
+      getReceiptHistory(),
       sbInventory.from('fixed_cost').select('*'),
     ])
     receipts = r

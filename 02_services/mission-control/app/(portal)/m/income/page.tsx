@@ -1,10 +1,11 @@
-import { sbInventory, type MoneyWallet, type MoneyMovement, type WalletId, type LoyverseReceipt } from '@/lib/supabase'
+import { sbInventory, type MoneyWallet, type MoneyMovement, type WalletId } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, todayBkk } from '@/lib/kpi'
 import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
 import { MovementForm, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
 import { LedgerTable, DailyTable, type LedgerRowData } from '@/components/modules/income/IncomeTables'
 import { DataFreshness } from '@/components/shell/DataFreshness'
+import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,22 +23,16 @@ export default async function IncomePage() {
   const movements = (movementsRes.data ?? []) as MoneyMovement[]
 
   // Auto inflows from Loyverse sales, from the earliest wallet opening date.
-  // PostgREST caps at 1000 rows → page through. Tolerate a missing
-  // payment_method column (migration 025 not applied yet) by warning, not crashing.
+  // Reads the shared receipt cache (paged + cached once for all analytics pages)
+  // and slices to this view's window. Tolerate a sales-fetch failure by warning,
+  // not crashing — balances still render without the auto inflows.
   const sinceIso = (wallets.map(w => w.opening_date).sort()[0] ?? today) + 'T00:00:00Z'
-  const receipts: IncomeReceipt[] = []
+  let receipts: IncomeReceipt[] = []
   let salesError: string | null = null
-  for (let from = 0; from < 200000; from += 1000) {
-    const { data, error } = await sbInventory
-      .from('loyverse_receipt')
-      .select('receipt_date, receipt_type, total, payment_method, is_bank_transfer, is_b2b')
-      .gte('receipt_date', sinceIso)
-      .order('receipt_date', { ascending: true })
-      .range(from, from + 999)
-    if (error) { salesError = error.message; break }
-    if (!data?.length) break
-    receipts.push(...(data as IncomeReceipt[]))
-    if (data.length < 1000) break
+  try {
+    receipts = receiptsFrom(await getReceiptHistory(), sinceIso) as IncomeReceipt[]
+  } catch (e: unknown) {
+    salesError = String((e as { message?: string })?.message ?? e)
   }
   const auto = autoInflows(receipts)
 

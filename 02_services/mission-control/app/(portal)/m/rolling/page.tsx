@@ -5,6 +5,7 @@ import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type W
 import { generateObligations, mandatoryLabelSet, isMandatoryExpense, daysInMonth } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
+import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,18 +33,14 @@ export default async function RollingPage() {
   const movements = (movementsRes.data ?? []) as MoneyMovement[]
 
   // Receipts since the earliest opening date (for liquidity) — also covers the
-  // last-7-days retail average. Paged for the 1000-row cap.
+  // last-7-days retail average. Reads the shared cached receipt history and
+  // slices to this view's window.
   const sinceIso = (wallets.map(w => w.opening_date).sort()[0] ?? addDays(today, -30)) + 'T00:00:00Z'
-  const receipts: IncomeReceipt[] = []
-  for (let from = 0; from < 200000; from += 1000) {
-    const { data, error } = await sbInventory
-      .from('loyverse_receipt')
-      .select('receipt_date, receipt_type, total, payment_method, is_bank_transfer, is_b2b')
-      .gte('receipt_date', sinceIso).order('receipt_date', { ascending: true }).range(from, from + 999)
-    if (error) return <SchemaError error={error.message} />
-    if (!data?.length) break
-    receipts.push(...(data as IncomeReceipt[]))
-    if (data.length < 1000) break
+  let receipts: IncomeReceipt[] = []
+  try {
+    receipts = receiptsFrom(await getReceiptHistory(), sinceIso) as IncomeReceipt[]
+  } catch (e: unknown) {
+    return <SchemaError error={String((e as { message?: string })?.message ?? e)} />
   }
 
   // Purchase orders (public schema) — for supplier payments (AP).

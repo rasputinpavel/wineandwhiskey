@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost } from '@/lib/supabase'
+import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import {
@@ -78,25 +79,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   // window, we need orders up to 30 days before the window starts.
   const poStart = isoNDaysAgo(daysBetween(today, monthsStart) + AP_FETCH_GRACE_DAYS)
 
-  // PostgREST max-rows is 1000 on Supabase Cloud — `.limit(N>1000)` is
-  // silently capped. Page over 1000-row windows to fetch the full set.
-  async function fetchAllReceipts(): Promise<LoyverseReceipt[]> {
-    const all: LoyverseReceipt[] = []
-    const PAGE = 1000
-    for (let from = 0; from < 100000; from += PAGE) {
-      const { data, error } = await sbInventory
-        .from('loyverse_receipt')
-        .select('total, cost_total, is_b2b, receipt_type, receipt_date')
-        .gte('receipt_date', monthsStartIso)
-        .order('receipt_date', { ascending: true })
-        .range(from, from + PAGE - 1)
-      if (error) throw error
-      if (!data || data.length === 0) break
-      all.push(...(data as LoyverseReceipt[]))
-      if (data.length < PAGE) break
-    }
-    return all
-  }
   async function fetchAllPOs(): Promise<PurchaseOrder[]> {
     const all: PurchaseOrder[] = []
     const PAGE = 1000
@@ -120,10 +102,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   let posAll: PurchaseOrder[] = []
   try {
     const [r, p] = await Promise.all([
-      fetchAllReceipts(),
+      getReceiptHistory(),
       fetchAllPOs(),
     ])
-    receiptsAll = r
+    // Shared cache holds the full history; slice to this view's 13-month window.
+    receiptsAll = receiptsFrom(r, monthsStartIso) as LoyverseReceipt[]
     posAll = p
   } catch (e: any) {
     return <SchemaError error={String(e?.message ?? e)} />
