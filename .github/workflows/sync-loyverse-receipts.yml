@@ -31,3 +31,21 @@ jobs:
           LOYVERSE_FROM:        ${{ inputs.from }}
           LOYVERSE_TO:          ${{ inputs.to }}
         run: npm run inv:receipts
+
+      # Bust the portal's shared receipt cache so fresh receipts show up at once
+      # instead of waiting out the 10-minute revalidate. Non-fatal: skipped when
+      # the secrets aren't configured, never fails the sync.
+      - name: Bust portal receipt cache
+        if: success()
+        env:
+          PORTAL_URL:                 ${{ secrets.PORTAL_URL }}
+          RECEIPTS_REVALIDATE_SECRET: ${{ secrets.RECEIPTS_REVALIDATE_SECRET }}
+        run: |
+          if [ -z "$PORTAL_URL" ] || [ -z "$RECEIPTS_REVALIDATE_SECRET" ]; then
+            echo "PORTAL_URL / RECEIPTS_REVALIDATE_SECRET not set — skipping cache bust"
+            exit 0
+          fi
+          curl -fsS -X POST "$PORTAL_URL/api/public/revalidate" \
+            -H "Authorization: Bearer $RECEIPTS_REVALIDATE_SECRET" \
+            && echo "portal cache revalidated" \
+            || echo "revalidate ping failed (non-fatal)"
