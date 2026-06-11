@@ -40,6 +40,17 @@ export default async function IncomePage() {
   }
   const auto = autoInflows(receipts)
 
+  // When was the Loyverse sales sync last run? The "sales" line on the cards is
+  // auto-pulled, so this is the freshness of the whole liquidity picture.
+  const { data: syncRow } = await sbInventory
+    .from('sync_log')
+    .select('finished_at, ok')
+    .eq('source', 'loyverse_receipts')
+    .order('finished_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+  const salesSyncedAt = (syncRow?.ok === false ? null : syncRow?.finished_at) ?? null
+
   // Expenses are read live from the Google Sheet — tolerate a missing-creds /
   // network failure by showing balances without them plus a warning.
   let expenses: WalletExpense[] = []
@@ -86,7 +97,7 @@ export default async function IncomePage() {
 
       {/* Wallet balances */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {summary.wallets.map(w => <WalletCard key={w.id} w={w} />)}
+        {summary.wallets.map(w => <WalletCard key={w.id} w={w} salesSyncedAt={salesSyncedAt} />)}
       </div>
 
       {/* Liquidity */}
@@ -131,7 +142,7 @@ export default async function IncomePage() {
 
 // ─── Wallet card ─────────────────────────────────────────────────────────────
 
-function WalletCard({ w }: { w: WalletBalance }) {
+function WalletCard({ w, salesSyncedAt }: { w: WalletBalance; salesSyncedAt: string | null }) {
   return (
     <div className="bg-warm-white border border-pale-stone rounded-sm p-4">
       <div className="overline text-graphite mb-1">{WALLET_LABELS[w.id]}</div>
@@ -140,7 +151,12 @@ function WalletCard({ w }: { w: WalletBalance }) {
         <WalletOpeningCell id={w.id} balance={w.opening} date={w.openingDate} />
       </div>
       <div className="mt-2 text-[10px] text-graphite leading-relaxed border-t border-pale-stone/60 pt-1.5">
-        {w.sales !== 0 && <Line label="sales" v={Math.abs(w.sales)} sign={w.sales < 0 ? '−' : '+'} />}
+        {w.sales !== 0 && (
+          <>
+            <Line label="sales" v={Math.abs(w.sales)} sign={w.sales < 0 ? '−' : '+'} />
+            <SalesFreshness syncedAt={salesSyncedAt} />
+          </>
+        )}
         {w.ownerContrib > 0 && (
           <div className="flex justify-between text-amber-gold"><span>owner financing</span><span>+{fmtThb(w.ownerContrib).replace('฿', '฿')}</span></div>
         )}
@@ -156,6 +172,36 @@ function WalletCard({ w }: { w: WalletBalance }) {
 
 function Line({ label, v, sign }: { label: string; v: number; sign: '+' | '−' }) {
   return <div className="flex justify-between"><span>{label}</span><span className={sign === '−' ? 'text-wine-red' : 'text-deep-black'}>{sign}{fmtThb(v).replace('฿', '฿')}</span></div>
+}
+
+// Freshness of the auto-pulled sales figure — last successful Loyverse receipt
+// sync, in BKK time, with an amber hint when it's gone stale (> 24h).
+function SalesFreshness({ syncedAt }: { syncedAt: string | null }) {
+  if (!syncedAt) {
+    return <div className="text-[9px] text-amber-gold/90 pl-2 -mt-0.5 mb-0.5">↳ sync time unknown</div>
+  }
+  const ms = Date.now() - new Date(syncedAt).getTime()
+  const stale = ms > 24 * 3_600_000
+  return (
+    <div className={`text-[9px] pl-2 -mt-0.5 mb-0.5 ${stale ? 'text-amber-gold' : 'text-graphite/70'}`}>
+      ↳ as of {fmtBkkDateTime(syncedAt)} BKK · {timeAgo(syncedAt)}
+    </div>
+  )
+}
+
+function fmtBkkDateTime(iso: string): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const d = new Date(new Date(iso).getTime() + 7 * 3_600_000)
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}, ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+}
+
+function timeAgo(iso: string): string {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.round(h / 24)}d ago`
 }
 
 function Footnote() {
