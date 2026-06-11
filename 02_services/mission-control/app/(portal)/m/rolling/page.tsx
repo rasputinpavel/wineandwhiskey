@@ -2,7 +2,7 @@ import { sbInventory, sbPublic, type MoneyWallet, type MoneyMovement, type Fixed
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk, computeDueDate } from '@/lib/kpi'
 import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type WalletExpense } from '@/lib/income'
-import { fixedModel } from '@/lib/dashboard'
+import { generateObligations, mandatoryLabelSet, isMandatoryExpense, daysInMonth } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
 
@@ -20,7 +20,7 @@ export default async function RollingPage() {
   const [walletsRes, movementsRes, fixedRes, invoicesRes, suppliersRes, customersRes] = await Promise.all([
     sbInventory.from('money_wallet').select('*').order('sort_order', { ascending: true }),
     sbInventory.from('money_movement').select('*').limit(2000),
-    sbInventory.from('fixed_cost').select('amount_thb, percent_revenue, active'),
+    sbInventory.from('fixed_cost').select('*'),
     sbInventory.from('flowaccount_invoice').select('total, status, due_at, issued_at, customer_id').neq('status', 'Cancelled').eq('excluded', false),
     sbInventory.from('supplier').select('id, name, type, payment_terms_days'),
     sbInventory.from('b2b_customer').select('id, payment_terms_days'),
@@ -142,12 +142,49 @@ export default async function RollingPage() {
     else if (m.kind === 'outflow') manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
     // transfers net zero on total liquidity
   }
-  const expensesActual: DatedAmount[] = expenses.map(e => ({ date: e.date, amount: e.amount }))
+  // Split actual expenses into mandatory (category matches a fixed-cost row) vs
+  // operational (everything else) so closed weeks break down by bucket.
+  const fixedRows = (fixedRes.data ?? []) as FixedCost[]
+  const labels = mandatoryLabelSet(fixedRows)
+  const mandatoryExpensesActual: DatedAmount[] = []
+  const operationalExpensesActual: DatedAmount[] = []
+  for (const e of expenses) {
+    const d = { date: e.date, amount: e.amount }
+    if (isMandatoryExpense(e.category, labels)) mandatoryExpensesActual.push(d)
+    else operationalExpensesActual.push(d)
+  }
+
+  // Dated mandatory obligations across the whole horizon (forecast side). Revenue
+  // for %-rows: actual for closed months, retail run-rate × month length ahead.
+  const monthlyActual = new Map<string, number>()
+  for (const r of receipts) {
+    const ym = r.receipt_date.slice(0, 7)
+    monthlyActual.set(ym, (monthlyActual.get(ym) ?? 0) + (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total))
+  }
+  const curMonth = today.slice(0, 7)
+  const revenueOfMonth = (ym: string) => ym < curMonth ? (monthlyActual.get(ym) ?? 0) : avgRetailPerDay * daysInMonth(ym)
+
+  const addMonthYm = (ym: string, delta: number) => {
+    const [y, mo] = ym.split('-').map(Number)
+    const d = new Date(Date.UTC(y, mo - 1 + delta, 1))
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+  const mandatory: DatedAmount[] = []
+  {
+    const endYm = `${Math.max(Number(openingDate.slice(0, 4)), Number(today.slice(0, 4)))}-12`
+    let ym = openingDate.slice(0, 7)
+    let guard = 0
+    while (ym <= endYm && guard++ < 60) {
+      for (const o of generateObligations(ym, fixedRows, revenueOfMonth)) mandatory.push({ date: o.date, amount: o.planned })
+      ym = addMonthYm(ym, 1)
+    }
+  }
 
   const forecast = buildRolling({
     today, openingBalance, openingDate,
-    revenueActual, manualInflows, manualOutflows, ownerIntake, expensesActual,
-    avgRetailPerDay, ar, ap, big, fixed: fixedModel(fixedRes.data ?? []),
+    revenueActual, manualInflows, manualOutflows, ownerIntake,
+    mandatoryExpensesActual, operationalExpensesActual,
+    avgRetailPerDay, ar, ap, big, mandatory,
   })
 
   return (
@@ -196,7 +233,7 @@ function Footnote() {
   return (
     <div className="text-[11px] text-graphite leading-relaxed border-t border-pale-stone pt-4 space-y-1">
       <p>Plan / fact chain anchored at the Income opening balance. Each week: <span className="text-deep-black">opening + income + owner intake − outflow = closing</span>, carried forward.</p>
-      <p><span className="bg-cream px-1 rounded-sm">fact</span> (closed weeks) use <span className="text-deep-black">actual</span> revenue (Loyverse B2C+B2B) and actual expenses. <span className="text-amber-gold bg-amber-gold/20 px-1 rounded-sm">this week</span> blends actual-so-far with the rest projected. <span className="border border-pale-stone px-1 rounded-sm">forecast</span> weeks project income (retail avg/day × days + AR due) and outflow (supplier POs due + fixed + big payments). Hover Income / Outflow for the breakdown.</p>
+      <p><span className="bg-cream px-1 rounded-sm">fact</span> (closed weeks) use <span className="text-deep-black">actual</span> revenue (Loyverse B2C+B2B) and actual expenses. <span className="text-amber-gold bg-amber-gold/20 px-1 rounded-sm">this week</span> blends actual-so-far with the rest projected. <span className="border border-pale-stone px-1 rounded-sm">forecast</span> weeks project income (retail avg/day × days + AR due) and outflow split into <span className="text-deep-black">Mandatory</span> (dated obligations on their real dates), <span className="text-deep-black">Payables</span> (supplier POs due) and <span className="text-deep-black">Big</span> one-offs. Operational spend is never forecast — it shows only as fact on closed weeks. The breakdown sits under each Outflow figure.</p>
       <p><span className="text-amber-gold">Owner in</span> = owner financing, shown on its real week and folded into the closing balance, but kept out of business income. Follow <span className="text-deep-black">Closing</span> to see the runway. Supplier payments are assumed on supplier terms (no confirmed-payment signal in the data).</p>
     </div>
   )

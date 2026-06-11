@@ -18,12 +18,18 @@
 // fact (closed weeks) and forecast (ahead) join seamlessly at today.
 // ════════════════════════════════════════════════════════════════════════════
 
-const DAYS_PER_MONTH_AVG = 365 / 12
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export type DatedAmount = { date: string; amount: number }
-export type RollingFixed = { baseMonthly: number; pctRate: number }
 export type WeekStatus = 'closed' | 'current' | 'forecast'
+
+// Outflow split into the three non-overlapping buckets (+ one-off big payments).
+export type OutflowBuckets = {
+  mandatory: number        // dated obligations (forecast) or matched expenses (actual)
+  payables: number         // supplier POs due (AP)
+  operational: number      // everyday non-mandatory spend — actual only, never forecast
+  big: number              // planned one-off payments
+}
 
 export type RollingWeek = {
   start: string
@@ -36,6 +42,7 @@ export type RollingWeek = {
   ownerIntake: number      // owner financing (not business income)
   outflow: number
   outflowNote: string
+  outflowBuckets: OutflowBuckets
   closing: number
 }
 
@@ -102,16 +109,18 @@ export function buildRolling(input: {
   manualInflows: DatedAmount[]
   manualOutflows: DatedAmount[]
   ownerIntake: DatedAmount[]
-  expensesActual: DatedAmount[]
+  // actual expenses, pre-split by category into the two buckets:
+  mandatoryExpensesActual: DatedAmount[]
+  operationalExpensesActual: DatedAmount[]
   // projection inputs:
   avgRetailPerDay: number
   ar: DatedAmount[]
   ap: DatedAmount[]
   big: DatedAmount[]
-  fixed: RollingFixed
+  mandatory: DatedAmount[]   // dated obligations (forecast side)
 }): RollingForecast {
   const { today, openingBalance, openingDate, revenueActual, manualInflows, manualOutflows,
-    ownerIntake, expensesActual, avgRetailPerDay, ar, ap, big, fixed } = input
+    ownerIntake, mandatoryExpensesActual, operationalExpensesActual, avgRetailPerDay, ar, ap, big, mandatory } = input
 
   const periods = periodsFrom(openingDate)
   const weeks: RollingWeek[] = []
@@ -133,22 +142,36 @@ export function buildRolling(input: {
     // Owner intake — actual contributions this week (+ any future-dated).
     const ownerIn = sumSide(ownerIntake, p.s, p.e, today, 'actual') + sumSide(ownerIntake, p.s, p.e, today, 'proj')
 
-    // Outflow — actual expenses/withdrawals (before today) + projection (today on).
-    const expAct = sumSide(expensesActual, p.s, p.e, today, 'actual')
-    const outAct = sumSide(manualOutflows, p.s, p.e, today, 'actual')
-    const apProj = sumSide(ap, p.s, p.e, today, 'proj')
-    const fixedProj = fixed.baseMonthly * (futureDays / DAYS_PER_MONTH_AVG) + fixed.pctRate * retailProj
-    const bigProj = sumSide(big, p.s, p.e, today, 'proj')
-    const outflow = expAct + outAct + apProj + fixedProj + bigProj
+    // Outflow — split into mandatory / payables / operational / big. Actual
+    // (before today) reconciles closed weeks; projection (today on) is the dated
+    // mandatory obligations + supplier AP + big payments. Operational is never
+    // forecast — it shows only as actuals on closed weeks.
+    const mandAct = sumSide(mandatoryExpensesActual, p.s, p.e, today, 'actual')
+    const operAct = sumSide(operationalExpensesActual, p.s, p.e, today, 'actual')
+    const outAct  = sumSide(manualOutflows, p.s, p.e, today, 'actual')
+    const mandProj = sumSide(mandatory, p.s, p.e, today, 'proj')
+    const apProj   = sumSide(ap, p.s, p.e, today, 'proj')
+    const bigProj  = sumSide(big, p.s, p.e, today, 'proj')
+
+    const outflowBuckets: OutflowBuckets = {
+      mandatory:   mandAct + mandProj,
+      payables:    apProj,
+      operational: operAct + outAct,
+      big:         bigProj,
+    }
+    const outflow = outflowBuckets.mandatory + outflowBuckets.payables + outflowBuckets.operational + outflowBuckets.big
 
     const closing = opening + income + ownerIn - outflow
 
     const incomeNote = status === 'closed'
       ? `actual revenue ${fmt(revAct + inAct)}`
       : `retail ${fmt(retailProj)}${arProj ? ` + AR ${fmt(arProj)}` : ''}${revAct + inAct ? ` + actual ${fmt(revAct + inAct)}` : ''}`
-    const outflowNote = status === 'closed'
-      ? `actual expenses ${fmt(expAct + outAct)}`
-      : `${apProj ? `supplier ${fmt(apProj)} · ` : ''}fixed ${fmt(fixedProj)}${bigProj ? ` · big ${fmt(bigProj)}` : ''}${expAct + outAct ? ` · actual ${fmt(expAct + outAct)}` : ''}`
+    const noteParts: string[] = []
+    if (outflowBuckets.mandatory)   noteParts.push(`mandatory ${fmt(outflowBuckets.mandatory)}`)
+    if (outflowBuckets.payables)    noteParts.push(`payables ${fmt(outflowBuckets.payables)}`)
+    if (outflowBuckets.operational) noteParts.push(`operational ${fmt(outflowBuckets.operational)}`)
+    if (outflowBuckets.big)         noteParts.push(`big ${fmt(outflowBuckets.big)}`)
+    const outflowNote = noteParts.join(' · ') || '—'
 
     if (status !== 'closed') {
       if (closing < minClosing) minClosing = closing
@@ -157,7 +180,7 @@ export function buildRolling(input: {
 
     weeks.push({
       start: p.s, end: p.e, label: label(p.s, p.e), status,
-      opening, income, incomeNote, ownerIntake: ownerIn, outflow, outflowNote, closing,
+      opening, income, incomeNote, ownerIntake: ownerIn, outflow, outflowNote, outflowBuckets, closing,
     })
     opening = closing
   }

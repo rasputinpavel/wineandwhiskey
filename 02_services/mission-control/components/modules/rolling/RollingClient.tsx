@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fmtThb } from '@/lib/kpi'
+import { fmtThb, fmtThbCompact } from '@/lib/kpi'
 import { DataTable, type Col } from '@/components/shared/DataTable'
-import type { RollingWeek } from '@/lib/rolling'
+import type { RollingWeek, OutflowBuckets } from '@/lib/rolling'
 import type { RollingBigPayment } from '@/lib/supabase'
 
 const API = '/api/m/rolling/payment'
@@ -17,6 +17,18 @@ function StatusBadge({ s }: { s: RollingWeek['status'] }) {
   return <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-warm-white border border-pale-stone text-graphite">forecast</span>
 }
 
+// Persistent breakdown of the outflow into its buckets — so it's always clear
+// what the number is made of (and whether it's plan or fact), not just on hover.
+function OutflowBreakdown({ b }: { b: OutflowBuckets }) {
+  const parts: string[] = []
+  if (b.mandatory)   parts.push(`Mand ${fmtThbCompact(b.mandatory)}`)
+  if (b.payables)    parts.push(`Pay ${fmtThbCompact(b.payables)}`)
+  if (b.operational) parts.push(`Op ${fmtThbCompact(b.operational)}`)
+  if (b.big)         parts.push(`Big ${fmtThbCompact(b.big)}`)
+  if (!parts.length) return null
+  return <span className="text-[10px] text-graphite leading-tight">{parts.join(' · ')}</span>
+}
+
 export function WeeklyTable({ weeks }: { weeks: RollingWeek[] }) {
   const cols: Col<RollingWeek>[] = [
     { key: 'week', header: 'Week', sort: w => w.start, text: w => w.label, cell: w => (
@@ -25,7 +37,12 @@ export function WeeklyTable({ weeks }: { weeks: RollingWeek[] }) {
     { key: 'opening', header: 'Opening', align: 'right', sort: w => w.opening, cell: w => <span className={`tabular-nums ${w.opening < 0 ? 'text-wine-red' : 'text-graphite'}`}>{fmtThb(w.opening)}</span> },
     { key: 'income', header: 'Income', align: 'right', sort: w => w.income, cell: w => <span className="tabular-nums text-deep-black" title={w.incomeNote}>{w.income ? '+' + fmtThb(w.income) : '—'}</span> },
     { key: 'owner', header: 'Owner in', align: 'right', sort: w => w.ownerIntake, cell: w => <span className="tabular-nums text-amber-gold">{w.ownerIntake ? '+' + fmtThb(w.ownerIntake) : '—'}</span> },
-    { key: 'outflow', header: 'Outflow', align: 'right', sort: w => w.outflow, cell: w => <span className="tabular-nums text-wine-red" title={w.outflowNote}>{w.outflow ? '−' + fmtThb(w.outflow) : '—'}</span> },
+    { key: 'outflow', header: 'Outflow', align: 'right', sort: w => w.outflow, cell: w => (
+      <span className="flex flex-col items-end gap-0.5" title={w.outflowNote}>
+        <span className="tabular-nums text-wine-red">{w.outflow ? '−' + fmtThb(w.outflow) : '—'}</span>
+        {w.outflow > 0 && <OutflowBreakdown b={w.outflowBuckets} />}
+      </span>
+    ) },
     { key: 'closing', header: 'Closing', align: 'right', sort: w => w.closing, cell: w => <span className={`tabular-nums font-medium ${w.closing < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(w.closing)}</span> },
   ]
   return (

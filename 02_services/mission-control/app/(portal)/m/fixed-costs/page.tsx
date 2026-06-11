@@ -84,13 +84,13 @@ function TemplateView({ rows }: { rows: FixedCost[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
         <Stat label="Fixed THB (active)" value={fmtThb(fixedSum)} note={`${fixedRows.length} categories`} />
         <Stat label="% of revenue (active)" value={`${pctSum.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`} note={`${pctRows.length} categories`} />
-        <Stat label="Dated" value={String(datedCount)} note={`${undatedCount} without a due-day`} tone={undatedCount > 0 ? 'warn' : 'normal'} />
+        <Stat label="Dated" value={String(datedCount)} note={`${undatedCount} not projected (no day)`} tone={undatedCount > 0 ? 'warn' : 'normal'} />
         <Stat label="Inactive rows" value={String(rows.filter(r => !r.active).length)} note="kept for history" muted />
       </div>
 
       {undatedCount > 0 && (
         <p className="text-[12px] text-amber-gold bg-amber-gold/10 border border-amber-gold/30 rounded-sm px-3 py-2 mb-3">
-          {undatedCount} active {undatedCount === 1 ? 'cost has' : 'costs have'} no due-day — until set, they fall back to the old even-smear in Rolling and won&apos;t land on a real date.
+          {undatedCount} active {undatedCount === 1 ? 'cost has' : 'costs have'} no due-day — until set, they are <strong>not projected</strong> in Rolling or the Payment Calendar and won&apos;t appear in the monthly plan/fact. Set a day for every recurring obligation.
         </p>
       )}
 
