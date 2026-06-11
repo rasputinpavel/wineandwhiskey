@@ -41,8 +41,11 @@ const REPO_SF     = 'https://github.com/rasputinpavel/phuket-sip-reserve'
 const STOREFRONT  = 'https://phuket-sip-reserve.lovable.app'
 const TRENDWATCH  = 'https://trendwatch-production.up.railway.app'
 
-const sheetEmbed  = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing&rm=embedded&widget=true`
-const sheetEdit   = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit`
+const sheetEmbed  = (id: string, gid?: number) => `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing&rm=embedded&widget=true${gid != null ? `&gid=${gid}#gid=${gid}` : ''}`
+const sheetEdit   = (id: string, gid?: number) => `https://docs.google.com/spreadsheets/d/${id}/edit${gid != null ? `#gid=${gid}` : ''}`
+
+// Google Sheet tab gids (within SHEET_OPS)
+const GID_EXPENSES = 969216571
 const DRIVE_AUTHUSER = 'info@wine-whiskey.com'
 const folderEmbed = (id: string) => `https://drive.google.com/embeddedfolderview?id=${id}&authuser=${encodeURIComponent(DRIVE_AUTHUSER)}#list`
 const folderOpen  = (id: string) => `https://drive.google.com/drive/folders/${id}?authuser=${encodeURIComponent(DRIVE_AUTHUSER)}`
@@ -156,16 +159,16 @@ export const SECTIONS: Section[] = [
     ],
   },
 
-  // ═══ ANALYTICS ════════════════════════════════════════════════════════
+  // ═══ ACCOUNTING ═══════════════════════════════════════════════════════
   {
-    key: 'analytics', label: 'Аналитика',
+    key: 'analytics', label: 'Accounting',
     description: 'Дашборды, метрики, отчёты',
     items: [
       {
-        slug: 'dashboard-sheet', name: 'Dashboard (Google Sheet)', icon: '📑', status: 'live',
-        description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Переносится в портал поэтапно.',
+        slug: 'dashboard-sheet', name: 'Expenses', icon: '📑', status: 'live',
+        description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Открывается на листе Expenses.',
         route: m('dashboard-sheet'),
-        embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS), openHref: sheetEdit(SHEET_OPS) },
+        embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS, GID_EXPENSES), openHref: sheetEdit(SHEET_OPS, GID_EXPENSES) },
       },
       {
         slug: 'wine-analytics-sheet', name: 'Wine Analytics', icon: '🍇', status: 'live',
