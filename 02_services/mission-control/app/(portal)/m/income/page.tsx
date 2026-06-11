@@ -4,6 +4,7 @@ import { fmtThb, todayBkk } from '@/lib/kpi'
 import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
 import { MovementForm, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
 import { LedgerTable, DailyTable, type LedgerRowData } from '@/components/modules/income/IncomeTables'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,7 +94,10 @@ export default async function IncomePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-heading text-xl text-deep-black">Income / Cash</h2>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="font-heading text-xl text-deep-black">Income / Cash</h2>
+        <DataFreshness sources={['loyverse_receipts']} />
+      </div>
 
       {/* Wallet balances */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

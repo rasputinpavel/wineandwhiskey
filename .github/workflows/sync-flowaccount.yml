@@ -2,8 +2,9 @@ name: Sync FlowAccount
 
 on:
   schedule:
-    # Every 8 hours: 00:00 / 08:00 / 16:00 Bangkok (UTC+7) = 17 / 01 / 09 UTC
-    - cron: "0 1,9,17 * * *"
+    # Every 8 hours: 06:30 / 14:30 / 22:30 Bangkok (UTC+7) = 23:30 / 07:30 / 15:30 UTC.
+    # One run right after close (22:30 BKK) for same-evening day totals.
+    - cron: "30 7,15,23 * * *"
   workflow_dispatch:
     inputs:
       from:
