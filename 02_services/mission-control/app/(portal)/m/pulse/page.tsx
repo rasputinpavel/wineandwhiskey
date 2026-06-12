@@ -1,10 +1,8 @@
 import Link from 'next/link'
-import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost, type MandatoryActual } from '@/lib/supabase'
+import { sbInventory, sbPublic, type LoyverseReceipt, type FlowInvoice, type B2bCustomer, type Supplier, type PurchaseOrder, type FixedCost } from '@/lib/supabase'
 import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
-import { matchLabelsFor, mandatoryLabelSet, isMandatoryExpense } from '@/lib/mandatory'
-import { fetchExpenses, type WalletExpense } from '@/lib/income'
 import {
   lastNMonths, mtdProgress, computeDueDate, daysBetween, isoNDaysAgo,
   fmtThb, fmtThbCompact, todayBkk,
@@ -119,11 +117,10 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     customersRes,
     suppliersRes,
     pulseSettingsRes,
-    mandatoryActualRes,
   ] = await Promise.all([
     sbInventory
       .from('fixed_cost')
-      .select('*'),
+      .select('amount_thb, percent_revenue, active'),
     sbInventory
       .from('flowaccount_invoice')
       .select('id, total, status, issued_at, due_at, customer_id, customer_name')
@@ -140,9 +137,6 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       .select('fixed_buffer_pct')
       .eq('id', 1)
       .maybeSingle(),
-    sbInventory
-      .from('mandatory_actual')
-      .select('*'),
   ])
 
   for (const r of [invoicesOpenRes, customersRes, suppliersRes]) {
@@ -283,68 +277,33 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     if (b) b.supplierPayments += consignObligationTotal(ym)
   }
 
-  // Mandatory costs (Fixed Costs tracker) — flat THB/month and percent-of-revenue
-  // rows. No buffer (removed). For monthly P&L we use ACTUAL incurred where we can
-  // match it (Expenses sheet + manual overrides) and fall back to the plan amount,
-  // so closed months stop being an estimate. Operational = everyday non-mandatory
-  // spend, counted as actual only (never forecast).
+  // Fixed costs — two kinds:
+  //   fixed rows  → flat THB/month (rent, salary, …)
+  //   pct rows    → percent of monthly revenue (tax, royalties, …)
+  // No buffer (removed) — the safety contingency is no longer applied.
+  type FxCost = Pick<FixedCost, 'amount_thb' | 'percent_revenue' | 'active'>
   void pulseSettingsRes  // buffer deprecated — kept in DB, no longer applied
-  const fixedCostRows = ((fixedCostsRes.data ?? []) as FixedCost[]).filter(r => r.active)
+  const fixedCostRows = ((fixedCostsRes.data ?? []) as FxCost[]).filter(r => r.active)
   const monthlyFixedBase = fixedCostRows
     .filter(r => r.percent_revenue == null)
     .reduce((s, r) => s + Number(r.amount_thb ?? 0), 0)
   const fixedPctOfRevenue = fixedCostRows
     .filter(r => r.percent_revenue != null)
     .reduce((s, r) => s + Number(r.percent_revenue ?? 0), 0) / 100
-  // Full-month mandatory plan at a given revenue — used for forecasts (projection,
-  // next month, break-even) where actuals don't exist yet.
+  const bufferPct = 0
+  // Helper: full-month fixed for a given revenue (used by trend, projection, etc.)
   function fixedForMonth(revenue: number): number {
     return monthlyFixedBase + revenue * fixedPctOfRevenue
   }
+  // Legacy convenience: fixed cost assuming the selected month's revenue.
   const monthlyFixed = monthlyFixedBase
-
-  // Fact inputs for mandatory/operational reconciliation.
-  const overrides = (mandatoryActualRes.data ?? []) as MandatoryActual[]
-  const mandLabels = mandatoryLabelSet(fixedCostRows)
-  let pulseExpenses: WalletExpense[] = []
-  try { pulseExpenses = await fetchExpenses() } catch { /* no creds → operational 0, mandatory from plan */ }
-
-  // Mandatory + operational for a month — ACTUAL ONLY, straight from the Expenses
-  // sheet, split by category match. No plan fallback here: adding plan on top of
-  // actuals double-counts a cost whenever its sheet category doesn't match the
-  // Fixed Costs row (e.g. "Аренда" vs "Rent"). Plan lives only in the forecast
-  // (fixedForMonth) for projection / next month / break-even.
-  //   mandatory   = Σ Expenses-sheet rows whose category matches a Fixed Costs row
-  //                 (+ manual override amounts for rows with no sheet match)
-  //   operational = Σ everything else in the sheet that month
-  function costsForMonth(ym: string, revenue: number): { mandatory: number; operational: number } {
-    const monthExp = pulseExpenses.filter(e => e.date.slice(0, 7) === ym)
-    // No actuals for this month (pre-sheet history, or Expenses unavailable) →
-    // fall back to the plan template so the trend isn't blank. Safe from double-
-    // counting: there are no expense rows to also land in operational.
-    if (monthExp.length === 0) return { mandatory: fixedForMonth(revenue), operational: 0 }
-    let mandatory = 0, operational = 0
-    for (const e of monthExp) {
-      if (isMandatoryExpense(e.category, mandLabels)) mandatory += e.amount
-      else operational += e.amount
-    }
-    // Manual override amounts count only when the sheet has no matching row this
-    // month (otherwise the actual is already in `mandatory` above).
-    for (const r of fixedCostRows) {
-      const ov = overrides.find(o => o.fixed_cost_id === r.id && o.period === ym)
-      if (!ov || ov.amount_thb == null) continue
-      const labels = matchLabelsFor(r)
-      if (!monthExp.some(e => labels.includes(e.category.trim().toLowerCase()))) mandatory += Number(ov.amount_thb)
-    }
-    return { mandatory, operational }
-  }
 
   // ─── Per-month P&L ───────────────────────────────────────────────────────
   // For closed months: supplierPayments = full-month bucket; fixed = full.
   // For current month:
   //   trend cell shows MTD supplier payments (payment_date ≤ today)
   //   projection uses full-month bucket (already in byMonth)
-  type MonthPnl = { ym: string; label: string; revenue: number; revenueB2C: number; revenueB2B: number; supplierPayments: number; gp: number; fixed: number; operational: number; net: number; isCurrent: boolean }
+  type MonthPnl = { ym: string; label: string; revenue: number; revenueB2C: number; revenueB2B: number; supplierPayments: number; gp: number; fixed: number; net: number; isCurrent: boolean }
   const currentYM = currentMonth.fromDate.slice(0, 7)
 
   // Always anchored to the CURRENT month — this is what the trend's current
@@ -359,14 +318,14 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     const ym = m.fromDate.slice(0, 7)
     const b  = byMonth.get(ym) ?? empty()
     const cur = ym === currentYm
-    // Mandatory = actual where matched (Expenses sheet + overrides), else plan;
-    // for the current month that's actual-so-far + plan for the rest. Operational
-    // = actual non-mandatory spend this month. Revenue for pct-rows = month total
-    // (full for closed, MTD for current).
-    const { mandatory: fixed, operational } = costsForMonth(ym, b.total)
+    // Fixed-THB pro-rated for current month MTD; pct-of-revenue already scales
+    // by revenue (which is MTD for current month, full for closed months).
+    const fixed = cur
+      ? monthlyFixedBase * (1 + bufferPct) * (currentDaysPassed / currentDaysInMonth) + b.total * fixedPctOfRevenue
+      : monthlyFixedBase * (1 + bufferPct) + b.total * fixedPctOfRevenue
     const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
-    return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, operational, net: gp - fixed - operational, isCurrent: cur }
+    return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, net: gp - fixed, isCurrent: cur }
   })
   const selected      = monthsPnl.find(m => m.ym === selectedYm) ?? monthsPnl[monthsPnl.length - 1]
   const selectedBucket = byMonth.get(selectedYm) ?? empty()
@@ -378,7 +337,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   const selectedConsignObligation = consignObligationTotal(selectedYm)
   const selectedSupplierPayments = selected.supplierPayments
   const selectedGp  = selected.revenue - selectedSupplierPayments
-  const selectedNet = selectedGp - selected.fixed - selected.operational
+  const selectedNet = selectedGp - selected.fixed
 
   // Reference Gross Margin % (from Loyverse cost_total) for the selected month.
   const refGmPct = selectedBucket.total > 0
@@ -414,9 +373,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     : selected.revenue
   const projSupplier   = isCurrent ? currentBucket.supplierPayments : selectedSupplierPayments
   const projGp         = projRevenue - projSupplier
-  // EOM: full-month mandatory plan at projected revenue, minus operational so far
-  // (operational is never forecast). Closed months keep their final net.
-  const projNet        = isCurrent ? (projGp - fixedForMonth(projRevenue) - selected.operational) : selectedNet
+  const projNet        = isCurrent ? (projGp - fixedForMonth(projRevenue)) : selectedNet
   // For "more by EOM" sub on waterfall — only meaningful when looking at current.
   const revenueRemainingProj  = isCurrent ? Math.max(0, projRevenue - selected.revenue) : 0
   const supplierRemainingProj = isCurrent ? Math.max(0, projSupplier - selectedSupplierPayments) : 0
@@ -453,11 +410,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     })
     .reduce((s, inv) => s + Number(inv.total), 0)
 
-  // Solve R = sup + base + R*pct  →  R = (sup + base) / (1 - pct).
+  // Solve R = sup + base*(1+buf) + R*pct  →  R = (sup + base*(1+buf)) / (1 - pct).
   // Guard pct ≥ 1 (cost scales beyond 100% of revenue → no break-even possible).
   const minRevenueNext = fixedPctOfRevenue >= 1
     ? Infinity
-    : (supplierPaymentsNext + monthlyFixedBase) / (1 - fixedPctOfRevenue)
+    : (supplierPaymentsNext + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
   const minB2CNext     = Number.isFinite(minRevenueNext) ? Math.max(0, minRevenueNext - expectedB2BNext) : minRevenueNext
 
   // ─── Cash control: AR Open / AP Open / Net WC ────────────────────────────
@@ -625,7 +582,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
       </div>
 
       {/* Break-even reference for the selected month: total cash needed
-          (full-month supplier + full-month mandatory plan). Current
+          (full-month supplier + full-month fixed-with-buffer). Current
           revenue is what's already in the books (MTD or final). */}
       {(() => null)() /* placeholder to keep below const list legible */}
 
@@ -649,14 +606,14 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           consignmentNote={harvestNote(selectedYm)}
           gp={selectedGp}
           fixedMtd={selected.fixed}
-          operational={selected.operational}
           monthlyFixedBase={monthlyFixedBase}
+          bufferPct={bufferPct}
           fixedPctOfRevenue={fixedPctOfRevenue}
           refGmPct={refGmPct}
           breakevenRevenue={
             fixedPctOfRevenue >= 1
               ? Infinity
-              : ((isCurrent ? currentBucket.supplierPayments : selectedSupplierPayments) + monthlyFixedBase) / (1 - fixedPctOfRevenue)
+              : ((isCurrent ? currentBucket.supplierPayments : selectedSupplierPayments) + monthlyFixedBase * (1 + bufferPct)) / (1 - fixedPctOfRevenue)
           }
         />
         <NextMonthCard
@@ -664,6 +621,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           supplierPaymentsNext={supplierPaymentsNext}
           monthlyFixed={Number.isFinite(minRevenueNext) ? fixedForMonth(minRevenueNext) : monthlyFixed}
           monthlyFixedBase={monthlyFixedBase}
+          bufferPct={bufferPct}
           fixedPctOfRevenue={fixedPctOfRevenue}
           expectedB2BNext={expectedB2BNext}
           minRevenueNext={minRevenueNext}
@@ -724,8 +682,8 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
           <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is taken from the monthly settlement PO — Harvest raises one PO per month (the invoice; other arrivals are Loyverse stock adjustments, not POs), so the PO is the source of truth. It&apos;s booked by payment date. POs settled before the ownership handover (before May 2026) are excluded and flagged.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
-          <p><span className="text-deep-black">Mandatory</span> &amp; <span className="text-deep-black">Operational</span> are the month&apos;s <em>actual</em> spend from the Expenses sheet, split by category: rows whose category matches a <Link href="/m/fixed-costs" className="text-wine-red hover:underline">Fixed Costs</Link> entry (rent, salary, taxes, …) are Mandatory, everything else is Operational. No plan is added on top of actuals (that would double-count a cost whose sheet category doesn&apos;t match its Fixed Costs row), and no buffer. So Net reflects real money out. Plan amounts are used only in the EOM projection and Next-month outlook. Net = GP − Mandatory − Operational.</p>
-          <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full-month mandatory plan − operational so far (operational isn&apos;t forecast).</p>
+          <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. No buffer. The list is configured in <Link href="/m/fixed-costs" className="text-wine-red hover:underline">Fixed Costs</Link>. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
+          <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
           <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
           <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
         </div>
@@ -770,15 +728,15 @@ function buildPastHeadline({ net, monthLabel }: { net: number; monthLabel: strin
 
 // Unified hero for the selected month — mirrors NextMonthCard's structure
 // (amber/tone strip + big number + daily-pace breakdown + INPUTS section).
-function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, consignmentNote, gp, fixedMtd, operational, monthlyFixedBase, fixedPctOfRevenue, refGmPct, breakevenRevenue }: {
+function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, daysInMonth, headline, revenue, revenueB2C, revenueB2B, revenueRemainingProj, supplierPayments, supplierPaymentsRemaining, supplierConsignment, consignmentNote, gp, fixedMtd, monthlyFixedBase, bufferPct, fixedPctOfRevenue, refGmPct, breakevenRevenue }: {
   monthLabel: string; isCurrent: boolean
   net: number; netProjected: number
   daysPassed: number; daysInMonth: number
   headline: { tone: 'ok' | 'warn' | 'danger'; text: string }
   revenue: number; revenueB2C: number; revenueB2B: number; revenueRemainingProj: number
   supplierPayments: number; supplierPaymentsRemaining: number; supplierConsignment: number; consignmentNote: string | null
-  gp: number; fixedMtd: number; operational: number; monthlyFixedBase: number
-  fixedPctOfRevenue: number
+  gp: number; fixedMtd: number; monthlyFixedBase: number
+  bufferPct: number; fixedPctOfRevenue: number
   refGmPct: number
   breakevenRevenue: number
 }) {
@@ -797,7 +755,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
   const fixedParts: string[] = []
   if (monthlyFixedBase > 0) fixedParts.push(`${fmtThb(monthlyFixedBase)}/mo`)
   if (fixedPctOfRevenue > 0) fixedParts.push(`${(fixedPctOfRevenue * 100).toFixed(1)}% of revenue`)
-  const fixedSub = fixedParts.length > 0 ? `actual from Expenses · plan ${fixedParts.join(' · ')}` : 'not configured'
+  const fixedSub = fixedParts.length > 0 ? fixedParts.join(' · ') : 'not configured'
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md shadow-card h-full overflow-hidden flex flex-col">
@@ -866,10 +824,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
             </div>
           )}
           <NMORow label={`Gross Profit · GM% ref ${refGmPct.toFixed(1)}%`} value={gp} sign="=" bold />
-          <NMORow label="Mandatory" value={fixedMtd} sign="−" sub={fixedSub} />
-          {operational > 0 && (
-            <NMORow label="Operational" value={operational} sign="−" sub="actual non-mandatory spend (Expenses sheet)" />
-          )}
+          <NMORow label={isCurrent ? `Fixed (${daysPassed}/${daysInMonth} d)` : 'Fixed (full month)'} value={fixedMtd} sign="−" sub={fixedSub} />
           <NMORow label="Net Profit" value={net} sign="=" bold tone={positive ? 'pos' : 'neg'} />
         </div>
       </div>
@@ -878,7 +833,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
 }
 
 function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annualTotalRev, annualAvgRev, closedCount }: {
-  months: { ym: string; label: string; net: number; revenue: number; supplierPayments: number; fixed: number; operational: number; isCurrent: boolean }[]
+  months: { ym: string; label: string; net: number; revenue: number; supplierPayments: number; fixed: number; isCurrent: boolean }[]
   max: number
   selectedYm: string
   annualTotalNet: number
@@ -934,7 +889,7 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
                 strokeWidth={isSelected ? 2 : (m.isCurrent ? 1 : 0)}
                 strokeDasharray={dash}
               >
-                <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Mand ${fmtThbCompact(m.fixed)}${m.operational ? ` · Op ${fmtThbCompact(m.operational)}` : ''}\nNet ${valueLabel}${m.isCurrent ? ' (projected)' : ''}`}</title>
+                <title>{`${m.label}\nRevenue ${fmtThbCompact(m.revenue)} · Sup ${fmtThbCompact(m.supplierPayments)} · Fixed ${fmtThbCompact(m.fixed)}\nNet ${valueLabel}${m.isCurrent ? ' (projected)' : ''}`}</title>
               </rect>
               <text
                 x={x + barW / 2} y={valueY}
@@ -996,11 +951,12 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
   )
 }
 
-function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, fixedPctOfRevenue, expectedB2BNext, minRevenueNext, minB2CNext }: {
+function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, bufferPct, fixedPctOfRevenue, expectedB2BNext, minRevenueNext, minB2CNext }: {
   monthLabel: string
   supplierPaymentsNext: number
   monthlyFixed: number
   monthlyFixedBase: number
+  bufferPct: number
   fixedPctOfRevenue: number
   expectedB2BNext: number
   minRevenueNext: number
@@ -1038,7 +994,7 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthly
         <div className="space-y-1.5 text-xs">
           <NMORow label="Supplier payments due" value={supplierPaymentsNext} sign="−"
             sub="POs ordered this month, payable next" />
-          <NMORow label="Mandatory costs" value={monthlyFixed} sign="−"
+          <NMORow label="Fixed costs" value={monthlyFixed} sign="−"
             sub={(() => {
               const parts: string[] = []
               if (monthlyFixedBase > 0) parts.push(`${fmtThb(monthlyFixedBase)}/mo`)
