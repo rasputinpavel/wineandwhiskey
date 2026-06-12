@@ -6,8 +6,7 @@ import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
 import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
-import { generateObligations, reconcile, daysInMonth } from '@/lib/mandatory'
-import { fetchExpenses, type WalletExpense } from '@/lib/income'
+import { generateObligations, applyOverrides, daysInMonth } from '@/lib/mandatory'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,7 +156,8 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
   }
 
   // ── OUT: обязательные расходы (mandatory obligations из Fixed Costs) ─────
-  // Датированные обязательства (аренда, зарплата, налоги…) с reconcile к факту.
+  // Датированные обязательства (аренда, зарплата, налоги…) — план по датам,
+  // статус paid только из ручного override (лист Expenses не делится по строкам).
   // Месячный вид — обязательства месяца; Open — ближнее окно неоплаченных.
   const [{ data: fcData }, { data: ovData }] = await Promise.all([
     sbInventory.from('fixed_cost').select('*'),
@@ -165,9 +165,6 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
   ])
   const fixedRows = (fcData ?? []) as FixedCost[]
   const overrides = (ovData ?? []) as MandatoryActual[]
-
-  let mandExpenses: WalletExpense[] = []
-  try { mandExpenses = await fetchExpenses() } catch { /* нет creds — факт только из override */ }
 
   // Оценка выручки/мес для %-строк (налоги, бонусы): средний день × длина месяца.
   const since30 = new Date(Date.now() - 30 * 86400_000 + 7 * 3600_000).toISOString().slice(0, 10)
@@ -193,7 +190,7 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
 
   const outMand: CalRow[] = []
   for (const mo of mandMonths) {
-    const rec = reconcile(generateObligations(mo, fixedRows, revenueOfMonth), mandExpenses, overrides, today)
+    const rec = applyOverrides(generateObligations(mo, fixedRows, revenueOfMonth), overrides, today)
     for (const o of rec) {
       const status: Status = o.status === 'paid' ? 'paid' : statusFor(o.date, today)
       if (!month && status === 'paid') continue   // Open = только неоплаченные

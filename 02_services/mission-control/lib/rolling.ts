@@ -109,9 +109,10 @@ export function buildRolling(input: {
   manualInflows: DatedAmount[]
   manualOutflows: DatedAmount[]
   ownerIntake: DatedAmount[]
-  // actual expenses, pre-split by category into the two buckets:
+  // actual expenses, pre-split by Expenses-sheet bucket:
   mandatoryExpensesActual: DatedAmount[]
   operationalExpensesActual: DatedAmount[]
+  payablesExpensesActual: DatedAmount[]
   // projection inputs:
   avgRetailPerDay: number
   ar: DatedAmount[]
@@ -120,7 +121,7 @@ export function buildRolling(input: {
   mandatory: DatedAmount[]   // dated obligations (forecast side)
 }): RollingForecast {
   const { today, openingBalance, openingDate, revenueActual, manualInflows, manualOutflows,
-    ownerIntake, mandatoryExpensesActual, operationalExpensesActual, avgRetailPerDay, ar, ap, big, mandatory } = input
+    ownerIntake, mandatoryExpensesActual, operationalExpensesActual, payablesExpensesActual, avgRetailPerDay, ar, ap, big, mandatory } = input
 
   const periods = periodsFrom(openingDate)
   const weeks: RollingWeek[] = []
@@ -148,6 +149,7 @@ export function buildRolling(input: {
     // forecast — it shows only as actuals on closed weeks.
     const mandAct = sumSide(mandatoryExpensesActual, p.s, p.e, today, 'actual')
     const operAct = sumSide(operationalExpensesActual, p.s, p.e, today, 'actual')
+    const payAct  = sumSide(payablesExpensesActual, p.s, p.e, today, 'actual')
     const outAct  = sumSide(manualOutflows, p.s, p.e, today, 'actual')
     const mandProj = sumSide(mandatory, p.s, p.e, today, 'proj')
     const apProj   = sumSide(ap, p.s, p.e, today, 'proj')
@@ -155,7 +157,7 @@ export function buildRolling(input: {
 
     const outflowBuckets: OutflowBuckets = {
       mandatory:   mandAct + mandProj,
-      payables:    apProj,
+      payables:    payAct + apProj,
       operational: operAct + outAct,
       big:         bigProj,
     }

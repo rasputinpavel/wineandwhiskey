@@ -2,11 +2,11 @@ import Link from 'next/link'
 import { sbInventory, type FixedCost, type MandatoryActual } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import {
-  CategoryCell, AmountCell, DueDayCell, MatchCategoryCell, ActiveCell, DeleteCell, NewCostRow,
+  CategoryCell, AmountCell, DueDayCell, ActiveCell, DeleteCell, NewCostRow,
 } from '@/components/modules/pulse/FixedCostCells'
-import { ActualCell, StatusCell } from '@/components/modules/fixed/ObligationCells'
+import { StatusCell } from '@/components/modules/fixed/ObligationCells'
 import { fmtThb, todayBkk } from '@/lib/kpi'
-import { generateObligations, reconcile } from '@/lib/mandatory'
+import { generateObligations, applyOverrides, sumBucket } from '@/lib/mandatory'
 import { fetchExpenses, type WalletExpense } from '@/lib/income'
 import { type DashReceipt, monthlyTotals, MONTH_ABBR } from '@/lib/dashboard'
 
@@ -101,7 +101,6 @@ function TemplateView({ rows }: { rows: FixedCost[] }) {
               <th className="py-2 px-4 text-left font-normal">Category</th>
               <th className="py-2 px-4 text-right font-normal">Amount</th>
               <th className="py-2 px-3 text-center font-normal">Due day</th>
-              <th className="py-2 px-3 text-left font-normal">Match (Expenses cat.)</th>
               <th className="py-2 px-4 text-center font-normal">Status</th>
               <th className="py-2 px-4 text-right font-normal w-12"></th>
             </tr>
@@ -112,13 +111,12 @@ function TemplateView({ rows }: { rows: FixedCost[] }) {
                 <td className="py-2 px-4"><CategoryCell id={r.id} initial={r.category} /></td>
                 <td className="py-2 px-4 text-right"><AmountCell id={r.id} amountThb={r.amount_thb} percentRevenue={r.percent_revenue} /></td>
                 <td className="py-2 px-3 text-center"><DueDayCell id={r.id} initial={r.due_day} /></td>
-                <td className="py-2 px-3"><MatchCategoryCell id={r.id} initial={r.match_category} /></td>
                 <td className="py-2 px-4 text-center"><ActiveCell id={r.id} initial={r.active} /></td>
                 <td className="py-2 px-4 text-right"><DeleteCell id={r.id} category={r.category} /></td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-graphite text-sm">No fixed costs yet. Add the first one below.</td></tr>
+              <tr><td colSpan={5} className="py-6 text-center text-graphite text-sm">No fixed costs yet. Add the first one below.</td></tr>
             )}
           </tbody>
         </table>
@@ -159,11 +157,13 @@ async function MonthView({ rows, month }: { rows: FixedCost[]; month: string }) 
   }
   const monthly = monthlyTotals(receipts)
   const obligations = generateObligations(month, rows, m => monthly.get(m) ?? 0)
-  const reconciled = reconcile(obligations, expenses, overrides, today).sort((a, b) => a.date.localeCompare(b.date))
+  const reconciled = applyOverrides(obligations, overrides, today).sort((a, b) => a.date.localeCompare(b.date))
 
   const undated = rows.filter(r => r.active && r.due_day == null)
   const plannedTotal = reconciled.reduce((s, o) => s + o.planned, 0)
-  const actualTotal  = reconciled.reduce((s, o) => s + (o.actual ?? 0), 0)
+  // Actual mandatory spend is the whole "Обязательные" bucket from the sheet —
+  // the sheet has no per-obligation detail, so fact lives at the bucket level.
+  const actualBucket = sumBucket(expenses, month, 'mandatory')
   const paidCount    = reconciled.filter(o => o.status === 'paid').length
 
   return (
@@ -176,16 +176,22 @@ async function MonthView({ rows, month }: { rows: FixedCost[]; month: string }) 
 
       {expensesError && (
         <p className="text-[12px] text-wine-red bg-wine-red/[0.06] border border-wine-red/30 rounded-sm px-3 py-2 mb-3">
-          Expenses sheet not loaded ({expensesError}). Actuals shown only from manual overrides. Set GOOGLE_* env.
+          Expenses sheet not loaded ({expensesError}). Actual bucket total unavailable. Set GOOGLE_* env.
         </p>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
-        <Stat label="Planned" value={fmtThb(plannedTotal)} note={`${reconciled.length} obligations`} />
-        <Stat label="Actual" value={fmtThb(actualTotal)} note="paid + overrides" />
-        <Stat label="Variance" value={fmtThb(actualTotal - plannedTotal)} note="actual − planned" tone={actualTotal - plannedTotal > 0 ? 'warn' : 'normal'} />
-        <Stat label="Paid" value={`${paidCount}/${reconciled.length}`} note={`${reconciled.length - paidCount} outstanding`} muted />
+        <Stat label="Plan" value={fmtThb(plannedTotal)} note={`${reconciled.length} obligations`} />
+        <Stat label="Actual · Обязательные" value={fmtThb(actualBucket)} note="from Expenses sheet" />
+        <Stat label="Variance" value={fmtThb(actualBucket - plannedTotal)} note="actual − plan" tone={actualBucket - plannedTotal > 0 ? 'warn' : 'normal'} />
+        <Stat label="Marked paid" value={`${paidCount}/${reconciled.length}`} note={`${reconciled.length - paidCount} not marked`} muted />
       </div>
+
+      <p className="text-[12px] text-graphite mb-3">
+        <strong>Plan</strong> is your template, broken down per obligation. <strong>Actual</strong> is the
+        month&apos;s whole <span className="font-mono">Обязательные</span> bucket from the Expenses sheet — it has no
+        per-obligation detail, so fact is compared at the bucket level. Mark rows paid to track what&apos;s settled.
+      </p>
 
       <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
         <table className="w-full text-[13px]">
@@ -193,30 +199,21 @@ async function MonthView({ rows, month }: { rows: FixedCost[]; month: string }) 
             <tr>
               <th className="py-2 px-4 text-left font-normal">Due</th>
               <th className="py-2 px-4 text-left font-normal">Category</th>
-              <th className="py-2 px-4 text-right font-normal">Planned</th>
-              <th className="py-2 px-4 text-right font-normal">Actual</th>
-              <th className="py-2 px-4 text-right font-normal">Δ</th>
+              <th className="py-2 px-4 text-right font-normal">Plan</th>
               <th className="py-2 px-4 text-center font-normal">Status</th>
             </tr>
           </thead>
           <tbody>
-            {reconciled.map(o => {
-              const delta = (o.actual ?? 0) - o.planned
-              return (
-                <tr key={o.fixedCostId} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${o.status === 'overdue' ? 'bg-wine-red/[0.04]' : ''}`}>
-                  <td className="py-2 px-4 tabular-nums text-graphite">{o.date.slice(8)} {monthLabel(month).split(' ')[0]}</td>
-                  <td className="py-2 px-4 text-deep-black">{o.category}</td>
-                  <td className="py-2 px-4 text-right tabular-nums text-deep-black">{fmtThb(o.planned)}</td>
-                  <td className="py-2 px-4 text-right"><ActualCell fixedCostId={o.fixedCostId} period={month} actual={o.actual} source={o.source} /></td>
-                  <td className={`py-2 px-4 text-right tabular-nums ${o.actual == null ? 'text-graphite' : delta > 0 ? 'text-wine-red' : 'text-emerald-700'}`}>
-                    {o.actual == null ? '—' : (delta > 0 ? '+' : '') + fmtThb(delta)}
-                  </td>
-                  <td className="py-2 px-4 text-center"><StatusCell fixedCostId={o.fixedCostId} period={month} status={o.status} planned={o.planned} source={o.source} /></td>
-                </tr>
-              )
-            })}
+            {reconciled.map(o => (
+              <tr key={o.fixedCostId} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${o.status === 'overdue' ? 'bg-wine-red/[0.04]' : ''}`}>
+                <td className="py-2 px-4 tabular-nums text-graphite">{o.date.slice(8)} {monthLabel(month).split(' ')[0]}</td>
+                <td className="py-2 px-4 text-deep-black">{o.category}</td>
+                <td className="py-2 px-4 text-right tabular-nums text-deep-black">{fmtThb(o.planned)}</td>
+                <td className="py-2 px-4 text-center"><StatusCell fixedCostId={o.fixedCostId} period={month} status={o.status} planned={o.planned} source={o.source} /></td>
+              </tr>
+            ))}
             {reconciled.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-graphite text-sm">No dated obligations. Add a due-day to costs in the Template view.</td></tr>
+              <tr><td colSpan={4} className="py-6 text-center text-graphite text-sm">No dated obligations. Add a due-day to costs in the Template view.</td></tr>
             )}
           </tbody>
         </table>

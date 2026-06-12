@@ -2,7 +2,7 @@ import { sbInventory, sbPublic, type MoneyWallet, type MoneyMovement, type Fixed
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk, computeDueDate } from '@/lib/kpi'
 import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type WalletExpense } from '@/lib/income'
-import { generateObligations, mandatoryLabelSet, isMandatoryExpense, daysInMonth } from '@/lib/mandatory'
+import { generateObligations, bucketOf, daysInMonth } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
 import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
@@ -139,15 +139,18 @@ export default async function RollingPage() {
     else if (m.kind === 'outflow') manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
     // transfers net zero on total liquidity
   }
-  // Split actual expenses into mandatory (category matches a fixed-cost row) vs
-  // operational (everything else) so closed weeks break down by bucket.
+  // Split actual expenses by the Expenses-sheet bucket (Обязательные /
+  // Кредиторка / Операционные) so closed weeks break down correctly. Anything
+  // uncategorised falls into operational.
   const fixedRows = (fixedRes.data ?? []) as FixedCost[]
-  const labels = mandatoryLabelSet(fixedRows)
   const mandatoryExpensesActual: DatedAmount[] = []
   const operationalExpensesActual: DatedAmount[] = []
+  const payablesExpensesActual: DatedAmount[] = []
   for (const e of expenses) {
     const d = { date: e.date, amount: e.amount }
-    if (isMandatoryExpense(e.category, labels)) mandatoryExpensesActual.push(d)
+    const b = bucketOf(e.category)
+    if (b === 'mandatory') mandatoryExpensesActual.push(d)
+    else if (b === 'payables') payablesExpensesActual.push(d)
     else operationalExpensesActual.push(d)
   }
 
@@ -180,7 +183,7 @@ export default async function RollingPage() {
   const forecast = buildRolling({
     today, openingBalance, openingDate,
     revenueActual, manualInflows, manualOutflows, ownerIntake,
-    mandatoryExpensesActual, operationalExpensesActual,
+    mandatoryExpensesActual, operationalExpensesActual, payablesExpensesActual,
     avgRetailPerDay, ar, ap, big, mandatory,
   })
 
