@@ -317,8 +317,12 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   //   mandatory   = Σ Expenses-sheet rows whose category matches a Fixed Costs row
   //                 (+ manual override amounts for rows with no sheet match)
   //   operational = Σ everything else in the sheet that month
-  function costsForMonth(ym: string): { mandatory: number; operational: number } {
+  function costsForMonth(ym: string, revenue: number): { mandatory: number; operational: number } {
     const monthExp = pulseExpenses.filter(e => e.date.slice(0, 7) === ym)
+    // No actuals for this month (pre-sheet history, or Expenses unavailable) →
+    // fall back to the plan template so the trend isn't blank. Safe from double-
+    // counting: there are no expense rows to also land in operational.
+    if (monthExp.length === 0) return { mandatory: fixedForMonth(revenue), operational: 0 }
     let mandatory = 0, operational = 0
     for (const e of monthExp) {
       if (isMandatoryExpense(e.category, mandLabels)) mandatory += e.amount
@@ -359,7 +363,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     // for the current month that's actual-so-far + plan for the rest. Operational
     // = actual non-mandatory spend this month. Revenue for pct-rows = month total
     // (full for closed, MTD for current).
-    const { mandatory: fixed, operational } = costsForMonth(ym)
+    const { mandatory: fixed, operational } = costsForMonth(ym, b.total)
     const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
     return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, operational, net: gp - fixed - operational, isCurrent: cur }
