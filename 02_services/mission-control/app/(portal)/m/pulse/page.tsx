@@ -309,28 +309,29 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   let pulseExpenses: WalletExpense[] = []
   try { pulseExpenses = await fetchExpenses() } catch { /* no creds → operational 0, mandatory from plan */ }
 
-  // Mandatory + operational for a month. Mandatory per row: manual override amount,
-  // else matched Expenses-sheet sum, else plan (flat or pct×revenue). Operational =
-  // non-mandatory Expenses-sheet rows in the month. Date-agnostic — a monthly P&L.
-  function costsForMonth(ym: string, revenue: number): { mandatory: number; operational: number } {
+  // Mandatory + operational for a month — ACTUAL ONLY, straight from the Expenses
+  // sheet, split by category match. No plan fallback here: adding plan on top of
+  // actuals double-counts a cost whenever its sheet category doesn't match the
+  // Fixed Costs row (e.g. "Аренда" vs "Rent"). Plan lives only in the forecast
+  // (fixedForMonth) for projection / next month / break-even.
+  //   mandatory   = Σ Expenses-sheet rows whose category matches a Fixed Costs row
+  //                 (+ manual override amounts for rows with no sheet match)
+  //   operational = Σ everything else in the sheet that month
+  function costsForMonth(ym: string): { mandatory: number; operational: number } {
     const monthExp = pulseExpenses.filter(e => e.date.slice(0, 7) === ym)
-    let mandatory = 0
-    for (const r of fixedCostRows) {
-      const plan = r.percent_revenue != null ? (Number(r.percent_revenue) / 100) * revenue : Number(r.amount_thb ?? 0)
-      const ov = overrides.find(o => o.fixed_cost_id === r.id && o.period === ym)
-      let actual: number | null = null
-      if (ov && ov.amount_thb != null) actual = Number(ov.amount_thb)
-      else {
-        const labels = matchLabelsFor(r)
-        const matched = monthExp.filter(e => labels.includes(e.category.trim().toLowerCase()))
-        if (matched.length) actual = matched.reduce((s, e) => s + e.amount, 0)
-        else if (ov?.paid) actual = plan
-      }
-      mandatory += actual ?? plan
+    let mandatory = 0, operational = 0
+    for (const e of monthExp) {
+      if (isMandatoryExpense(e.category, mandLabels)) mandatory += e.amount
+      else operational += e.amount
     }
-    const operational = monthExp
-      .filter(e => !isMandatoryExpense(e.category, mandLabels))
-      .reduce((s, e) => s + e.amount, 0)
+    // Manual override amounts count only when the sheet has no matching row this
+    // month (otherwise the actual is already in `mandatory` above).
+    for (const r of fixedCostRows) {
+      const ov = overrides.find(o => o.fixed_cost_id === r.id && o.period === ym)
+      if (!ov || ov.amount_thb == null) continue
+      const labels = matchLabelsFor(r)
+      if (!monthExp.some(e => labels.includes(e.category.trim().toLowerCase()))) mandatory += Number(ov.amount_thb)
+    }
     return { mandatory, operational }
   }
 
@@ -358,7 +359,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
     // for the current month that's actual-so-far + plan for the rest. Operational
     // = actual non-mandatory spend this month. Revenue for pct-rows = month total
     // (full for closed, MTD for current).
-    const { mandatory: fixed, operational } = costsForMonth(ym, b.total)
+    const { mandatory: fixed, operational } = costsForMonth(ym)
     const sup   = cur ? supplierPaymentsMtd : b.supplierPayments
     const gp    = b.total - sup
     return { ym, label: m.label, revenue: b.total, revenueB2C: b.b2c, revenueB2B: b.b2b, supplierPayments: sup, gp, fixed, operational, net: gp - fixed - operational, isCurrent: cur }
@@ -719,7 +720,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           <p><span className="text-deep-black">Revenue</span> = Σ Loyverse receipts in month, SALE minus REFUND. Cancelled receipts are not yet filtered (Phase 2 — they&apos;re rare).</p>
           <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is taken from the monthly settlement PO — Harvest raises one PO per month (the invoice; other arrivals are Loyverse stock adjustments, not POs), so the PO is the source of truth. It&apos;s booked by payment date. POs settled before the ownership handover (before May 2026) are excluded and flagged.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
-          <p><span className="text-deep-black">Mandatory costs</span> = the dated obligations from <Link href="/m/fixed-costs" className="text-wine-red hover:underline">Fixed Costs</Link> (rent, salary, taxes, …). Per row we use the ACTUAL incurred amount where it matches the Expenses sheet (or a manual override), otherwise the plan (flat THB, or pct-of-revenue × month revenue). So closed months reflect real spend; the current month is actual-so-far + plan for what&apos;s left. No buffer. <span className="text-deep-black">Operational</span> = everyday non-mandatory spend from the Expenses sheet (actual only, never forecast). Net = GP − Mandatory − Operational.</p>
+          <p><span className="text-deep-black">Mandatory</span> &amp; <span className="text-deep-black">Operational</span> are the month&apos;s <em>actual</em> spend from the Expenses sheet, split by category: rows whose category matches a <Link href="/m/fixed-costs" className="text-wine-red hover:underline">Fixed Costs</Link> entry (rent, salary, taxes, …) are Mandatory, everything else is Operational. No plan is added on top of actuals (that would double-count a cost whose sheet category doesn&apos;t match its Fixed Costs row), and no buffer. So Net reflects real money out. Plan amounts are used only in the EOM projection and Next-month outlook. Net = GP − Mandatory − Operational.</p>
           <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full-month mandatory plan − operational so far (operational isn&apos;t forecast).</p>
           <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
           <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
@@ -792,7 +793,7 @@ function ThisMonthCard({ monthLabel, isCurrent, net, netProjected, daysPassed, d
   const fixedParts: string[] = []
   if (monthlyFixedBase > 0) fixedParts.push(`${fmtThb(monthlyFixedBase)}/mo`)
   if (fixedPctOfRevenue > 0) fixedParts.push(`${(fixedPctOfRevenue * 100).toFixed(1)}% of revenue`)
-  const fixedSub = fixedParts.length > 0 ? `plan ${fixedParts.join(' · ')} · actual where matched` : 'not configured'
+  const fixedSub = fixedParts.length > 0 ? `actual from Expenses · plan ${fixedParts.join(' · ')}` : 'not configured'
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md shadow-card h-full overflow-hidden flex flex-col">
