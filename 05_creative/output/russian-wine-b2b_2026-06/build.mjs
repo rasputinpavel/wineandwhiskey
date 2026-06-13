@@ -303,7 +303,7 @@ const HEADER = `
       ${logo(26)}
     </div>
     <h1>RUSSIAN WINE <span>&amp; SPIRITS</span></h1>
-    <div class="sub">B2B prices · THB per bottle · Summer 2026 · Rawai, Phuket</div>
+    <div class="sub">B2B prices · THB per bottle · VAT 7% excluded · Summer 2026 · Rawai, Phuket</div>
     <div class="order-qr">
       <div class="oq-tile">${ORDER_QR}</div>
       <div class="oq-cap">
@@ -317,8 +317,8 @@ const HEADER = `
 const FOOTER = `
   <footer class="doc-foot">
     Wine &amp; Whiskey · Rawai, Phuket<br>
-    Цены B2B, ฿ за бутылку, действительны на лето 2026.<br>
-    B2B prices, THB per bottle, valid Summer 2026.
+    Цены B2B, ฿ за бутылку, без НДС 7%, действительны на лето 2026.<br>
+    B2B prices, THB per bottle, VAT 7% excluded, valid Summer 2026.
   </footer>`;
 
 // ─── CSS — phone-width single column, one tall scrollable sheet ──────────────
