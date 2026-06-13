@@ -274,7 +274,6 @@ function card(b) {
           <h3 class="name">${b.name}</h3>
           <div class="price">${fmt(b.b2b)}</div>
         </div>
-        <div class="producer">${b.producer.en}</div>
         <div class="meta">${b.region.en} · ${b.grape.en} · ${b.abv}</div>
         <p class="note note-ru">${b.note.ru}</p>
         <p class="note note-en">${b.note.en}</p>
@@ -282,17 +281,38 @@ function card(b) {
     </div>`;
 }
 
+// Within a category: group by producer, producers ordered by their cheapest
+// bottle, bottles within a producer ordered by price (both ascending).
+function producerBlock(producerEn, items) {
+  const sorted = [...items].sort((a, b) => a.b2b - b.b2b);
+  return `
+    <div class="producer-group">
+      <div class="producer-head">${producerEn}</div>
+      <div class="list">${sorted.map(card).join('')}</div>
+    </div>`;
+}
+
 function catSection(cat) {
   const items = BOTTLES.filter((b) => b.category === cat);
   if (!items.length) return '';
   const c = CATEGORY[cat];
+
+  const byProducer = new Map();
+  for (const b of items) {
+    const key = b.producer.en;
+    if (!byProducer.has(key)) byProducer.set(key, []);
+    byProducer.get(key).push(b);
+  }
+  const groups = [...byProducer.entries()]
+    .sort((a, b) => Math.min(...a[1].map((x) => x.b2b)) - Math.min(...b[1].map((x) => x.b2b)));
+
   return `
     <section class="cat">
       <div class="cat-head">
         <span class="cat-en">${c.en}</span>
         <span class="cat-ru">${c.ru}</span>
       </div>
-      <div class="list">${items.map(card).join('')}</div>
+      ${groups.map(([prod, list]) => producerBlock(prod, list)).join('')}
     </section>`;
 }
 
@@ -365,6 +385,14 @@ const CSS = `
   .cat-en { font-family:'Bebas Neue'; font-size:28px; letter-spacing:0.03em; color:var(--wine); line-height:1; }
   .cat-ru { font-family:'Oswald'; font-weight:500; font-size:16px; letter-spacing:0.03em; color:var(--graphite); text-transform:uppercase; }
 
+  /* ── Producer subgroup ── */
+  .producer-group { margin-bottom:14px; }
+  .producer-group:last-child { margin-bottom:0; }
+  .producer-head {
+    font-family:'Oswald'; font-weight:500; font-size:13px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--wine); margin:2px 0 8px; padding-left:2px;
+  }
+
   /* ── Cards (single column) ── */
   .list { display:flex; flex-direction:column; gap:12px; }
   .card { display:flex; gap:14px; padding:13px; align-items:flex-start;
@@ -379,8 +407,6 @@ const CSS = `
   .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .name { font-size:15px; line-height:1.15; font-weight:500; color:var(--black); }
   .price { font-family:'Bebas Neue'; font-size:25px; line-height:0.95; color:var(--black); white-space:nowrap; }
-  .producer { font-family:'Oswald'; font-weight:500; font-size:11px; letter-spacing:0.05em;
-    text-transform:uppercase; color:var(--wine); margin-top:3px; }
   .meta { font-size:11px; color:var(--graphite); letter-spacing:0.01em; margin-top:6px;
     padding-bottom:7px; border-bottom:1px solid rgba(212,201,188,0.7); }
   .note { font-size:11.5px; line-height:1.34; margin-top:6px; }
