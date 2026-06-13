@@ -304,14 +304,14 @@ const HEADER = `
     </div>
     <h1>RUSSIAN WINE <span>&amp; SPIRITS</span></h1>
     <div class="sub">B2B prices · THB per bottle · VAT 7% excluded · Summer 2026 · Rawai, Phuket</div>
-    <div class="order-qr">
+    <a class="order-qr" href="${ORDER_URL}" target="_blank" rel="noopener">
       <div class="oq-tile">${ORDER_QR}</div>
       <div class="oq-cap">
-        <span class="oq-en">Place an order</span>
+        <span class="oq-en">Place an order ›</span>
         <span class="oq-ru">Сделать заказ</span>
         <span class="oq-num">WhatsApp · Irina +66 93 914 0004</span>
       </div>
-    </div>
+    </a>
   </header>`;
 
 const FOOTER = `
@@ -349,7 +349,8 @@ const CSS = `
 
   /* Order QR */
   .order-qr { display:flex; align-items:center; gap:13px; margin-top:16px; padding:11px 13px;
-    background:rgba(255,255,255,0.5); border:1px solid var(--stone); border-radius:8px; }
+    background:rgba(255,255,255,0.5); border:1px solid var(--stone); border-radius:8px;
+    text-decoration:none; color:inherit; }
   .oq-tile { flex:0 0 72px; width:72px; height:72px; background:#F3ECE2; padding:5px; border-radius:4px;
     box-shadow:0 0 0 1px rgba(140,28,28,0.45); }
   .oq-tile svg { width:100%; height:100%; display:block; shape-rendering:crispEdges; }
