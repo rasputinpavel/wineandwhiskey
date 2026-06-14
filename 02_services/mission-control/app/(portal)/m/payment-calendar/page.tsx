@@ -1,12 +1,11 @@
 import Link from 'next/link'
-import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice, type FixedCost, type MandatoryActual } from '@/lib/supabase'
+import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
 import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
-import { generateObligations, applyOverrides, daysInMonth } from '@/lib/mandatory'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +28,6 @@ type CalRow = {
   net: number             // бегущий нетто, проставляется после сортировки
   po?: PurchaseOrder      // OUT: для инлайн-ячеек paid_at / docs
   inv?: { status: string; detailUrl: string | null }  // IN: для статуса/ссылки
-  mand?: boolean          // OUT: обязательный расход (из Fixed Costs), без PO
 }
 type SearchParams = { month?: string }   // YYYY-MM; absent = "Open" (outstanding only)
 
@@ -155,55 +153,6 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
     })
   }
 
-  // ── OUT: обязательные расходы (mandatory obligations из Fixed Costs) ─────
-  // Датированные обязательства (аренда, зарплата, налоги…) — план по датам,
-  // статус paid только из ручного override (лист Expenses не делится по строкам).
-  // Месячный вид — обязательства месяца; Open — ближнее окно неоплаченных.
-  const [{ data: fcData }, { data: ovData }] = await Promise.all([
-    sbInventory.from('fixed_cost').select('*'),
-    sbInventory.from('mandatory_actual').select('*'),
-  ])
-  const fixedRows = (fcData ?? []) as FixedCost[]
-  const overrides = (ovData ?? []) as MandatoryActual[]
-
-  // Оценка выручки/мес для %-строк (налоги, бонусы): средний день × длина месяца.
-  const since30 = new Date(Date.now() - 30 * 86400_000 + 7 * 3600_000).toISOString().slice(0, 10)
-  const { data: recRows } = await sbInventory
-    .from('loyverse_receipt').select('receipt_type, total').gte('receipt_date', since30).limit(8000)
-  let rev30 = 0
-  for (const r of (recRows ?? []) as { receipt_type: string; total: number }[]) {
-    rev30 += (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total)
-  }
-  const avgPerDay = Math.max(0, rev30 / 30)
-  const revenueOfMonth = (ym: string) => avgPerDay * daysInMonth(ym)
-
-  const addMonthYm = (ym: string, delta: number) => {
-    const [y, mo] = ym.split('-').map(Number)
-    const d = new Date(Date.UTC(y, mo - 1 + delta, 1))
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-  }
-  const mandMonths = month ? [month] : (() => {
-    const base = bangkokYM(); const out: string[] = []
-    for (let i = -1; i <= 2; i++) out.push(addMonthYm(base, i))
-    return out
-  })()
-
-  const outMand: CalRow[] = []
-  for (const mo of mandMonths) {
-    const rec = applyOverrides(generateObligations(mo, fixedRows, revenueOfMonth), overrides, today)
-    for (const o of rec) {
-      const status: Status = o.status === 'paid' ? 'paid' : statusFor(o.date, today)
-      if (!month && status === 'paid') continue   // Open = только неоплаченные
-      outMand.push({
-        key: `mand-${o.fixedCostId}-${o.period}`,
-        date: status === 'paid' && o.paidAt ? o.paidAt : o.date,
-        dir: 'out', who: o.category, label: 'fixed', href: null,
-        amount: o.actual != null ? o.actual : o.planned,
-        status, net: 0, mand: true,
-      })
-    }
-  }
-
   // ── Сборка вида ────────────────────────────────────────────────────────
   let rows: CalRow[]
   if (month) {
@@ -211,11 +160,10 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
     rows = [
       ...outOpen.filter(r => inMonth(r.date)),
       ...outPaid,                                  // уже отфильтрованы по paid_at месяца
-      ...outMand,                                  // обязательства месяца (вкл. оплаченные)
       ...inOpen.filter(r => inMonth(r.date)),
     ]
   } else {
-    rows = [...outOpen, ...outMand, ...inOpen]
+    rows = [...outOpen, ...inOpen]
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || (a.dir === b.dir ? 0 : a.dir === 'out' ? -1 : 1))
   let net = 0
@@ -359,12 +307,10 @@ function Timeline({ rows, today }: { rows: CalRow[]; today: string }) {
                   </td>
                   <td className="py-2 px-4 whitespace-nowrap">
                     {r.dir === 'out'
-                      ? (r.mand
-                          ? <MandStatus status={r.status} />
-                          : <div className="flex items-center gap-2">
-                              <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at} />
-                              <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
-                            </div>)
+                      ? <div className="flex items-center gap-2">
+                          <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at} />
+                          <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
+                        </div>
                       : <InvoiceStatus status={r.inv!.status} overdue={r.status === 'overdue'} detailUrl={r.inv!.detailUrl} />}
                   </td>
                 </tr>
@@ -383,22 +329,6 @@ function whenLabel(r: CalRow, today: string): React.ReactNode {
   if (dd < 0)   return <span className="text-wine-red">просрочено {-dd} дн</span>
   if (dd === 0) return <span className="text-deep-black">сегодня</span>
   return <span className="text-graphite">через {dd} дн</span>
-}
-
-function MandStatus({ status }: { status: Status }) {
-  const map: Record<Status, { label: string; cls: string }> = {
-    paid:    { label: 'Paid',    cls: 'bg-emerald-600/10 text-emerald-700 border-emerald-600/40' },
-    overdue: { label: 'Overdue', cls: 'bg-wine-red/10 text-wine-red border-wine-red/40' },
-    today:   { label: 'Today',   cls: 'bg-amber-gold/10 text-deep-black border-amber-gold/40' },
-    future:  { label: 'Planned', cls: 'bg-cream text-graphite border-pale-stone' },
-  }
-  const s = map[status]
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-block px-2 py-0.5 text-[11px] rounded-sm border ${s.cls}`}>{s.label}</span>
-      <Link href="/m/fixed-costs" className="text-[11px] text-graphite hover:text-wine-red" title="Fixed Costs">⚙</Link>
-    </span>
-  )
 }
 
 function InvoiceStatus({ status, overdue, detailUrl }: { status: string; overdue: boolean; detailUrl: string | null }) {
