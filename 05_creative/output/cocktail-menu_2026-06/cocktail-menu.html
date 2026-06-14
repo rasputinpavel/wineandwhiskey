@@ -28,8 +28,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      background: var(--black);
-      color: var(--white);
+      background: var(--white);
+      color: var(--black);
       font-family: 'Inter', sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -38,7 +38,7 @@
     .card {
       width: 210mm;
       height: 297mm;
-      background: var(--black);
+      background: var(--white);
       position: relative;
       overflow: hidden;
       display: flex;
@@ -52,7 +52,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse at 50% 26%, rgba(201,168,76,0.11) 0%, rgba(201,168,76,0) 60%);
+      background: radial-gradient(ellipse at 50% 26%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 62%);
       pointer-events: none;
       z-index: 0;
     }
@@ -61,7 +61,7 @@
     .frame {
       position: absolute;
       inset: 9mm;
-      border: 1px solid var(--graph);
+      border: 1px solid var(--stone);
       pointer-events: none;
       z-index: 1;
     }
@@ -80,13 +80,13 @@
       line-height: 1;
     }
     .wordmark .w { color: var(--wine); }
-    .wordmark .k { color: var(--white); }
+    .wordmark .k { color: var(--black); }
     .title {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 11pt;
       letter-spacing: 0.50em;
       text-transform: uppercase;
-      color: var(--gold);
+      color: var(--wine);
       margin-top: 4mm;
     }
 
@@ -114,13 +114,13 @@
       font-size: 19pt;
       letter-spacing: 0.20em;
       text-transform: uppercase;
-      color: var(--white);
+      color: var(--black);
       white-space: nowrap;
     }
     .section-head .rule {
       flex: 1;
       height: 1px;
-      background: var(--graph);
+      background: var(--stone);
     }
 
     .item {
@@ -135,7 +135,7 @@
       width: 10mm;
       height: 10mm;
       flex-shrink: 0;
-      color: var(--gold);
+      color: var(--wine);
       margin-right: 6mm;
     }
     .item .icon svg { width: 100%; height: 100%; display: block; }
@@ -146,7 +146,7 @@
       font-size: 29pt;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      color: var(--white);
+      color: var(--black);
       white-space: nowrap;
       line-height: 1;
     }
@@ -156,21 +156,21 @@
       font-size: 9pt;
       font-weight: 400;
       letter-spacing: 0.03em;
-      color: var(--stone);
+      color: var(--graph);
       margin-top: 2.5mm;
       font-family: 'Inter', sans-serif;
     }
     .item .lead {
       flex: 1;
       margin: 0 6mm;
-      border-bottom: 1px dotted var(--graph);
+      border-bottom: 1px dotted var(--stone);
       transform: translateY(-1.5mm);
     }
     .item .price {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 29pt;
       letter-spacing: 0.02em;
-      color: var(--gold);
+      color: var(--wine);
       white-space: nowrap;
       line-height: 1;
     }
@@ -190,16 +190,16 @@
       max-width: 142mm;
       flex-shrink: 0;
       padding-top: 4mm;
-      border-top: 1px solid var(--graph);
+      border-top: 1px solid var(--stone);
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-size: 8pt;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--stone);
+      color: var(--graph);
     }
-    .footer .right { color: var(--gold); font-weight: 600; }
+    .footer .right { color: var(--wine); font-weight: 600; }
   </style>
 </head>
 <body>
