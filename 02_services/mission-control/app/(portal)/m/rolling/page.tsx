@@ -5,6 +5,7 @@ import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type W
 import { generateObligations, bucketOf, daysInMonth } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 import { getReceiptHistory, receiptsFrom } from '@/lib/receipts-cache'
 
 export const dynamic = 'force-dynamic'
@@ -189,7 +190,10 @@ export default async function RollingPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-heading text-xl text-deep-black">Rolling cashflow</h2>
+      <div className="flex items-baseline justify-between flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Rolling cashflow</h2>
+        <DataFreshness sources={['loyverse_receipts', 'flowaccount_invoices', 'purchase_orders']} />
+      </div>
 
       {/* Runway summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

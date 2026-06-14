@@ -1,6 +1,6 @@
 import { sbInventory, type MoneyWallet, type MoneyMovement, type WalletId } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
-import { fmtThb, todayBkk } from '@/lib/kpi'
+import { fmtThb, todayBkk, isoNDaysAgo } from '@/lib/kpi'
 import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
 import { MovementForm, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
 import { LedgerTable, DailyTable, type LedgerRowData } from '@/components/modules/income/IncomeTables'
@@ -35,6 +35,11 @@ export default async function IncomePage() {
     salesError = String((e as { message?: string })?.message ?? e)
   }
   const auto = autoInflows(receipts)
+
+  // Yesterday's takings — Loyverse sales only (net of refunds), across both
+  // wallets. A quick "how did we do yesterday" glance at the top of the page.
+  const yesterday = isoNDaysAgo(1)
+  const yesterdaySales = auto.filter(a => a.date === yesterday).reduce((s, a) => s + a.amount, 0)
 
   // When was the Loyverse sales sync last run? The "sales" line on the cards is
   // auto-pulled, so this is the freshness of the whole liquidity picture.
@@ -115,6 +120,10 @@ export default async function IncomePage() {
             <div className="font-display text-2xl leading-none text-amber-gold">{fmtThb(summary.ownerContributions)}</div>
           </div>
         )}
+        <div className="pl-4 border-l border-pale-stone/30 ml-auto">
+          <div className="overline text-pale-stone mb-1">Yesterday · sales ({fmtDayLabel(yesterday)})</div>
+          <div className="font-display text-2xl leading-none">{fmtThb(yesterdaySales)}</div>
+        </div>
       </div>
 
       {expensesError && (
@@ -192,6 +201,13 @@ function fmtBkkDateTime(iso: string): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const d = new Date(new Date(iso).getTime() + 7 * 3_600_000)
   return `${d.getUTCDate()} ${months[d.getUTCMonth()]}, ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+}
+
+// 'YYYY-MM-DD' → '13 Jun' (the date is already a BKK calendar day).
+function fmtDayLabel(ymd: string): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const [, m, d] = ymd.split('-').map(Number)
+  return `${d} ${months[m - 1]}`
 }
 
 function timeAgo(iso: string): string {

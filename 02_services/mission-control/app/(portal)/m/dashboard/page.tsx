@@ -9,6 +9,7 @@ import {
 } from '@/lib/dashboard'
 import { RetailB2BChart, GpFixedChart, ProgressChart, FactPlanChart } from '@/components/modules/dashboard/MonthlyCharts'
 import { getReceiptHistory } from '@/lib/receipts-cache'
+import { DataFreshness } from '@/components/shell/DataFreshness'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-baseline justify-between flex-wrap gap-3">
+        <h2 className="font-heading text-xl text-deep-black">Dashboard</h2>
+        <DataFreshness sources={['loyverse_receipts']} />
+      </div>
+
       <AnnualHero annual={annual} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
