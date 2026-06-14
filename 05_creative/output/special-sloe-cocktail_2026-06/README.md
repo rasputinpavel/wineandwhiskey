@@ -18,13 +18,19 @@ supplier bottle photo (`.inbox/WhatsApp Image 2026-06-14 at 12.16.31.jpeg`) as a
 reference so the real Barrister Sloe Gin bottle appears (softly out of focus) in the scene.
 
 ## Re-render after editing the HTML
+The PDF is built from the flat PNG raster (NOT Chrome's `--print-to-pdf`). Chrome's PDF
+export keeps the photo + gradients as separate layers and blooms magenta on wide-gamut
+(Display P3) viewers; rasterising to PNG first bakes everything flat and avoids it.
 ```sh
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 HTML="file://$PWD/special-sloe-cocktail.html"
-"$CHROME" --headless=new --force-device-scale-factor=4 --window-size=397,559 \
+"$CHROME" --headless=new --force-device-scale-factor=5 --window-size=397,559 \
   --hide-scrollbars --screenshot="$PWD/special-sloe-cocktail_2026-06_preview.png" "$HTML"
-"$CHROME" --headless=new --no-pdf-header-footer \
-  --print-to-pdf="$PWD/special-sloe-cocktail_2026-06.pdf" "$HTML"
+python3 - <<'PY'
+from PIL import Image
+im = Image.open("special-sloe-cocktail_2026-06_preview.png").convert("RGB")
+im.save("special-sloe-cocktail_2026-06.pdf", "PDF", resolution=im.size[0]/(105/25.4))
+PY
 ```
 
 ## Print notes
