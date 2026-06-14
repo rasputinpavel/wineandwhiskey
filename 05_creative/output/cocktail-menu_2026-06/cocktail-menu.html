@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Wine &amp; Whiskey — Cocktails &amp; Shots</title>
+  <title>Wine &amp; Whiskey — Menu</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -44,7 +44,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 22mm 22mm 18mm 22mm;
+      padding: 20mm 24mm 16mm 24mm;
     }
 
     /* warm centre glow */
@@ -52,7 +52,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse at 50% 28%, rgba(201,168,76,0.12) 0%, rgba(201,168,76,0) 58%);
+      background: radial-gradient(ellipse at 50% 26%, rgba(201,168,76,0.11) 0%, rgba(201,168,76,0) 60%);
       pointer-events: none;
       z-index: 0;
     }
@@ -71,81 +71,114 @@
       position: relative;
       z-index: 2;
       text-align: center;
+      margin-bottom: 13mm;
     }
-    .monogram {
-      width: 46mm;
-      height: 46mm;
-      object-fit: contain;
-      display: block;
-      margin: 0 auto 6mm auto;
+    .wordmark {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 17pt;
+      letter-spacing: 0.22em;
+      line-height: 1;
     }
-    .overline {
-      margin-top: 0;
-      font-size: 10pt;
-      font-weight: 600;
-      letter-spacing: 0.34em;
+    .wordmark .w { color: var(--wine); }
+    .wordmark .k { color: var(--white); }
+    .title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 11pt;
+      letter-spacing: 0.50em;
       text-transform: uppercase;
       color: var(--gold);
+      margin-top: 4mm;
     }
 
-    /* ---------- LIST ---------- */
-    .list {
+    /* ---------- SECTIONS ---------- */
+    .menu {
       position: relative;
       z-index: 2;
       width: 100%;
-      max-width: 132mm;
+      max-width: 138mm;
       margin: auto 0;
       display: flex;
       flex-direction: column;
-      gap: 11mm;
+      gap: 12mm;
     }
-    .item {
+
+    .section-head {
       display: flex;
-      align-items: baseline;
-      width: 100%;
+      align-items: center;
+      gap: 5mm;
+      margin-bottom: 6mm;
     }
-    .item .name {
+    .section-head .label {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 27pt;
-      letter-spacing: 0.05em;
+      font-size: 15pt;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--white);
       white-space: nowrap;
     }
+    .section-head .rule {
+      flex: 1;
+      height: 1px;
+      background: var(--graph);
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 7mm;
+    }
+    .item:last-child { margin-bottom: 0; }
+
+    .item .icon {
+      width: 7mm;
+      height: 7mm;
+      flex-shrink: 0;
+      color: var(--gold);
+      margin-right: 5mm;
+    }
+    .item .icon svg { width: 100%; height: 100%; display: block; }
+
+    .item .row-head { display: flex; flex-direction: column; }
+    .item .name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 21pt;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--white);
+      white-space: nowrap;
+      line-height: 1;
+    }
     .item .name .accent { color: var(--wine); }
+    .item .desc {
+      display: block;
+      font-size: 8pt;
+      font-weight: 400;
+      letter-spacing: 0.03em;
+      color: var(--stone);
+      margin-top: 1.5mm;
+      font-family: 'Inter', sans-serif;
+    }
     .item .lead {
       flex: 1;
-      margin: 0 5mm 0 6mm;
+      margin: 0 5mm;
       border-bottom: 1px dotted var(--graph);
-      transform: translateY(-2mm);
+      transform: translateY(-1mm);
     }
     .item .price {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 27pt;
+      font-size: 21pt;
       letter-spacing: 0.02em;
       color: var(--gold);
       white-space: nowrap;
+      line-height: 1;
     }
     .item .price .cur {
       font-family: 'Inter', sans-serif;
       font-weight: 600;
-      font-size: 14pt;
-      vertical-align: 2pt;
-      margin-right: 1mm;
-    }
-    .item .desc {
-      display: block;
-      font-size: 8.5pt;
-      font-weight: 400;
-      letter-spacing: 0.04em;
-      text-transform: none;
-      color: var(--stone);
-      margin-top: 2mm;
-      font-family: 'Inter', sans-serif;
-    }
-    .row-head {
-      display: flex;
-      flex-direction: column;
+      font-size: 11pt;
+      vertical-align: 1.5pt;
+      margin-right: 0.8mm;
     }
 
     /* ---------- FOOTER ---------- */
@@ -153,7 +186,7 @@
       position: relative;
       z-index: 2;
       width: 100%;
-      max-width: 132mm;
+      max-width: 138mm;
       padding-top: 4mm;
       border-top: 1px solid var(--graph);
       display: flex;
@@ -172,44 +205,75 @@
     <div class="frame"></div>
 
     <div class="header">
-      <img class="monogram" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/cocktail-menu_2026-06/assets/monogram.png" alt="Wine &amp; Whiskey" />
-      <div class="overline">Cocktails &amp; Shots</div>
+      <div class="wordmark"><span class="w">WINE</span> <span class="k">&amp; WHISKEY</span></div>
+      <div class="title">Menu</div>
     </div>
 
-    <div class="list">
-      <div class="item">
-        <div class="row-head">
-          <span class="name">Vodka Shot</span>
+    <div class="menu">
+
+      <!-- WINE -->
+      <div class="section">
+        <div class="section-head">
+          <span class="label">Wine</span>
+          <span class="rule"></span>
         </div>
-        <span class="lead"></span>
-        <span class="price"><span class="cur">฿</span>100</span>
+        <div class="item">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10c0 4.2-2.1 7.2-5 7.2S7 7.2 7 3z"/><line x1="12" y1="10.2" x2="12" y2="19"/><line x1="8" y1="19" x2="16" y2="19"/></svg></span>
+          <div class="row-head">
+            <span class="name">Wine by Glass</span>
+            <span class="desc">Ask the bar for today's pour</span>
+          </div>
+          <span class="lead"></span>
+          <span class="price"><span class="cur">฿</span>200</span>
+        </div>
       </div>
 
-      <div class="item">
-        <div class="row-head">
-          <span class="name">Gin Shot</span>
+      <!-- SPIRITS -->
+      <div class="section">
+        <div class="section-head">
+          <span class="label">Spirits</span>
+          <span class="rule"></span>
         </div>
-        <span class="lead"></span>
-        <span class="price"><span class="cur">฿</span>150</span>
+        <div class="item">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h8l-1 13H9L8 5z"/><line x1="8.3" y1="9.5" x2="15.7" y2="9.5"/></svg></span>
+          <div class="row-head"><span class="name">Vodka Shot</span></div>
+          <span class="lead"></span>
+          <span class="price"><span class="cur">฿</span>100</span>
+        </div>
+        <div class="item">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h8l-1 13H9L8 5z"/><line x1="8.3" y1="9.5" x2="15.7" y2="9.5"/></svg></span>
+          <div class="row-head"><span class="name">Gin Shot</span></div>
+          <span class="lead"></span>
+          <span class="price"><span class="cur">฿</span>150</span>
+        </div>
       </div>
 
-      <div class="item">
-        <div class="row-head">
-          <span class="name">Gin &amp; <span class="accent">Tonic</span></span>
-          <span class="desc">Gin over ice, topped with tonic &amp; a citrus twist</span>
+      <!-- COCKTAILS -->
+      <div class="section">
+        <div class="section-head">
+          <span class="label">Cocktails</span>
+          <span class="rule"></span>
         </div>
-        <span class="lead"></span>
-        <span class="price"><span class="cur">฿</span>200</span>
+        <div class="item">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l-.6 15H8.6L8 4z"/><circle cx="11" cy="10.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="13.4" cy="13.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="11.4" cy="15.2" r="0.6" fill="currentColor" stroke="none"/></svg></span>
+          <div class="row-head">
+            <span class="name">Gin &amp; <span class="accent">Tonic</span></span>
+            <span class="desc">Gin over ice, topped with tonic &amp; a citrus twist</span>
+          </div>
+          <span class="lead"></span>
+          <span class="price"><span class="cur">฿</span>200</span>
+        </div>
+        <div class="item">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-8 8-8-8z"/><line x1="12" y1="13" x2="12" y2="19.5"/><line x1="8" y1="19.5" x2="16" y2="19.5"/><circle cx="15.5" cy="6.2" r="0.8" fill="currentColor" stroke="none"/></svg></span>
+          <div class="row-head">
+            <span class="name"><span class="accent">Special</span> Cocktail</span>
+            <span class="desc">Our signature serve — ask the bar</span>
+          </div>
+          <span class="lead"></span>
+          <span class="price"><span class="cur">฿</span>200</span>
+        </div>
       </div>
 
-      <div class="item">
-        <div class="row-head">
-          <span class="name"><span class="accent">Special</span> Cocktail</span>
-          <span class="desc">Our signature serve — ask the bar</span>
-        </div>
-        <span class="lead"></span>
-        <span class="price"><span class="cur">฿</span>200</span>
-      </div>
     </div>
 
     <div class="footer">
