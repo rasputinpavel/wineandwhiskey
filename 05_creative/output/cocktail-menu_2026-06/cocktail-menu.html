@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wine &amp; Whiskey — Cocktails &amp; Shots</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    @font-face {
+      font-family: 'Bebas Neue';
+      src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+           url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    :root {
+      --black:   #1A1A1A;
+      --white:   #F5F0EB;
+      --cream:   #EDE0D0;
+      --wine:    #8C1C1C;
+      --gold:    #C9A84C;
+      --stone:   #D4C9BC;
+      --graph:   #3D3D3D;
+    }
+
+    @page { size: 210mm 297mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--black);
+      color: var(--white);
+      font-family: 'Inter', sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .card {
+      width: 210mm;
+      height: 297mm;
+      background: var(--black);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 22mm 22mm 18mm 22mm;
+    }
+
+    /* warm centre glow */
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 28%, rgba(201,168,76,0.12) 0%, rgba(201,168,76,0) 58%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* hairline border frame */
+    .frame {
+      position: absolute;
+      inset: 9mm;
+      border: 1px solid var(--graph);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ---------- HEADER ---------- */
+    .header {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+    }
+    .monogram {
+      width: 46mm;
+      height: 46mm;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 6mm auto;
+    }
+    .overline {
+      margin-top: 0;
+      font-size: 10pt;
+      font-weight: 600;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    /* ---------- LIST ---------- */
+    .list {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 132mm;
+      margin: auto 0;
+      display: flex;
+      flex-direction: column;
+      gap: 11mm;
+    }
+    .item {
+      display: flex;
+      align-items: baseline;
+      width: 100%;
+    }
+    .item .name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 27pt;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--white);
+      white-space: nowrap;
+    }
+    .item .name .accent { color: var(--wine); }
+    .item .lead {
+      flex: 1;
+      margin: 0 5mm 0 6mm;
+      border-bottom: 1px dotted var(--graph);
+      transform: translateY(-2mm);
+    }
+    .item .price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 27pt;
+      letter-spacing: 0.02em;
+      color: var(--gold);
+      white-space: nowrap;
+    }
+    .item .price .cur {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 14pt;
+      vertical-align: 2pt;
+      margin-right: 1mm;
+    }
+    .item .desc {
+      display: block;
+      font-size: 8.5pt;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: none;
+      color: var(--stone);
+      margin-top: 2mm;
+      font-family: 'Inter', sans-serif;
+    }
+    .row-head {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------- FOOTER ---------- */
+    .footer {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 132mm;
+      padding-top: 4mm;
+      border-top: 1px solid var(--graph);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+    .footer .right { color: var(--gold); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="frame"></div>
+
+    <div class="header">
+      <img class="monogram" src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/cocktail-menu_2026-06/assets/monogram.png" alt="Wine &amp; Whiskey" />
+      <div class="overline">Cocktails &amp; Shots</div>
+    </div>
+
+    <div class="list">
+      <div class="item">
+        <div class="row-head">
+          <span class="name">Vodka Shot</span>
+        </div>
+        <span class="lead"></span>
+        <span class="price"><span class="cur">฿</span>100</span>
+      </div>
+
+      <div class="item">
+        <div class="row-head">
+          <span class="name">Gin Shot</span>
+        </div>
+        <span class="lead"></span>
+        <span class="price"><span class="cur">฿</span>150</span>
+      </div>
+
+      <div class="item">
+        <div class="row-head">
+          <span class="name">Gin &amp; <span class="accent">Tonic</span></span>
+          <span class="desc">Gin over ice, topped with tonic &amp; a citrus twist</span>
+        </div>
+        <span class="lead"></span>
+        <span class="price"><span class="cur">฿</span>200</span>
+      </div>
+
+      <div class="item">
+        <div class="row-head">
+          <span class="name"><span class="accent">Special</span> Cocktail</span>
+          <span class="desc">Our signature serve — ask the bar</span>
+        </div>
+        <span class="lead"></span>
+        <span class="price"><span class="cur">฿</span>200</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>Wine &amp; Whiskey · Phuket</div>
+      <div class="right">Open daily 11–22</div>
+    </div>
+
+  </div>
+</body>
+</html>
