@@ -54,6 +54,7 @@ function SourceBadge({ sourceKey, status, onSynced }: {
 
   const ts  = status?.finished_at
   const ago = ts ? timeAgo(ts) : 'never'
+  const when = ts ? formatBkkShort(ts) : 'never'
   const ok  = status?.ok !== false
   const dotCls =
     !ts                                     ? 'bg-pale-stone' :
@@ -90,11 +91,13 @@ function SourceBadge({ sourceKey, status, onSynced }: {
     <div ref={wrapRef} className="relative inline-block">
       <button
         onClick={() => setOpen(o => !o)}
+        title={ts ? `${ago} · ${formatBkkDateTime(new Date(ts))} BKK` : 'never synced'}
         className="inline-flex items-center gap-1.5 px-2 py-1 bg-warm-white border border-pale-stone rounded-sm hover:border-wine-red transition-colors text-[11px] font-mono text-graphite"
       >
         <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
         <span className="text-deep-black">{def.label}</span>
-        <span>· {ago}</span>
+        <span>· {when}</span>
+        {ts && <span className="text-graphite/60">({ago})</span>}
       </button>
 
       {open && (
@@ -196,6 +199,13 @@ function formatBkkTime(d: Date): string {
 function formatBkkDateTime(d: Date): string {
   const bkk = new Date(d.getTime() + 7 * 3_600_000)
   return bkk.toISOString().slice(0, 16).replace('T', ' ')
+}
+
+// Compact absolute BKK stamp for the chip face: "14 Jun 09:32".
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function formatBkkShort(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 7 * 3_600_000)
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
 function isStale(iso: string): boolean {
