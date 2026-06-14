@@ -17,14 +17,13 @@
     :root {
       --black:   #1A1A1A;
       --white:   #F5F0EB;
-      --cream:   #EDE0D0;
       --wine:    #8C1C1C;
       --gold:    #C9A84C;
       --stone:   #D4C9BC;
       --graph:   #3D3D3D;
     }
 
-    @page { size: 148mm 210mm; margin: 0; }
+    @page { size: 105mm 148mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
@@ -36,8 +35,8 @@
     }
 
     .card {
-      width: 148mm;
-      height: 210mm;
+      width: 105mm;
+      height: 148mm;
       background: var(--black);
       position: relative;
       overflow: hidden;
@@ -45,21 +44,11 @@
       flex-direction: column;
     }
 
-    /* warm centre glow */
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse at 50% 30%, rgba(201,168,76,0.10) 0%, rgba(201,168,76,0) 55%);
-      pointer-events: none;
-      z-index: 3;
-    }
-
     /* ---------- HERO ---------- */
     .hero {
       position: relative;
       width: 100%;
-      height: 116mm;
+      height: 80mm;
       flex-shrink: 0;
     }
     .hero img {
@@ -69,43 +58,49 @@
       object-position: center 36%;
       display: block;
     }
-    /* top scrim for header legibility */
+    /* edge vignette — pushes all hero edges into solid #1A1A1A
+       so nothing blooms past the photo on any display */
+    .hero .vignette {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      box-shadow: inset 0 0 14mm 5mm var(--black);
+      pointer-events: none;
+    }
     .hero .scrim-top {
       position: absolute;
       top: 0; left: 0; right: 0;
-      height: 40mm;
-      background: linear-gradient(to bottom, rgba(10,10,10,0.72) 0%, rgba(10,10,10,0) 100%);
+      height: 28mm;
+      background: linear-gradient(to bottom, rgba(10,10,10,0.74) 0%, rgba(10,10,10,0) 100%);
       z-index: 2;
     }
-    /* bottom scrim — seamless blend into the text zone */
     .hero .scrim-bot {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      height: 36mm;
+      height: 26mm;
       background: linear-gradient(to bottom, rgba(26,26,26,0) 0%, var(--black) 96%);
       z-index: 2;
     }
 
-    /* header over hero */
     .header {
       position: absolute;
-      top: 9mm; left: 0; right: 0;
+      top: 6.5mm; left: 0; right: 0;
       z-index: 4;
       text-align: center;
     }
     .wordmark {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 19pt;
+      font-size: 13pt;
       letter-spacing: 0.16em;
       line-height: 1;
     }
     .wordmark .w { color: var(--wine); }
     .wordmark .k { color: var(--white); }
     .overline {
-      margin-top: 3mm;
-      font-size: 8pt;
+      margin-top: 2mm;
+      font-size: 5.5pt;
       font-weight: 600;
-      letter-spacing: 0.30em;
+      letter-spacing: 0.28em;
       text-transform: uppercase;
       color: var(--gold);
     }
@@ -115,17 +110,17 @@
       flex: 1;
       position: relative;
       z-index: 4;
-      padding: 0 14mm 10mm 14mm;
+      padding: 0 10mm 8mm 10mm;
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
-      margin-top: -3mm;
+      margin-top: -2mm;
     }
 
     .name {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 35pt;
+      font-size: 25pt;
       line-height: 0.9;
       letter-spacing: 0.04em;
       color: var(--white);
@@ -134,11 +129,11 @@
     .name .accent { color: var(--wine); }
 
     .recipe {
-      margin-top: 4mm;
-      font-size: 9.5pt;
+      margin-top: 3mm;
+      font-size: 7pt;
       line-height: 1.5;
       color: var(--stone);
-      max-width: 102mm;
+      max-width: 78mm;
     }
 
     .price-wrap {
@@ -149,14 +144,14 @@
       align-items: center;
     }
     .price-rule {
-      width: 34mm;
+      width: 24mm;
       height: 1px;
       background: var(--graph);
-      margin: 6mm 0 3mm 0;
+      margin: 4mm 0 2mm 0;
     }
     .price {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 56pt;
+      font-size: 40pt;
       line-height: 0.9;
       letter-spacing: 0.02em;
       color: var(--gold);
@@ -164,20 +159,20 @@
     .price .cur {
       font-family: 'Inter', sans-serif;
       font-weight: 600;
-      font-size: 26pt;
-      vertical-align: 5pt;
-      margin-right: 1.5mm;
+      font-size: 18pt;
+      vertical-align: 4pt;
+      margin-right: 1mm;
     }
 
     .footer {
-      margin-top: 6mm;
-      padding-top: 3.5mm;
+      margin-top: 4mm;
+      padding-top: 2.5mm;
       border-top: 1px solid var(--graph);
       width: 100%;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 7.5pt;
+      font-size: 5.5pt;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--stone);
@@ -190,6 +185,7 @@
 
     <div class="hero">
       <img src="file:///Users/pavelrasputin/Desktop/Wine_Whiskey/05_creative/output/special-sloe-cocktail_2026-06/assets/hero.png" alt="Special Sloe Cocktail" />
+      <div class="vignette"></div>
       <div class="scrim-top"></div>
       <div class="scrim-bot"></div>
       <div class="header">

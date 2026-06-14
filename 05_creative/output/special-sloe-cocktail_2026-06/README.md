@@ -1,6 +1,6 @@
 # Special Sloe Cocktail — table flyer (2026-06)
 
-One-sided **A5 portrait** table-tent flyer for the *Special Sloe Cocktail* — a Spanish-style
+One-sided **A6 portrait** (105×148 mm) table-tent flyer for the *Special Sloe Cocktail* — a Spanish-style
 vermouth serve built on **Barrister Sloe Gin** layered with dark vermouth over ice, garnished
 with an orange wheel + olive on a pick. Price **฿200**.
 
@@ -21,13 +21,13 @@ reference so the real Barrister Sloe Gin bottle appears (softly out of focus) in
 ```sh
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 HTML="file://$PWD/special-sloe-cocktail.html"
-"$CHROME" --headless=new --force-device-scale-factor=4 --window-size=559,793 \
+"$CHROME" --headless=new --force-device-scale-factor=4 --window-size=397,559 \
   --hide-scrollbars --screenshot="$PWD/special-sloe-cocktail_2026-06_preview.png" "$HTML"
 "$CHROME" --headless=new --no-pdf-header-footer \
   --print-to-pdf="$PWD/special-sloe-cocktail_2026-06.pdf" "$HTML"
 ```
 
 ## Print notes
-- Print at **100% / actual size**, A5 paper (148×210 mm), borderless if possible.
+- Print at **100% / actual size**, A6 paper (105×148 mm), borderless if possible.
 - Background is near-black — print on a printer that handles full-bleed dark coverage well,
   or trim to the edge after printing on A4.
