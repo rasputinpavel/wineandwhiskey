@@ -412,5 +412,5 @@ function KPI({ label, sum, n, tone, note }: {
 }
 
 function fmt(n: number): string {
-  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
