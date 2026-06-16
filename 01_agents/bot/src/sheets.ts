@@ -1,51 +1,3 @@
-const SHEET_ID = "1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY";
-
-let _token: string | null = null;
-
-async function gToken(): Promise<string | null> {
-  const id  = process.env.GOOGLE_CLIENT_ID;
-  const sec = process.env.GOOGLE_CLIENT_SECRET;
-  const ref = process.env.GOOGLE_REFRESH_TOKEN;
-  if (!id || !sec || !ref) return null;
-
-  if (_token) return _token;
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: id, client_secret: sec, refresh_token: ref, grant_type: "refresh_token" }),
-  });
-  if (!r.ok) return null;
-  _token = (await r.json()).access_token;
-  // Reset cache after 50 minutes
-  setTimeout(() => { _token = null; }, 50 * 60 * 1000);
-  return _token;
-}
-
-async function readSheet(token: string, tab: string, range: string): Promise<string[][]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${tab}!${range}`)}`;
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) return [];
-  const d = await r.json();
-  return d.values ?? [];
-}
-
-function bangkokToday(): string {
-  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
-}
-
-function daysUntil(dateStr: string): number | null {
-  // Accept DD.MM.YYYY or YYYY-MM-DD
-  let iso = dateStr.trim();
-  if (/^\d{2}\.\d{2}\.\d{4}$/.test(iso)) {
-    const [d, m, y] = iso.split(".");
-    iso = `${y}-${m}-${d}`;
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
-  const today = bangkokToday();
-  const diff = (new Date(iso + "T12:00:00Z").getTime() - new Date(today + "T12:00:00Z").getTime()) / 86_400_000;
-  return Math.round(diff);
-}
-
 function dueDateLabel(days: number): string {
   if (days < 0)  return `просрочено на ${Math.abs(days)} дн.`;
   if (days === 0) return "сегодня";
@@ -70,47 +22,44 @@ export interface PaymentAlert {
   daysLeft: number;
 }
 
+// Источник дебиторки/кредиторки — Mission Control (Payment Calendar), а не Google
+// Sheet: оплаченные PO (paid_at) и закрытые инвойсы (status) отпадают автоматически,
+// так что бот больше не показывает уже оплаченные счета. Окно (withinDays) и skip
+// (Titov) применяем здесь, на стороне бота.
+interface AlertItem { name: string; date: string; amount: number; daysUntil: number }
+interface AlertsResponse { today: string; receivables: AlertItem[]; payables: AlertItem[] }
+
+const fmtAmount = (n: number): string =>
+  n ? `฿${Math.round(n).toLocaleString("en-US")}` : "";
+
 export async function getPaymentAlerts(withinDays = 3): Promise<PaymentAlert[]> {
-  const token = await gToken();
-  if (!token) return [];
+  const base   = process.env.MISSION_CONTROL_URL;
+  const secret = process.env.PAYABLES_ALERT_SECRET;
+  if (!base || !secret) return [];
+
+  let data: AlertsResponse;
+  try {
+    const r = await fetch(`${base.replace(/\/$/, "")}/api/public/payables-alerts`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    if (!r.ok) return [];
+    data = await r.json();
+  } catch {
+    return [];
+  }
 
   const alerts: PaymentAlert[] = [];
-
-  // Дебиторка: column A = name, column C = amount, column D = due date
-  // Read up to column G to catch the status column wherever it may be
-  const deb = await readSheet(token, "Дебиторка", "A2:G200");
-  for (const row of deb) {
-    const isPaid = row.some(cell => cell?.trim().toLowerCase() === "paid");
-    if (isPaid) continue;
-    const name    = row[0]?.trim() ?? "";
-    const amount  = row[2]?.trim() ?? "";
-    const dateStr = row[3]?.trim() ?? "";
-    if (!name || !dateStr) continue;
-    if (isSkipped(name)) continue;
-    const days = daysUntil(dateStr);
-    if (days === null) continue;
-    if (days <= withinDays) {
-      alerts.push({ tab: "Дебиторка", name, amount, dueDate: dateStr, daysLeft: days });
+  const collect = (items: AlertItem[], tab: PaymentAlert["tab"]) => {
+    for (const it of items ?? []) {
+      if (!it.name || !it.date) continue;
+      if (isSkipped(it.name)) continue;
+      if (it.daysUntil <= withinDays) {
+        alerts.push({ tab, name: it.name, amount: fmtAmount(it.amount), dueDate: it.date, daysLeft: it.daysUntil });
+      }
     }
-  }
-
-  // Кредиторка: column A = name, column D = amount, column E = due date
-  // Read up to column G to catch the status column wherever it may be
-  const kred = await readSheet(token, "Кредиторка", "A2:G200");
-  for (const row of kred) {
-    const isPaid = row.some(cell => cell?.trim().toLowerCase() === "paid");
-    if (isPaid) continue;
-    const name    = row[0]?.trim() ?? "";
-    const amount  = row[3]?.trim() ?? "";
-    const dateStr = row[4]?.trim() ?? "";
-    if (!name || !dateStr) continue;
-    if (isSkipped(name)) continue;
-    const days = daysUntil(dateStr);
-    if (days === null) continue;
-    if (days <= withinDays) {
-      alerts.push({ tab: "Кредиторка", name, amount, dueDate: dateStr, daysLeft: days });
-    }
-  }
+  };
+  collect(data.receivables, "Дебиторка");
+  collect(data.payables,    "Кредиторка");
 
   return alerts.sort((a, b) => a.daysLeft - b.daysLeft);
 }
