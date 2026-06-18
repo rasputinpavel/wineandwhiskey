@@ -63,15 +63,22 @@ function classifyPayment(payments: any[] | undefined): "cash" | "card" | "qr" | 
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-// Loyverse изредка отдаёт пустое/битое тело при 2xx или транзиентный 429/5xx.
-// Ретраим с экспоненциальным бэкоффом, иначе одна осечка валит весь прогон.
+const REQUEST_TIMEOUT_MS = 25_000; // per-request hard cap — без него зависший сокет вешает всю джобу до 15-мин GitHub cap
+
+// Loyverse изредка отдаёт пустое/битое тело при 2xx, транзиентный 429/5xx, 202
+// (троттлинг IP раннеров) — или вовсе подвисает на ответе. Ретраим с
+// экспоненциальным бэкоффом + per-request таймаут, иначе одна осечка валит прогон.
 async function loyverseGet(url: string): Promise<any> {
   const MAX = 5;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` } });
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${LOYVERSE_TOKEN}` }, signal: ctrl.signal });
       const body = await r.text();
+      // 202 = Loyverse троттлит IP раннера (отдаёт Accepted без данных) — транзиентно, ретраим
+      if (r.status === 202) throw new Error("Loyverse 202 (throttled) — retrying");
       if (!r.ok) {
         const err = new Error(`Loyverse ${r.status}: ${body.slice(0, 200)}`);
         // 429/5xx — транзиентные, ретраим; 4xx (кроме 429) — фатально, не повторяем
@@ -81,11 +88,15 @@ async function loyverseGet(url: string): Promise<any> {
       if (!body.trim()) throw new Error("Loyverse вернул пустое тело при 2xx");
       return JSON.parse(body);
     } catch (e) {
-      lastErr = e;
+      lastErr = (e as any)?.name === "AbortError"
+        ? new Error(`Loyverse request timed out after ${REQUEST_TIMEOUT_MS}ms`)
+        : e;
       if ((e as any)?.fatal || attempt === MAX) break;
       const wait = 500 * 2 ** (attempt - 1); // 0.5s, 1s, 2s, 4s
-      console.warn(`[receipts]   retry ${attempt}/${MAX - 1} after error: ${String((e as any)?.message ?? e)} (wait ${wait}ms)`);
+      console.warn(`[receipts]   retry ${attempt}/${MAX - 1} after error: ${String((lastErr as any)?.message ?? lastErr)} (wait ${wait}ms)`);
       await sleep(wait);
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastErr;
