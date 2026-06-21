@@ -7,6 +7,7 @@ import {
   lastNMonths, mtdProgress, computeDueDate, daysBetween, isoNDaysAgo,
   fmtThb, fmtThbCompact, todayBkk,
 } from '@/lib/kpi'
+import { computeConsignmentSettlement, shiftMonth } from '@/lib/consignment-settlement'
 
 export const dynamic = 'force-dynamic'
 
@@ -253,14 +254,56 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   function consignPaidBySupId(ym: string): Map<string, number> {
     return consignPaidByMonth.get(ym) ?? new Map<string, number>()
   }
-  function consignObligationTotal(ym: string): number {
+  // PO-sourced obligation (the real, recorded settlement). consignObligationTotal
+  // below adds a live accrual fallback on top of this.
+  function consignPoTotal(ym: string): number {
     return [...consignObligationBySupId(ym).values()].filter(d => d > 0).reduce((s, d) => s + d, 0)
   }
-  // Note for months where consignment is intentionally absent (excluded during
-  // handover, or the settlement PO not recorded yet) — surfaced on the hero so
+
+  // ── Accrual fallback ──────────────────────────────────────────────────────
+  // A current/upcoming month with no settlement PO yet isn't a ฿0 obligation —
+  // Harvest raises the PO ~5th of the FOLLOWING month, so the bill is already
+  // accruing in the open billing cycle. We read that live from the same
+  // settlement math the supplier report uses (lib/consignment-settlement.ts —
+  // one source of truth) so the break-even forecast reflects the real in-progress
+  // amount instead of ฿0.
+  //   obligation month ym  ←  open cycle period = shiftMonth(ym, -1)
+  //   (a cycle starting in month M is invoiced/paid in M+1)
+  // Bounded to current month onward and ≥ handover: never resurrects pre-handover
+  // months, never rewrites closed-month P&L from live receipts.
+  const consignAccrualByMonth = new Map<string, number>()
+  {
+    const consignSups = suppliers.filter(su => su.type === 'consignment' && su.id)
+    const candidateYms = [...new Set([currentYm, shiftMonth(currentYm, 1)])]
+      .filter(ym => ym >= HARVEST_START_YM && consignPoTotal(ym) === 0)
+    await Promise.all(candidateYms.map(async ym => {
+      const cyclePeriod = shiftMonth(ym, -1)
+      let total = 0
+      for (const su of consignSups) {
+        try {
+          const r = await computeConsignmentSettlement(su.id!, cyclePeriod)
+          if (r) total += r.grandTotal
+        } catch { /* settlement schema missing → treat as no accrual */ }
+      }
+      consignAccrualByMonth.set(ym, total)
+    }))
+  }
+
+  function consignObligationTotal(ym: string): number {
+    const po = consignPoTotal(ym)
+    if (po > 0) return po                       // real settlement PO wins
+    return consignAccrualByMonth.get(ym) ?? 0   // else live accrual (0 if none)
+  }
+  // Note for months where consignment is absent or still accruing — surfaced so
   // the bottom line isn't misread as final/complete.
   function harvestNote(ym: string): string | null {
-    if (consignObligationTotal(ym) > 0) return null
+    if (consignPoTotal(ym) > 0) return null     // recorded settlement → no note
+    const accrual = consignAccrualByMonth.get(ym)
+    if (accrual != null) {
+      return accrual > 0
+        ? `Harvest ${fmtThb(accrual)} accrued so far — billing cycle still open, settlement PO not yet raised`
+        : 'Harvest billing cycle still open — no consignment sales yet this cycle'
+    }
     if (ym < HARVEST_START_YM) return 'Excludes Harvest consignment (pre-handover — previous owner’s liability, pending bank reconciliation)'
     return 'Harvest settlement PO for this month not recorded yet'
   }
@@ -619,6 +662,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <NextMonthCard
           monthLabel={nextMonthLabel}
           supplierPaymentsNext={supplierPaymentsNext}
+          consignmentNote={harvestNote(nextMonthYm)}
           monthlyFixed={Number.isFinite(minRevenueNext) ? fixedForMonth(minRevenueNext) : monthlyFixed}
           monthlyFixedBase={monthlyFixedBase}
           bufferPct={bufferPct}
@@ -951,9 +995,10 @@ function TrendCard({ months, max, selectedYm, annualTotalNet, annualAvgNet, annu
   )
 }
 
-function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthlyFixedBase, bufferPct, fixedPctOfRevenue, expectedB2BNext, minRevenueNext, minB2CNext }: {
+function NextMonthCard({ monthLabel, supplierPaymentsNext, consignmentNote, monthlyFixed, monthlyFixedBase, bufferPct, fixedPctOfRevenue, expectedB2BNext, minRevenueNext, minB2CNext }: {
   monthLabel: string
   supplierPaymentsNext: number
+  consignmentNote?: string | null
   monthlyFixed: number
   monthlyFixedBase: number
   bufferPct: number
@@ -994,6 +1039,9 @@ function NextMonthCard({ monthLabel, supplierPaymentsNext, monthlyFixed, monthly
         <div className="space-y-1.5 text-xs">
           <NMORow label="Supplier payments due" value={supplierPaymentsNext} sign="−"
             sub="POs ordered this month, payable next" />
+          {consignmentNote && (
+            <div className="pl-4 -mt-1 text-[10px] text-amber-gold leading-snug">{consignmentNote}</div>
+          )}
           <NMORow label="Fixed costs" value={monthlyFixed} sign="−"
             sub={(() => {
               const parts: string[] = []
