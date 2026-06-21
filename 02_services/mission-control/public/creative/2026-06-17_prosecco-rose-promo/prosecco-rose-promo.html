@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prosecco Rosé — WhatsApp promo</title>
+<style>
+  /* ─── Fonts (local first, Google as enhancement) ─────────────────────── */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  @font-face {
+    font-family: 'Bebas Neue';
+    src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.woff2') format('woff2'),
+         url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/BebasNeue.ttf') format('truetype');
+    font-weight: normal;
+  }
+  @font-face {
+    font-family: 'Inter';
+    src: url('file:///Users/pavelrasputin/Desktop/Wine_Whiskey/04_brand/logo/fonts/Inter500.woff2') format('woff2');
+    font-weight: 400 600;
+  }
+
+  :root {
+    --black:  #1A1A1A;
+    --white:  #F5F0EB;
+    --cream:  #EDE0D0;
+    --gold:   #C9A84C;
+    --wine:   #8C1C1C;
+    --wine-bright: #B52A2A;  /* WINE wordmark on dark bg — brand red lifted for contrast */
+    --stone:  #D4C9BC;
+    --graph:  #3D3D3D;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { width: 1080px; height: 1350px; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--black);
+    color: var(--white);
+    overflow: hidden;
+  }
+
+  /* ─── Canvas ─────────────────────────────────────────────────────────── */
+  .card {
+    position: relative;
+    width: 1080px;
+    height: 1350px;
+    padding: 72px 76px 60px;
+    display: flex;
+    flex-direction: column;
+    /* warm depth: subtle key light from upper-centre, deep matte black around */
+    background:
+      radial-gradient(120% 80% at 50% 30%, #232220 0%, #1A1A1A 55%, #141312 100%);
+  }
+  /* hairline gold frame — quiet premium cue, reused across promos */
+  .card::after {
+    content: '';
+    position: absolute; inset: 28px;
+    border: 1px solid rgba(201,168,76,.28);
+    pointer-events: none;
+  }
+
+  /* ─── Masthead (brand wordmark, drawn natively for crisp colour) ─────── */
+  .masthead { text-align: center; position: relative; z-index: 2; }
+  .masthead .w1, .masthead .w2 {
+    font-family: 'Bebas Neue', sans-serif; line-height: .9;
+    text-transform: uppercase; display: block;
+  }
+  .masthead .w1 { font-size: 60px; letter-spacing: 9px; color: var(--wine-bright); }
+  .masthead .w2 { font-size: 60px; letter-spacing: 6px; color: var(--white); }
+
+  /* ─── Limited-offer ribbon (diagonal sash across the bottle) ─────────── */
+  .ribbon {
+    position: absolute; z-index: 6;
+    top: 41%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-11deg);
+    width: 680px; text-align: center;
+    background: var(--wine);
+    border-top: 2px solid var(--gold);
+    border-bottom: 2px solid var(--gold);
+    box-shadow: 0 14px 30px rgba(0,0,0,.55);
+    padding: 17px 0 12px;
+  }
+  .ribbon span {
+    font-family: 'Bebas Neue', sans-serif; text-transform: uppercase;
+    font-size: 50px; letter-spacing: 11px; color: var(--white);
+    text-shadow: 0 2px 6px rgba(0,0,0,.4);
+  }
+
+  /* ─── Product caption (labels the bottle) ────────────────────────────── */
+  .caption {
+    text-align: center; position: relative; z-index: 2;
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    font-size: 23px; letter-spacing: 6px; text-transform: uppercase;
+    color: var(--gold); margin-top: 2px;
+  }
+
+  /* ─── Hero bottle ────────────────────────────────────────────────────── */
+  .hero {
+    flex: 1 1 auto;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 0;
+    margin: 14px 0 18px;
+  }
+  /* warm pool of light behind the bottle */
+  .hero::before {
+    content: '';
+    position: absolute; top: 6%; left: 50%; transform: translateX(-50%);
+    width: 360px; height: 88%;
+    background: radial-gradient(50% 50% at 50% 45%, rgba(201,168,76,.20) 0%, rgba(201,168,76,0) 70%);
+    z-index: 0;
+  }
+  .hero img {
+    position: relative; z-index: 1;
+    height: 100%; width: auto; max-width: 80%;
+    object-fit: contain;
+    filter: drop-shadow(0 26px 34px rgba(0,0,0,.55));
+  }
+  /* contact-shadow ellipse under the bottle */
+  .hero::after {
+    content: '';
+    position: absolute; bottom: 2%; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 34px;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 72%);
+    z-index: 0;
+  }
+
+  /* ─── Offer mechanic ─────────────────────────────────────────────────── */
+  .mechanic {
+    text-align: center; position: relative; z-index: 2;
+    margin-top: 4px;
+  }
+  .mechanic .rule {
+    width: 120px; height: 1px; background: rgba(201,168,76,.5);
+    margin: 0 auto 18px;
+  }
+  .mechanic .deal {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 78px; line-height: .9; letter-spacing: 2px;
+    color: var(--white);
+  }
+  .mechanic .deal .free { color: var(--gold); }
+
+  /* ─── Price block ────────────────────────────────────────────────────── */
+  .price { text-align: center; position: relative; z-index: 2; margin-top: 26px; }
+  .price .box {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 104px; line-height: .9; letter-spacing: 1px;
+    color: var(--gold);
+  }
+  .price .box .cur { font-size: 64px; vertical-align: 6px; margin-right: 4px; }
+  .price .sub {
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    font-size: 24px; letter-spacing: 2px; color: var(--cream);
+    margin-top: 6px;
+  }
+  .price .perbottle {
+    font-family: 'Inter', sans-serif; font-weight: 400;
+    font-size: 19px; letter-spacing: 1px; color: var(--stone);
+    margin-top: 10px;
+  }
+  .price .perbottle s { color: var(--graph); }
+
+  /* ─── Footer ─────────────────────────────────────────────────────────── */
+  .footer {
+    text-align: center; position: relative; z-index: 2; margin-top: 34px;
+    font-family: 'Inter', sans-serif; font-weight: 500;
+    font-size: 18px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--stone);
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+
+    <!-- SLOT: brand masthead (wordmark) -->
+    <div class="masthead">
+      <span class="w1">Wine</span>
+      <span class="w2">&amp; Whiskey</span>
+    </div>
+
+    <!-- SLOT: hero product image, with limited-offer sash across it -->
+    <div class="hero">
+      <img src="assets/bottle.png" alt="Lele Prosecco Rosé V8 Brut">
+      <div class="ribbon"><span>Limited Offer</span></div>
+    </div>
+
+    <!-- SLOT: product caption -->
+    <div class="caption">Lele Prosecco Rosé · V8 Brut</div>
+
+    <!-- SLOT: offer mechanic -->
+    <div class="mechanic">
+      <div class="rule"></div>
+      <div class="deal">Buy 4 · Get 2 <span class="free">Free</span></div>
+    </div>
+
+    <!-- SLOT: price -->
+    <div class="price">
+      <div class="box"><span class="cur">฿</span>649</div>
+      <div class="sub">PER BOTTLE</div>
+    </div>
+
+    <!-- SLOT: footer -->
+    <div class="footer">Open daily 11–22 · Wine &amp; Whiskey · Phuket</div>
+
+  </div>
+</body>
+</html>
