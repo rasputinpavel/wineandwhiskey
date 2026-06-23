@@ -8,7 +8,7 @@ const verdict: Verdict = {
   communityNote: "4.1/5 (1200 reviews)",
   marketPrice: { amount: 15, currency: "USD", context: "avg" },
   qpr: { rating: 8, label: "Excellent value" },
-  bottomLine: "take it — strong value",
+  bottomLine: "take-value",
   tastingNotes: "dark fruit, soft tannins",
   drinkingWindow: "2024–2030",
   dataConfidence: "high",

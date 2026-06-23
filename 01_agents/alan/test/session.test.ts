@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { SessionStore } from "../src/session.js";
 import type { Verdict } from "../src/types.js";
 
-const v = { bottomLine: "x" } as Verdict;
+const v = { bottomLine: "take-value" } as Verdict;
 
 describe("SessionStore", () => {
   it("stores and retrieves a verdict + lang by key", () => {

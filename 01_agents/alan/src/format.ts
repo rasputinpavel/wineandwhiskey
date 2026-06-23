@@ -8,12 +8,28 @@ const T = {
     notes: "Notes", drink: "Drink", sources: "Sources", confidence: "Confidence",
     limited: "Reliable data is limited — treat this with caution.",
     noCritics: "no critic scores found", analoguesFor: "Analogues for",
+    bottom: {
+      "take-value": "take it — strong value",
+      "take-quality": "take it — genuinely good",
+      "overpriced": "overpriced — skip unless you love the style",
+      "skip": "skip — unremarkable",
+      "depends-ok": "depends — fine but not special",
+      "nodata": "depends — not enough data",
+    },
   },
   ru: {
     critics: "Критики", crowd: "Толпа", price: "Цена", value: "Цена/качество",
     notes: "Ноты", drink: "Пить", sources: "Источники", confidence: "Уверенность",
     limited: "Надёжных данных мало — относись осторожно.",
     noCritics: "оценок критиков не найдено", analoguesFor: "Аналоги для",
+    bottom: {
+      "take-value": "брать — отличная цена",
+      "take-quality": "брать — действительно хорошее",
+      "overpriced": "переоценено — мимо, если не любишь стиль",
+      "skip": "мимо — ничем не примечательно",
+      "depends-ok": "на любителя — нормальное, без вау",
+      "nodata": "данных мало — однозначно не скажу",
+    },
   },
 } as const;
 
@@ -36,7 +52,7 @@ export function shortVerdict(v: Verdict, lang: Lang): string {
   }
   if (v.qpr) lines.push(`${t.value}: ${v.qpr.rating}/10 — ${v.qpr.label} · ${priceStr(v)}`);
   else if (v.marketPrice) lines.push(`${t.price}: ${priceStr(v)}`);
-  lines.push(`👉 ${v.bottomLine}`);
+  lines.push(`👉 ${t.bottom[v.bottomLine]}`);
   return lines.join("\n");
 }
 
@@ -56,7 +72,7 @@ export function fullCard(v: Verdict, lang: Lang): string {
   if (v.tastingNotes) lines.push(`${t.notes}: ${v.tastingNotes}`);
   if (v.drinkingWindow) lines.push(`${t.drink}: ${v.drinkingWindow}`);
   lines.push("");
-  lines.push(`👉 ${v.bottomLine}`);
+  lines.push(`👉 ${t.bottom[v.bottomLine]}`);
   lines.push(`${t.confidence}: ${v.dataConfidence}`);
   if (v.dataConfidence === "low") lines.push(t.limited);
   if (v.sources.length) lines.push(`${t.sources}:\n${v.sources.slice(0, MAX_SOURCES).map((s) => `• ${s}`).join("\n")}`);

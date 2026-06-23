@@ -14,7 +14,7 @@ export async function assessWine(
     query,
     systemPrompt: researchSystemPrompt(query.lang),
   });
-  const evidence = await structureEvidence(brief);
+  const evidence = await structureEvidence(brief, query.lang);
   return assembleVerdict(evidence);
 }
 
@@ -27,5 +27,5 @@ export async function findAnalogues(
     query,
     systemPrompt: analoguesSystemPrompt(query.lang),
   });
-  return structureAnalogues(brief);
+  return structureAnalogues(brief, query.lang);
 }
