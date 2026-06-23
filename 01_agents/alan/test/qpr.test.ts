@@ -11,6 +11,10 @@ describe("qprRating", () => {
     const r = qprRating(86, 60)!;
     expect(r.rating).toBeLessThanOrEqual(3);
   });
+  it("does NOT punish a cheap, decently-rated wine (regression: $11 / crowd 4-star → 80)", () => {
+    const r = qprRating(80, 11)!;
+    expect(r.rating).toBeGreaterThanOrEqual(5);
+  });
   it("clamps into the 1–10 range", () => {
     expect(qprRating(100, 5)!.rating).toBeLessThanOrEqual(10);
     expect(qprRating(80, 500)!.rating).toBeGreaterThanOrEqual(1);

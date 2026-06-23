@@ -11,6 +11,14 @@ export interface WineQuery {
   intent: Intent;
 }
 
+export type BottomLine =
+  | "take-value"     // good wine, strong price
+  | "take-quality"   // good wine (price unknown/irrelevant)
+  | "overpriced"     // not worth the asking price
+  | "skip"           // unremarkable
+  | "depends-ok"     // fine but not special
+  | "nodata";        // not enough data to judge
+
 export type CriticScale = "100pt" | "20pt" | "5star";
 
 export interface CriticScore {
@@ -73,7 +81,7 @@ export interface Verdict {
   communityNote: string;            // human phrasing of crowd signal, "" if none
   marketPrice: PriceObservation | null;
   qpr: { rating: number; label: string } | null; // 1–10 + label, null if price/quality missing
-  bottomLine: string;               // "take" | "skip" | "overpriced" | "depends" → human label
+  bottomLine: BottomLine;           // localized for display in format.ts
   tastingNotes: string;
   drinkingWindow: string;
   dataConfidence: WineEvidence["dataConfidence"];

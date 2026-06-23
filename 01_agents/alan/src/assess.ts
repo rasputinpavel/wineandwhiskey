@@ -1,4 +1,4 @@
-import type { WineEvidence, Verdict, PriceObservation } from "./types.js";
+import type { WineEvidence, Verdict, PriceObservation, BottomLine } from "./types.js";
 import { bayesianAggregate } from "./normalize.js";
 import { qprRating } from "./qpr.js";
 
@@ -60,12 +60,12 @@ function communityToHundred(c: WineEvidence["communityRating"]): number | null {
   return c.scale === "100pt" ? c.value : Math.min(100, c.value * 20);
 }
 
-/** Honest one-word-ish bottom line. */
-function bottomLine(quality: number | null, qpr: number | null): string {
-  if (quality === null) return "depends — not enough data";
-  if (qpr !== null && qpr <= 3) return "overpriced — skip unless you love the style";
-  if (qpr !== null && qpr >= 7) return "take it — strong value";
-  if (quality >= 90) return "take it — genuinely good";
-  if (quality < 85) return "skip — unremarkable";
-  return "depends — fine but not special";
+/** Honest bottom-line code (localized for display in format.ts). */
+function bottomLine(quality: number | null, qpr: number | null): BottomLine {
+  if (quality === null) return "nodata";
+  if (qpr !== null && qpr <= 3) return "overpriced";
+  if (qpr !== null && qpr >= 7) return "take-value";
+  if (quality >= 90) return "take-quality";
+  if (quality < 85) return "skip";
+  return "depends-ok";
 }

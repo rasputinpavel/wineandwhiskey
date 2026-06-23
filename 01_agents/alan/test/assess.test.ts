@@ -57,6 +57,6 @@ describe("assembleVerdict", () => {
       criticScores: [{ source: "Decanter", rawScore: 86, scale: "100pt" }],
       priceObservations: [{ amount: 80, currency: "USD", context: "avg" }],
     });
-    expect(v.bottomLine.toLowerCase()).toContain("overpriced");
+    expect(v.bottomLine).toBe("overpriced");
   });
 });
