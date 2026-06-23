@@ -6,6 +6,7 @@ import { assessWine, findAnalogues } from "./pipeline.js";
 import { shortVerdict, fullCard, analoguesMessage } from "./format.js";
 import { SessionStore } from "./session.js";
 import { detectLang } from "./lang.js";
+import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
 import type { WineQuery } from "./types.js";
 
@@ -47,6 +48,18 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
   }
 }
 
+async function routeText(ctx: any, text: string): Promise<void> {
+  const lang = detectLang(text, DEFAULT_LANG);
+  const t = await triage(text, lang);
+  if (t.kind === "chat") {
+    await ctx.reply(t.reply);
+    return;
+  }
+  const query = buildQuery({ text });
+  query.intent = t.kind === "analogues" ? "analogues" : "assess"; // triage decides assess vs analogues
+  await handleQuery(ctx, query);
+}
+
 bot.on("message:photo", async (ctx) => {
   const photos = ctx.message.photo;
   const fileId = photos[photos.length - 1].file_id; // largest size
@@ -58,12 +71,12 @@ bot.on("message:photo", async (ctx) => {
 bot.on("message:voice", async (ctx) => {
   const text = await transcribeVoice(TELEGRAM_TOKEN, ctx.message.voice.file_id);
   if (!text) { await ctx.reply(FAIL[DEFAULT_LANG]); return; }
-  await handleQuery(ctx, buildQuery({ text }));
+  await routeText(ctx, text);
 });
 
 bot.on("message:text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return; // ignore unknown commands
-  await handleQuery(ctx, buildQuery({ text: ctx.message.text }));
+  await routeText(ctx, ctx.message.text);
 });
 
 bot.callbackQuery("details", async (ctx) => {
@@ -82,4 +95,10 @@ bot.callbackQuery("details", async (ctx) => {
 
 bot.catch((err) => console.error("bot error:", err));
 
-bot.start({ onStart: (i) => console.log(`Алан started as @${i.username}`) });
+bot.start({
+  drop_pending_updates: true,
+  onStart: (i) => console.log(`Алан started as @${i.username}`),
+}).catch((err) => {
+  console.error("polling stopped:", err);
+  process.exit(1);
+});
