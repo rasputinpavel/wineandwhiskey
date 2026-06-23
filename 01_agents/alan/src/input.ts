@@ -1,4 +1,4 @@
-import type { WineQuery, Intent, Lang } from "./types.js";
+import type { WineQuery, WineImage, Intent, Lang } from "./types.js";
 import { DEFAULT_LANG } from "./config.js";
 import { detectLang } from "./lang.js";
 import { downloadTelegramFile } from "./voice.js";
@@ -9,25 +9,18 @@ export function detectIntent(text: string): Intent {
     ? "analogues" : "assess";
 }
 
-export async function photoToBase64(
-  botToken: string, fileId: string,
-): Promise<{ data: string; mediaType: WineQuery["imageMediaType"] }> {
+export async function photoToBase64(botToken: string, fileId: string): Promise<WineImage> {
   const buf = await downloadTelegramFile(botToken, fileId);
-  // Telegram photos are JPEG; declare jpeg.
+  // Telegram photos are JPEG.
   return { data: buf.toString("base64"), mediaType: "image/jpeg" };
 }
 
-export function buildQuery(opts: {
-  text: string;
-  imageBase64?: string;
-  imageMediaType?: WineQuery["imageMediaType"];
-}): WineQuery {
+export function buildQuery(opts: { text: string; images?: WineImage[] }): WineQuery {
   const text = opts.text ?? "";
   const lang: Lang = detectLang(text, DEFAULT_LANG);
   return {
     text,
-    imageBase64: opts.imageBase64,
-    imageMediaType: opts.imageMediaType,
+    images: opts.images ?? [],
     lang,
     intent: detectIntent(text),
   };

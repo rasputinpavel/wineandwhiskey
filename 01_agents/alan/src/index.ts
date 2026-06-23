@@ -8,12 +8,16 @@ import { SessionStore } from "./session.js";
 import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
-import type { WineQuery } from "./types.js";
+import type { WineQuery, WineImage } from "./types.js";
 
 assertEnv();
 
 const bot = new Bot(TELEGRAM_TOKEN);
 const sessions = new SessionStore(SESSION_TTL_MS);
+
+interface Album { ctx: any; fileIds: string[]; caption: string; timer: ReturnType<typeof setTimeout> | null; }
+const albums = new Map<string, Album>();
+const ALBUM_DEBOUNCE_MS = 1200;
 
 const WORKING = { ru: "Изучаю вино…", en: "Researching the wine…" } as const;
 const FAIL = {
@@ -64,9 +68,41 @@ bot.on("message:photo", async (ctx) => {
   const photos = ctx.message.photo;
   const fileId = photos[photos.length - 1].file_id; // largest size
   const caption = ctx.message.caption ?? "";
-  const { data, mediaType } = await photoToBase64(TELEGRAM_TOKEN, fileId);
-  await handleQuery(ctx, buildQuery({ text: caption, imageBase64: data, imageMediaType: mediaType }));
+  const groupId = ctx.message.media_group_id;
+
+  // Single photo: handle immediately.
+  if (!groupId) {
+    const img = await photoToBase64(TELEGRAM_TOKEN, fileId);
+    await handleQuery(ctx, buildQuery({ text: caption, images: [img] }));
+    return;
+  }
+
+  // Album: buffer photos sharing a media_group_id, process once after a quiet gap.
+  let album = albums.get(groupId);
+  if (!album) {
+    album = { ctx, fileIds: [], caption: "", timer: null };
+    albums.set(groupId, album);
+  }
+  album.fileIds.push(fileId);
+  if (caption) album.caption = caption; // only one photo in the group carries the caption
+  if (album.timer) clearTimeout(album.timer);
+  album.timer = setTimeout(() => { void flushAlbum(groupId); }, ALBUM_DEBOUNCE_MS);
 });
+
+async function flushAlbum(groupId: string): Promise<void> {
+  const album = albums.get(groupId);
+  if (!album) return;
+  albums.delete(groupId);
+  try {
+    const images: WineImage[] = await Promise.all(
+      album.fileIds.map((id) => photoToBase64(TELEGRAM_TOKEN, id)),
+    );
+    await handleQuery(album.ctx, buildQuery({ text: album.caption, images }));
+  } catch (err) {
+    console.error("album processing failed:", err);
+    await album.ctx.reply(FAIL[DEFAULT_LANG]);
+  }
+}
 
 bot.on("message:voice", async (ctx) => {
   const text = await transcribeVoice(TELEGRAM_TOKEN, ctx.message.voice.file_id);

@@ -2,11 +2,17 @@ export type Lang = "ru" | "en";
 
 export type Intent = "assess" | "analogues";
 
+export type ImageMediaType = "image/png" | "image/jpeg" | "image/webp";
+
+export interface WineImage {
+  data: string;            // base64, no "data:" prefix
+  mediaType: ImageMediaType;
+}
+
 /** Normalized user input, language-detected, ready for the pipeline. */
 export interface WineQuery {
-  text: string;          // typed text, voice transcript, or photo caption ("" if none)
-  imageBase64?: string;  // PNG/JPEG label photo, base64 (no data: prefix)
-  imageMediaType?: "image/png" | "image/jpeg" | "image/webp";
+  text: string;            // typed text, voice transcript, or photo caption ("" if none)
+  images: WineImage[];     // 0+ label photos (e.g. front + back of the same bottle)
   lang: Lang;
   intent: Intent;
 }

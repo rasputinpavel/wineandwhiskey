@@ -13,14 +13,10 @@ const MAX_CONTINUATIONS = 4;
 
 function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
   const blocks: any[] = [];
-  if (input.query.imageBase64) {
+  for (const img of input.query.images) {
     blocks.push({
       type: "image",
-      source: {
-        type: "base64",
-        media_type: input.query.imageMediaType ?? "image/jpeg",
-        data: input.query.imageBase64,
-      },
+      source: { type: "base64", media_type: img.mediaType, data: img.data },
     });
   }
   const text = input.query.text.trim();
@@ -28,7 +24,7 @@ function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
     type: "text",
     text: text
       ? text
-      : "Identify the wine in this photo and research it as instructed.",
+      : "Identify the wine in the photo(s) and research it as instructed. Multiple photos may be the front and back label of the SAME bottle — treat them as one wine.",
   });
   return blocks;
 }
