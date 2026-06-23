@@ -1,4 +1,5 @@
 import type { Verdict, AnaloguesResult, Lang, ValueRead, EvidenceLevel } from "./types.js";
+import { usdToThb } from "./priceLocal.js";
 
 const MAX_SOURCES = 6;
 
@@ -8,6 +9,7 @@ const T = {
     notes: "Notes", drink: "Drink", sources: "Sources", confidence: "Confidence",
     producer: "Producer", category: "Category", basis: "Based on",
     limited: "Reliable data is limited — treat this with caution.",
+    localPrompt: "💬 Send the bottle's price in baht and I'll tell you how good the deal is here.",
     noCritics: "no critic scores found", analoguesFor: "Analogues for",
     valueRead: { good: "good price", fair: "fair price", steep: "steep for what it is", unknown: "" } as Record<ValueRead, string>,
     level: { exact: "this exact wine", producer: "the producer", category: "the category", none: "very little data" } as Record<EvidenceLevel, string>,
@@ -25,6 +27,7 @@ const T = {
     notes: "Ноты", drink: "Пить", sources: "Источники", confidence: "Уверенность",
     producer: "Производитель", category: "Категория", basis: "Вывод по",
     limited: "Надёжных данных мало — относись осторожно.",
+    localPrompt: "💬 Пришли цену бутылки в батах — скажу, насколько это выгодно здесь.",
     noCritics: "оценок критиков не найдено", analoguesFor: "Аналоги для",
     valueRead: { good: "цена хорошая", fair: "цена нормальная", steep: "дороговато за такое", unknown: "" } as Record<ValueRead, string>,
     level: { exact: "этому вину", producer: "производителю", category: "категории", none: "крайне малому объёму данных" } as Record<EvidenceLevel, string>,
@@ -82,6 +85,7 @@ export function shortVerdict(v: Verdict, lang: Lang): string {
 
   lines.push(`👉 ${t.bottom[v.bottomLine]}`);
   lines.push(`${t.basis}: ${t.level[v.evidenceLevel]}`);
+  if (v.qualityScore !== null || v.marketUsd !== null) lines.push(t.localPrompt);
   return lines.join("\n");
 }
 
@@ -99,6 +103,7 @@ export function fullCard(v: Verdict, lang: Lang): string {
   lines.push(`${t.price}: ${priceStr(v)}`);
   if (v.qpr) lines.push(`${t.value}: ${v.qpr.rating}/10 — ${v.qpr.label}`);
   else if (t.valueRead[v.valueRead]) lines.push(`${t.value}: ${t.valueRead[v.valueRead]}`);
+  if (v.marketUsd !== null) lines.push(`${t.price} (฿): ≈ ฿${usdToThb(v.marketUsd)}`);
   if (v.producerNote) lines.push(`${t.producer}: ${v.producerNote}`);
   if (v.categoryPositioning) lines.push(`${t.category}: ${v.categoryPositioning}`);
   if (v.tastingNotes) lines.push(`${t.notes}: ${v.tastingNotes}`);

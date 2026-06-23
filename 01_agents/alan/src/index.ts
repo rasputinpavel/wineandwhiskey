@@ -8,6 +8,7 @@ import { SessionStore } from "./session.js";
 import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
+import { localPriceVerdict } from "./priceLocal.js";
 import type { WineQuery, WineImage } from "./types.js";
 
 assertEnv();
@@ -18,6 +19,12 @@ const sessions = new SessionStore(SESSION_TTL_MS);
 interface Album { ctx: any; fileIds: string[]; caption: string; timer: ReturnType<typeof setTimeout> | null; }
 const albums = new Map<string, Album>();
 const ALBUM_DEBOUNCE_MS = 1200;
+
+function userKey(ctx: any): number { return ctx.from?.id ?? ctx.chat?.id ?? -1; }
+function parseBaht(text: string): number | null {
+  const m = text.trim().match(/^[฿]?\s*(\d{2,6})(?:[.,]\d+)?\s*(฿|บาท|baht|бат|тхб|thb)?\s*$/i);
+  return m ? parseInt(m[1], 10) : null;
+}
 
 const WORKING = { ru: "Изучаю вино…", en: "Researching the wine…" } as const;
 const FAIL = {
@@ -41,7 +48,7 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
       return;
     }
     const verdict = await assessWine(query);
-    const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
+    const key = userKey(ctx);
     sessions.set(key, verdict, query.lang);
     const kb = new InlineKeyboard().text(
       query.lang === "ru" ? "Подробнее" : "Details", "details");
@@ -53,6 +60,12 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
 }
 
 async function routeText(ctx: any, text: string): Promise<void> {
+  const baht = parseBaht(text);
+  const entry = sessions.get(userKey(ctx));
+  if (baht !== null && entry) {
+    await ctx.reply(localPriceVerdict(entry.verdict.qualityScore, entry.verdict.marketUsd, baht, entry.lang));
+    return;
+  }
   const lang = detectLang(text, DEFAULT_LANG);
   const t = await triage(text, lang);
   if (t.kind === "chat") {
@@ -117,7 +130,7 @@ bot.on("message:text", async (ctx) => {
 
 bot.callbackQuery("details", async (ctx) => {
   await ctx.answerCallbackQuery();
-  const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
+  const key = userKey(ctx);
   const entry = sessions.get(key);
   if (!entry) {
     await ctx.reply(
