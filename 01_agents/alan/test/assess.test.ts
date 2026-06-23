@@ -12,6 +12,10 @@ const base: WineEvidence = {
   priceObservations: [{ amount: 15, currency: "USD", context: "avg" }],
   tastingNotes: "dark fruit, soft tannins",
   drinkingWindow: "2024–2030",
+  producerNote: "well-regarded estate",
+  categoryPositioning: "solid Rioja in this band",
+  evidenceLevel: "exact",
+  valueRead: "good",
   dataConfidence: "high",
   sources: ["https://example.com"],
 };
@@ -26,6 +30,14 @@ describe("assembleVerdict", () => {
     expect(v.sources).toEqual(["https://example.com"]);
   });
 
+  it("passes through cascade fields", () => {
+    const v = assembleVerdict(base);
+    expect(v.producerNote).toBe("well-regarded estate");
+    expect(v.categoryPositioning).toBe("solid Rioja in this band");
+    expect(v.evidenceLevel).toBe("exact");
+    expect(v.valueRead).toBe("good");
+  });
+
   it("omits QPR when no price is known", () => {
     const v = assembleVerdict({ ...base, priceObservations: [] });
     expect(v.qpr).toBeNull();
@@ -38,17 +50,27 @@ describe("assembleVerdict", () => {
     expect(v.criticCount).toBe(0);
   });
 
-  it("never invents sources or notes on thin evidence", () => {
+  it("gives a real take from producer/category context when numbers are absent", () => {
     const v = assembleVerdict({
       ...base,
       criticScores: [], communityRating: null, priceObservations: [],
-      tastingNotes: "", drinkingWindow: "", dataConfidence: "low", sources: [],
+      evidenceLevel: "producer", valueRead: "good",
+      producerNote: "respected grower", categoryPositioning: "classic dry Riesling",
     });
+    expect(v.bottomLine).toBe("take-value");   // not "nodata"
+    expect(v.qpr).toBeNull();
+  });
+
+  it("returns nodata only when truly nothing is known", () => {
+    const v = assembleVerdict({
+      ...base,
+      criticScores: [], communityRating: null, priceObservations: [],
+      tastingNotes: "", drinkingWindow: "", producerNote: "", categoryPositioning: "",
+      evidenceLevel: "none", valueRead: "unknown", dataConfidence: "low", sources: [],
+    });
+    expect(v.bottomLine).toBe("nodata");
     expect(v.criticConsensus).toBeNull();
     expect(v.qpr).toBeNull();
-    expect(v.communityNote).toBe("");
-    expect(v.sources).toEqual([]);
-    expect(v.dataConfidence).toBe("low");
   });
 
   it("flags an overpriced wine in the bottom line", () => {
@@ -56,6 +78,7 @@ describe("assembleVerdict", () => {
       ...base,
       criticScores: [{ source: "Decanter", rawScore: 86, scale: "100pt" }],
       priceObservations: [{ amount: 80, currency: "USD", context: "avg" }],
+      valueRead: "steep",
     });
     expect(v.bottomLine).toBe("overpriced");
   });

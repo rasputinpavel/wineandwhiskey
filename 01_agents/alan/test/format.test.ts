@@ -11,20 +11,26 @@ const verdict: Verdict = {
   bottomLine: "take-value",
   tastingNotes: "dark fruit, soft tannins",
   drinkingWindow: "2024–2030",
+  producerNote: "well-regarded family estate",
+  categoryPositioning: "strong Rioja for the price",
+  evidenceLevel: "exact",
+  valueRead: "good",
   dataConfidence: "high",
   sources: ["https://a.com", "https://b.com"],
 };
 
 describe("shortVerdict", () => {
-  it("includes name, bottom line, and is compact", () => {
+  it("includes name, bottom line, basis, and is compact", () => {
     const s = shortVerdict(verdict, "en");
     expect(s).toContain("Test");
     expect(s).toContain("take it");
-    expect(s.split("\n").length).toBeLessThanOrEqual(6);
+    expect(s).toContain("Based on");
+    expect(s.split("\n").length).toBeLessThanOrEqual(7);
   });
-  it("does not show a critic score when consensus is null", () => {
-    const s = shortVerdict({ ...verdict, criticConsensus: null, criticCount: 0 }, "en");
+  it("shows positioning instead of a score when no critic consensus", () => {
+    const s = shortVerdict({ ...verdict, criticConsensus: null, criticCount: 0, evidenceLevel: "producer" }, "en");
     expect(s).not.toMatch(/\b\d{2}\/100\b/);
+    expect(s).toContain("well-regarded");
   });
   it("renders Russian labels", () => {
     expect(shortVerdict(verdict, "ru")).toMatch(/[Ѐ-ӿ]/);
@@ -32,14 +38,20 @@ describe("shortVerdict", () => {
 });
 
 describe("fullCard", () => {
-  it("lists sources and tasting notes", () => {
+  it("lists producer, category, sources and tasting notes", () => {
     const c = fullCard(verdict, "en");
     expect(c).toContain("https://a.com");
     expect(c).toContain("dark fruit");
     expect(c).toContain("Excellent value");
+    expect(c).toContain("well-regarded family estate");
+    expect(c).toContain("strong Rioja for the price");
+  });
+  it("shows a qualitative value when there is no numeric QPR", () => {
+    const c = fullCard({ ...verdict, qpr: null, criticConsensus: null, valueRead: "good" }, "en");
+    expect(c.toLowerCase()).toContain("good price");
   });
   it("states when data is thin instead of inventing", () => {
-    const thin = fullCard({ ...verdict, criticConsensus: null, qpr: null, communityNote: "", sources: [], dataConfidence: "low" }, "en");
+    const thin = fullCard({ ...verdict, criticConsensus: null, qpr: null, communityNote: "", producerNote: "", categoryPositioning: "", sources: [], dataConfidence: "low", evidenceLevel: "none", valueRead: "unknown" }, "en");
     expect(thin.toLowerCase()).toContain("limited");
   });
   it("caps the source list to keep messages short", () => {

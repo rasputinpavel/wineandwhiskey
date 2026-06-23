@@ -21,6 +21,9 @@ export type BottomLine =
 
 export type CriticScale = "100pt" | "20pt" | "5star";
 
+export type EvidenceLevel = "exact" | "producer" | "category" | "none";
+export type ValueRead = "good" | "fair" | "steep" | "unknown";
+
 export interface CriticScore {
   source: string;        // e.g. "Decanter", "James Suckling"
   rawScore: number;      // as published, on `scale`
@@ -56,6 +59,10 @@ export interface WineEvidence {
   priceObservations: PriceObservation[];
   tastingNotes: string;  // short, factual
   drinkingWindow: string; // "" if unknown
+  producerNote: string;        // producer reputation / positioning ("" if unknown)
+  categoryPositioning: string; // what this grape/region at this price typically delivers ("" if unknown)
+  evidenceLevel: EvidenceLevel; // most specific tier the evidence actually supports
+  valueRead: ValueRead;         // qualitative price read when no numeric QPR
   dataConfidence: "high" | "medium" | "low"; // overall confidence in the evidence
   sources: string[];     // URLs or named sources
 }
@@ -84,6 +91,10 @@ export interface Verdict {
   bottomLine: BottomLine;           // localized for display in format.ts
   tastingNotes: string;
   drinkingWindow: string;
+  producerNote: string;
+  categoryPositioning: string;
+  evidenceLevel: EvidenceLevel;
+  valueRead: ValueRead;
   dataConfidence: WineEvidence["dataConfidence"];
   sources: string[];
 }

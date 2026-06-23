@@ -1,4 +1,4 @@
-import type { WineEvidence, Verdict, PriceObservation, BottomLine } from "./types.js";
+import type { WineEvidence, Verdict, PriceObservation, BottomLine, ValueRead, EvidenceLevel } from "./types.js";
 import { bayesianAggregate } from "./normalize.js";
 import { qprRating } from "./qpr.js";
 
@@ -24,6 +24,32 @@ function pickPrice(obs: PriceObservation[]): PriceObservation | null {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
+function communityToHundred(c: WineEvidence["communityRating"]): number | null {
+  if (!c) return null;
+  return c.scale === "100pt" ? c.value : Math.min(100, c.value * 20);
+}
+
+/** Honest bottom-line code (localized for display in format.ts). Uses the numeric
+ *  QPR when available, otherwise the qualitative value read + evidence level, so a
+ *  wine with only producer/category context still gets a real take. */
+function bottomLine(
+  quality: number | null,
+  qpr: number | null,
+  valueRead: ValueRead,
+  level: EvidenceLevel,
+): BottomLine {
+  if (qpr !== null) {
+    if (qpr <= 3) return "overpriced";
+    if (qpr >= 7) return "take-value";
+  }
+  if (quality !== null && quality >= 90) return "take-quality";
+  if (valueRead === "steep") return "overpriced";
+  if (valueRead === "good") return "take-value";
+  if (quality !== null && quality < 85) return "skip";
+  if (level === "none" && quality === null && valueRead === "unknown") return "nodata";
+  return "depends-ok";
+}
+
 export function assembleVerdict(e: WineEvidence): Verdict {
   const criticConsensus = bayesianAggregate(e.criticScores);
   const marketPrice = pickPrice(e.priceObservations);
@@ -45,27 +71,14 @@ export function assembleVerdict(e: WineEvidence): Verdict {
     communityNote,
     marketPrice,
     qpr,
-    bottomLine: bottomLine(quality, qpr ? qpr.rating : null),
+    bottomLine: bottomLine(quality, qpr ? qpr.rating : null, e.valueRead, e.evidenceLevel),
     tastingNotes: e.tastingNotes,
     drinkingWindow: e.drinkingWindow,
+    producerNote: e.producerNote,
+    categoryPositioning: e.categoryPositioning,
+    evidenceLevel: e.evidenceLevel,
+    valueRead: e.valueRead,
     dataConfidence: e.dataConfidence,
     sources: e.sources,
   };
-}
-
-/** Map a community rating to the 100-pt scale. Linear (×20 for 5-star), matching
- *  normalize.ts — crowd ratings are not inflated into the critic band. */
-function communityToHundred(c: WineEvidence["communityRating"]): number | null {
-  if (!c) return null;
-  return c.scale === "100pt" ? c.value : Math.min(100, c.value * 20);
-}
-
-/** Honest bottom-line code (localized for display in format.ts). */
-function bottomLine(quality: number | null, qpr: number | null): BottomLine {
-  if (quality === null) return "nodata";
-  if (qpr !== null && qpr <= 3) return "overpriced";
-  if (qpr !== null && qpr >= 7) return "take-value";
-  if (quality >= 90) return "take-quality";
-  if (quality < 85) return "skip";
-  return "depends-ok";
 }
