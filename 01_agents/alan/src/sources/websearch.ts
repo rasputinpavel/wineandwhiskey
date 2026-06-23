@@ -34,36 +34,32 @@ export const webSearchSource: WineDataSource = {
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: userContent(input) },
     ];
+    let accumulated = "";
 
-    let response = await anthropic.messages.create({
-      model: MODEL_MAIN,
-      max_tokens: 8000,
-      thinking: { type: "adaptive" },
-      system: input.systemPrompt,
-      tools: WEB_TOOLS as any,
-      messages,
-    });
-
-    let continuations = 0;
-    while (response.stop_reason === "pause_turn" && continuations < MAX_CONTINUATIONS) {
-      messages.push({ role: "assistant", content: response.content });
-      response = await anthropic.messages.create({
+    // Stream the research; resume across pause_turn (server-side web-search loop limit).
+    for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
+      const stream = anthropic.messages.stream({
         model: MODEL_MAIN,
         max_tokens: 8000,
         thinking: { type: "adaptive" },
         system: input.systemPrompt,
         tools: WEB_TOOLS as any,
         messages,
+      } as any);
+
+      stream.on("text", (delta: string) => {
+        accumulated += delta;
+        input.onProgress?.(accumulated);
       });
-      continuations++;
+
+      const msg = await stream.finalMessage();
+      if (msg.stop_reason === "pause_turn" && i < MAX_CONTINUATIONS) {
+        messages.push({ role: "assistant", content: msg.content });
+        continue;
+      }
+      break;
     }
 
-    const brief = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-
-    return { brief };
+    return { brief: accumulated.trim() };
   },
 };

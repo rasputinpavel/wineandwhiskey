@@ -15,6 +15,8 @@ const verdict: Verdict = {
   categoryPositioning: "strong Rioja for the price",
   evidenceLevel: "exact",
   valueRead: "good",
+  qualityScore: 92,
+  marketUsd: 15,
   dataConfidence: "high",
   sources: ["https://a.com", "https://b.com"],
 };
@@ -34,6 +36,9 @@ describe("shortVerdict", () => {
   });
   it("renders Russian labels", () => {
     expect(shortVerdict(verdict, "ru")).toMatch(/[Ѐ-ӿ]/);
+  });
+  it("invites a local baht price", () => {
+    expect(shortVerdict(verdict, "ru")).toContain("батах");
   });
 });
 

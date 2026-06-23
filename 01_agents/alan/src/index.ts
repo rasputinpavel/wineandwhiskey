@@ -8,6 +8,7 @@ import { SessionStore } from "./session.js";
 import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
+import { localPriceVerdict } from "./priceLocal.js";
 import type { WineQuery, WineImage } from "./types.js";
 
 assertEnv();
@@ -18,6 +19,42 @@ const sessions = new SessionStore(SESSION_TTL_MS);
 interface Album { ctx: any; fileIds: string[]; caption: string; timer: ReturnType<typeof setTimeout> | null; }
 const albums = new Map<string, Album>();
 const ALBUM_DEBOUNCE_MS = 1200;
+
+function userKey(ctx: any): number { return ctx.from?.id ?? ctx.chat?.id ?? -1; }
+function parseBaht(text: string): number | null {
+  const m = text.trim().match(/^[฿]?\s*(\d{2,6})(?:[.,]\d+)?\s*(฿|บาท|baht|бат|тхб|thb)?\s*$/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Returns an onProgress(text) that edits one Telegram message in place, at most
+ *  once every MIN_MS, with a trailing flush. Safe against Telegram errors / dupes. */
+function makeProgressEditor(ctx: any, messageId: number): (text: string) => void {
+  const MIN_MS = 2500;
+  let latest = "";
+  let lastSent = "";
+  let lastAt = 0;
+  let pending: ReturnType<typeof setTimeout> | null = null;
+
+  async function flush(): Promise<void> {
+    pending = null;
+    const text = latest.trim().slice(0, 3500);
+    if (!text || text === lastSent) return;
+    lastSent = text;
+    lastAt = Date.now();
+    try {
+      await ctx.api.editMessageText(ctx.chat.id, messageId, text);
+    } catch {
+      /* ignore "message is not modified" / transient edit errors */
+    }
+  }
+
+  return (text: string) => {
+    latest = text;
+    const since = Date.now() - lastAt;
+    if (since >= MIN_MS) { void flush(); }
+    else if (!pending) { pending = setTimeout(() => void flush(), MIN_MS - since); }
+  };
+}
 
 const WORKING = { ru: "Изучаю вино…", en: "Researching the wine…" } as const;
 const FAIL = {
@@ -33,16 +70,16 @@ bot.command("start", (ctx) =>
   ctx.reply(START[detectLang(ctx.message?.text ?? "", DEFAULT_LANG)]));
 
 async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
-  await ctx.reply(WORKING[query.lang]);
+  const progress = await ctx.reply(WORKING[query.lang]);
+  const onProgress = makeProgressEditor(ctx, progress.message_id);
   try {
     if (query.intent === "analogues") {
-      const result = await findAnalogues(query);
+      const result = await findAnalogues(query, onProgress);
       await ctx.reply(analoguesMessage(result, query.lang));
       return;
     }
-    const verdict = await assessWine(query);
-    const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
-    sessions.set(key, verdict, query.lang);
+    const verdict = await assessWine(query, onProgress);
+    sessions.set(userKey(ctx), verdict, query.lang);
     const kb = new InlineKeyboard().text(
       query.lang === "ru" ? "Подробнее" : "Details", "details");
     await ctx.reply(shortVerdict(verdict, query.lang), { reply_markup: kb });
@@ -53,6 +90,12 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
 }
 
 async function routeText(ctx: any, text: string): Promise<void> {
+  const baht = parseBaht(text);
+  const entry = sessions.get(userKey(ctx));
+  if (baht !== null && entry) {
+    await ctx.reply(localPriceVerdict(entry.verdict.qualityScore, entry.verdict.marketUsd, baht, entry.lang));
+    return;
+  }
   const lang = detectLang(text, DEFAULT_LANG);
   const t = await triage(text, lang);
   if (t.kind === "chat") {
@@ -117,7 +160,7 @@ bot.on("message:text", async (ctx) => {
 
 bot.callbackQuery("details", async (ctx) => {
   await ctx.answerCallbackQuery();
-  const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
+  const key = userKey(ctx);
   const entry = sessions.get(key);
   if (!entry) {
     await ctx.reply(

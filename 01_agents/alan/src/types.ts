@@ -101,6 +101,8 @@ export interface Verdict {
   categoryPositioning: string;
   evidenceLevel: EvidenceLevel;
   valueRead: ValueRead;
+  qualityScore: number | null;  // 0–100 quality used for value math (for the local-price follow-up)
+  marketUsd: number | null;     // world market price in USD (for the local-price comparison)
   dataConfidence: WineEvidence["dataConfidence"];
   sources: string[];
 }
