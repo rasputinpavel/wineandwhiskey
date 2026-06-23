@@ -36,7 +36,8 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
       return;
     }
     const verdict = await assessWine(query);
-    sessions.setVerdict(ctx.chat.id, verdict);
+    const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
+    sessions.set(key, verdict, query.lang);
     const kb = new InlineKeyboard().text(
       query.lang === "ru" ? "Подробнее" : "Details", "details");
     await ctx.reply(shortVerdict(verdict, query.lang), { reply_markup: kb });
@@ -67,13 +68,16 @@ bot.on("message:text", async (ctx) => {
 
 bot.callbackQuery("details", async (ctx) => {
   await ctx.answerCallbackQuery();
-  const verdict = sessions.getVerdict(ctx.chat?.id ?? -1);
-  const lang = detectLang(verdict?.tastingNotes ?? "", DEFAULT_LANG);
-  if (!verdict) {
-    await ctx.reply(lang === "ru" ? "Сессия истекла, пришли вино заново." : "Session expired, send the wine again.");
+  const key = ctx.from?.id ?? ctx.chat?.id ?? -1;
+  const entry = sessions.get(key);
+  if (!entry) {
+    await ctx.reply(
+      DEFAULT_LANG === "ru"
+        ? "Сессия истекла, пришли вино заново."
+        : "Session expired, send the wine again.");
     return;
   }
-  await ctx.reply(fullCard(verdict, lang));
+  await ctx.reply(fullCard(entry.verdict, entry.lang));
 });
 
 bot.catch((err) => console.error("bot error:", err));

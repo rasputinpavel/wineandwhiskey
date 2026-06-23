@@ -8,7 +8,6 @@ export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 
 export const MODEL_MAIN = "claude-opus-4-8";
-export const MODEL_CHEAP = "claude-haiku-4-5";
 
 /** Reply language when the message carries no detectable text (e.g. bare photo). */
 export const DEFAULT_LANG: Lang = "ru";

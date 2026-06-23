@@ -1,6 +1,6 @@
-import type { Verdict } from "./types.js";
+import type { Verdict, Lang } from "./types.js";
 
-interface Entry { verdict: Verdict; at: number; }
+interface Entry { verdict: Verdict; lang: Lang; at: number; }
 
 export class SessionStore {
   private map = new Map<number, Entry>();
@@ -9,14 +9,14 @@ export class SessionStore {
     private now: () => number = () => Date.now(),
   ) {}
 
-  setVerdict(chatId: number, verdict: Verdict): void {
-    this.map.set(chatId, { verdict, at: this.now() });
+  set(key: number, verdict: Verdict, lang: Lang): void {
+    this.map.set(key, { verdict, lang, at: this.now() });
   }
 
-  getVerdict(chatId: number): Verdict | undefined {
-    const e = this.map.get(chatId);
+  get(key: number): { verdict: Verdict; lang: Lang } | undefined {
+    const e = this.map.get(key);
     if (!e) return undefined;
-    if (this.now() - e.at > this.ttlMs) { this.map.delete(chatId); return undefined; }
-    return e.verdict;
+    if (this.now() - e.at > this.ttlMs) { this.map.delete(key); return undefined; }
+    return { verdict: e.verdict, lang: e.lang };
   }
 }

@@ -42,6 +42,12 @@ describe("fullCard", () => {
     const thin = fullCard({ ...verdict, criticConsensus: null, qpr: null, communityNote: "", sources: [], dataConfidence: "low" }, "en");
     expect(thin.toLowerCase()).toContain("limited");
   });
+  it("caps the source list to keep messages short", () => {
+    const many = Array.from({ length: 12 }, (_, i) => `https://src${i}.com`);
+    const c = fullCard({ ...verdict, sources: many }, "en");
+    const bullets = c.split("\n").filter((l) => l.startsWith("• ")).length;
+    expect(bullets).toBeLessThanOrEqual(6);
+  });
 });
 
 describe("analoguesMessage", () => {

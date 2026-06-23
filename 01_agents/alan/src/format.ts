@@ -1,5 +1,7 @@
 import type { Verdict, AnaloguesResult, Lang } from "./types.js";
 
+const MAX_SOURCES = 6;
+
 const T = {
   en: {
     critics: "Critics", crowd: "Crowd", price: "Price", value: "Value",
@@ -57,7 +59,7 @@ export function fullCard(v: Verdict, lang: Lang): string {
   lines.push(`👉 ${v.bottomLine}`);
   lines.push(`${t.confidence}: ${v.dataConfidence}`);
   if (v.dataConfidence === "low") lines.push(t.limited);
-  if (v.sources.length) lines.push(`${t.sources}:\n${v.sources.map((s) => `• ${s}`).join("\n")}`);
+  if (v.sources.length) lines.push(`${t.sources}:\n${v.sources.slice(0, MAX_SOURCES).map((s) => `• ${s}`).join("\n")}`);
   return lines.join("\n");
 }
 
@@ -71,6 +73,6 @@ export function analoguesMessage(a: AnaloguesResult, lang: Lang): string {
   lines.push("");
   lines.push(`${t.confidence}: ${a.dataConfidence}`);
   if (a.dataConfidence === "low") lines.push(t.limited);
-  if (a.sources.length) lines.push(`${t.sources}:\n${a.sources.map((s) => `• ${s}`).join("\n")}`);
+  if (a.sources.length) lines.push(`${t.sources}:\n${a.sources.slice(0, MAX_SOURCES).map((s) => `• ${s}`).join("\n")}`);
   return lines.join("\n");
 }
