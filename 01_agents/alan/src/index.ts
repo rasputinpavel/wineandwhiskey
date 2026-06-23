@@ -26,6 +26,36 @@ function parseBaht(text: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+/** Returns an onProgress(text) that edits one Telegram message in place, at most
+ *  once every MIN_MS, with a trailing flush. Safe against Telegram errors / dupes. */
+function makeProgressEditor(ctx: any, messageId: number): (text: string) => void {
+  const MIN_MS = 2500;
+  let latest = "";
+  let lastSent = "";
+  let lastAt = 0;
+  let pending: ReturnType<typeof setTimeout> | null = null;
+
+  async function flush(): Promise<void> {
+    pending = null;
+    const text = latest.trim().slice(0, 3500);
+    if (!text || text === lastSent) return;
+    lastSent = text;
+    lastAt = Date.now();
+    try {
+      await ctx.api.editMessageText(ctx.chat.id, messageId, text);
+    } catch {
+      /* ignore "message is not modified" / transient edit errors */
+    }
+  }
+
+  return (text: string) => {
+    latest = text;
+    const since = Date.now() - lastAt;
+    if (since >= MIN_MS) { void flush(); }
+    else if (!pending) { pending = setTimeout(() => void flush(), MIN_MS - since); }
+  };
+}
+
 const WORKING = { ru: "Изучаю вино…", en: "Researching the wine…" } as const;
 const FAIL = {
   ru: "Не удалось разобрать. Пришли фото этикетки чётче или напиши название текстом.",
@@ -40,16 +70,16 @@ bot.command("start", (ctx) =>
   ctx.reply(START[detectLang(ctx.message?.text ?? "", DEFAULT_LANG)]));
 
 async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
-  await ctx.reply(WORKING[query.lang]);
+  const progress = await ctx.reply(WORKING[query.lang]);
+  const onProgress = makeProgressEditor(ctx, progress.message_id);
   try {
     if (query.intent === "analogues") {
-      const result = await findAnalogues(query);
+      const result = await findAnalogues(query, onProgress);
       await ctx.reply(analoguesMessage(result, query.lang));
       return;
     }
-    const verdict = await assessWine(query);
-    const key = userKey(ctx);
-    sessions.set(key, verdict, query.lang);
+    const verdict = await assessWine(query, onProgress);
+    sessions.set(userKey(ctx), verdict, query.lang);
     const kb = new InlineKeyboard().text(
       query.lang === "ru" ? "Подробнее" : "Details", "details");
     await ctx.reply(shortVerdict(verdict, query.lang), { reply_markup: kb });
