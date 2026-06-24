@@ -12,6 +12,7 @@ const base: WineEvidence = {
   priceObservations: [{ amount: 15, currency: "USD", context: "avg" }],
   tastingNotes: "dark fruit, soft tannins",
   drinkingWindow: "2024–2030",
+  agingNote: "Tempranillo выдерживается; 2018 в самой поре",
   producerNote: "well-regarded estate",
   categoryPositioning: "solid Rioja in this band",
   evidenceLevel: "exact",
@@ -39,6 +40,7 @@ describe("assembleVerdict", () => {
     expect(v.evidenceLevel).toBe("exact");
     expect(v.valueRead).toBe("good");
     expect(v.priceTier).toBe("entry");
+    expect(v.agingNote).toBe("Tempranillo выдерживается; 2018 в самой поре");
     expect(v.punchline).toBe("Берём, это рабочая лошадка.");
     expect(v.detail).toBe("");
   });

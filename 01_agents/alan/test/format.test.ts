@@ -11,6 +11,7 @@ const verdict: Verdict = {
   bottomLine: "take-value",
   tastingNotes: "honest commercial fizz",
   drinkingWindow: "drink now",
+  agingNote: "Glera — пьётся молодым; 2023 в поре",
   producerNote: "Pitars — solid commercial house, not cult",
   categoryPositioning: "entry Prosecco DOC Extra Dry",
   evidenceLevel: "producer",
@@ -33,6 +34,9 @@ describe("shortVerdict (summary)", () => {
     expect(s).toContain("входной уровень");
     expect(s).toContain("Пятничный пузырь");
     expect(s).toContain("батах"); // local price invite
+  });
+  it("shows the aging conclusion", () => {
+    expect(shortVerdict(verdict, "ru")).toContain("пьётся молодым");
   });
   it("shows 'no critic scores' when consensus is null and crowd otherwise", () => {
     const s = shortVerdict(verdict, "ru");

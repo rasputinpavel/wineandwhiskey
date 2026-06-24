@@ -6,7 +6,7 @@ const MAX_SOURCES = 6;
 const T = {
   en: {
     critics: "Critics", crowd: "Crowd", value: "Value",
-    notes: "Notes", drink: "Drink", sources: "Sources", confidence: "Confidence",
+    notes: "Notes", drink: "Drink", age: "Age", sources: "Sources", confidence: "Confidence",
     producer: "Producer", category: "Category", basis: "Based on",
     origin: "Origin", thaiEst: "Thailand est.", segment: "Segment",
     limited: "Reliable data is limited — treat this with caution.",
@@ -18,7 +18,7 @@ const T = {
   },
   ru: {
     critics: "Критики", crowd: "Толпа", value: "Цена/качество",
-    notes: "Ноты", drink: "Пить", sources: "Источники", confidence: "Уверенность",
+    notes: "Ноты", drink: "Пить", age: "Возраст", sources: "Источники", confidence: "Уверенность",
     producer: "Производитель", category: "Категория", basis: "Вывод по",
     origin: "На родине", thaiEst: "Ориентир по Таиланду", segment: "Сегмент",
     limited: "Надёжных данных мало — относись осторожно.",
@@ -61,6 +61,7 @@ export function shortVerdict(v: Verdict, lang: Lang): string {
   if (v.categoryPositioning) lines.push(`${t.category}: ${v.categoryPositioning}`);
   if (v.tastingNotes) lines.push(`${t.notes}: ${v.tastingNotes}`);
   if (v.drinkingWindow) lines.push(`${t.drink}: ${v.drinkingWindow}`);
+  if (v.agingNote) lines.push(`${t.age}: ${v.agingNote}`);
 
   if (v.punchline) { lines.push(""); lines.push(v.punchline); }
   if (v.qualityScore !== null || v.marketUsd !== null) { lines.push(""); lines.push(t.localPrompt); }
@@ -97,6 +98,7 @@ export function fullCard(v: Verdict, lang: Lang): string {
   if (v.categoryPositioning) lines.push(`${t.category}: ${v.categoryPositioning}`);
   if (v.tastingNotes) lines.push(`${t.notes}: ${v.tastingNotes}`);
   if (v.drinkingWindow) lines.push(`${t.drink}: ${v.drinkingWindow}`);
+  if (v.agingNote) lines.push(`${t.age}: ${v.agingNote}`);
   if (v.punchline) { lines.push(""); lines.push(v.punchline); }
   lines.push(`${t.basis}: ${t.level[v.evidenceLevel]} · ${t.confidence.toLowerCase()} ${v.dataConfidence}`);
   if (v.dataConfidence === "low") lines.push(t.limited);

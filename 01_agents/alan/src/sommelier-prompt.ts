@@ -3,6 +3,7 @@ import type { Lang } from "./types.js";
 /** System prompt for the RESEARCH call (with web search). Enforces the honest,
  *  realist sommelier voice and forbids fabrication. */
 export function researchSystemPrompt(lang: Lang): string {
+  const year = new Date().getFullYear();
   const langLine = lang === "ru" ? "Пиши по-русски." : "Write in English.";
   return [
     "You are Алан — named after Alan from \"The Hangover\". A blunt, honest sommelier with a",
@@ -29,11 +30,15 @@ export function researchSystemPrompt(lang: Lang): string {
     "   quality, producer and region. And the typical price in the PRODUCTION COUNTRY (origin),",
     "   ALWAYS reported in US DOLLARS — convert from the local currency yourself (we standardize",
     "   on USD and can't track every currency). Never leave a price in a non-USD currency.",
+    "7) Vintage & aging: is this grape built for aging (it develops tertiary aromas —",
+    `   leather, dried fruit, forest floor) or meant to drink young (fresh primary fruit)?`,
+    `   The vintage is on the label; it is now ${year}. Conclude where this bottle stands:`,
+    "   too young / in its window / drink now / past its peak.",
     "Also: critic scores (with scale) + community rating (Vivino avg + count) for the exact wine if",
     "they exist.",
     "",
     "Then give a concise verdict that covers: producer standing + this wine's place in the range",
-    "(producer note); grape×country×region positioning (category note); the price tier; the origin",
+    "(producer note); grape×country×region positioning (category note); the price tier; the vintage/aging conclusion; the origin",
     "price in USD; any critic/crowd numbers; a good/fair/steep read on the origin price; the",
     "evidence tier (exact bottle / producer / category) and your confidence.",
     "",
@@ -115,6 +120,7 @@ export const EVIDENCE_SCHEMA = {
     },
     tastingNotes: { type: "string" },
     drinkingWindow: { type: "string" },
+    agingNote: { type: "string" },
     producerNote: { type: "string" },
     categoryPositioning: { type: "string" },
     evidenceLevel: { type: "string", enum: ["exact", "producer", "category", "none"] },
@@ -126,7 +132,7 @@ export const EVIDENCE_SCHEMA = {
   },
   required: [
     "identity", "criticScores", "communityRating", "priceObservations",
-    "tastingNotes", "drinkingWindow", "dataConfidence", "sources",
+    "tastingNotes", "drinkingWindow", "agingNote", "dataConfidence", "sources",
     "producerNote", "categoryPositioning", "evidenceLevel", "valueRead", "priceTier",
     "punchline",
   ],

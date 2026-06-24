@@ -14,6 +14,7 @@ const EMPTY_EVIDENCE: WineEvidence = {
   priceObservations: [],
   tastingNotes: "",
   drinkingWindow: "",
+  agingNote: "",
   producerNote: "",
   categoryPositioning: "",
   evidenceLevel: "none",
@@ -35,7 +36,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
   const params = {
     model: MODEL_CHEAP,
     max_tokens: 4000,
-    system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, producerNote, categoryPositioning, punchline, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
+    system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, agingNote, producerNote, categoryPositioning, punchline, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
     output_config: { format: { type: "json_schema", schema } },
     messages: [{ role: "user", content: brief }],
   } as any;
@@ -71,7 +72,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
 export function structureEvidence(brief: string, lang: Lang): Promise<WineEvidence> {
   return structured<WineEvidence>(
     brief, EVIDENCE_SCHEMA,
-    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown). For priceObservations, ALWAYS express amount in US dollars with currency \"USD\" — convert any local-currency price in the brief to USD; never emit a non-USD currency. Set punchline to the brief's single closing one-line verdict in Alan's blunt, deadpan-sincere voice.",
+    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown). For priceObservations, ALWAYS express amount in US dollars with currency \"USD\" — convert any local-currency price in the brief to USD; never emit a non-USD currency. Set punchline to the brief's single closing one-line verdict in Alan's blunt, deadpan-sincere voice. Set agingNote to a one-line conclusion on the grape's aging propensity and this vintage's status (e.g. \"Glera — пьётся молодым; 2023 в самой поре\" / \"Cabernet выдерживается; 2018 ещё молод, дайте 3–5 лет\").",
     EMPTY_EVIDENCE,
     lang,
   );

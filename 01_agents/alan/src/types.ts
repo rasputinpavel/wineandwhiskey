@@ -66,6 +66,7 @@ export interface WineEvidence {
   priceObservations: PriceObservation[];
   tastingNotes: string;  // short, factual
   drinkingWindow: string; // "" if unknown
+  agingNote: string;   // grape's aging propensity + this vintage's status (one-line conclusion)
   producerNote: string;        // producer reputation / positioning ("" if unknown)
   categoryPositioning: string; // what this grape/region at this price typically delivers ("" if unknown)
   evidenceLevel: EvidenceLevel; // most specific tier the evidence actually supports
@@ -100,6 +101,7 @@ export interface Verdict {
   bottomLine: BottomLine;           // localized for display in format.ts
   tastingNotes: string;
   drinkingWindow: string;
+  agingNote: string;
   producerNote: string;
   categoryPositioning: string;
   evidenceLevel: EvidenceLevel;

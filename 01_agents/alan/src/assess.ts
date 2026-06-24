@@ -74,6 +74,7 @@ export function assembleVerdict(e: WineEvidence): Verdict {
     bottomLine: bottomLine(quality, qpr ? qpr.rating : null, e.valueRead, e.evidenceLevel),
     tastingNotes: e.tastingNotes,
     drinkingWindow: e.drinkingWindow,
+    agingNote: e.agingNote,
     producerNote: e.producerNote,
     categoryPositioning: e.categoryPositioning,
     evidenceLevel: e.evidenceLevel,
