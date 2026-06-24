@@ -1,5 +1,5 @@
 import type { Verdict, AnaloguesResult, Lang, ValueRead, EvidenceLevel } from "./types.js";
-import { usdToThb } from "./priceLocal.js";
+import { usdToThb, estimateThaiThb } from "./priceLocal.js";
 
 const MAX_SOURCES = 6;
 
@@ -12,6 +12,7 @@ const T = {
     localPrompt: "💬 Send the bottle's price in baht and I'll tell you how good the deal is here.",
     noCritics: "no critic scores found", analoguesFor: "Analogues for",
     valueRead: { good: "good price", fair: "fair price", steep: "steep for what it is", unknown: "" } as Record<ValueRead, string>,
+    tier: { entry: "entry-level", mid: "mid-range", premium: "premium", luxury: "luxury", icon: "icon/collector", unknown: "" } as Record<import("./types.js").PriceTier, string>, segment: "Segment", origin: "Origin", thaiEst: "Thailand est.",
     level: { exact: "this exact wine", producer: "the producer", category: "the category", none: "very little data" } as Record<EvidenceLevel, string>,
     bottom: {
       "take-value": "take it — strong value",
@@ -30,6 +31,7 @@ const T = {
     localPrompt: "💬 Пришли цену бутылки в батах — скажу, насколько это выгодно здесь.",
     noCritics: "оценок критиков не найдено", analoguesFor: "Аналоги для",
     valueRead: { good: "цена хорошая", fair: "цена нормальная", steep: "дороговато за такое", unknown: "" } as Record<ValueRead, string>,
+    tier: { entry: "входной уровень", mid: "средний сегмент", premium: "премиум", luxury: "люкс", icon: "икона/коллекционное", unknown: "" } as Record<import("./types.js").PriceTier, string>, segment: "Сегмент", origin: "На родине", thaiEst: "Ориентир по Таиланду",
     level: { exact: "этому вину", producer: "производителю", category: "категории", none: "крайне малому объёму данных" } as Record<EvidenceLevel, string>,
     bottom: {
       "take-value": "брать — отличная цена",
@@ -83,6 +85,10 @@ export function shortVerdict(v: Verdict, lang: Lang): string {
     lines.push(t.valueRead[v.valueRead]);
   }
 
+  if (v.priceTier !== "unknown" && lines.length > 1) {
+    lines[lines.length - 1] += ` · ${t.tier[v.priceTier]}`;
+  }
+
   lines.push(`👉 ${t.bottom[v.bottomLine]}`);
   lines.push(`${t.basis}: ${t.level[v.evidenceLevel]}`);
   if (v.qualityScore !== null || v.marketUsd !== null) lines.push(t.localPrompt);
@@ -103,7 +109,12 @@ export function fullCard(v: Verdict, lang: Lang): string {
   lines.push(`${t.price}: ${priceStr(v)}`);
   if (v.qpr) lines.push(`${t.value}: ${v.qpr.rating}/10 — ${v.qpr.label}`);
   else if (t.valueRead[v.valueRead]) lines.push(`${t.value}: ${t.valueRead[v.valueRead]}`);
-  if (v.marketUsd !== null) lines.push(`${t.price} (฿): ≈ ฿${usdToThb(v.marketUsd)}`);
+  if (v.priceTier !== "unknown") lines.push(`${t.segment}: ${t.tier[v.priceTier]}`);
+  if (v.marketUsd !== null) {
+    const est = estimateThaiThb(v.marketUsd);
+    lines.push(`${t.origin}: ≈ ฿${usdToThb(v.marketUsd)}`);
+    lines.push(`${t.thaiEst}: ฿${est.low}–฿${est.high}`);
+  }
   if (v.producerNote) lines.push(`${t.producer}: ${v.producerNote}`);
   if (v.categoryPositioning) lines.push(`${t.category}: ${v.categoryPositioning}`);
   if (v.tastingNotes) lines.push(`${t.notes}: ${v.tastingNotes}`);

@@ -78,6 +78,7 @@ export function assembleVerdict(e: WineEvidence): Verdict {
     categoryPositioning: e.categoryPositioning,
     evidenceLevel: e.evidenceLevel,
     valueRead: e.valueRead,
+    priceTier: e.priceTier,
     qualityScore: quality,
     marketUsd: priceUsd,
     dataConfidence: e.dataConfidence,

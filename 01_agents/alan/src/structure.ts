@@ -18,6 +18,7 @@ const EMPTY_EVIDENCE: WineEvidence = {
   categoryPositioning: "",
   evidenceLevel: "none",
   valueRead: "unknown",
+  priceTier: "unknown",
   dataConfidence: "low",
   sources: [],
 };
@@ -56,7 +57,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
 export function structureEvidence(brief: string, lang: Lang): Promise<WineEvidence> {
   return structured<WineEvidence>(
     brief, EVIDENCE_SCHEMA,
-    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief.",
+    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown).",
     EMPTY_EVIDENCE,
     lang,
   );

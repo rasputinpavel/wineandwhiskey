@@ -16,6 +16,7 @@ const base: WineEvidence = {
   categoryPositioning: "solid Rioja in this band",
   evidenceLevel: "exact",
   valueRead: "good",
+  priceTier: "entry",
   dataConfidence: "high",
   sources: ["https://example.com"],
 };
@@ -36,6 +37,7 @@ describe("assembleVerdict", () => {
     expect(v.categoryPositioning).toBe("solid Rioja in this band");
     expect(v.evidenceLevel).toBe("exact");
     expect(v.valueRead).toBe("good");
+    expect(v.priceTier).toBe("entry");
   });
 
   it("omits QPR when no price is known", () => {

@@ -29,6 +29,7 @@ export type CriticScale = "100pt" | "20pt" | "5star";
 
 export type EvidenceLevel = "exact" | "producer" | "category" | "none";
 export type ValueRead = "good" | "fair" | "steep" | "unknown";
+export type PriceTier = "entry" | "mid" | "premium" | "luxury" | "icon" | "unknown";
 
 export interface CriticScore {
   source: string;        // e.g. "Decanter", "James Suckling"
@@ -69,6 +70,7 @@ export interface WineEvidence {
   categoryPositioning: string; // what this grape/region at this price typically delivers ("" if unknown)
   evidenceLevel: EvidenceLevel; // most specific tier the evidence actually supports
   valueRead: ValueRead;         // qualitative price read when no numeric QPR
+  priceTier: PriceTier;   // which price band this wine plays in
   dataConfidence: "high" | "medium" | "low"; // overall confidence in the evidence
   sources: string[];     // URLs or named sources
 }
@@ -101,6 +103,7 @@ export interface Verdict {
   categoryPositioning: string;
   evidenceLevel: EvidenceLevel;
   valueRead: ValueRead;
+  priceTier: PriceTier;
   qualityScore: number | null;  // 0–100 quality used for value math (for the local-price follow-up)
   marketUsd: number | null;     // world market price in USD (for the local-price comparison)
   dataConfidence: WineEvidence["dataConfidence"];
