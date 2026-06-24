@@ -15,6 +15,7 @@ const verdict: Verdict = {
   categoryPositioning: "strong Rioja for the price",
   evidenceLevel: "exact",
   valueRead: "good",
+  priceTier: "entry",
   qualityScore: 92,
   marketUsd: 15,
   dataConfidence: "high",
@@ -58,6 +59,11 @@ describe("fullCard", () => {
   it("states when data is thin instead of inventing", () => {
     const thin = fullCard({ ...verdict, criticConsensus: null, qpr: null, communityNote: "", producerNote: "", categoryPositioning: "", sources: [], dataConfidence: "low", evidenceLevel: "none", valueRead: "unknown" }, "en");
     expect(thin.toLowerCase()).toContain("limited");
+  });
+  it("shows the price tier and Thailand estimate", () => {
+    const c = fullCard(verdict, "ru");
+    expect(c).toContain("входной уровень");
+    expect(c).toContain("Ориентир по Таиланду");
   });
   it("caps the source list to keep messages short", () => {
     const many = Array.from({ length: 12 }, (_, i) => `https://src${i}.com`);

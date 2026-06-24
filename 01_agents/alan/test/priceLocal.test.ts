@@ -1,27 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { localPriceVerdict, thbToUsd, usdToThb } from "../src/priceLocal.js";
+import { localPriceVerdict, thbToUsd, usdToThb, estimateThaiThb } from "../src/priceLocal.js";
 
 describe("localPriceVerdict", () => {
-  it("rates a cheap local price on a good wine and compares to world market", () => {
-    const s = localPriceVerdict(90, 15, 450, "en"); // ฿450 ≈ $12.6, market $15
-    expect(s).toMatch(/At ฿450/);
+  it("rates a local price and compares to origin with Thai markup in mind", () => {
+    const s = localPriceVerdict(90, 15, 900, "en"); // ฿900 ≈ $25.2 vs origin $15 → ×1.67 ≈ Thai-fair
+    expect(s).toMatch(/At ฿900/);
     expect(s).toMatch(/\d\/10/);
-    expect(s.toLowerCase()).toContain("world price");
-    expect(s.toLowerCase()).toContain("below world market");
+    expect(s.toLowerCase()).toContain("origin");
+    expect(s.toLowerCase()).toMatch(/thailand/);
   });
-  it("flags a price well above world market", () => {
-    const s = localPriceVerdict(88, 15, 1200, "en"); // ฿1200 ≈ $33.6 vs $15
-    expect(s.toLowerCase()).toContain("above world market");
+  it("flags a price steep even for Thailand", () => {
+    const s = localPriceVerdict(88, 15, 2000, "en"); // ฿2000 ≈ $56 vs origin $15 → ×3.7
+    expect(s.toLowerCase()).toContain("steep even for thailand");
+  });
+  it("calls a low markup a good deal for Thailand", () => {
+    const s = localPriceVerdict(90, 15, 550, "en"); // ฿550 ≈ $15.4 vs origin $15 → ×1.0
+    expect(s.toLowerCase()).toContain("good deal for thailand");
   });
   it("renders Russian", () => {
-    expect(localPriceVerdict(90, 15, 450, "ru")).toMatch(/[Ѐ-ӿ]/);
+    expect(localPriceVerdict(90, 15, 900, "ru")).toMatch(/[Ѐ-ӿ]/);
   });
-  it("says so when there is no quality/market basis", () => {
-    const s = localPriceVerdict(null, null, 450, "en");
-    expect(s.toLowerCase()).toContain("not enough");
+  it("says so when there is no basis", () => {
+    expect(localPriceVerdict(null, null, 900, "en").toLowerCase()).toContain("not enough");
   });
-  it("round-trips THB/USD roughly", () => {
-    expect(usdToThb(10)).toBeGreaterThan(300);
+  it("estimates a Thai range above origin", () => {
+    const r = estimateThaiThb(15);
+    expect(r.low).toBeLessThan(r.high);
+    expect(r.low).toBeGreaterThan(usdToThb(15)); // always above bare origin
+  });
+  it("round-trips THB/USD", () => {
     expect(thbToUsd(usdToThb(10))).toBeCloseTo(10, 0);
   });
 });
