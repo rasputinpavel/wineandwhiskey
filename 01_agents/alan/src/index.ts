@@ -29,6 +29,36 @@ function parseBaht(text: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+const TG_LIMIT = 4000; // safe margin under Telegram's 4096-char message cap
+/** Split text into ≤TG_LIMIT chunks on line boundaries (hard-splitting any over-long line). */
+function chunkText(text: string, limit = TG_LIMIT): string[] {
+  const out: string[] = [];
+  let buf = "";
+  for (const line of text.split("\n")) {
+    if (line.length > limit) {
+      if (buf) { out.push(buf); buf = ""; }
+      for (let i = 0; i < line.length; i += limit) out.push(line.slice(i, i + limit));
+      continue;
+    }
+    if (buf.length + line.length + 1 > limit) { out.push(buf); buf = line; }
+    else { buf = buf ? buf + "\n" + line : line; }
+  }
+  if (buf) out.push(buf);
+  return out.length ? out : [""];
+}
+/** Send a (possibly long) message as one or more chunks; opts attach to the last chunk. */
+async function sendLong(ctx: any, text: string, lastOpts?: any): Promise<void> {
+  const parts = chunkText(text);
+  for (let i = 0; i < parts.length; i++) {
+    await ctx.reply(parts[i], i === parts.length - 1 ? lastOpts : undefined);
+  }
+}
+/** Remove the live "thinking" message once the result is ready (avoids a lingering,
+ *  truncated reasoning duplicate next to the final summary). */
+async function dropProgress(ctx: any, messageId: number): Promise<void> {
+  try { await ctx.api.deleteMessage(ctx.chat.id, messageId); } catch { /* already gone */ }
+}
+
 /** Returns an onProgress(text) that edits one Telegram message in place, at most
  *  once every MIN_MS, with a trailing flush. Safe against Telegram errors / dupes. */
 function makeProgressEditor(ctx: any, messageId: number): (text: string) => void {
@@ -82,16 +112,19 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
   try {
     if (query.intent === "analogues") {
       const result = await findAnalogues(query, onProgress);
-      await ctx.reply(analoguesMessage(result, query.lang));
+      await dropProgress(ctx, progress.message_id);
+      await sendLong(ctx, analoguesMessage(result, query.lang));
       return;
     }
     const verdict = await assessWine(query, onProgress);
     sessions.set(userKey(ctx), verdict, query.lang);
+    await dropProgress(ctx, progress.message_id);
     const kb = new InlineKeyboard().text(
       query.lang === "ru" ? "Подробнее" : "Details", "details");
-    await ctx.reply(shortVerdict(verdict, query.lang), { reply_markup: kb });
+    await sendLong(ctx, shortVerdict(verdict, query.lang), { reply_markup: kb });
   } catch (err) {
     console.error("query failed:", err);
+    await dropProgress(ctx, progress.message_id);
     await ctx.reply(FAIL[query.lang]);
   }
 }
@@ -193,7 +226,7 @@ bot.callbackQuery("details", async (ctx) => {
         : "Session expired, send the wine again.");
     return;
   }
-  await ctx.reply(fullCard(entry.verdict, entry.lang));
+  await sendLong(ctx, fullCard(entry.verdict, entry.lang));
 });
 
 bot.catch((err) => console.error("bot error:", err));
