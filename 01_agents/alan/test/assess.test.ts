@@ -17,6 +17,7 @@ const base: WineEvidence = {
   evidenceLevel: "exact",
   valueRead: "good",
   priceTier: "entry",
+  punchline: "Берём, это рабочая лошадка.",
   dataConfidence: "high",
   sources: ["https://example.com"],
 };
@@ -38,6 +39,8 @@ describe("assembleVerdict", () => {
     expect(v.evidenceLevel).toBe("exact");
     expect(v.valueRead).toBe("good");
     expect(v.priceTier).toBe("entry");
+    expect(v.punchline).toBe("Берём, это рабочая лошадка.");
+    expect(v.detail).toBe("");
   });
 
   it("omits QPR when no price is known", () => {

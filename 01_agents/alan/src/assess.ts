@@ -81,6 +81,8 @@ export function assembleVerdict(e: WineEvidence): Verdict {
     priceTier: e.priceTier,
     qualityScore: quality,
     marketUsd: priceUsd,
+    punchline: e.punchline,
+    detail: "",
     dataConfidence: e.dataConfidence,
     sources: e.sources,
   };

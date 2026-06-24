@@ -19,6 +19,7 @@ const EMPTY_EVIDENCE: WineEvidence = {
   evidenceLevel: "none",
   valueRead: "unknown",
   priceTier: "unknown",
+  punchline: "",
   dataConfidence: "low",
   sources: [],
 };
@@ -34,7 +35,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
   const response = await anthropic.messages.create({
     model: MODEL_CHEAP,
     max_tokens: 4000,
-    system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
+    system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, producerNote, categoryPositioning, punchline, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
     output_config: { format: { type: "json_schema", schema } },
     messages: [{ role: "user", content: brief }],
   } as any);
@@ -57,7 +58,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
 export function structureEvidence(brief: string, lang: Lang): Promise<WineEvidence> {
   return structured<WineEvidence>(
     brief, EVIDENCE_SCHEMA,
-    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown). For priceObservations, ALWAYS express amount in US dollars with currency \"USD\" — convert any local-currency price in the brief to USD; never emit a non-USD currency.",
+    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown). For priceObservations, ALWAYS express amount in US dollars with currency \"USD\" — convert any local-currency price in the brief to USD; never emit a non-USD currency. Set punchline to the brief's single closing one-line verdict in Alan's blunt, deadpan-sincere voice.",
     EMPTY_EVIDENCE,
     lang,
   );
