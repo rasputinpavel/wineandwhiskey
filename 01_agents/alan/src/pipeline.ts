@@ -25,7 +25,7 @@ export async function assessWine(
   // (A failed earlier run could have stored empty evidence; ignore it and re-research,
   //  which overwrites the poisoned row.)
   const cached = key ? await getCached(key) : null;
-  if (cached && !isEmptyEvidence(cached.evidence)) {
+  if (cached && hasSubstance(cached.evidence)) {
     onProgress?.(`Вижу: ${label}\nУже знаю это вино — отдаю готовый разбор.`);
     const v = assembleVerdict(cached.evidence);
     v.detail = cached.brief;
@@ -40,27 +40,39 @@ export async function assessWine(
   });
   const evidence = await structureEvidence(brief, query.lang);
 
-  // If extraction came back completely empty (e.g. a transient API failure during
-  // identify+research+structure), don't show a misleading "Unknown wine" card —
-  // surface it as a retry to handleQuery and don't cache the empty result.
-  if (isEmptyEvidence(evidence)) {
+  // Never lose the wine: if structure didn't fill identity (e.g. research timed out
+  // mid-search), seed it from the reliable identify step — so we show the wine and
+  // a category-level read instead of a misleading "Unknown wine".
+  if (!evidence.identity.producer && !evidence.identity.name && (identity.producer || identity.name)) {
+    evidence.identity = identity;
+  }
+
+  const known = !!(evidence.identity.producer || evidence.identity.name);
+  const substance = hasSubstance(evidence);
+
+  // Truly nothing — not even an identity: a transient failure. Ask the user to retry
+  // rather than show an empty card.
+  if (!known && !substance) {
     throw new Error("empty extraction — likely a transient API failure");
   }
 
-  if (key) await putCached(key, identity, evidence, brief);
+  // Cache only results that actually carry data — so a thin/timed-out research
+  // re-runs next time instead of getting frozen into the cache.
+  if (key && substance) await putCached(key, identity, evidence, brief);
   const v = assembleVerdict(evidence);
   v.detail = brief;
   return v;
 }
 
-/** True when we got nothing usable — no identity, no data, no positioning. */
-function isEmptyEvidence(e: Awaited<ReturnType<typeof structureEvidence>>): boolean {
+/** True when the evidence carries real data worth reusing (beyond bare identity). */
+function hasSubstance(e: Awaited<ReturnType<typeof structureEvidence>>): boolean {
   return (
-    !e.identity.producer && !e.identity.name &&
-    e.criticScores.length === 0 &&
-    e.communityRating === null &&
-    e.priceObservations.length === 0 &&
-    !e.producerNote && !e.categoryPositioning && !e.tastingNotes
+    e.criticScores.length > 0 ||
+    e.communityRating !== null ||
+    e.priceObservations.length > 0 ||
+    !!e.producerNote ||
+    !!e.categoryPositioning ||
+    !!e.tastingNotes
   );
 }
 

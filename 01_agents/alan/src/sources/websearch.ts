@@ -10,7 +10,7 @@ const WEB_TOOLS = [
 ] as const;
 
 const MAX_CONTINUATIONS = 1;          // pause_turn resume legs
-const RESEARCH_TIMEOUT_MS = 70_000;   // hard ceiling so the bot never appears hung
+const RESEARCH_TIMEOUT_MS = 90_000;   // hard ceiling so the bot never appears hung
 
 function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
   const blocks: any[] = [];
@@ -71,9 +71,10 @@ export const webSearchSource: WineDataSource = {
             event.type === "content_block_start" &&
             event.content_block?.type === "server_tool_use"
           ) {
+            // Only surface a search line when we actually have the query — avoids
+            // a wall of bare "ищу…" placeholders (the query streams after the start).
             const q = event.content_block?.input?.query;
-            display += q ? `\n🔍 ${q}\n` : "\n🔍 ищу…\n";
-            input.onProgress?.(display);
+            if (q) { display += `\n🔍 ${q}\n`; input.onProgress?.(display); }
           }
         }
 
