@@ -9,8 +9,8 @@ const WEB_TOOLS = [
   { type: "web_fetch_20260209", name: "web_fetch" },
 ] as const;
 
-const MAX_CONTINUATIONS = 2;          // pause_turn resume legs
-const RESEARCH_TIMEOUT_MS = 90_000;   // hard ceiling so the bot never appears hung
+const MAX_CONTINUATIONS = 1;          // pause_turn resume legs
+const RESEARCH_TIMEOUT_MS = 70_000;   // hard ceiling so the bot never appears hung
 
 function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
   const blocks: any[] = [];
@@ -20,12 +20,16 @@ function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
       source: { type: "base64", media_type: img.mediaType, data: img.data },
     });
   }
+  const hint = input.identityHint?.trim();
   const text = input.query.text.trim();
+  const base = text
+    ? text
+    : "Identify the wine in the photo(s). Multiple photos may be the front and back of the SAME bottle — treat them as one wine.";
   blocks.push({
     type: "text",
-    text: text
-      ? text
-      : "Identify the wine in the photo(s) and research it as instructed. Multiple photos may be the front and back label of the SAME bottle — treat them as one wine.",
+    text: hint
+      ? `This wine is already identified as: ${hint}. Skip identification — start at grape×country. Be fast: a few targeted web searches (critic scores, Vivino, market price, producer reputation), do not exhaust every source.\n\n${base}`
+      : base,
   });
   return blocks;
 }
@@ -48,7 +52,7 @@ export const webSearchSource: WineDataSource = {
             model: MODEL_MAIN,
             max_tokens: 8000,
             thinking: { type: "adaptive" },
-            output_config: { effort: "medium" },
+            output_config: { effort: "low" },
             system: input.systemPrompt,
             tools: WEB_TOOLS as any,
             messages,

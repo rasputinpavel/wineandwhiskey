@@ -4,19 +4,25 @@ import type { WineDataSource } from "./sources/types.js";
 import { researchSystemPrompt, analoguesSystemPrompt } from "./sommelier-prompt.js";
 import { structureEvidence, structureAnalogues } from "./structure.js";
 import { assembleVerdict } from "./assess.js";
+import { identifyWine, identityLabel } from "./identify.js";
 
 type OnProgress = (text: string) => void;
 
-/** Assess a wine: research (streamed via onProgress) → extract evidence → verdict. */
+/** Assess a wine: fast identify (Haiku) → research (streamed) → extract (Haiku) → verdict. */
 export async function assessWine(
   query: WineQuery,
   onProgress?: OnProgress,
   source: WineDataSource = webSearchSource,
 ): Promise<Verdict> {
+  const identity = await identifyWine(query);
+  const label = identityLabel(identity);
+  if (label) onProgress?.(`Вижу: ${label}\n`);
+
   const { brief } = await source.research({
     query,
     systemPrompt: researchSystemPrompt(query.lang),
     onProgress,
+    identityHint: label || undefined,
   });
   const evidence = await structureEvidence(brief, query.lang);
   return assembleVerdict(evidence);
