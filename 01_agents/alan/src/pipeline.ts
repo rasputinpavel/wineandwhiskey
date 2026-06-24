@@ -21,9 +21,11 @@ export async function assessWine(
 
   const key = identityKey(identity);
 
-  // Fast path: already analyzed before.
+  // Fast path: already analyzed before — but only trust a NON-empty cached entry.
+  // (A failed earlier run could have stored empty evidence; ignore it and re-research,
+  //  which overwrites the poisoned row.)
   const cached = key ? await getCached(key) : null;
-  if (cached) {
+  if (cached && !isEmptyEvidence(cached.evidence)) {
     onProgress?.(`Вижу: ${label}\nУже знаю это вино — отдаю готовый разбор.`);
     const v = assembleVerdict(cached.evidence);
     v.detail = cached.brief;
