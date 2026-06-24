@@ -61,6 +61,11 @@ export default async function SkuDetail({
         source={sku.wine_attrs_source ?? null}
       />
 
+      {/* Цены и маржа — закупка из последнего PO, продажа из Loyverse. */}
+      <Suspense fallback={<PricingSkeleton />}>
+        <PricingSection code={code} sellPrice={sku.default_price ?? null} />
+      </Suspense>
+
       {/* Each section streams independently. Suspense with a skeleton so the */}
       {/* slow Loyverse REST scan doesn't block the rest of the page. */}
       <Suspense fallback={<StatsSkeleton />}>
@@ -87,6 +92,51 @@ export default async function SkuDetail({
 }
 
 // ─── Sections (each is its own async server component) ───────────────────
+
+async function PricingSection({ code, sellPrice }: { code: string; sellPrice: number | null }) {
+  // Закупочная цена = cost_price из самого свежего PO по этому SKU.
+  // order_date живёт на purchase_orders, поэтому тянем items + их POs (как в ReceiptsSection).
+  const { data: items } = await sbPublic
+    .from('purchase_order_items')
+    .select('po_id, cost_price')
+    .eq('sku', code)
+    .limit(200)
+
+  let buyPrice: number | null = null
+  const poItems = (items ?? []) as { po_id: number; cost_price: number | null }[]
+  if (poItems.length) {
+    const ids = Array.from(new Set(poItems.map(i => i.po_id)))
+    const { data: pos } = await sbPublic
+      .from('purchase_orders')
+      .select('id, order_date')
+      .in('id', ids)
+    const dateById: Record<number, string> = {}
+    for (const p of (pos ?? []) as { id: number; order_date: string | null }[]) {
+      dateById[p.id] = p.order_date ?? ''
+    }
+    const latest = [...poItems].sort((a, b) =>
+      (dateById[b.po_id] ?? '').localeCompare(dateById[a.po_id] ?? ''))[0]
+    buyPrice = latest?.cost_price != null ? Number(latest.cost_price) : null
+  }
+
+  // Маржа считаем от цены продажи (gross margin): (sell − cost) / sell.
+  const hasBoth = buyPrice != null && sellPrice != null && sellPrice > 0
+  const profit = hasBoth ? (sellPrice as number) - (buyPrice as number) : null
+  const marginPct = hasBoth && profit != null ? (profit / (sellPrice as number)) * 100 : null
+
+  return (
+    <div className="grid grid-cols-3 gap-3 mb-6">
+      <PriceStat label="Закупка" value={buyPrice != null ? `฿${fmt(buyPrice)}` : '—'} />
+      <PriceStat label="Продажа" value={sellPrice != null ? `฿${fmt(sellPrice)}` : '—'} />
+      <PriceStat
+        label="Маржа"
+        value={marginPct != null ? `${fmt(marginPct)}%` : '—'}
+        sub={profit != null ? `+฿${fmt(profit)} с бутылки` : undefined}
+        accent
+      />
+    </div>
+  )
+}
 
 async function StatsSection({ skuId }: { skuId: string }) {
   const { data } = await sbInventory
@@ -493,6 +543,19 @@ async function ConsignmentSection({ skuId, sp }: { skuId: string; sp: SearchPara
 
 // ─── Skeletons ───────────────────────────────────────────────────────────
 
+function PricingSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-3 mb-6 animate-pulse">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="bg-warm-white border border-pale-stone rounded-md p-4">
+          <div className="h-3 w-16 bg-pale-stone/60 rounded-sm mb-3" />
+          <div className="h-8 w-20 bg-pale-stone/40 rounded-sm" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function StatsSkeleton() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10 animate-pulse">
@@ -534,6 +597,18 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
       <div className={`font-display text-3xl tracking-display leading-none ${accent ? 'text-wine-red' : 'text-deep-black'}`}>
         {fmt(value)}
       </div>
+    </div>
+  )
+}
+
+function PriceStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+  return (
+    <div className="bg-warm-white border border-pale-stone rounded-md p-4">
+      <div className="overline text-graphite mb-2">{label}</div>
+      <div className={`font-display text-3xl tracking-display leading-none tabular-nums ${accent ? 'text-wine-red' : 'text-deep-black'}`}>
+        {value}
+      </div>
+      {sub && <div className="text-xs text-graphite mt-1.5">{sub}</div>}
     </div>
   )
 }
