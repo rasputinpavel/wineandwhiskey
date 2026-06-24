@@ -9,12 +9,15 @@ import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
 import { localPriceVerdict } from "./priceLocal.js";
-import type { WineQuery, WineImage } from "./types.js";
+import type { WineQuery, WineImage, Lang } from "./types.js";
 
 assertEnv();
 
 const bot = new Bot(TELEGRAM_TOKEN);
 const sessions = new SessionStore(SESSION_TTL_MS);
+const langs = new Map<number, Lang>();
+function priorLang(id: number): Lang { return langs.get(id) ?? DEFAULT_LANG; }
+function rememberLang(id: number, l: Lang): void { langs.set(id, l); }
 
 interface Album { ctx: any; fileIds: string[]; caption: string; timer: ReturnType<typeof setTimeout> | null; }
 const albums = new Map<string, Album>();
@@ -58,8 +61,12 @@ function makeProgressEditor(ctx: any, messageId: number): (text: string) => void
 
 const WORKING = { ru: "Изучаю вино…", en: "Researching the wine…" } as const;
 const FAIL = {
-  ru: "Не удалось разобрать. Пришли фото этикетки чётче или напиши название текстом.",
-  en: "Couldn't work that out. Send a clearer label photo or type the name.",
+  ru: "Что-то сбойнуло на моей стороне (возможно, перегрузка сервиса). Попробуй ещё раз через минуту.",
+  en: "Something glitched on my side (maybe a service overload). Try again in a minute.",
+} as const;
+const VOICE_FAIL = {
+  ru: "Не расслышал. Пришли голос ещё раз или напиши текстом.",
+  en: "Couldn't catch that. Send the voice note again or type it.",
 } as const;
 const START = {
   ru: "Я Алан — винный помощник. Пришли фото этикетки, название текстом или голосом — расскажу честно: что за вино, что говорят критики и толпа, и стоит ли оно денег. Или попроси подобрать аналоги.",
@@ -89,21 +96,31 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
   }
 }
 
-async function routeText(ctx: any, text: string): Promise<void> {
+async function routeText(ctx: any, text: string, conversational: boolean): Promise<void> {
+  const id = userKey(ctx);
+  const prior = priorLang(id);
+
   const baht = parseBaht(text);
-  const entry = sessions.get(userKey(ctx));
+  const entry = sessions.get(id);
   if (baht !== null && entry) {
     await ctx.reply(localPriceVerdict(entry.verdict.qualityScore, entry.verdict.marketUsd, baht, entry.lang));
     return;
   }
-  const lang = detectLang(text, DEFAULT_LANG);
-  const t = await triage(text, lang);
+
+  const detected = detectLang(text, prior);
+  const t = await triage(text, detected);
   if (t.kind === "chat") {
+    rememberLang(id, detected); // conversation reveals the user's language
     await ctx.reply(t.reply);
     return;
   }
-  const query = buildQuery({ text });
-  query.intent = t.kind === "analogues" ? "analogues" : "assess"; // triage decides assess vs analogues
+
+  // Wine request: a typed wine name (often Latin) must NOT flip the language.
+  // Use the sticky language; only voice transcripts count as conversational here.
+  const lang: Lang = conversational ? detected : prior;
+  if (conversational) rememberLang(id, detected);
+  const query = buildQuery({ text, lang });
+  query.intent = t.kind === "analogues" ? "analogues" : "assess";
   await handleQuery(ctx, query);
 }
 
@@ -113,10 +130,14 @@ bot.on("message:photo", async (ctx) => {
   const caption = ctx.message.caption ?? "";
   const groupId = ctx.message.media_group_id;
 
+  const id = userKey(ctx);
+  const lang = caption ? detectLang(caption, priorLang(id)) : priorLang(id);
+  if (caption) rememberLang(id, lang);
+
   // Single photo: handle immediately.
   if (!groupId) {
     const img = await photoToBase64(TELEGRAM_TOKEN, fileId);
-    await handleQuery(ctx, buildQuery({ text: caption, images: [img] }));
+    await handleQuery(ctx, buildQuery({ text: caption, images: [img], lang }));
     return;
   }
 
@@ -138,24 +159,27 @@ async function flushAlbum(groupId: string): Promise<void> {
   albums.delete(groupId);
   try {
     const images: WineImage[] = await Promise.all(
-      album.fileIds.map((id) => photoToBase64(TELEGRAM_TOKEN, id)),
+      album.fileIds.map((fid) => photoToBase64(TELEGRAM_TOKEN, fid)),
     );
-    await handleQuery(album.ctx, buildQuery({ text: album.caption, images }));
+    const id = userKey(album.ctx);
+    const lang = album.caption ? detectLang(album.caption, priorLang(id)) : priorLang(id);
+    if (album.caption) rememberLang(id, lang);
+    await handleQuery(album.ctx, buildQuery({ text: album.caption, images, lang }));
   } catch (err) {
     console.error("album processing failed:", err);
-    await album.ctx.reply(FAIL[DEFAULT_LANG]);
+    await album.ctx.reply(FAIL[priorLang(userKey(album.ctx))]);
   }
 }
 
 bot.on("message:voice", async (ctx) => {
   const text = await transcribeVoice(TELEGRAM_TOKEN, ctx.message.voice.file_id);
-  if (!text) { await ctx.reply(FAIL[DEFAULT_LANG]); return; }
-  await routeText(ctx, text);
+  if (!text) { await ctx.reply(VOICE_FAIL[priorLang(userKey(ctx))]); return; }
+  await routeText(ctx, text, true);
 });
 
 bot.on("message:text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return; // ignore unknown commands
-  await routeText(ctx, ctx.message.text);
+  await routeText(ctx, ctx.message.text, false);
 });
 
 bot.callbackQuery("details", async (ctx) => {

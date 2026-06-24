@@ -32,19 +32,32 @@ const EMPTY_ANALOGUES: AnaloguesResult = {
 };
 
 async function structured<T>(brief: string, schema: unknown, instruction: string, fallback: T, lang: Lang): Promise<T> {
-  const response = await anthropic.messages.create({
+  const params = {
     model: MODEL_CHEAP,
     max_tokens: 4000,
     system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, producerNote, categoryPositioning, punchline, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
     output_config: { format: { type: "json_schema", schema } },
     messages: [{ role: "user", content: brief }],
-  } as any);
+  } as any;
+
+  let response: any;
+  try {
+    response = await anthropic.messages.create(params);
+  } catch (err1) {
+    console.error("structure API error, retrying once:", err1);
+    try {
+      response = await anthropic.messages.create(params);
+    } catch (err2) {
+      console.error("structure API error after retry, using fallback:", err2);
+      return fallback;
+    }
+  }
 
   if (response.stop_reason === "refusal") return fallback;
 
   const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
     .join("")
     .trim();
 

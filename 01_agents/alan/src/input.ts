@@ -15,9 +15,9 @@ export async function photoToBase64(botToken: string, fileId: string): Promise<W
   return { data: buf.toString("base64"), mediaType: "image/jpeg" };
 }
 
-export function buildQuery(opts: { text: string; images?: WineImage[] }): WineQuery {
+export function buildQuery(opts: { text: string; images?: WineImage[]; lang?: Lang }): WineQuery {
   const text = opts.text ?? "";
-  const lang: Lang = detectLang(text, DEFAULT_LANG);
+  const lang: Lang = opts.lang ?? detectLang(text, DEFAULT_LANG);
   return {
     text,
     images: opts.images ?? [],

@@ -38,25 +38,29 @@ function content(query: WineQuery): any[] {
 
 /** Fast, cheap identification (Haiku). Reads the label; does NOT research. */
 export async function identifyWine(query: WineQuery): Promise<Identity> {
-  try {
-    const resp = await anthropic.messages.create({
-      model: MODEL_CHEAP,
-      max_tokens: 700,
-      system:
-        'Identify the wine from the photo(s)/text. Fill producer, name, vintage ("" if non-vintage/unknown), grape, region, and type (red/white/sparkling/rosé/fortified/""). Set idConfidence. Use ONLY what you can read or directly infer — do not research or guess wildly. Output the JSON only.',
-      output_config: { format: { type: "json_schema", schema: IDENTITY_SCHEMA } },
-      messages: [{ role: "user", content: content(query) }],
-    } as any);
-    const txt = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
-    return JSON.parse(txt) as Identity;
-  } catch (err) {
-    console.error("identify failed:", err);
-    return { producer: "", name: "", vintage: "", region: "", grape: "", type: "", idConfidence: "low" };
+  const params = {
+    model: MODEL_CHEAP,
+    max_tokens: 700,
+    system:
+      'Identify the wine from the photo(s)/text. Fill producer, name, vintage ("" if non-vintage/unknown), grape, region, and type (red/white/sparkling/rosé/fortified/""). Set idConfidence. Use ONLY what you can read or directly infer — do not research or guess wildly. Output the JSON only.',
+    output_config: { format: { type: "json_schema", schema: IDENTITY_SCHEMA } },
+    messages: [{ role: "user", content: content(query) }],
+  } as any;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await anthropic.messages.create(params);
+      const txt = resp.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+      return JSON.parse(txt) as Identity;
+    } catch (err) {
+      console.error(`identify attempt ${attempt} failed:`, err);
+    }
   }
+  return { producer: "", name: "", vintage: "", region: "", grape: "", type: "", idConfidence: "low" };
 }
 
 /** Human label for progress/echo, e.g. "MontGras Day One 2020". */
