@@ -4,7 +4,8 @@ import type { WineDataSource } from "./sources/types.js";
 import { researchSystemPrompt, analoguesSystemPrompt } from "./sommelier-prompt.js";
 import { structureEvidence, structureAnalogues } from "./structure.js";
 import { assembleVerdict } from "./assess.js";
-import { identifyWine, identityLabel } from "./identify.js";
+import { identifyWine, identityLabel, identityKey } from "./identify.js";
+import { getCachedEvidence, putCachedEvidence } from "./cache.js";
 
 type OnProgress = (text: string) => void;
 
@@ -18,6 +19,15 @@ export async function assessWine(
   const label = identityLabel(identity);
   if (label) onProgress?.(`Вижу: ${label}\n`);
 
+  const key = identityKey(identity);
+
+  // Fast path: already analyzed before.
+  const cached = key ? await getCachedEvidence(key) : null;
+  if (cached) {
+    onProgress?.(`Вижу: ${label}\nУже знаю это вино — отдаю готовый разбор.`);
+    return assembleVerdict(cached);
+  }
+
   const { brief } = await source.research({
     query,
     systemPrompt: researchSystemPrompt(query.lang),
@@ -25,6 +35,7 @@ export async function assessWine(
     identityHint: label || undefined,
   });
   const evidence = await structureEvidence(brief, query.lang);
+  if (key) await putCachedEvidence(key, identity, evidence);
   return assembleVerdict(evidence);
 }
 

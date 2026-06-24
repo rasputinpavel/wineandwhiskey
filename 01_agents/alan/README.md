@@ -14,6 +14,7 @@ output contract — confidence and sources always shown, never fabricated.
 - `ALAN_BOT_TOKEN` — BotFather token (new bot)
 - `ANTHROPIC_API_KEY` — Claude (shared)
 - `OPENAI_API_KEY` — Whisper voice transcription (shared)
+- `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` — optional; enables the wine cache (apply `migrations/001_wine_cache.sql` in Supabase first). Without them the bot runs fine, just without caching.
 
 ## Run
 ```bash
