@@ -57,7 +57,7 @@ async function structured<T>(brief: string, schema: unknown, instruction: string
 export function structureEvidence(brief: string, lang: Lang): Promise<WineEvidence> {
   return structured<WineEvidence>(
     brief, EVIDENCE_SCHEMA,
-    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown).",
+    "Extract structured wine evidence from this research brief. Set evidenceLevel to the most specific tier the brief actually supports (exact/producer/category/none), and valueRead to the brief's qualitative price read (good/fair/steep/unknown). Capture producerNote and categoryPositioning verbatim-ish from the brief. Set priceTier to the band the brief implies (entry/mid/premium/luxury/icon, or unknown). For priceObservations, ALWAYS express amount in US dollars with currency \"USD\" — convert any local-currency price in the brief to USD; never emit a non-USD currency.",
     EMPTY_EVIDENCE,
     lang,
   );
