@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ANTHROPIC_API_KEY, MODEL_MAIN } from "./config.js";
+import { ANTHROPIC_API_KEY, MODEL_CHEAP } from "./config.js";
 import { EVIDENCE_SCHEMA, ANALOGUES_SCHEMA } from "./sommelier-prompt.js";
 import type { WineEvidence, AnaloguesResult, Lang } from "./types.js";
 
@@ -32,7 +32,7 @@ const EMPTY_ANALOGUES: AnaloguesResult = {
 
 async function structured<T>(brief: string, schema: unknown, instruction: string, fallback: T, lang: Lang): Promise<T> {
   const response = await anthropic.messages.create({
-    model: MODEL_MAIN,
+    model: MODEL_CHEAP,
     max_tokens: 4000,
     system: `${instruction}\nUse ONLY facts present in the research brief. Do not add data that is not in the brief. Empty/zero/"" for anything the brief does not establish.\nWrite any human-readable prose fields (tastingNotes, drinkingWindow, analogues' "why") in ${lang === "ru" ? "Russian" : "English"}.`,
     output_config: { format: { type: "json_schema", schema } },

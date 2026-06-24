@@ -7,6 +7,9 @@ export const TELEGRAM_TOKEN = process.env.ALAN_BOT_TOKEN!;
 export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 
+export const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
+export const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY ?? "";
+
 export const MODEL_MAIN = "claude-opus-4-8";
 export const MODEL_CHEAP = "claude-haiku-4-5";
 

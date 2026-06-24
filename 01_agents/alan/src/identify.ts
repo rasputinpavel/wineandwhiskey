@@ -1,0 +1,75 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { ANTHROPIC_API_KEY, MODEL_CHEAP } from "./config.js";
+import type { WineQuery, WineEvidence } from "./types.js";
+
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+type Identity = WineEvidence["identity"];
+
+const IDENTITY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    producer: { type: "string" },
+    name: { type: "string" },
+    vintage: { type: "string" },
+    region: { type: "string" },
+    grape: { type: "string" },
+    type: { type: "string" },
+    idConfidence: { type: "string", enum: ["high", "medium", "low"] },
+  },
+  required: ["producer", "name", "vintage", "region", "grape", "type", "idConfidence"],
+} as const;
+
+function content(query: WineQuery): any[] {
+  const blocks: any[] = [];
+  for (const img of query.images) {
+    blocks.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data } });
+  }
+  const text = query.text.trim();
+  blocks.push({
+    type: "text",
+    text: text
+      ? `Identify this wine: ${text}`
+      : "Identify the wine from the label photo(s). Front and back of one bottle may be shown.",
+  });
+  return blocks;
+}
+
+/** Fast, cheap identification (Haiku). Reads the label; does NOT research. */
+export async function identifyWine(query: WineQuery): Promise<Identity> {
+  try {
+    const resp = await anthropic.messages.create({
+      model: MODEL_CHEAP,
+      max_tokens: 700,
+      system:
+        'Identify the wine from the photo(s)/text. Fill producer, name, vintage ("" if non-vintage/unknown), grape, region, and type (red/white/sparkling/rosé/fortified/""). Set idConfidence. Use ONLY what you can read or directly infer — do not research or guess wildly. Output the JSON only.',
+      output_config: { format: { type: "json_schema", schema: IDENTITY_SCHEMA } },
+      messages: [{ role: "user", content: content(query) }],
+    } as any);
+    const txt = resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+    return JSON.parse(txt) as Identity;
+  } catch (err) {
+    console.error("identify failed:", err);
+    return { producer: "", name: "", vintage: "", region: "", grape: "", type: "", idConfidence: "low" };
+  }
+}
+
+/** Human label for progress/echo, e.g. "MontGras Day One 2020". */
+export function identityLabel(id: Identity): string {
+  return [id.producer, id.name, id.vintage].filter(Boolean).join(" ").trim();
+}
+
+/** Normalized cache key from producer + name + vintage. */
+export function identityKey(id: Identity): string {
+  return [id.producer, id.name, id.vintage]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-zа-я0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
