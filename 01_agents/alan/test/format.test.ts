@@ -3,90 +3,72 @@ import { shortVerdict, fullCard, analoguesMessage } from "../src/format.js";
 import type { Verdict, AnaloguesResult } from "../src/types.js";
 
 const verdict: Verdict = {
-  identity: { producer: "Test", name: "Red", vintage: "2018", region: "Rioja", grape: "Tempranillo", type: "red", idConfidence: "high" },
-  criticConsensus: 92, criticCount: 3,
-  communityNote: "4.1/5 (1200 reviews)",
-  marketPrice: { amount: 15, currency: "USD", context: "avg" },
-  qpr: { rating: 8, label: "Excellent value" },
+  identity: { producer: "Pitars", name: "Genesi", vintage: "", region: "Friuli-Venezia Giulia", grape: "Glera", type: "sparkling", idConfidence: "high" },
+  criticConsensus: null, criticCount: 0,
+  communityNote: "3.9/5 (1200 reviews)",
+  marketPrice: { amount: 6.5, currency: "USD", context: "avg" },
+  qpr: { rating: 9, label: "Outstanding value" },
   bottomLine: "take-value",
-  tastingNotes: "dark fruit, soft tannins",
-  drinkingWindow: "2024–2030",
-  producerNote: "well-regarded family estate",
-  categoryPositioning: "strong Rioja for the price",
-  evidenceLevel: "exact",
+  tastingNotes: "honest commercial fizz",
+  drinkingWindow: "drink now",
+  producerNote: "Pitars — solid commercial house, not cult",
+  categoryPositioning: "entry Prosecco DOC Extra Dry",
+  evidenceLevel: "producer",
   valueRead: "good",
   priceTier: "entry",
-  qualityScore: 92,
-  marketUsd: 15,
+  qualityScore: 84,
+  marketUsd: 6.5,
+  punchline: "Пятничный пузырь, не event — но берём.",
+  detail: "Сорт × страна: Glera = Просекко.\nВердикт. Берём.",
   dataConfidence: "high",
   sources: ["https://a.com", "https://b.com"],
 };
 
-describe("shortVerdict", () => {
-  it("includes name, bottom line, basis, and is compact", () => {
-    const s = shortVerdict(verdict, "en");
-    expect(s).toContain("Test");
-    expect(s).toContain("take it");
-    expect(s).toContain("Based on");
-    expect(s.split("\n").length).toBeLessThanOrEqual(7);
+describe("shortVerdict (summary)", () => {
+  it("shows title, grape/region, origin USD, segment and the punchline", () => {
+    const s = shortVerdict(verdict, "ru");
+    expect(s).toContain("Pitars Genesi");
+    expect(s).toContain("Glera, Friuli-Venezia Giulia");
+    expect(s).toContain("6.5 USD");
+    expect(s).toContain("входной уровень");
+    expect(s).toContain("Пятничный пузырь");
+    expect(s).toContain("батах"); // local price invite
   });
-  it("shows positioning instead of a score when no critic consensus", () => {
-    const s = shortVerdict({ ...verdict, criticConsensus: null, criticCount: 0, evidenceLevel: "producer" }, "en");
-    expect(s).not.toMatch(/\b\d{2}\/100\b/);
-    expect(s).toContain("well-regarded");
-  });
-  it("renders Russian labels", () => {
-    expect(shortVerdict(verdict, "ru")).toMatch(/[Ѐ-ӿ]/);
-  });
-  it("invites a local baht price", () => {
-    expect(shortVerdict(verdict, "ru")).toContain("батах");
+  it("shows 'no critic scores' when consensus is null and crowd otherwise", () => {
+    const s = shortVerdict(verdict, "ru");
+    expect(s).toContain("оценок критиков не найдено");
+    expect(s).toContain("Толпа (Vivino): 3.9/5");
   });
 });
 
-describe("fullCard", () => {
-  it("lists producer, category, sources and tasting notes", () => {
-    const c = fullCard(verdict, "en");
-    expect(c).toContain("https://a.com");
-    expect(c).toContain("dark fruit");
-    expect(c).toContain("Excellent value");
-    expect(c).toContain("well-regarded family estate");
-    expect(c).toContain("strong Rioja for the price");
-  });
-  it("shows a qualitative value when there is no numeric QPR", () => {
-    const c = fullCard({ ...verdict, qpr: null, criticConsensus: null, valueRead: "good" }, "en");
-    expect(c.toLowerCase()).toContain("good price");
-  });
-  it("states when data is thin instead of inventing", () => {
-    const thin = fullCard({ ...verdict, criticConsensus: null, qpr: null, communityNote: "", producerNote: "", categoryPositioning: "", sources: [], dataConfidence: "low", evidenceLevel: "none", valueRead: "unknown" }, "en");
-    expect(thin.toLowerCase()).toContain("limited");
-  });
-  it("shows the price tier and Thailand estimate", () => {
+describe("fullCard (details)", () => {
+  it("returns the ladder brief plus sources when detail is present", () => {
     const c = fullCard(verdict, "ru");
-    expect(c).toContain("входной уровень");
-    expect(c).toContain("Ориентир по Таиланду");
+    expect(c).toContain("Сорт × страна");
+    expect(c).toContain("Вердикт. Берём.");
+    expect(c).toContain("https://a.com");
   });
-  it("caps the source list to keep messages short", () => {
-    const many = Array.from({ length: 12 }, (_, i) => `https://src${i}.com`);
-    const c = fullCard({ ...verdict, sources: many }, "en");
-    const bullets = c.split("\n").filter((l) => l.startsWith("• ")).length;
-    expect(bullets).toBeLessThanOrEqual(6);
+  it("falls back to a structured card when there is no brief", () => {
+    const c = fullCard({ ...verdict, detail: "" }, "ru");
+    expect(c).toContain("Pitars Genesi");
+    expect(c).toContain("Производитель:");
   });
 });
 
 describe("analoguesMessage", () => {
   it("lists each analogue with its reason", () => {
     const a: AnaloguesResult = {
-      forWine: "Test Red 2018",
+      forWine: "Pitars Genesi",
       analogues: [
-        { name: "Wine A", why: "same grape, similar price", approxPrice: "$14" },
-        { name: "Wine B", why: "comparable body", approxPrice: "$17" },
+        { name: "Wine A", why: "same style, similar price", approxPrice: "$7" },
+        { name: "Wine B", why: "comparable fizz", approxPrice: "$8" },
       ],
       dataConfidence: "medium",
       sources: ["https://a.com"],
     };
     const m = analoguesMessage(a, "en");
     expect(m).toContain("Wine A");
-    expect(m).toContain("same grape");
+    expect(m).toContain("same style");
     expect(m).toContain("Wine B");
   });
 });

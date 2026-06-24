@@ -5,7 +5,7 @@ import { researchSystemPrompt, analoguesSystemPrompt } from "./sommelier-prompt.
 import { structureEvidence, structureAnalogues } from "./structure.js";
 import { assembleVerdict } from "./assess.js";
 import { identifyWine, identityLabel, identityKey } from "./identify.js";
-import { getCachedEvidence, putCachedEvidence } from "./cache.js";
+import { getCached, putCached } from "./cache.js";
 
 type OnProgress = (text: string) => void;
 
@@ -22,10 +22,12 @@ export async function assessWine(
   const key = identityKey(identity);
 
   // Fast path: already analyzed before.
-  const cached = key ? await getCachedEvidence(key) : null;
+  const cached = key ? await getCached(key) : null;
   if (cached) {
     onProgress?.(`Вижу: ${label}\nУже знаю это вино — отдаю готовый разбор.`);
-    return assembleVerdict(cached);
+    const v = assembleVerdict(cached.evidence);
+    v.detail = cached.brief;
+    return v;
   }
 
   const { brief } = await source.research({
@@ -35,8 +37,10 @@ export async function assessWine(
     identityHint: label || undefined,
   });
   const evidence = await structureEvidence(brief, query.lang);
-  if (key) await putCachedEvidence(key, identity, evidence);
-  return assembleVerdict(evidence);
+  if (key) await putCached(key, identity, evidence, brief);
+  const v = assembleVerdict(evidence);
+  v.detail = brief;
+  return v;
 }
 
 /** Find global analogues: research (streamed) → extract analogues. */

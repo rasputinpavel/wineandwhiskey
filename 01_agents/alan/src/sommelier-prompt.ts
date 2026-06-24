@@ -39,6 +39,7 @@ export function researchSystemPrompt(lang: Lang): string {
     "price — that is supplied separately. Cite sources.",
     "Do NOT ask the user about the price and do NOT recap the wine at the end — the bot runs the",
     "price step separately and the reader has already seen your analysis. End on the verdict.",
+    "End with a single punchy one-line verdict in your voice (the punchline).",
     langLine,
   ].join("\n");
 }
@@ -116,6 +117,7 @@ export const EVIDENCE_SCHEMA = {
     evidenceLevel: { type: "string", enum: ["exact", "producer", "category", "none"] },
     valueRead: { type: "string", enum: ["good", "fair", "steep", "unknown"] },
     priceTier: { type: "string", enum: ["entry", "mid", "premium", "luxury", "icon", "unknown"] },
+    punchline: { type: "string" },
     dataConfidence: { type: "string", enum: ["high", "medium", "low"] },
     sources: { type: "array", items: { type: "string" } },
   },
@@ -123,6 +125,7 @@ export const EVIDENCE_SCHEMA = {
     "identity", "criticScores", "communityRating", "priceObservations",
     "tastingNotes", "drinkingWindow", "dataConfidence", "sources",
     "producerNote", "categoryPositioning", "evidenceLevel", "valueRead", "priceTier",
+    "punchline",
   ],
 } as const;
 

@@ -71,6 +71,7 @@ export interface WineEvidence {
   evidenceLevel: EvidenceLevel; // most specific tier the evidence actually supports
   valueRead: ValueRead;         // qualitative price read when no numeric QPR
   priceTier: PriceTier;   // which price band this wine plays in
+  punchline: string;   // one-line verdict in Alan's voice (for the summary)
   dataConfidence: "high" | "medium" | "low"; // overall confidence in the evidence
   sources: string[];     // URLs or named sources
 }
@@ -106,6 +107,8 @@ export interface Verdict {
   priceTier: PriceTier;
   qualityScore: number | null;  // 0–100 quality used for value math (for the local-price follow-up)
   marketUsd: number | null;     // world market price in USD (for the local-price comparison)
+  punchline: string;   // one-line verdict shown at the end of the summary
+  detail: string;      // full ladder brief, shown behind "Подробнее"
   dataConfidence: WineEvidence["dataConfidence"];
   sources: string[];
 }
