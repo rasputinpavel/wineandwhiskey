@@ -35,12 +35,22 @@ function title(v: Verdict): string {
   return [i.producer, i.name, i.vintage].filter(Boolean).join(" ").trim() || "Unknown wine";
 }
 
+/** Warning line when the read was broadened off a data-thin vintage ("" if not). */
+function vintageWarn(v: Verdict, lang: Lang): string {
+  if (!v.vintageFallback) return "";
+  return lang === "ru"
+    ? `⚠️ По винтажу ${v.vintageFallback} надёжных данных мало — оцениваю вино в целом.`
+    : `⚠️ Limited reliable data for the ${v.vintageFallback} vintage — assessing the wine in general.`;
+}
+
 /** First message: rich digest. */
 export function shortVerdict(v: Verdict, lang: Lang): string {
   const t = T[lang];
   const lines: string[] = [`🍷 ${title(v)}`];
   const sub = [v.identity.grape, v.identity.region].filter(Boolean).join(", ");
   if (sub) lines.push(sub);
+  const warn = vintageWarn(v, lang);
+  if (warn) lines.push(warn);
   lines.push("");
 
   lines.push(v.criticConsensus !== null
@@ -71,8 +81,9 @@ export function shortVerdict(v: Verdict, lang: Lang): string {
 /** "Подробнее": the full ladder brief + sources. Falls back to a structured card. */
 export function fullCard(v: Verdict, lang: Lang): string {
   const t = T[lang];
+  const warn = vintageWarn(v, lang);
   if (v.detail && v.detail.trim()) {
-    let out = v.detail.trim();
+    let out = warn ? `${warn}\n\n${v.detail.trim()}` : v.detail.trim();
     if (v.sources.length) {
       out += `\n\n${t.sources}:\n${v.sources.slice(0, MAX_SOURCES).map((s) => `• ${s}`).join("\n")}`;
     }
@@ -82,6 +93,7 @@ export function fullCard(v: Verdict, lang: Lang): string {
   const lines: string[] = [`🍷 ${title(v)}`];
   const sub = [v.identity.grape, v.identity.region].filter(Boolean).join(", ");
   if (sub) lines.push(sub);
+  if (warn) lines.push(warn);
   lines.push("");
   lines.push(v.criticConsensus !== null
     ? `${t.critics}: ${v.criticConsensus}/100 (${v.criticCount})`

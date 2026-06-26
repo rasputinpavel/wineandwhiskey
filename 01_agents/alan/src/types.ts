@@ -113,4 +113,5 @@ export interface Verdict {
   detail: string;      // full ladder brief, shown behind "Подробнее"
   dataConfidence: WineEvidence["dataConfidence"];
   sources: string[];
+  vintageFallback?: string; // dropped vintage when the read was broadened to the wine in general ("" / absent = no fallback)
 }

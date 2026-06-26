@@ -43,6 +43,14 @@ describe("shortVerdict (summary)", () => {
     expect(s).toContain("оценок критиков не найдено");
     expect(s).toContain("Толпа (Vivino): 3.9/5");
   });
+  it("warns when the read is a vintage fallback, naming the dropped year", () => {
+    const s = shortVerdict({ ...verdict, vintageFallback: "2021" }, "ru");
+    expect(s).toContain("2021");
+    expect(s).toContain("вино в целом");
+  });
+  it("shows no vintage warning on a normal verdict", () => {
+    expect(shortVerdict(verdict, "ru")).not.toContain("вино в целом");
+  });
 });
 
 describe("fullCard (details)", () => {

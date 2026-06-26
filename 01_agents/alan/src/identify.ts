@@ -4,7 +4,7 @@ import type { WineQuery, WineEvidence } from "./types.js";
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-type Identity = WineEvidence["identity"];
+export type Identity = WineEvidence["identity"];
 
 const IDENTITY_SCHEMA = {
   type: "object",
