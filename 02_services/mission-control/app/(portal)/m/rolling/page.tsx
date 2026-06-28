@@ -105,8 +105,12 @@ export default async function RollingPage() {
     ar.push({ date: maxDate(expected, today), amount: Number(inv.total) })
   }
 
-  // AP — supplier payments due from today on (past ones assumed already paid →
-  // already in liquidity). Consignment suppliers excluded (accrual, not POs).
+  // AP — supplier payments. paid_at is the source of truth for "paid": a PO with
+  // paid_at already left the bank (it's in current liquidity), so it's dropped.
+  // A PO with no paid_at is still owed — scheduled on its due date, and if that
+  // due date is already past (overdue) it's pulled to today so the forecast shows
+  // the obligation instead of silently assuming it was paid. Consignment
+  // suppliers excluded (accrual, not POs).
   type SupRow = Pick<Supplier, 'name' | 'type' | 'payment_terms_days'>
   const supByName = new Map<string, SupRow>(((suppliersRes.data ?? []) as SupRow[]).map(s => [s.name.trim().toLowerCase(), s]))
   const ap: DatedAmount[] = []
@@ -115,9 +119,15 @@ export default async function RollingPage() {
     const sup = p.supplier ? supByName.get(p.supplier.trim().toLowerCase()) : undefined
     if (sup?.type === 'consignment') continue
     if (p.cashflow_override === 'exclude') continue
-    const payDate = (p.paid_at ?? computeDueDate(p.order_date, sup?.payment_terms_days ?? 0)).slice(0, 10)
-    if (payDate < today) continue
-    ap.push({ date: payDate, amount: Number(p.total_thb ?? 0) })
+    const amount = Number(p.total_thb ?? 0)
+    if (p.paid_at) {
+      const paid = p.paid_at.slice(0, 10)
+      if (paid < today) continue            // already paid → reflected in liquidity
+      ap.push({ date: paid, amount })        // payment scheduled for a future date
+    } else {
+      const due = computeDueDate(p.order_date, sup?.payment_terms_days ?? 0).slice(0, 10)
+      ap.push({ date: maxDate(due, today), amount })  // unpaid; overdue → today
+    }
   }
 
   // Big one-off payments — planned only, on their due date (overdue → today).
