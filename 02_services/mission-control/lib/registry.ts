@@ -99,6 +99,12 @@ export const SECTIONS: Section[] = [
         route: m('payment-calendar'),
         embed: { kind: 'native' },
       },
+      {
+        slug: 'dashboard-sheet', name: 'Expenses', icon: '📑', status: 'live',
+        description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Открывается на листе Expenses.',
+        route: m('dashboard-sheet'),
+        embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS, GID_EXPENSES), openHref: sheetEdit(SHEET_OPS, GID_EXPENSES) },
+      },
     ],
   },
 
@@ -164,12 +170,6 @@ export const SECTIONS: Section[] = [
     key: 'analytics', label: 'Accounting',
     description: 'Дашборды, метрики, отчёты',
     items: [
-      {
-        slug: 'dashboard-sheet', name: 'Expenses', icon: '📑', status: 'live',
-        description: 'Исходная таблица: Наличка, Income, Rolling, Expenses, Дебиторка/Кредиторка. Открывается на листе Expenses.',
-        route: m('dashboard-sheet'),
-        embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS, GID_EXPENSES), openHref: sheetEdit(SHEET_OPS, GID_EXPENSES) },
-      },
       {
         slug: 'wine-analytics-sheet', name: 'Wine Analytics', icon: '🍇', status: 'live',
         description: 'Bestsellers, B2C margins, channels, segmentation.',
