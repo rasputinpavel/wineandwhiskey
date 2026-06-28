@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice } from '@/lib/supabase'
+import { MonthStrip } from '@/components/modules/payment-calendar/MonthStrip'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
@@ -198,26 +199,11 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
       </p>
 
       {/* Month strip */}
-      <div className="flex gap-1 mb-5 text-[11px] flex-wrap">
-        <Link href="/m/payment-calendar"
-          className={`px-2 py-1 rounded-sm border transition-colors ${
-            month === null
-              ? 'bg-wine-red text-warm-white border-wine-red'
-              : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
-          }`}>
-          Open
-        </Link>
-        {months.map(mm => (
-          <Link key={mm} href={`/m/payment-calendar?month=${mm}`}
-            className={`px-2 py-1 rounded-sm border transition-colors ${
-              mm === month
-                ? 'bg-wine-red text-warm-white border-wine-red'
-                : 'bg-warm-white text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red'
-            }`}>
-            {monthLabel(mm)}
-          </Link>
-        ))}
-      </div>
+      <MonthStrip
+        months={months.map(mm => ({ ym: mm, label: monthLabel(mm) }))}
+        selected={month}
+        currentYM={bangkokYM()}
+      />
 
       {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
