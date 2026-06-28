@@ -74,7 +74,11 @@ export default async function RollingPage() {
   // ─── Derive forecast inputs ─────────────────────────────────────────────────
   const auto = autoInflows(receipts)
   const incomeSummary = computeBalances(wallets, movements, expenses, auto)
-  const openingLiquidity = incomeSummary.total
+  // Liquidity = company money only (account + cash). The Personal wallet is the
+  // owner's own pocket — tracked on the Income page so owner-paid expenses stay
+  // visible, but it never counts toward business liquidity or the rolling chain.
+  const openingLiquidity = incomeSummary.business
+  const isBusiness = (w: string | null | undefined): boolean => w === 'account' || w === 'cash'
 
   // Avg retail/day over the trailing 7 days (B2C only, SALE − REFUND).
   const last7Start = addDays(today, -6)
@@ -126,7 +130,7 @@ export default async function RollingPage() {
   // Actual flows (dated) — used for closed weeks. Anchor = earliest wallet
   // opening; the chain reconciles with today's liquidity.
   const openingDate = wallets.map(w => w.opening_date).sort()[0] ?? today
-  const openingBalance = wallets.reduce((s, w) => s + Number(w.opening_balance), 0)
+  const openingBalance = wallets.filter(w => isBusiness(w.id)).reduce((s, w) => s + Number(w.opening_balance), 0)
 
   const revenueActual: DatedAmount[] = receipts.map(r => ({
     date: r.receipt_date.slice(0, 10),
@@ -136,9 +140,19 @@ export default async function RollingPage() {
   const manualOutflows: DatedAmount[] = []
   const ownerIntake: DatedAmount[] = []
   for (const m of movements) {
-    if (m.kind === 'inflow') (m.owner_contribution ? ownerIntake : manualInflows).push({ date: m.occurred_on, amount: Number(m.amount) })
-    else if (m.kind === 'outflow') manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
-    // transfers net zero on total liquidity
+    if (m.kind === 'inflow') {
+      if (!isBusiness(m.wallet_id)) continue  // money landing in Personal isn't business liquidity
+      ;(m.owner_contribution ? ownerIntake : manualInflows).push({ date: m.occurred_on, amount: Number(m.amount) })
+    } else if (m.kind === 'outflow') {
+      if (!isBusiness(m.wallet_id)) continue
+      manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
+    } else if (m.kind === 'transfer') {
+      // Account↔Cash nets zero on business liquidity; a Personal↔business transfer
+      // moves money in or out of the business and must be counted.
+      const into = isBusiness(m.to_wallet_id), outOf = isBusiness(m.from_wallet_id)
+      if (into && !outOf) manualInflows.push({ date: m.occurred_on, amount: Number(m.amount) })
+      else if (outOf && !into) manualOutflows.push({ date: m.occurred_on, amount: Number(m.amount) })
+    }
   }
   // Split actual expenses by the Expenses-sheet bucket (Обязательные /
   // Кредиторка / Операционные) so closed weeks break down correctly. Anything
@@ -148,6 +162,7 @@ export default async function RollingPage() {
   const operationalExpensesActual: DatedAmount[] = []
   const payablesExpensesActual: DatedAmount[] = []
   for (const e of expenses) {
+    if (!isBusiness(e.wallet)) continue  // owner-paid (Personal) expenses don't draw down business liquidity
     const d = { date: e.date, amount: e.amount }
     const b = bucketOf(e.category)
     if (b === 'mandatory') mandatoryExpensesActual.push(d)

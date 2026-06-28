@@ -60,7 +60,7 @@ export function DailyTable({ days }: { days: DayBreakdown[] }) {
     { key: 'account', header: 'Account', align: 'right', sort: d => d.account.balance, cell: d => <DayWalletCell c={d.account} /> },
     { key: 'cash', header: 'Cash', align: 'right', sort: d => d.cash.balance, cell: d => <DayWalletCell c={d.cash} /> },
     { key: 'personal', header: 'Personal', align: 'right', sort: d => d.personal.balance, cell: d => <DayWalletCell c={d.personal} /> },
-    { key: 'total', header: 'Total', align: 'right', sort: d => d.total, cell: d => <span className={`font-medium ${d.total < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(d.total)}</span> },
+    { key: 'total', header: 'Liquidity', align: 'right', sort: d => d.total, cell: d => <span className={`font-medium ${d.total < 0 ? 'text-wine-red' : 'text-deep-black'}`}>{fmtThb(d.total)}</span> },
   ]
   return (
     <details className="bg-warm-white border border-pale-stone rounded-sm overflow-hidden">

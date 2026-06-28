@@ -199,7 +199,7 @@ export type DayBreakdown = {
   account: DayCell
   cash: DayCell
   personal: DayCell
-  total: number       // sum of the three running balances at end of day
+  total: number       // business liquidity at end of day (account + cash; Personal excluded)
 }
 
 export function dailyBreakdown(
@@ -247,7 +247,7 @@ export function dailyBreakdown(
       account: { delta: d.account, balance: running.account },
       cash: { delta: d.cash, balance: running.cash },
       personal: { delta: d.personal, balance: running.personal },
-      total: running.account + running.cash + running.personal,
+      total: running.account + running.cash,
     })
   }
   return out
