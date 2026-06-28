@@ -145,7 +145,8 @@ export type IncomeSummary = {
   byId: Record<WalletId, WalletBalance>
   total: number            // all three wallets (matches the sheet TOTAL)
   business: number         // account + cash (company liquidity for planning)
-  ownerContributions: number // total owner financing folded into liquidity
+  ownerContributions: number // owner financing folded into business liquidity
+  ownerInvested: number    // total owner money sunk in: financing + Personal deficit
 }
 
 export function computeBalances(
@@ -178,12 +179,17 @@ export function computeBalances(
 
   const byId = Object.fromEntries(rows.map(r => [r.id, r])) as Record<WalletId, WalletBalance>
   const bal = (id: WalletId) => byId[id]?.balance ?? 0
+  const ownerContributions = rows.reduce((s, r) => s + r.ownerContrib, 0)
+  // A negative Personal balance = owner money spent on the business beyond what
+  // Personal held — i.e. additional owner financing. Fold it into "invested".
+  const personalDeficit = Math.max(0, -bal('personal'))
   return {
     wallets: rows,
     byId,
     total: rows.reduce((s, r) => s + r.balance, 0),
     business: bal('account') + bal('cash'),
-    ownerContributions: rows.reduce((s, r) => s + r.ownerContrib, 0),
+    ownerContributions,
+    ownerInvested: ownerContributions + personalDeficit,
   }
 }
 

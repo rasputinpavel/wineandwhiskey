@@ -110,10 +110,10 @@ export default async function IncomePage() {
           <div className="overline text-pale-stone mb-1">Liquidity · account + cash</div>
           <div className="font-display text-3xl leading-none">{fmtThb(summary.business)}</div>
         </div>
-        {summary.ownerContributions > 0 && (
+        {summary.ownerInvested > 0 && (
           <div className="pl-4 border-l border-amber-gold/40">
-            <div className="overline text-amber-gold mb-1">↳ incl. owner financing</div>
-            <div className="font-display text-2xl leading-none text-amber-gold">{fmtThb(summary.ownerContributions)}</div>
+            <div className="overline text-amber-gold mb-1">↳ owner invested (incl. personal)</div>
+            <div className="font-display text-2xl leading-none text-amber-gold">{fmtThb(summary.ownerInvested)}</div>
           </div>
         )}
         <div className="pl-4 border-l border-pale-stone/30 ml-auto">
