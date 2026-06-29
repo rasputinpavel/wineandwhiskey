@@ -38,6 +38,9 @@ const HEADLESS = !process.env.SCRAPER_HEADFUL;
 const DEBUG    = !!process.env.SCRAPER_DEBUG;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Separate client pinned to the `inventory` schema — that's where the
+// supplier registry (inventory.supplier) lives. POs are in `public`.
+const sbInventory = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "inventory" } });
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -535,6 +538,63 @@ async function upsertOrder(
   }
 }
 
+// Auto-register suppliers. Any supplier name that appears on a PO but is not
+// yet in inventory.supplier gets created with table defaults (type=regular,
+// payment_terms_days=0) — the operator fills Type/Terms in the portal later.
+// This is what makes a brand-new Loyverse supplier show up in the portal's
+// Suppliers list without manual SQL.
+//
+// Idempotent and case-insensitive: we compare on lower(trim(name)) so we never
+// create a case/whitespace variant of an existing supplier (e.g. "BB&B" when
+// "bb&b" already exists). The join in the portal is also case-insensitive, so
+// keeping one canonical row per name keeps PO stats attached to it.
+async function syncSuppliersFromPOs(): Promise<number> {
+  // 1. Distinct supplier names seen on POs (paged — select caps at 1000 rows).
+  const seen = new Map<string, string>(); // lower(trim) -> original spelling
+  let cur = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("purchase_orders").select("supplier").range(cur, cur + 999);
+    if (error) throw new Error(`Supplier sync (read POs): ${error.message}`);
+    if (!data?.length) break;
+    for (const r of data) {
+      const name = ((r as any).supplier ?? "").trim();
+      if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+    }
+    if (data.length < 1000) break;
+    cur += 1000;
+  }
+
+  // 2. Existing supplier names (lower(trim)) from inventory.supplier.
+  const existing = new Set<string>();
+  cur = 0;
+  while (true) {
+    const { data, error } = await sbInventory
+      .from("supplier").select("name").range(cur, cur + 999);
+    if (error) throw new Error(`Supplier sync (read registry): ${error.message}`);
+    if (!data?.length) break;
+    for (const r of data) existing.add(((r as any).name as string).trim().toLowerCase());
+    if (data.length < 1000) break;
+    cur += 1000;
+  }
+
+  // 3. Insert the difference. ignoreDuplicates guards against a race on the
+  //    unique(name) constraint; the lower() filter guards against case variants.
+  const toAdd = [...seen.entries()]
+    .filter(([lower]) => !existing.has(lower))
+    .map(([, name]) => ({ name }));
+  if (toAdd.length === 0) {
+    console.log("  No new suppliers to register.");
+    return 0;
+  }
+  const { error } = await sbInventory
+    .from("supplier")
+    .upsert(toAdd, { onConflict: "name", ignoreDuplicates: true });
+  if (error) throw new Error(`Supplier sync (insert): ${error.message}`);
+  console.log(`  ✓ Registered ${toAdd.length} new supplier(s): ${toAdd.map(s => s.name).join(", ")}`);
+  return toAdd.length;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 // Pull all distinct po_numbers that already have items (paged — Supabase caps select() at 1000 rows).
@@ -621,13 +681,18 @@ async function main() {
           .map(po => po.po_number));
 
     if (targetSet.size === 0) {
-      console.log("Nothing to do — all orders are up to date.\n");
-      return;
+      console.log("Nothing to scrape — all orders are up to date.");
+    } else {
+      console.log(`\n[3/3] Scraping ${targetSet.size} orders via list clicks...`);
+      const { success, failed } = await scrapeViaListClick(page, targetSet);
+      console.log(`\n✓ Done. ${success} succeeded, ${failed} failed.`);
     }
 
-    console.log(`\n[3/3] Scraping ${targetSet.size} orders via list clicks...`);
-    const { success, failed } = await scrapeViaListClick(page, targetSet);
-    console.log(`\n✓ Done. ${success} succeeded, ${failed} failed.\n`);
+    // Register any new suppliers seen on POs into inventory.supplier so they
+    // appear in the portal Suppliers list. Runs every pass — cheap and idempotent.
+    console.log("\n[+] Syncing suppliers from POs into registry...");
+    await syncSuppliersFromPOs();
+    console.log("");
 
   } finally {
     await browser.close();
