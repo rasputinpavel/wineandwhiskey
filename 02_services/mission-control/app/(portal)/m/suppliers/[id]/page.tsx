@@ -2,11 +2,9 @@ import Link from 'next/link'
 import { sbInventory, sbPublic, type PurchaseOrder, type Supplier } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { CashflowOverrideCell } from '@/components/modules/purchases/POExcludeCell'
-import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
-import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
-import { computeDueDate } from '@/lib/kpi'
+import { computeDueDate, daysBetween, todayBkk } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +67,7 @@ export default async function SupplierDetail({
   const inflow   = pos.filter(includedInCashflow).reduce((a, p) => a + Number(p.total_thb ?? 0), 0)
   const paidSum  = pos.filter(p => p.paid_at != null).reduce((a, p) => a + Number(p.total_thb ?? 0), 0)
   const openSum  = grand - paidSum
+  const today = todayBkk()
 
   return (
     <>
@@ -116,6 +115,12 @@ export default async function SupplierDetail({
         )}
       </nav>
 
+      <p className="text-graphite/80 text-xs mb-4">
+        Оплаты отмечаются в{' '}
+        <Link href="/m/payment-calendar" className="text-wine-red hover:underline">Payment Calendar</Link>
+        {' '}— здесь статус показан только для справки.
+      </p>
+
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3 mb-4">
         <KPI label="All POs"      value={`฿${fmt(grand)}`}  note={`${pos.length} штук`} />
@@ -149,11 +154,16 @@ export default async function SupplierDetail({
           <tbody>
             {pos.map(p => {
               const dimmed = !includedInCashflow(p)
-              const projected = !p.paid_at && p.order_date && s.type !== 'consignment'
-                ? computeDueDate(p.order_date, s.payment_terms_days ?? 0)
-                : null
+              const payable = s.type !== 'consignment' && includedInCashflow(p) && !!p.order_date
+              const due = !p.paid_at && payable ? computeDueDate(p.order_date!, s.payment_terms_days ?? 0) : null
+              const dDue = due ? daysBetween(due, today) : null
+              const rowTone = p.paid_at != null
+                ? 'bg-emerald-600/[0.07] border-l-2 border-l-emerald-600/50'
+                : dDue != null && dDue < 0  ? 'bg-wine-red/[0.05] border-l-2 border-l-wine-red/60'
+                : dDue != null && dDue === 0 ? 'bg-amber-gold/[0.10] border-l-2 border-l-amber-gold'
+                : ''
               return (
-                <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${dimmed ? 'opacity-70' : ''}`}>
+                <tr key={p.id} className={`border-b border-pale-stone/40 last:border-0 hover:bg-cream/40 ${rowTone} ${dimmed ? 'opacity-70' : ''}`}>
                   <td className="py-2 px-4 font-mono">
                     {p.url
                       ? <a href={p.url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline">{p.po_number}</a>
@@ -163,15 +173,22 @@ export default async function SupplierDetail({
                   <td className="py-2 px-4 text-right tabular-nums">{p.total_thb ? `฿${fmt(p.total_thb)}` : '—'}</td>
                   <td className="py-2 px-4 text-graphite text-xs">{p.status ?? '—'}</td>
                   <td className="py-2 px-4"><CashflowOverrideCell poId={p.id} initial={p.cashflow_override} /></td>
-                  <td className="py-2 px-4">
-                    <PaidAtCell poId={p.id} initial={p.paid_at} />
-                    {projected && (
-                      <div className="text-[10px] text-graphite/70 mt-0.5">
-                        proj. {fmtDate(projected)}
-                      </div>
-                    )}
+                  <td className="py-2 px-4 whitespace-nowrap text-xs">
+                    {p.paid_at != null
+                      ? <span className="text-emerald-700">{fmtDate(p.paid_at)}<span className="text-graphite/70"> · оплачено</span></span>
+                      : due
+                        ? <span>{fmtDate(due)}{' '}
+                            <span className={dDue! < 0 ? 'text-wine-red' : dDue === 0 ? 'text-deep-black' : 'text-graphite/70'}>
+                              {dDue! < 0 ? `· просрочено ${-dDue!} дн` : dDue === 0 ? '· сегодня' : `· через ${dDue} дн`}
+                            </span>
+                          </span>
+                        : <span className="text-graphite/50">—</span>}
                   </td>
-                  <td className="py-2 px-4"><DocsUrlCell poId={p.id} initial={p.docs_url} /></td>
+                  <td className="py-2 px-4">
+                    {p.docs_url
+                      ? <a href={p.docs_url} target="_blank" rel="noreferrer" className="text-wine-red hover:underline text-xs">docs ↗</a>
+                      : <span className="text-graphite/50">—</span>}
+                  </td>
                 </tr>
               )
             })}
