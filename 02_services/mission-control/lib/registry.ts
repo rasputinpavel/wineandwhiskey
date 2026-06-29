@@ -105,16 +105,8 @@ export const SECTIONS: Section[] = [
         route: m('dashboard-sheet'),
         embed: { kind: 'iframe', src: sheetEmbed(SHEET_OPS, GID_EXPENSES), openHref: sheetEdit(SHEET_OPS, GID_EXPENSES) },
       },
-    ],
-  },
-
-  // ═══ FIXED COSTS ══════════════════════════════════════════════════════
-  // Обязательные регулярные расходы — датированный шаблон + план/факт по месяцам.
-  // Источник правды для Rolling, Payment Calendar и месячного P&L.
-  {
-    key: 'fixed', label: 'Fixed Costs',
-    description: 'Обязательные расходы: шаблон + план/факт по датам',
-    items: [
+      // Обязательные регулярные расходы — датированный шаблон + план/факт по месяцам.
+      // Источник правды для Rolling, Payment Calendar и месячного P&L.
       {
         slug: 'fixed-costs', name: 'Fixed Costs', icon: '📌', status: 'building',
         description: 'Регулярные обязательства (аренда, зарплата, налоги, utilities) по датам: месячный шаблон и план/факт по месяцам. Источник для Rolling и Payment Calendar.',
