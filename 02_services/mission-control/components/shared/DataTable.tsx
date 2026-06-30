@@ -18,7 +18,7 @@ export type Col<T> = {
 
 export function DataTable<T>({
   rows, cols, rowKey, initialSortKey, initialSortDir = 'desc',
-  searchPlaceholder = 'Search…', empty = 'No entries.',
+  searchPlaceholder = 'Search…', empty = 'No entries.', rowClassName,
 }: {
   rows: T[]
   cols: Col<T>[]
@@ -27,6 +27,7 @@ export function DataTable<T>({
   initialSortDir?: 'asc' | 'desc'
   searchPlaceholder?: string
   empty?: string
+  rowClassName?: (row: T, i: number) => string   // per-row tint, e.g. plan vs fact
 }) {
   const [q, setQ] = useState('')
   const [sortKey, setSortKey] = useState<string | undefined>(initialSortKey)
@@ -80,7 +81,7 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {view.map((r, i) => (
-              <tr key={rowKey(r, i)} className="border-b border-pale-stone/50 last:border-0 hover:bg-cream/40">
+              <tr key={rowKey(r, i)} className={`border-b border-pale-stone/50 last:border-0 hover:bg-cream/40 ${rowClassName?.(r, i) ?? ''}`}>
                 {cols.map(c => (
                   <td key={c.key} className={`px-3 py-2 whitespace-nowrap ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
                     {c.cell(r)}

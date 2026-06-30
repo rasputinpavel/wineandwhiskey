@@ -51,7 +51,12 @@ export function WeeklyTable({ weeks }: { weeks: RollingWeek[] }) {
         <h3 className="font-heading text-base text-deep-black">Weekly plan / fact</h3>
         <span className="text-[11px] text-graphite">{weeks.length} weeks · hover Income / Outflow for the breakdown</span>
       </div>
-      <DataTable rows={weeks} cols={cols} rowKey={w => w.start} initialSortKey="week" initialSortDir="asc" searchPlaceholder="Search week…" />
+      <DataTable rows={weeks} cols={cols} rowKey={w => w.start} initialSortKey="week" initialSortDir="asc" searchPlaceholder="Search week…"
+        rowClassName={w =>
+          w.status === 'closed'  ? 'bg-cream/40 border-l-2 border-l-pale-stone'
+          : w.status === 'current' ? 'bg-amber-gold/[0.07] border-l-2 border-l-amber-gold'
+          : 'border-l-2 border-l-transparent'
+        } />
     </section>
   )
 }
