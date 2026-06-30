@@ -1,16 +1,20 @@
 // Consignment settlement math — the SINGLE home for it.
 //
-// A consignment supplier (Harvest) is paid for the units SOLD in a billing
-// cycle: Amount = (B2C + B2B) × HC, + 7% VAT, tastings free. The cycle window
-// comes from lib/billing-cycle.ts (Harvest = 5th-to-5th). This function is the
-// one source of truth for that number, consumed by BOTH the supplier monthly
-// report page and the Pulse break-even forecast, so the two can never drift.
+// A consignment supplier is paid for the units SOLD in a billing cycle.
+// Two modes (per supplier.settlement_mode), both +7% VAT, tastings free:
+//   cost_plus    (Harvest)      Amount = sold × HC
+//   retail_minus (Cigar Empire) Amount = sold × listPrice × (1 − discount)
+// The per-unit math lives in lib/consignment-math.ts. The cycle window comes from
+// lib/billing-cycle.ts (Harvest = 5th-to-5th). This function is the one source of
+// truth, consumed by BOTH the supplier monthly report page and the Pulse break-even
+// forecast, so the two can never drift.
 //
 // Throws on schema/query errors (caller decides how to surface). Returns null
 // only when the supplier id doesn't exist.
 
 import { sbInventory } from '@/lib/supabase'
 import { cyclePeriodRange } from '@/lib/billing-cycle'
+import { consignmentLineCost } from '@/lib/consignment-math'
 
 export const CONSIGNMENT_VAT_RATE = 0.07
 
@@ -53,18 +57,20 @@ export async function computeConsignmentSettlement(
   const prevPeriod = shiftMonth(period, -1)
 
   const [supRes, pricesRes] = await Promise.all([
-    sbInventory.from('supplier').select('id, name, type, monthly_cycle_start_day').eq('id', supplierId).maybeSingle(),
-    sbInventory.from('consignment_price').select('sku_id, price_hc, sku:sku(id, name, loyverse_product_code, category)').eq('supplier_id', supplierId).limit(2000),
+    sbInventory.from('supplier').select('id, name, type, monthly_cycle_start_day, settlement_mode, consignment_discount_pct').eq('id', supplierId).maybeSingle(),
+    sbInventory.from('consignment_price').select('sku_id, price_hc, price_retail, discount_pct, sku:sku(id, name, loyverse_product_code, category)').eq('supplier_id', supplierId).limit(2000),
   ])
   if (supRes.error) throw new Error(supRes.error.message)
   if (!supRes.data) return null
   if (pricesRes.error) throw new Error(pricesRes.error.message)
-  const s = supRes.data as { id: string; name: string; type: string | null; monthly_cycle_start_day?: number }
+  const s = supRes.data as { id: string; name: string; type: string | null; monthly_cycle_start_day?: number; settlement_mode?: string; consignment_discount_pct?: number }
   // Billing-cycle start day (1 = calendar month; Harvest = 5 → 5th-to-5th).
   const cycleStartDay = Number(s.monthly_cycle_start_day ?? 1)
+  const mode: 'cost_plus' | 'retail_minus' = s.settlement_mode === 'retail_minus' ? 'retail_minus' : 'cost_plus'
+  const supplierDiscountPct = Number(s.consignment_discount_pct ?? 0)
   const { startIso, endExclIso, startDate, endExclDate, label } = cyclePeriodRange(period, cycleStartDay)
 
-  type PriceRow = { sku_id: string; price_hc: number | null; sku: SkuInfo | null }
+  type PriceRow = { sku_id: string; price_hc: number | null; price_retail: number | null; discount_pct: number | null; sku: SkuInfo | null }
   const priceRows = (pricesRes.data ?? []) as unknown as PriceRow[]
   const pricedIds = new Set(priceRows.map(p => p.sku_id))
 
@@ -88,11 +94,16 @@ export async function computeConsignmentSettlement(
     for (const sk of (data ?? []) as SkuInfo[]) extraInfo.set(sk.id, sk)
   }
 
-  // Unified SKU list: priced (with HC) first, then unpriced cell SKUs (HC null).
-  type ReportSku = { sku_id: string; info: SkuInfo; hc: number | null }
+  // Unified SKU list: priced (with prices) first, then unpriced cell SKUs.
+  type ReportSku = { sku_id: string; info: SkuInfo; priceHc: number | null; priceRetail: number | null; skuDiscount: number | null }
   const reportSkus: ReportSku[] = []
-  for (const p of priceRows) if (p.sku) reportSkus.push({ sku_id: p.sku_id, info: p.sku, hc: p.price_hc == null ? null : Number(p.price_hc) })
-  for (const sid of extraIds) { const info = extraInfo.get(sid); if (info) reportSkus.push({ sku_id: sid, info, hc: null }) }
+  for (const p of priceRows) if (p.sku) reportSkus.push({
+    sku_id: p.sku_id, info: p.sku,
+    priceHc: p.price_hc == null ? null : Number(p.price_hc),
+    priceRetail: p.price_retail == null ? null : Number(p.price_retail),
+    skuDiscount: p.discount_pct == null ? null : Number(p.discount_pct),
+  })
+  for (const sid of extraIds) { const info = extraInfo.get(sid); if (info) reportSkus.push({ sku_id: sid, info, priceHc: null, priceRetail: null, skuDiscount: null }) }
 
   const codeBySkuId = new Map(reportSkus.map(r => [r.sku_id, r.info.loyverse_product_code ?? null]))
   const skuIdByCode = new Map<string, string>()
@@ -177,7 +188,12 @@ export async function computeConsignmentSettlement(
       const sold = b2c + b2b                               // billable units
       const closingAuto = opening != null ? opening + delivered - sold - tastings : null
       const closing = closingManual ?? closingAuto
-      const hc = rs.hc                                     // null = not priced yet (n/a)
+      // Per-unit PRE-VAT cost: cost_plus → HC; retail_minus → list × (1 − discount).
+      // VAT (×1.07) is applied once on the subtotal below. `hc` carries this unit
+      // cost for display; null = not priced yet (n/a).
+      const basePrice = mode === 'retail_minus' ? rs.priceRetail : rs.priceHc
+      const effDiscount = mode === 'retail_minus' ? (rs.skuDiscount ?? supplierDiscountPct) : 0
+      const hc = consignmentLineCost({ mode, basePrice, discountPct: effDiscount })
       const amount = hc == null ? null : sold * hc         // tastings are free → excluded
       return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount }
     })
