@@ -391,4 +391,4 @@ export function findSectionForItem(slug: string): Section | undefined {
 }
 
 // Default landing — what the portal opens to after login.
-export const DEFAULT_ROUTE = '/m/inventory'
+export const DEFAULT_ROUTE = '/m/pulse'
