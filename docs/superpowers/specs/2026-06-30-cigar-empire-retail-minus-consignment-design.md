@@ -17,16 +17,29 @@ VAT added. We need a second settlement mode without disturbing Harvest.
 
 ### The Cigar Empire economics (verified against their delivery note TDN-20260600009)
 
-For a cigar listed at net price `P`:
+The supplier's price list gives one number per cigar, `P` — and that number is the
+**VAT-inclusive shelf price** (e.g. Lauk Daun `P = 690`; that 690 is what the customer
+pays at the till). The same `P` is the base the supplier discounts on their invoice to us.
 
-- **Customer pays (retail):** `P × 1.07`
-- **We pay Cigar Empire (per sold unit):** `P × (1 − 0.30) × 1.07`
-- **Our income (per sold unit):** `P × 1.07 × 0.30`
+- **Shelf / customer price:** `P` (we sell at the list price, VAT already included).
+- **We pay Cigar Empire (per sold unit):** `P × (1 − 0.30) × 1.07` — per the delivery
+  note: 30% off `P`, then 7% VAT on top. For Lauk Daun: `690 × 0.70 × 1.07 = 516.81`.
+- **Our margin (per sold unit):** `P − P × 0.70 × 1.07`. For Lauk Daun:
+  `690 − 516.81 = 173.19`, i.e. **~25.1%** of the shelf price.
 
-The 30% discount and the 7% VAT commute, so the order does not change the result.
-We store it the way their official document presents it: **discount applied to the
-net price first, then 7% VAT on top** (`Pre-VAT` column = `qty × P × (1 − disc)`,
-VAT applied to the summed total).
+Note the asymmetry that confused us at first: the nominal discount is 30%, but because
+VAT is added on the *cost* side (after the discount) while the shelf price `P` already
+includes VAT, the realised margin against the shelf price is ~25%, not 30%. This is
+accepted — it is normal consignment economics.
+
+The shelf/customer price and the settlement we owe are **two independent things**: the
+settlement is fixed by `P` and the supplier's invoice; the shelf price is set in
+Loyverse and happens to equal `P`. The engine computes only the settlement; it does
+NOT derive a separate customer price.
+
+We store the math the way the delivery note presents it: **discount applied to `P`
+first, then 7% VAT on top** (`Pre-VAT` column = `qty × P × (1 − disc)`, VAT applied to
+the summed total).
 
 Worked example from the delivery note (qty 5 each, discount 30%):
 
@@ -117,10 +130,11 @@ UI can label columns correctly.
 ## Portal UI
 
 - **Price editor** `/m/suppliers/[id]/consignment`: for `retail_minus` suppliers,
-  label the base-price column **"List price"** and show derived read-only columns
-  **"Customer (×1.07)"** and **"Payable/unit"** (`P × (1 − disc) × 1.07`), so the
-  screen reconciles visually with the supplier's invoice. For `cost_plus`, keep the
-  current "HC" labelling.
+  label the base-price column **"List price (shelf, incl VAT)"** and show one derived
+  read-only column **"Payable/unit"** (`P × (1 − disc) × 1.07`), so the screen
+  reconciles visually with the supplier's invoice. Do NOT derive a separate customer
+  price — the list price IS the shelf price. For `cost_plus`, keep the current "HC"
+  labelling.
 - **Monthly report** `/m/suppliers/[id]/report`: logic unchanged (it consumes the
   settlement engine). Adjust labels to reflect the active mode; show the effective
   discount in `retail_minus` mode.
