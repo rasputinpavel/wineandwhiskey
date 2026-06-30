@@ -233,7 +233,7 @@ export type ConsignmentPrice = {
   id: string
   supplier_id: string
   sku_id: string
-  price_hc: number
+  price_hc: number | null       // null for retail_minus rows (only price_retail set)
   price_retail: number | null
   discount_pct: number | null   // retail_minus per-SKU override; null = supplier default
   notes: string | null

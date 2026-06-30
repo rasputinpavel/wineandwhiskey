@@ -19,6 +19,12 @@ alter table inventory.supplier
 alter table inventory.consignment_price
   add column if not exists discount_pct numeric null;
 
+-- retail_minus rows carry only a list price (price_retail); price_hc stays unset
+-- for them. The NOT NULL was Harvest-era (HC was the only price). The existing
+-- CHECK (price_hc >= 0) still holds — NULL passes a CHECK.
+alter table inventory.consignment_price
+  alter column price_hc drop not null;
+
 -- Seed Cigar Empire. Consignment suppliers are not auto-registered from POs, so
 -- insert explicitly. The name must match the Loyverse supplier for future
 -- settlement-PO matching.
