@@ -29,12 +29,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'supplier_id required' }, { status: 400 })
   if (typeof sku_id !== 'string' || !sku_id)
     return NextResponse.json({ error: 'sku_id required' }, { status: 400 })
-  if (typeof price_hc !== 'number' || !Number.isFinite(price_hc) || price_hc < 0)
-    return NextResponse.json({ error: 'price_hc (non-negative number) required' }, { status: 400 })
+  const hasHc = price_hc !== undefined && price_hc !== null
+  if (hasHc && (typeof price_hc !== 'number' || !Number.isFinite(price_hc) || price_hc < 0))
+    return NextResponse.json({ error: 'price_hc must be a non-negative number' }, { status: 400 })
+  const hasRetail = price_retail !== undefined && price_retail !== null
+  if (hasRetail && (typeof price_retail !== 'number' || !Number.isFinite(price_retail) || price_retail < 0))
+    return NextResponse.json({ error: 'price_retail must be a non-negative number' }, { status: 400 })
+  if (!hasHc && !hasRetail)
+    return NextResponse.json({ error: 'price_hc or price_retail required' }, { status: 400 })
 
-  const row: Record<string, unknown> = { supplier_id, sku_id, price_hc }
-  if (price_retail !== undefined) row.price_retail = price_retail === null ? null : Number(price_retail)
-  if (notes !== undefined)        row.notes        = notes === null ? null : String(notes)
+  const row: Record<string, unknown> = { supplier_id, sku_id }
+  if (hasHc)     row.price_hc     = price_hc
+  if (hasRetail) row.price_retail = Number(price_retail)
+  if (notes !== undefined) row.notes = notes === null ? null : String(notes)
 
   // Upsert by (supplier_id, sku_id) so re-adding the same SKU is idempotent.
   const { data, error } = await sbInventory
