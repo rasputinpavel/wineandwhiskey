@@ -84,8 +84,10 @@ export function DeletePriceCell({ id, name }: { id: string; name: string }) {
   )
 }
 
-export function NewPriceRow({ supplierId }: {
+export function NewPriceRow({ supplierId, retailMinus = false, discountPct = 0 }: {
   supplierId: string
+  retailMinus?: boolean
+  discountPct?: number
 }) {
   const router = useRouter()
   const [skuId, setSkuId] = useState('')
@@ -97,14 +99,21 @@ export function NewPriceRow({ supplierId }: {
   const [err, setErr] = useState<string | null>(null)
 
   async function add() {
-    const hc = Number(priceHc)
     if (!skuId) { setErr('pick SKU'); return }
-    if (!Number.isFinite(hc) || hc < 0) { setErr('HC price ≥ 0'); return }
-    setSaving(true); setErr(null)
-    try {
-      const payload: Record<string, unknown> = { supplier_id: supplierId, sku_id: skuId, price_hc: hc }
+    const payload: Record<string, unknown> = { supplier_id: supplierId, sku_id: skuId }
+    if (retailMinus) {
+      const r = Number(priceRetail)
+      if (!Number.isFinite(r) || r < 0) { setErr('list price ≥ 0'); return }
+      payload.price_retail = r
+    } else {
+      const hc = Number(priceHc)
+      if (!Number.isFinite(hc) || hc < 0) { setErr('HC price ≥ 0'); return }
+      payload.price_hc = hc
       const r = Number(priceRetail)
       if (priceRetail !== '' && Number.isFinite(r) && r >= 0) payload.price_retail = r
+    }
+    setSaving(true); setErr(null)
+    try {
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,6 +130,10 @@ export function NewPriceRow({ supplierId }: {
     finally { setSaving(false) }
   }
 
+  const payablePreview = retailMinus && priceRetail !== '' && Number.isFinite(Number(priceRetail))
+    ? Number(priceRetail) * (1 - discountPct / 100) * 1.07
+    : null
+
   return (
     <div className="flex items-center gap-2 mt-4 p-3 bg-cream/40 border border-pale-stone rounded-sm flex-wrap">
       <div className="flex-1 min-w-[16rem]">
@@ -130,20 +143,25 @@ export function NewPriceRow({ supplierId }: {
         />
         {skuName && <p className="mt-1 text-[11px] text-graphite">Selected: <span className="text-deep-black">{skuName}</span></p>}
       </div>
+      {!retailMinus && (
+        <input
+          type="number" min={0} step={1} placeholder="HC price"
+          value={priceHc} onChange={e => setPriceHc(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add() }}
+          className="w-24 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
+          disabled={saving}
+        />
+      )}
       <input
-        type="number" min={0} step={1} placeholder="HC price"
-        value={priceHc} onChange={e => setPriceHc(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') add() }}
-        className="w-24 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
-        disabled={saving}
-      />
-      <input
-        type="number" min={0} step={1} placeholder="Retail (opt)"
+        type="number" min={0} step={1} placeholder={retailMinus ? 'List price' : 'Retail (opt)'}
         value={priceRetail} onChange={e => setPriceRetail(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') add() }}
         className="w-24 px-2 py-1 text-xs border border-pale-stone rounded-sm focus:outline-none focus:border-wine-red text-right tabular-nums"
         disabled={saving}
       />
+      {payablePreview != null && (
+        <span className="text-[11px] text-graphite tabular-nums">→ pay ฿{payablePreview.toLocaleString('en-US', { maximumFractionDigits: 2 })}/u</span>
+      )}
       <button
         onClick={add} disabled={saving}
         className="text-xs px-3 py-1 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50"
