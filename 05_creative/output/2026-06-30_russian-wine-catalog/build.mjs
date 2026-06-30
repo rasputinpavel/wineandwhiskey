@@ -191,8 +191,7 @@ const wineryRow = (it) => {
   return `
     <div class="wrow">
       <div class="wmain"><span class="wname">${esc(it.name)}</span><span class="wgrape">${esc(it.variety || '')}</span></div>
-      <div class="wcomp">${esc(p.comparable)}</div>
-      <div class="wacc">${p.accolade ? esc(p.accolade) : '—'}</div>
+      <div class="wcomp">${esc(p.comparable)}${p.accolade ? `<span class="wbadge">${esc(p.accolade)}</span>` : ''}</div>
       <div class="wprice">${esc(price)}</div>
     </div>`;
 };
@@ -213,7 +212,7 @@ const wineryPage = (w) => {
       <div class="accolades">${w.accolades.map((a) => `<span class="acc">${esc(a)}</span>`).join('')}</div>
     </header>
     <div class="wtable">
-      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wprice">฿</div></div>
       ${items.map(wineryRow).join('')}
     </div>
   </section>`;
@@ -275,9 +274,10 @@ const html = `<!doctype html>
   .pill{font-family:'Bebas Neue';font-size:22px;letter-spacing:.03em;color:#fff;background:var(--wine);
     border-radius:8px;padding:3px 13px 1px;line-height:1.1;white-space:nowrap}
 
-  .ribbon{position:absolute;top:18px;right:-42px;width:150px;text-align:center;transform:rotate(45deg);
-    background:var(--gold);color:var(--black);font-family:'Inter';font-weight:700;font-size:9.5px;
-    letter-spacing:.1em;text-transform:uppercase;padding:4px 0;box-shadow:0 2px 6px rgba(0,0,0,.15);z-index:2}
+  /* Flat badge — no rotate/overflow/box-shadow (those can artifact in some browsers) */
+  .ribbon{position:absolute;top:14px;left:14px;background:var(--gold);color:var(--black);
+    font-family:'Inter';font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    padding:5px 10px;border-radius:6px;z-index:2}
 
   /* Footer */
   .foot{border-top:1px solid var(--stone);margin-top:48px;padding:22px 0 40px;text-align:center;
@@ -303,13 +303,13 @@ const html = `<!doctype html>
   .acc{font-family:'Inter';font-weight:600;font-size:11px;color:var(--burg);background:var(--cream);border:1px solid var(--stone);border-radius:999px;padding:5px 12px}
 
   .wtable{display:flex;flex-direction:column;border-top:2px solid var(--wine)}
-  .wrow{display:grid;grid-template-columns:2.2fr 3fr 2fr .8fr;gap:14px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--stone)}
+  .wrow{display:grid;grid-template-columns:2.4fr 3.6fr .8fr;gap:16px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--stone)}
   .wrow.whead div{font-family:'Inter';font-weight:600;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--graphite)}
   .wmain{display:flex;flex-direction:column;gap:2px}
   .wname{font-family:'DM Sans';font-weight:600;font-size:14px;color:var(--black);line-height:1.2}
   .wgrape{font-family:'Inter';font-size:11.5px;color:var(--graphite)}
   .wcomp{font-family:'Inter';font-size:12.5px;color:var(--black);line-height:1.4}
-  .wacc{font-family:'Inter';font-weight:600;font-size:11.5px;color:var(--burg);line-height:1.3}
+  .wbadge{display:inline-block;margin-left:8px;font-family:'Inter';font-weight:600;font-size:10px;color:var(--burg);background:var(--cream);border:1px solid var(--gold);border-radius:999px;padding:2px 9px;vertical-align:1px;white-space:nowrap}
   .wprice{font-family:'Bebas Neue';font-size:20px;color:var(--wine);text-align:right;letter-spacing:.02em}
 
   /* Print: A4. Cover = full-bleed own page (no margin); content pages keep margins. */
