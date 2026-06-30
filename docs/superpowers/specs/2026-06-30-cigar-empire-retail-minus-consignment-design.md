@@ -39,10 +39,10 @@ Worked example from the delivery note (qty 5 each, discount 30%):
 | Joker Connecticut | DNT-JCNT | 490 | 1,715 |
 | Ernesto S4 | TM-ERS4 | 400 | 1,400 |
 
-Net subtotal 10,885 → VAT 7% = 761.95 → total 11,646.95. (Delivery note is page
-1/2; remaining SKUs to be added when page 2 is supplied. This total is the **value
-of the consignment stock handed over**, NOT a settlement amount — we pay only for
-units sold during a billing cycle.)
+Net subtotal 10,885 → VAT 7% = 761.95 → total 11,646.95. (The delivery note's two
+pages are duplicates — these 6 SKUs are the complete first set.) This total is the
+**value of the consignment stock handed over** (the opening balance, qty 5 of each),
+NOT a settlement amount — we pay only for units sold during a billing cycle.
 
 - **Billing cycle:** 5th-to-5th (same as Harvest), so costs land in the right month.
 - **Discount:** uniform 30% for Cigar Empire, but the model must allow a per-SKU
@@ -141,7 +141,7 @@ free). `retail_minus` inherits the behaviour with no extra work.
 - 33 Hongyok Uthit Road, Mueang, Talat Yai, Phuket 83000
 - Ibrahim Tuncel · 0928653180 · access@cigar-empire.com · cigar-empire.com
 - Type: consignment, `retail_minus`, 30% discount, 5th-to-5th cycle.
-- First delivery: TDN-20260600009 (29/06/2026).
+- First delivery (opening balance): TDN-20260600009 (29/06/2026), 6 SKUs × 5 units.
 
 ## Out of scope (explicitly not doing)
 
