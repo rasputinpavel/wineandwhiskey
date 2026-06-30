@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SkuPickerInline } from '@/components/modules/customers/SkuPickerInline'
+import { consignmentLineCost } from '@/lib/consignment-math'
 
 const API = '/api/m/consignment-prices'
 
@@ -130,9 +131,12 @@ export function NewPriceRow({ supplierId, retailMinus = false, discountPct = 0 }
     finally { setSaving(false) }
   }
 
-  const payablePreview = retailMinus && priceRetail !== '' && Number.isFinite(Number(priceRetail))
-    ? Number(priceRetail) * (1 - discountPct / 100) * 1.07
+  // Same helper as the settlement engine so the live preview can't drift from
+  // the billed amount; ×1.07 VAT applied here (helper returns pre-VAT).
+  const previewUnit = retailMinus && priceRetail !== '' && Number.isFinite(Number(priceRetail))
+    ? consignmentLineCost({ mode: 'retail_minus', basePrice: Number(priceRetail), discountPct })
     : null
+  const payablePreview = previewUnit == null ? null : previewUnit * 1.07
 
   return (
     <div className="flex items-center gap-2 mt-4 p-3 bg-cream/40 border border-pale-stone rounded-sm flex-wrap">

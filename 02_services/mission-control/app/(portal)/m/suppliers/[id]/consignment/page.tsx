@@ -105,7 +105,7 @@ export default async function SupplierConsignmentPage({ params }: { params: Prom
                   </>
                 ) : (
                   <>
-                    <td className="py-2 px-4 text-right"><PriceCell id={p.id} initial={Number(p.price_hc)} field="price_hc" /></td>
+                    <td className="py-2 px-4 text-right"><PriceCell id={p.id} initial={p.price_hc != null ? Number(p.price_hc) : null} field="price_hc" /></td>
                     <td className="py-2 px-4 text-right">
                       <PriceCell id={p.id} initial={p.price_retail != null ? Number(p.price_retail) : null} field="price_retail" />
                     </td>
