@@ -31,9 +31,10 @@ export default async function SupplierMonthlyReportPage({
   } catch (e: any) { return <SchemaError error={String(e?.message ?? e)} /> }
   if (!settlement) return <div className="text-graphite">Supplier not found.</div>
   const {
-    supplier: s, label, rows, subtotal, vat, grandTotal, unpricedSold,
+    supplier: s, mode, label, rows, subtotal, vat, grandTotal, unpricedSold,
     excluded, exclTableMissing, delTableMissing, closedAt, closings,
   } = settlement
+  const unitWord = mode === 'retail_minus' ? 'list' : 'HC'   // 'HC' is Harvest jargon
 
   return (
     <>
@@ -42,7 +43,7 @@ export default async function SupplierMonthlyReportPage({
           <Link href={`/m/suppliers/${id}`} className="text-xs text-graphite hover:text-wine-red">← Back to {s.name}</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{s.name} · Monthly sales report</h2>
           <p className="text-graphite text-sm mt-1 max-w-3xl">
-            Auto-aggregates Loyverse sales (B2C + B2B) per SKU and prices the billable units at consignment HC + 7% VAT.
+            Auto-aggregates Loyverse sales (B2C + B2B) per SKU and prices the billable units at the consignment unit cost + 7% VAT.
             <strong> TOTAL</strong> = billable (B2C + B2B); tastings are free and excluded from the bill.
             Closing = Opening + Delivered − TOTAL − Tastings (click to override). Set opening / tastings inline; log arrivals on the Deliveries tab.
           </p>
@@ -70,7 +71,7 @@ export default async function SupplierMonthlyReportPage({
         <p className="mb-3 text-[12px] text-wine-red">Deliveries table missing — apply migration 022_consignment_delivery.sql in Supabase (the Delivered column reads 0 until then).</p>
       )}
 
-      <ConsignmentReportTable supplierId={id} period={period} rows={rows} />
+      <ConsignmentReportTable supplierId={id} period={period} rows={rows} mode={mode} />
 
       <ReceiptExclusions supplierId={id} period={period} excluded={excluded} tableMissing={exclTableMissing} />
 
@@ -78,7 +79,7 @@ export default async function SupplierMonthlyReportPage({
         <div className="mt-4 flex justify-end">
           <div className="w-full max-w-xs bg-warm-white border border-pale-stone rounded-md overflow-hidden text-[13px]">
             <div className="flex justify-between px-4 py-2 border-b border-pale-stone/40">
-              <span className="text-graphite">Settlement subtotal (HC)</span>
+              <span className="text-graphite">Settlement subtotal ({mode === 'retail_minus' ? 'pre-VAT' : 'HC'})</span>
               <span className="tabular-nums">฿{Math.round(subtotal).toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between px-4 py-2 border-b border-pale-stone/40">
@@ -91,7 +92,7 @@ export default async function SupplierMonthlyReportPage({
             </div>
             {unpricedSold > 0 && (
               <div className="px-4 py-2 text-[11px] text-amber-gold border-t border-pale-stone/40">
-                {unpricedSold} sold SKU{unpricedSold > 1 ? 's' : ''} with no HC price (n/a) — not in this total. Add prices on the Consignment prices tab.
+                {unpricedSold} sold SKU{unpricedSold > 1 ? 's' : ''} with no {unitWord} price (n/a) — not in this total. Add prices on the Consignment prices tab.
               </div>
             )}
           </div>

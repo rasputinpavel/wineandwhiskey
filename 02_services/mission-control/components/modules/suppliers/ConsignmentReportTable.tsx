@@ -36,9 +36,13 @@ function value(r: ReportRow, key: SortKey): number | string | null {
   }
 }
 
-export function ConsignmentReportTable({ supplierId, period, rows }: {
-  supplierId: string; period: string; rows: ReportRow[]
+export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_plus' }: {
+  supplierId: string; period: string; rows: ReportRow[]; mode?: 'cost_plus' | 'retail_minus'
 }) {
+  // 'HC' is Harvest jargon (wholesale cost/unit). For retail_minus it's the
+  // discounted list price per unit, so label it plainly.
+  const unitLabel = mode === 'retail_minus' ? 'Cost/u ฿' : 'HC ฿'
+  const cols = COLS.map(c => (c.key === 'hc' ? { ...c, label: unitLabel } : c))
   // Default = activity desc (most-moved SKUs first), matching the old order.
   const [sortKey, setSortKey] = useState<SortKey>('activity')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
@@ -81,7 +85,7 @@ export function ConsignmentReportTable({ supplierId, period, rows }: {
       <table className="w-full text-[13px]">
         <thead className="text-graphite border-b border-pale-stone bg-cream/40">
           <tr>
-            {COLS.map(col => (
+            {cols.map(col => (
               <th key={col.key} className={`py-2 px-3 font-normal ${col.align === 'left' ? 'text-left' : 'text-right'}`}>
                 <button
                   onClick={() => onSort(col.key)}

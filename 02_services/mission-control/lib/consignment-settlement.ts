@@ -39,6 +39,7 @@ export type SettlementRow = {
 
 export type ConsignmentSettlement = {
   supplier: { id: string; name: string; type: string | null }
+  mode: 'cost_plus' | 'retail_minus'
   period: string; prevPeriod: string; label: string
   startDate: string; endExclDate: string
   rows: SettlementRow[]
@@ -223,6 +224,7 @@ export async function computeConsignmentSettlement(
 
   return {
     supplier: { id: s.id, name: s.name, type: s.type ?? null },
+    mode,
     period, prevPeriod, label,
     startDate, endExclDate,
     rows, totals,
