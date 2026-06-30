@@ -17,70 +17,70 @@ const img = (slug) => b64(join(PRODUCTS, `${slug}.png`));
 const logo = b64(LOGO);
 
 // --- Catalog data (source: .inbox/Russian Wine Harvest price.pdf) ---
-// price = display string; meta = "Region · Variety · ABV"; best = BEST SELLER ribbon;
-// desc = prose (only where the source PDF carries one); prices = [["1 L","฿749"],...]
+// Wines: { name, slug, price, region, variety, abv, aging?, desc?, best? }
+// Spirits: { name, slug, price|prices, detail }  (no grape variety)
 const sections = [
   {
     id: 'white', title: 'White Wine',
     items: [
-      { name: 'Grape Dance Blanc, Chateau Tamagne', slug: 'chateau-tamagne-grape-dance-blanc', price: '฿515', meta: 'Tamagne Peninsula · 100% Bianca, Gürner · 14%', best: true },
-      { name: 'Vedernikov Sibirkovyi', slug: 'vedernikov-sibirkovyi', price: '฿575', meta: 'Vedernikov, Don Valley · Sibirkovyi · 12%', desc: 'Made from the local Sibirkovy grape — aromas of acacia, lime, and green apple. Fresh and full-bodied, with mineral notes and a grapefruit finish.' },
-      { name: 'Visokiy Bereg Grüner Veltliner', slug: 'visokiy-bereg-gruner-veltliner', price: '฿595', meta: 'Kuban · 100% Grüner · 12.5%' },
-      { name: 'Aristov Riesling', slug: 'aristov-riesling', price: '฿610', meta: 'Kuban · 100% Riesling · 14%', best: true },
-      { name: 'Abrau-Durso Riesling', slug: 'abrau-durso-riesling', price: '฿910', meta: 'Abrau Durso, Tamagne Peninsula · 100% Riesling · 12%' },
-      { name: 'Abrau-Durso Chardonnay', slug: 'abrau-durso-chardonnay', price: '฿910', meta: 'Abrau Durso, Tamagne Peninsula · 100% Chardonnay · 12%' },
+      { name: 'Grape Dance Blanc, Chateau Tamagne', slug: 'chateau-tamagne-grape-dance-blanc', price: '฿515', variety: 'Bianca, Gürner', region: 'Tamagne Peninsula', abv: '14%', best: true },
+      { name: 'Vedernikov Sibirkovyi', slug: 'vedernikov-sibirkovyi', price: '฿575', variety: 'Sibirkovyi', region: 'Vedernikov, Don Valley', abv: '12%', desc: 'Made from the local Sibirkovy grape — aromas of acacia, lime, and green apple. Fresh and full-bodied, with mineral notes and a grapefruit finish.' },
+      { name: 'Visokiy Bereg Grüner Veltliner', slug: 'visokiy-bereg-gruner-veltliner', price: '฿595', variety: 'Grüner Veltliner', region: 'Kuban', abv: '12.5%' },
+      { name: 'Aristov Riesling', slug: 'aristov-riesling', price: '฿610', variety: 'Riesling', region: 'Kuban', abv: '14%', best: true },
+      { name: 'Abrau-Durso Riesling', slug: 'abrau-durso-riesling', price: '฿910', variety: 'Riesling', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%' },
+      { name: 'Abrau-Durso Chardonnay', slug: 'abrau-durso-chardonnay', price: '฿910', variety: 'Chardonnay', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%' },
     ],
   },
   {
     id: 'rose', title: 'Rosé',
     items: [
-      { name: 'Vedernikov Krasnostop Rosé', slug: 'vedernikov-krasnostop-rose', price: '฿625', meta: 'Vedernikov, Don Valley · 100% Krasnostop Zolotovsky · 12%', desc: 'A vibrant rosé with strawberry, marshmallow, and berry sorbet aromas. Smooth, light, and refreshing with a silky finish. Perfect for any season.' },
-      { name: 'Visokiy Bereg Graphite Rosé', slug: 'visokiy-bereg-graphite-rose', price: '฿650', meta: 'Kuban · 100% Cabernet Sauvignon · 12%' },
+      { name: 'Vedernikov Krasnostop Rosé', slug: 'vedernikov-krasnostop-rose', price: '฿625', variety: 'Krasnostop Zolotovsky', region: 'Vedernikov, Don Valley', abv: '12%', desc: 'A vibrant rosé with strawberry, marshmallow, and berry sorbet aromas. Smooth, light, and refreshing with a silky finish. Perfect for any season.' },
+      { name: 'Visokiy Bereg Graphite Rosé', slug: 'visokiy-bereg-graphite-rose', price: '฿650', variety: 'Cabernet Sauvignon', region: 'Kuban', abv: '12%' },
     ],
   },
   {
     id: 'red', title: 'Red Wine',
     items: [
-      { name: 'Chateau Tamagne Krasnostop Saperavi', slug: 'chateau-tamagne-krasnostop-saperavi', price: '฿560', meta: 'Kuban · 100% Krasnostop, Saperavi · 14%' },
-      { name: 'Nude Saperavi 2022, Chateau Tamagne', slug: 'chateau-tamagne-nude-saperavi', price: '฿575', meta: 'Krasnodar Region · 100% Saperavi · 13.5%', best: true },
-      { name: 'Aristov Cabernet Sauvignon', slug: 'aristov-cabernet-sauvignon', price: '฿615', meta: 'Kuban · 100% Cabernet Sauvignon · 14%', best: true },
-      { name: 'Vedernikov Krasnostop Zolotovsky', slug: 'vedernikov-krasnostop-zolotovsky', price: '฿625', meta: 'Vedernikov, Don Valley · 100% Krasnostop Zolotovsky · 14.5%', desc: 'Deep ruby-red with aromas of currant, chocolate, and spices. Bright, balanced flavors of blackcurrant, mulberry, and cherry, with a long berry finish.' },
-      { name: 'Chateau Tamagne Cabernet Reserve', slug: 'chateau-tamagne-cabernet-reserve', price: '฿685', meta: 'Tamagne Peninsula · 100% Cabernet Sauvignon · 12–14%', best: true },
-      { name: 'Chateau Tamagne Saperavi Reserve', slug: 'chateau-tamagne-saperavi-reserve', price: '฿685', meta: 'Tamagne Peninsula · 100% Saperavi · 14%', best: true },
-      { name: 'Chateau Tamagne Krasnostop Reserve', slug: 'chateau-tamagne-krasnostop-reserve', price: '฿685', meta: 'Tamagne Peninsula · 100% Krasnostop · 11.5–13.5%' },
-      { name: 'Chateau Tamagne Premier Rouge Reserve', slug: 'chateau-tamagne-premier-rouge-reserve', price: '฿685', meta: 'Tamagne Peninsula · Merlot, Cabernet Sauvignon, Krasnostop, Saperavi · 12–14%' },
-      { name: 'Cuvée Alexander Intenso Rosso, Aristov', slug: 'aristov-cuvee-alexander-intenso-rosso', price: '฿750', meta: 'Tamagne Peninsula · 100% Anchelotta · 12%' },
-      { name: 'Chateau Tamagne Krasnostop Reserve 2016', slug: 'chateau-tamagne-krasnostop-reserve-2016', price: '฿875', meta: 'Tamagne Peninsula · 100% Krasnostop Anapskiy · 14% · 12 mo French/American oak + 48 mo bottle' },
-      { name: 'Abrau-Durso Pinot Noir', slug: 'abrau-durso-pinot-noir', price: '฿910', meta: 'Abrau Durso, Tamagne Peninsula · 100% Pinot Noir · 11.5%' },
-      { name: 'Vedernikov Krasnostop Zolotovsky, Aged in Oak', slug: 'vedernikov-krasnostop-zolotovsky-oak', price: '฿1,250', meta: 'Vedernikov, Don Valley · 100% Krasnostop Zolotovsky · 14.5%', desc: 'From the native Krasnostop Zolotovsky grape, registered in 1814; aged 16 months in French oak. Deep ruby-red with aromas of cherry jam, blackberry, prune, smoke, and vanilla. Full-bodied and tannic with flavors of dried cherry, mulberry, tobacco, leather, and a hint of smoke, finishing with long jammy notes of black currant and blackberry.' },
-      { name: 'Gertz Sikory', slug: 'sikory-gertz', price: '฿1,285', meta: 'Semigorye · Cabernet Sauvignon, Merlot, Cabernet Franc, Krasnostop · 14%' },
-      { name: 'Sikory Cabernet Sauvignon Family Reserve', slug: 'sikory-cabernet-family-reserve', price: '฿1,500', meta: 'Semigorye · 100% Cabernet Sauvignon · 14%' },
+      { name: 'Chateau Tamagne Krasnostop Saperavi', slug: 'chateau-tamagne-krasnostop-saperavi', price: '฿560', variety: 'Krasnostop, Saperavi', region: 'Kuban', abv: '14%' },
+      { name: 'Nude Saperavi 2022, Chateau Tamagne', slug: 'chateau-tamagne-nude-saperavi', price: '฿575', variety: 'Saperavi', region: 'Krasnodar Region', abv: '13.5%', best: true },
+      { name: 'Aristov Cabernet Sauvignon', slug: 'aristov-cabernet-sauvignon', price: '฿615', variety: 'Cabernet Sauvignon', region: 'Kuban', abv: '14%', best: true },
+      { name: 'Vedernikov Krasnostop Zolotovsky', slug: 'vedernikov-krasnostop-zolotovsky', price: '฿625', variety: 'Krasnostop Zolotovsky', region: 'Vedernikov, Don Valley', abv: '14.5%', desc: 'Deep ruby-red with aromas of currant, chocolate, and spices. Bright, balanced flavors of blackcurrant, mulberry, and cherry, with a long berry finish.' },
+      { name: 'Chateau Tamagne Cabernet Reserve', slug: 'chateau-tamagne-cabernet-reserve', price: '฿685', variety: 'Cabernet Sauvignon', region: 'Tamagne Peninsula', abv: '12–14%', best: true },
+      { name: 'Chateau Tamagne Saperavi Reserve', slug: 'chateau-tamagne-saperavi-reserve', price: '฿685', variety: 'Saperavi', region: 'Tamagne Peninsula', abv: '14%', best: true },
+      { name: 'Chateau Tamagne Krasnostop Reserve', slug: 'chateau-tamagne-krasnostop-reserve', price: '฿685', variety: 'Krasnostop', region: 'Tamagne Peninsula', abv: '11.5–13.5%' },
+      { name: 'Chateau Tamagne Premier Rouge Reserve', slug: 'chateau-tamagne-premier-rouge-reserve', price: '฿685', variety: 'Merlot, Cabernet Sauvignon, Krasnostop, Saperavi', region: 'Tamagne Peninsula', abv: '12–14%' },
+      { name: 'Cuvée Alexander Intenso Rosso, Aristov', slug: 'aristov-cuvee-alexander-intenso-rosso', price: '฿750', variety: 'Anchelotta', region: 'Tamagne Peninsula', abv: '12%' },
+      { name: 'Chateau Tamagne Krasnostop Reserve 2016', slug: 'chateau-tamagne-krasnostop-reserve-2016', price: '฿875', variety: 'Krasnostop Anapskiy', region: 'Tamagne Peninsula', abv: '14%', aging: '12 months French/American oak + 48 months bottle' },
+      { name: 'Abrau-Durso Pinot Noir', slug: 'abrau-durso-pinot-noir', price: '฿910', variety: 'Pinot Noir', region: 'Abrau Durso, Tamagne Peninsula', abv: '11.5%' },
+      { name: 'Vedernikov Krasnostop Zolotovsky, Aged in Oak', slug: 'vedernikov-krasnostop-zolotovsky-oak', price: '฿1,250', variety: 'Krasnostop Zolotovsky', region: 'Vedernikov, Don Valley', abv: '14.5%', desc: 'From the native Krasnostop Zolotovsky grape, registered in 1814; aged 16 months in French oak. Deep ruby-red with aromas of cherry jam, blackberry, prune, smoke, and vanilla. Full-bodied and tannic with flavors of dried cherry, mulberry, tobacco, leather, and a hint of smoke, finishing with long jammy notes of black currant and blackberry.' },
+      { name: 'Gertz Sikory', slug: 'sikory-gertz', price: '฿1,285', variety: 'Cabernet Sauvignon, Merlot, Cabernet Franc, Krasnostop', region: 'Semigorye', abv: '14%' },
+      { name: 'Sikory Cabernet Sauvignon Family Reserve', slug: 'sikory-cabernet-family-reserve', price: '฿1,500', variety: 'Cabernet Sauvignon', region: 'Semigorye', abv: '14%' },
     ],
   },
   {
     id: 'sparkling', title: 'Sparkling',
     items: [
-      { name: 'Abrau-Durso Reserve Brut', slug: 'abrau-durso-reserve-brut', price: '฿510', meta: 'Abrau Durso, Tamagne Peninsula · Chardonnay, Riesling, Pinot Blanc · 11.5%' },
-      { name: 'Abrau-Durso Reserve Brut Rosé', slug: 'abrau-durso-reserve-brut-rose', price: '฿510', meta: 'Abrau Durso, Tamagne Peninsula · Pinot Noir, Pinot Franc, Cabernet Sauvignon · 11.5%' },
-      { name: 'Cuvée Alexander Blanc de Blancs Brut, Aristov', slug: 'aristov-cuvee-alexander-brut', price: '฿750', meta: 'Tamagne Peninsula · Chardonnay · 12%' },
-      { name: 'Victor Dravigny Brut', slug: 'abrau-durso-victor-dravigny-brut', price: '฿750', meta: 'Abrau Durso, Tamagne Peninsula · Chardonnay, Riesling, Pinot Blanc · 12%', best: true },
-      { name: 'Victor Dravigny Extra Brut', slug: 'abrau-durso-victor-dravigny-extra-brut', price: '฿750', meta: 'Abrau Durso, Tamagne Peninsula · Chardonnay, Riesling, Pinot Blanc · 12.5%' },
-      { name: 'Victor Dravigny Rosé Brut', slug: 'abrau-durso-victor-dravigny-rose', price: '฿750', meta: 'Abrau Durso, Tamagne Peninsula · Pinot Noir, Pinot Franc, Cabernet Sauvignon · 12%', best: true },
-      { name: "Brut d'Or Blanc de Noir", slug: 'abrau-durso-brut-dor-blanc-de-noir', price: '฿935', meta: 'Abrau Durso, Tamagne Peninsula · 100% Pinot Noir · 12.5%' },
-      { name: "Brut d'Or Riesling", slug: 'abrau-durso-brut-dor-riesling', price: '฿935', meta: 'Abrau Durso, Tamagne Peninsula · 100% Riesling · 12.5%' },
-      { name: 'Alexander II Brut Vintage', slug: 'abrau-durso-alexander-ii-brut-vintage', price: '฿1,000', meta: 'Abrau Durso, Tamagne Peninsula · Pinot Noir, Pinot Blanc, Chardonnay · 12%' },
-      { name: 'Alexander II Brut Rosé', slug: 'abrau-durso-alexander-ii-brut-rose', price: '฿1,000', meta: 'Abrau Durso, Tamagne Peninsula · 100% Pinot Noir · 12%' },
+      { name: 'Abrau-Durso Reserve Brut', slug: 'abrau-durso-reserve-brut', price: '฿510', variety: 'Chardonnay, Riesling, Pinot Blanc', region: 'Abrau Durso, Tamagne Peninsula', abv: '11.5%' },
+      { name: 'Abrau-Durso Reserve Brut Rosé', slug: 'abrau-durso-reserve-brut-rose', price: '฿510', variety: 'Pinot Noir, Pinot Franc, Cabernet Sauvignon', region: 'Abrau Durso, Tamagne Peninsula', abv: '11.5%' },
+      { name: 'Cuvée Alexander Blanc de Blancs Brut, Aristov', slug: 'aristov-cuvee-alexander-brut', price: '฿750', variety: 'Chardonnay', region: 'Tamagne Peninsula', abv: '12%' },
+      { name: 'Victor Dravigny Brut', slug: 'abrau-durso-victor-dravigny-brut', price: '฿750', variety: 'Chardonnay, Riesling, Pinot Blanc', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%', best: true },
+      { name: 'Victor Dravigny Extra Brut', slug: 'abrau-durso-victor-dravigny-extra-brut', price: '฿750', variety: 'Chardonnay, Riesling, Pinot Blanc', region: 'Abrau Durso, Tamagne Peninsula', abv: '12.5%' },
+      { name: 'Victor Dravigny Rosé Brut', slug: 'abrau-durso-victor-dravigny-rose', price: '฿750', variety: 'Pinot Noir, Pinot Franc, Cabernet Sauvignon', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%', best: true },
+      { name: "Brut d'Or Blanc de Noir", slug: 'abrau-durso-brut-dor-blanc-de-noir', price: '฿935', variety: 'Pinot Noir', region: 'Abrau Durso, Tamagne Peninsula', abv: '12.5%' },
+      { name: "Brut d'Or Riesling", slug: 'abrau-durso-brut-dor-riesling', price: '฿935', variety: 'Riesling', region: 'Abrau Durso, Tamagne Peninsula', abv: '12.5%' },
+      { name: 'Alexander II Brut Vintage', slug: 'abrau-durso-alexander-ii-brut-vintage', price: '฿1,000', variety: 'Pinot Noir, Pinot Blanc, Chardonnay', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%' },
+      { name: 'Alexander II Brut Rosé', slug: 'abrau-durso-alexander-ii-brut-rose', price: '฿1,000', variety: 'Pinot Noir', region: 'Abrau Durso, Tamagne Peninsula', abv: '12%' },
     ],
   },
   {
     id: 'spirits', title: 'Spirits',
     items: [
-      { name: 'Ladoga', slug: 'ladoga-vodka', prices: [['1 L', '฿749'], ['0.7 L', '฿599']], meta: 'Premium Russian vodka · St-Petersburg · 40%' },
-      { name: "Czar's Original", slug: 'czars-original', prices: [['1 L', '฿810'], ['0.7 L', '฿610']], meta: 'Super-premium Russian vodka · St-Petersburg · 40%' },
-      { name: "Czar's Gold", slug: 'czars-gold', prices: [['1 L', '฿1,185'], ['0.7 L', '฿1,060']], meta: 'Luxury Russian vodka · St-Petersburg · 40%' },
-      { name: 'Barrister Gin Dry', slug: 'barrister-dry-gin', price: '฿910', meta: 'London dry gin · 0.7 L · 40%' },
-      { name: 'Barrister Gin Pink', slug: 'barrister-pink-gin', price: '฿990', meta: 'Pink gin · 0.7 L · 40%' },
-      { name: 'Barrister Gin Blue', slug: 'barrister-blue-gin', price: '฿990', meta: 'Blue gin · 0.7 L · 40%' },
+      { name: 'Ladoga', slug: 'ladoga-vodka', prices: [['1 L', '฿749'], ['0.7 L', '฿599']], detail: 'Premium Russian vodka · St-Petersburg · 40%' },
+      { name: "Czar's Original", slug: 'czars-original', prices: [['1 L', '฿810'], ['0.7 L', '฿610']], detail: 'Super-premium Russian vodka · St-Petersburg · 40%' },
+      { name: "Czar's Gold", slug: 'czars-gold', prices: [['1 L', '฿1,185'], ['0.7 L', '฿1,060']], detail: 'Luxury Russian vodka · St-Petersburg · 40%' },
+      { name: 'Barrister Gin Dry', slug: 'barrister-dry-gin', price: '฿910', detail: 'London dry gin · 0.7 L · 40%' },
+      { name: 'Barrister Gin Pink', slug: 'barrister-pink-gin', price: '฿990', detail: 'Pink gin · 0.7 L · 40%' },
+      { name: 'Barrister Gin Blue', slug: 'barrister-blue-gin', price: '฿990', detail: 'Blue gin · 0.7 L · 40%' },
     ],
   },
 ];
@@ -100,8 +100,10 @@ const card = (it) => `
     ${it.best ? '<span class="ribbon">Best Seller</span>' : ''}
     <div class="shot"><img src="${img(it.slug)}" alt="${esc(it.name)}" loading="lazy"></div>
     <h3 class="name">${esc(it.name)}</h3>
-    <p class="meta">${esc(it.meta)}</p>
-    ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
+    ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
+    ${it.variety
+      ? `<p class="meta">${esc(it.region)} · ${esc(it.abv)}${it.aging ? ` · ${esc(it.aging)}` : ''}</p>`
+      : `<p class="meta">${esc(it.detail)}</p>`}
     ${priceBlock(it)}
   </article>`;
 
@@ -133,16 +135,17 @@ const html = `<!doctype html>
   body{font-family:'Inter',system-ui,sans-serif;color:var(--black);background:var(--white);line-height:1.5}
   .page{max-width:1180px;margin:0 auto;padding:0 28px}
 
-  /* Cover */
-  .cover{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    background:radial-gradient(120% 80% at 50% 0%,var(--cream) 0%,var(--white) 60%);padding:64px 28px}
-  .cover .logo{width:160px;height:160px;object-fit:contain;margin-bottom:28px}
-  .cover .kicker{font-family:'Inter';font-weight:600;letter-spacing:.28em;text-transform:uppercase;font-size:13px;color:var(--graphite);margin-bottom:14px}
-  .cover h1{font-family:'Bebas Neue';font-size:clamp(54px,9vw,108px);line-height:.92;letter-spacing:.02em;color:var(--wine);margin-bottom:8px}
+  /* Cover — full-bleed Warm White (matches the logo's own backplate) */
+  .cover{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;background:var(--white);padding:72px 28px}
+  .cover::before{content:"";position:absolute;inset:22px;border:1px solid var(--stone);pointer-events:none}
+  .cover::after{content:"";position:absolute;inset:27px;border:1px solid var(--gold);opacity:.4;pointer-events:none}
+  .cover .logo{width:200px;height:200px;object-fit:contain;margin-bottom:30px}
+  .cover h1{font-family:'Bebas Neue';font-size:clamp(54px,9vw,112px);line-height:.92;letter-spacing:.02em;color:var(--wine);margin-bottom:6px}
   .cover h1 .amp{color:var(--black)}
-  .cover .tagline{font-family:'DM Sans';font-weight:500;font-size:clamp(16px,2.4vw,22px);color:var(--black);max-width:620px;margin:18px auto 0}
+  .cover .tagline{font-family:'DM Sans';font-weight:500;font-size:clamp(16px,2.4vw,22px);color:var(--black);max-width:640px;margin:16px auto 0}
   .cover .rule{width:64px;height:3px;background:var(--gold);margin:30px auto 18px;border-radius:2px}
-  .cover .sub{font-family:'Inter';font-weight:500;letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--graphite)}
+  .cover .sub{font-family:'Inter';font-weight:600;letter-spacing:.2em;text-transform:uppercase;font-size:13px;color:var(--graphite)}
 
   /* Category */
   .cat{padding:54px 0 8px}
@@ -156,7 +159,10 @@ const html = `<!doctype html>
     padding:20px 18px 18px;display:flex;flex-direction:column;overflow:hidden}
   .card .shot{height:200px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:14px}
   .card .shot img{max-height:200px;max-width:88%;width:auto;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(26,26,26,.18))}
-  .card .name{font-family:'DM Sans';font-weight:600;font-size:17px;line-height:1.25;color:var(--black);margin-bottom:6px}
+  .card .name{font-family:'DM Sans';font-weight:600;font-size:17px;line-height:1.25;color:var(--black);margin-bottom:8px}
+  .grape{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--stone)}
+  .grape .glabel{flex:none;font-family:'Inter';font-weight:600;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+  .grape .gval{font-family:'DM Sans';font-weight:600;font-size:14px;line-height:1.3;color:var(--burg)}
   .card .meta{font-family:'Inter';font-size:12.5px;color:var(--graphite);line-height:1.45;margin-bottom:10px}
   .card .desc{font-family:'Inter';font-size:12px;font-style:italic;color:var(--graphite);line-height:1.5;margin-bottom:12px}
   .card .prices{margin-top:auto;display:flex;flex-direction:column;gap:6px}
@@ -176,14 +182,16 @@ const html = `<!doctype html>
   .foot strong{font-family:'DM Sans';font-weight:700;color:var(--wine);letter-spacing:.02em}
   .foot .sep{color:var(--stone);margin:0 8px}
 
-  /* Print: A4, cover own page, each category starts a new page */
+  /* Print: A4. Cover = full-bleed own page (no margin); content pages keep margins. */
   @page{size:A4;margin:14mm 12mm}
+  @page cover{margin:0}
   @media print{
     body{background:#fff}
     .page{max-width:none;padding:0}
-    .cover{min-height:auto;height:269mm;page-break-after:always;break-after:page;background:var(--cream)}
-    .cat{page-break-before:always;break-before:page;padding:6mm 0 6px}
-    .cat:first-of-type{page-break-before:avoid;break-before:avoid;padding-top:0}
+    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .cover .logo{width:54mm;height:54mm}
+    .cat{page-break-before:always;padding:6mm 0 6px}
+    .cat:first-of-type{page-break-before:avoid;padding-top:0}
     .grid{grid-template-columns:repeat(3,1fr);gap:10mm 8mm}
     .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
     .card .shot{height:42mm}.card .shot img{max-height:42mm;filter:none}
@@ -199,7 +207,6 @@ const html = `<!doctype html>
 <body>
   <div class="cover">
     <img class="logo" src="${logo}" alt="Wine & Whiskey">
-    <div class="kicker">Wine &amp; Whiskey · Phuket</div>
     <h1>Russian Wine <span class="amp">&amp;</span> Spirits</h1>
     <p class="tagline">Exclusive distributor of Russian wine and spirits in Phuket</p>
     <div class="rule"></div>
