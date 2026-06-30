@@ -64,6 +64,33 @@
   .foot strong{font-family:'DM Sans';font-weight:700;color:var(--wine);letter-spacing:.02em}
   .foot .sep{color:var(--stone);margin:0 8px}
 
+  /* Producers divider */
+  .producers-divider{padding:60px 0 10px}
+  .producers-divider h2{font-family:'Bebas Neue';font-size:52px;letter-spacing:.04em;color:var(--wine);text-transform:uppercase;line-height:1}
+  .producers-divider p{font-family:'Inter';font-size:14px;color:var(--graphite);max-width:680px;margin-top:10px;line-height:1.6}
+  .prod-note{font-size:12px !important;color:var(--graphite);border-left:2px solid var(--gold);padding-left:12px;margin-top:16px !important}
+  .prod-note em{color:var(--burg);font-style:italic}
+
+  /* Winery / producer pages */
+  .winery{padding:54px 0 8px}
+  .winery-head{margin-bottom:22px;max-width:780px}
+  .winery-kicker{font-family:'Inter';font-weight:600;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--gold);margin-bottom:6px}
+  .winery-head h2{font-family:'Bebas Neue';font-size:54px;letter-spacing:.03em;color:var(--wine);line-height:1;text-transform:uppercase;margin-bottom:6px}
+  .winery-region{font-family:'Inter';font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--graphite);margin-bottom:14px}
+  .winery-intro{font-family:'Inter';font-size:14px;line-height:1.6;color:var(--black);margin-bottom:16px}
+  .accolades{display:flex;flex-wrap:wrap;gap:8px}
+  .acc{font-family:'Inter';font-weight:600;font-size:11px;color:var(--burg);background:var(--cream);border:1px solid var(--stone);border-radius:999px;padding:5px 12px}
+
+  .wtable{display:flex;flex-direction:column;border-top:2px solid var(--wine)}
+  .wrow{display:grid;grid-template-columns:2.2fr 3fr 2fr .8fr;gap:14px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--stone)}
+  .wrow.whead div{font-family:'Inter';font-weight:600;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--graphite)}
+  .wmain{display:flex;flex-direction:column;gap:2px}
+  .wname{font-family:'DM Sans';font-weight:600;font-size:14px;color:var(--black);line-height:1.2}
+  .wgrape{font-family:'Inter';font-size:11.5px;color:var(--graphite)}
+  .wcomp{font-family:'Inter';font-size:12.5px;color:var(--black);line-height:1.4}
+  .wacc{font-family:'Inter';font-weight:600;font-size:11.5px;color:var(--burg);line-height:1.3}
+  .wprice{font-family:'Bebas Neue';font-size:20px;color:var(--wine);text-align:right;letter-spacing:.02em}
+
   /* Print: A4. Cover = full-bleed own page (no margin); content pages keep margins. */
   @page{size:A4;margin:14mm 12mm}
   @page cover{margin:0}
@@ -77,12 +104,20 @@
     .grid{grid-template-columns:repeat(3,1fr);gap:10mm 8mm}
     .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
     .card .shot{height:42mm}.card .shot img{max-height:42mm;filter:none}
+    .producers-divider{page-break-before:always;padding-top:0}
+    .winery{padding:18px 0 6px}
+    .winery-head{break-inside:avoid}
+    .wrow{break-inside:avoid}
     .foot{page-break-before:avoid}
   }
-  @media (max-width:520px){
+  @media (max-width:640px){
     .grid{grid-template-columns:repeat(2,1fr);gap:14px}
     .card .shot{height:150px}.card .shot img{max-height:150px}
     .cat-head h2{font-size:36px}
+    .wrow,.wrow.whead{grid-template-columns:1fr;gap:3px;padding:14px 2px}
+    .wrow.whead{display:none}
+    .wprice{text-align:left}
+    .wcomp::before{content:"≈ "}
   }
 </style>
 </head>
@@ -436,6 +471,284 @@
     <div class="prices"><div class="prow single"><span class="pill">฿990</span></div></div>
   </article></div>
   </section>
+
+    <section class="producers-divider" id="producers">
+      <h2>Our Producers</h2>
+      <p>The houses behind the list — what each estate is known for, how the wines compare to international styles, and their key ratings and awards.</p>
+      <p class="prod-note">Ratings cite the <em>Authoritative Guide to Russian Wines</em> (Artur Sarkisyan) and international competitions (Decanter, IWC, MUNDUS VINI, CSWWC). “Comparable to” lines are editorial style guides based on grape character, to help place each wine for guests.</p>
+    </section>
+    
+  <section class="winery" id="w-tamagne">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Chateau Tamagne</h2>
+      <p class="winery-region">Taman Peninsula · Krasnodar, Russia</p>
+      <p class="winery-intro">The flagship brand of Kuban-Vino — one of the largest wineries in Europe — on the Taman Peninsula of Russia’s Black Sea coast. Its range focuses on indigenous Black Sea grapes (Saperavi, Krasnostop) alongside international varieties, and is a regular at the Decanter World Wine Awards.</p>
+      <div class="accolades"><span class="acc">Kuban-Vino · 500+ competition medals</span><span class="acc">Decanter World Wine Awards regular</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Grape Dance Blanc, Chateau Tamagne</span><span class="wgrape">Bianca, Gürner</span></div>
+      <div class="wcomp">Vinho Verde-style — crisp, lightly spritzy young white</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿515</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Krasnostop Saperavi</span><span class="wgrape">Krasnostop, Saperavi</span></div>
+      <div class="wcomp">Dark indigenous blend — Southern Rhône / Malbec-Syrah character</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿560</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Nude Saperavi 2022, Chateau Tamagne</span><span class="wgrape">Saperavi</span></div>
+      <div class="wcomp">Bold unfiltered Saperavi — deep like Malbec, brooding like Syrah</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿575</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Cabernet Reserve</span><span class="wgrape">Cabernet Sauvignon</span></div>
+      <div class="wcomp">Oak-aged Cabernet — mid-tier Bordeaux / New World style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿685</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Saperavi Reserve</span><span class="wgrape">Saperavi</span></div>
+      <div class="wcomp">Age-worthy Saperavi — serious Malbec / Northern Rhône Syrah</div>
+      <div class="wacc">Decanter &amp; IWC medals</div>
+      <div class="wprice">฿685</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Krasnostop Reserve</span><span class="wgrape">Krasnostop</span></div>
+      <div class="wcomp">Savory, peppery Krasnostop — Northern Rhône Syrah style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿685</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Premier Rouge Reserve</span><span class="wgrape">Merlot, Cabernet Sauvignon, Krasnostop, Saperavi</span></div>
+      <div class="wcomp">Oak-aged Bordeaux-style blend</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿685</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Chateau Tamagne Krasnostop Reserve 2016</span><span class="wgrape">Krasnostop Anapskiy</span></div>
+      <div class="wcomp">Flagship long-aged Krasnostop — premium Syrah style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿875</div>
+    </div>
+    </div>
+  </section>
+  <section class="winery" id="w-abrau">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Abrau-Durso</h2>
+      <p class="winery-region">Abrau-Durso · Krasnodar, Russia</p>
+      <p class="winery-intro">Founded in 1870 by decree of Emperor Alexander II at Lake Abrau on the Black Sea coast, Abrau-Durso is Russia’s oldest and most famous sparkling house — and its largest. It makes both traditional-method (Champagne-style) and Charmat (Prosecco-style) sparkling wines, plus a premium still range.</p>
+      <div class="accolades"><span class="acc">Founded 1870</span><span class="acc">CSWWC 2021 “Rising Star” world champion</span><span class="acc">Russia’s #1 sparkling house</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Abrau-Durso Reserve Brut</span><span class="wgrape">Chardonnay, Riesling, Pinot Blanc</span></div>
+      <div class="wcomp">Charmat / tank method — Prosecco-style fresh fizz</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿510</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Abrau-Durso Reserve Brut Rosé</span><span class="wgrape">Pinot Noir, Pinot Franc, Cabernet Sauvignon</span></div>
+      <div class="wcomp">Charmat rosé — Prosecco rosé style</div>
+      <div class="wacc">RWWU Cup</div>
+      <div class="wprice">฿510</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Victor Dravigny Brut</span><span class="wgrape">Chardonnay, Riesling, Pinot Blanc</span></div>
+      <div class="wcomp">Traditional method — Champagne-style brut</div>
+      <div class="wacc">CSWWC 2021 Gold · National Champion</div>
+      <div class="wprice">฿750</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Victor Dravigny Extra Brut</span><span class="wgrape">Chardonnay, Riesling, Pinot Blanc</span></div>
+      <div class="wcomp">Traditional method, low dosage — Champagne extra brut</div>
+      <div class="wacc">IWC Silver · 90 pts</div>
+      <div class="wprice">฿750</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Victor Dravigny Rosé Brut</span><span class="wgrape">Pinot Noir, Pinot Franc, Cabernet Sauvignon</span></div>
+      <div class="wcomp">Traditional-method rosé — Champagne rosé style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿750</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Abrau-Durso Riesling</span><span class="wgrape">Riesling</span></div>
+      <div class="wcomp">Dry Riesling — Alsace / German trocken style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿910</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Abrau-Durso Chardonnay</span><span class="wgrape">Chardonnay</span></div>
+      <div class="wcomp">Still Chardonnay — cool-climate Burgundy village style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿910</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Abrau-Durso Pinot Noir</span><span class="wgrape">Pinot Noir</span></div>
+      <div class="wcomp">Light, fresh Pinot Noir — Burgundy / cool-climate style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿910</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Brut d'Or Blanc de Noir</span><span class="wgrape">Pinot Noir</span></div>
+      <div class="wcomp">Blanc de Noirs — prestige Champagne style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿935</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Brut d'Or Riesling</span><span class="wgrape">Riesling</span></div>
+      <div class="wcomp">Single-variety traditional-method brut</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿935</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Alexander II Brut Vintage</span><span class="wgrape">Pinot Noir, Pinot Blanc, Chardonnay</span></div>
+      <div class="wcomp">Vintage prestige cuvée — Champagne style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿1,000</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Alexander II Brut Rosé</span><span class="wgrape">Pinot Noir</span></div>
+      <div class="wcomp">Prestige rosé — Champagne style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿1,000</div>
+    </div>
+    </div>
+  </section>
+  <section class="winery" id="w-sikory">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Sikory</h2>
+      <p class="winery-region">Semigorye · Krasnodar, Russia</p>
+      <p class="winery-intro">A family-owned boutique estate founded in 2011 in the Semigorye hills near the Black Sea, worked by hand with gravity-flow and French-oak ageing, with output deliberately capped. One of Russia’s most decorated producers.</p>
+      <div class="accolades"><span class="acc">World’s Best Vineyards 2021 · #20</span><span class="acc">Sarkisyan Guide regular</span><span class="acc">Forbes Russian wine lists</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Gertz Sikory</span><span class="wgrape">Cabernet Sauvignon, Merlot, Cabernet Franc, Krasnostop</span></div>
+      <div class="wcomp">Bordeaux blend + native Krasnostop — Médoc style</div>
+      <div class="wacc">Sarkisyan 88 · Silver</div>
+      <div class="wprice">฿1,285</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Sikory Cabernet Sauvignon Family Reserve</span><span class="wgrape">Cabernet Sauvignon</span></div>
+      <div class="wcomp">French-oak Cabernet — Bordeaux Left Bank / Médoc profile</div>
+      <div class="wacc">Sarkisyan 90 · Gold · MUNDUS VINI Gold</div>
+      <div class="wprice">฿1,500</div>
+    </div>
+    </div>
+  </section>
+  <section class="winery" id="w-vedernikov">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Vedernikov</h2>
+      <p class="winery-region">Don Valley · Rostov, Russia</p>
+      <p class="winery-intro">A Don Valley estate in Russia’s Rostov region and the country’s flagship for native Don River grapes — Krasnostop Zolotovsky was recorded here in 1814, and it is the only commercial producer of Sibirkovy. Part of the Abrau-Durso group; consistently tops Russia’s critical guides.</p>
+      <div class="accolades"><span class="acc">Champions of indigenous Don grapes</span><span class="acc">Tops the Sarkisyan Guide</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Vedernikov Sibirkovyi</span><span class="wgrape">Sibirkovyi</span></div>
+      <div class="wcomp">Mineral dry white — Assyrtiko / Grüner Veltliner style</div>
+      <div class="wacc">Sarkisyan 88</div>
+      <div class="wprice">฿575</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Vedernikov Krasnostop Rosé</span><span class="wgrape">Krasnostop Zolotovsky</span></div>
+      <div class="wcomp">Savory, structured rosé — dry Tavel / Bandol style</div>
+      <div class="wacc">Sarkisyan 88</div>
+      <div class="wprice">฿625</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Vedernikov Krasnostop Zolotovsky</span><span class="wgrape">Krasnostop Zolotovsky</span></div>
+      <div class="wcomp">Dark, peppery red — Saperavi / rustic Syrah-Tannat</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿625</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Vedernikov Krasnostop Zolotovsky, Aged in Oak</span><span class="wgrape">Krasnostop Zolotovsky</span></div>
+      <div class="wcomp">Oak-aged — barrel-aged Saperavi / Northern Rhône Syrah</div>
+      <div class="wacc">Sarkisyan Reserve 92 · Platinum</div>
+      <div class="wprice">฿1,250</div>
+    </div>
+    </div>
+  </section>
+  <section class="winery" id="w-aristov">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Aristov</h2>
+      <p class="winery-region">Taman Peninsula · Krasnodar, Russia</p>
+      <p class="winery-intro">The modern, art-driven label of Kuban-Vino on the Taman Peninsula, known for playful designer bottles. Its premium Cuvée Alexander tier is traditional-method (bottle-fermented) sparkling, developed with Italian oenologists.</p>
+      <div class="accolades"><span class="acc">Kuban-Vino modern range</span><span class="acc">Cuvée Alexander · traditional method</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Aristov Riesling</span><span class="wgrape">Riesling</span></div>
+      <div class="wcomp">Dry, mineral Riesling — German trocken / Alsace style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿610</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Aristov Cabernet Sauvignon</span><span class="wgrape">Cabernet Sauvignon</span></div>
+      <div class="wcomp">Everyday varietal Cabernet — New World / southern-French style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿615</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Cuvée Alexander Intenso Rosso, Aristov</span><span class="wgrape">Anchelotta</span></div>
+      <div class="wcomp">Deep, velvety reserve red — Ancellotta, dark Italian-style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿750</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Cuvée Alexander Blanc de Blancs Brut, Aristov</span><span class="wgrape">Chardonnay</span></div>
+      <div class="wcomp">Traditional-method blanc de blancs — Champagne style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿750</div>
+    </div>
+    </div>
+  </section>
+  <section class="winery" id="w-visokiy">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>Visokiy Bereg</h2>
+      <p class="winery-region">Kuban / Taman · Krasnodar, Russia</p>
+      <p class="winery-intro">Visokiy Bereg (“High Bank”) is the premium still-wine line of Abrau-Durso, from estate vineyards on the mineral coastal soils of the Kuban / Taman coast. Single-variety, terroir-driven wines made in a modern style.</p>
+      <div class="accolades"><span class="acc">Premium still line by Abrau-Durso</span><span class="acc">Taman terroir</span></div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Visokiy Bereg Grüner Veltliner</span><span class="wgrape">Grüner Veltliner</span></div>
+      <div class="wcomp">Peppery, crisp white — Austria’s signature grape</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿595</div>
+    </div>
+    <div class="wrow">
+      <div class="wmain"><span class="wname">Visokiy Bereg Graphite Rosé</span><span class="wgrape">Cabernet Sauvignon</span></div>
+      <div class="wcomp">Dry, pale rosé — Provence style</div>
+      <div class="wacc">—</div>
+      <div class="wprice">฿650</div>
+    </div>
+    </div>
+  </section>
+
     <footer class="foot">
       <strong>Wine &amp; Whiskey</strong><span class="sep">·</span>wine-whiskey.com<span class="sep">·</span>Prices exclude 7% VAT
     </footer>

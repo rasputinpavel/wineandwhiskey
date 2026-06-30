@@ -85,6 +85,75 @@ const sections = [
   },
 ];
 
+// --- Producer pages: winery profiles + per-wine "comparable to" + verified accolade ---
+// Ratings/awards: only VERIFIED credentials are printed (Sarkisyan/RBC guide scores,
+// CSWWC/IWC/MUNDUS VINI medals, World's Best Vineyards rank). Vivino community scores
+// were left out — Vivino blocks fetch (403), so those numbers are unverified.
+const wineries = [
+  { id: 'tamagne', name: 'Chateau Tamagne', region: 'Taman Peninsula · Krasnodar, Russia',
+    intro: 'The flagship brand of Kuban-Vino — one of the largest wineries in Europe — on the Taman Peninsula of Russia’s Black Sea coast. Its range focuses on indigenous Black Sea grapes (Saperavi, Krasnostop) alongside international varieties, and is a regular at the Decanter World Wine Awards.',
+    accolades: ['Kuban-Vino · 500+ competition medals', 'Decanter World Wine Awards regular'] },
+  { id: 'abrau', name: 'Abrau-Durso', region: 'Abrau-Durso · Krasnodar, Russia',
+    intro: 'Founded in 1870 by decree of Emperor Alexander II at Lake Abrau on the Black Sea coast, Abrau-Durso is Russia’s oldest and most famous sparkling house — and its largest. It makes both traditional-method (Champagne-style) and Charmat (Prosecco-style) sparkling wines, plus a premium still range.',
+    accolades: ['Founded 1870', 'CSWWC 2021 “Rising Star” world champion', 'Russia’s #1 sparkling house'] },
+  { id: 'sikory', name: 'Sikory', region: 'Semigorye · Krasnodar, Russia',
+    intro: 'A family-owned boutique estate founded in 2011 in the Semigorye hills near the Black Sea, worked by hand with gravity-flow and French-oak ageing, with output deliberately capped. One of Russia’s most decorated producers.',
+    accolades: ['World’s Best Vineyards 2021 · #20', 'Sarkisyan Guide regular', 'Forbes Russian wine lists'] },
+  { id: 'vedernikov', name: 'Vedernikov', region: 'Don Valley · Rostov, Russia',
+    intro: 'A Don Valley estate in Russia’s Rostov region and the country’s flagship for native Don River grapes — Krasnostop Zolotovsky was recorded here in 1814, and it is the only commercial producer of Sibirkovy. Part of the Abrau-Durso group; consistently tops Russia’s critical guides.',
+    accolades: ['Champions of indigenous Don grapes', 'Tops the Sarkisyan Guide'] },
+  { id: 'aristov', name: 'Aristov', region: 'Taman Peninsula · Krasnodar, Russia',
+    intro: 'The modern, art-driven label of Kuban-Vino on the Taman Peninsula, known for playful designer bottles. Its premium Cuvée Alexander tier is traditional-method (bottle-fermented) sparkling, developed with Italian oenologists.',
+    accolades: ['Kuban-Vino modern range', 'Cuvée Alexander · traditional method'] },
+  { id: 'visokiy', name: 'Visokiy Bereg', region: 'Kuban / Taman · Krasnodar, Russia',
+    intro: 'Visokiy Bereg (“High Bank”) is the premium still-wine line of Abrau-Durso, from estate vineyards on the mineral coastal soils of the Kuban / Taman coast. Single-variety, terroir-driven wines made in a modern style.',
+    accolades: ['Premium still line by Abrau-Durso', 'Taman terroir'] },
+];
+
+// slug -> { winery, comparable, accolade? }
+const profile = {
+  // Chateau Tamagne
+  'chateau-tamagne-grape-dance-blanc': { winery: 'tamagne', comparable: 'Vinho Verde-style — crisp, lightly spritzy young white' },
+  'chateau-tamagne-krasnostop-saperavi': { winery: 'tamagne', comparable: 'Dark indigenous blend — Southern Rhône / Malbec-Syrah character' },
+  'chateau-tamagne-nude-saperavi': { winery: 'tamagne', comparable: 'Bold unfiltered Saperavi — deep like Malbec, brooding like Syrah' },
+  'chateau-tamagne-cabernet-reserve': { winery: 'tamagne', comparable: 'Oak-aged Cabernet — mid-tier Bordeaux / New World style' },
+  'chateau-tamagne-saperavi-reserve': { winery: 'tamagne', comparable: 'Age-worthy Saperavi — serious Malbec / Northern Rhône Syrah', accolade: 'Decanter & IWC medals' },
+  'chateau-tamagne-krasnostop-reserve': { winery: 'tamagne', comparable: 'Savory, peppery Krasnostop — Northern Rhône Syrah style' },
+  'chateau-tamagne-premier-rouge-reserve': { winery: 'tamagne', comparable: 'Oak-aged Bordeaux-style blend' },
+  'chateau-tamagne-krasnostop-reserve-2016': { winery: 'tamagne', comparable: 'Flagship long-aged Krasnostop — premium Syrah style' },
+  // Abrau-Durso
+  'abrau-durso-riesling': { winery: 'abrau', comparable: 'Dry Riesling — Alsace / German trocken style' },
+  'abrau-durso-chardonnay': { winery: 'abrau', comparable: 'Still Chardonnay — cool-climate Burgundy village style' },
+  'abrau-durso-pinot-noir': { winery: 'abrau', comparable: 'Light, fresh Pinot Noir — Burgundy / cool-climate style' },
+  'abrau-durso-reserve-brut': { winery: 'abrau', comparable: 'Charmat / tank method — Prosecco-style fresh fizz' },
+  'abrau-durso-reserve-brut-rose': { winery: 'abrau', comparable: 'Charmat rosé — Prosecco rosé style', accolade: 'RWWU Cup' },
+  'abrau-durso-victor-dravigny-brut': { winery: 'abrau', comparable: 'Traditional method — Champagne-style brut', accolade: 'CSWWC 2021 Gold · National Champion' },
+  'abrau-durso-victor-dravigny-extra-brut': { winery: 'abrau', comparable: 'Traditional method, low dosage — Champagne extra brut', accolade: 'IWC Silver · 90 pts' },
+  'abrau-durso-victor-dravigny-rose': { winery: 'abrau', comparable: 'Traditional-method rosé — Champagne rosé style' },
+  'abrau-durso-brut-dor-blanc-de-noir': { winery: 'abrau', comparable: 'Blanc de Noirs — prestige Champagne style' },
+  'abrau-durso-brut-dor-riesling': { winery: 'abrau', comparable: 'Single-variety traditional-method brut' },
+  'abrau-durso-alexander-ii-brut-vintage': { winery: 'abrau', comparable: 'Vintage prestige cuvée — Champagne style' },
+  'abrau-durso-alexander-ii-brut-rose': { winery: 'abrau', comparable: 'Prestige rosé — Champagne style' },
+  // Sikory
+  'sikory-cabernet-family-reserve': { winery: 'sikory', comparable: 'French-oak Cabernet — Bordeaux Left Bank / Médoc profile', accolade: 'Sarkisyan 90 · Gold · MUNDUS VINI Gold' },
+  'sikory-gertz': { winery: 'sikory', comparable: 'Bordeaux blend + native Krasnostop — Médoc style', accolade: 'Sarkisyan 88 · Silver' },
+  // Vedernikov
+  'vedernikov-sibirkovyi': { winery: 'vedernikov', comparable: 'Mineral dry white — Assyrtiko / Grüner Veltliner style', accolade: 'Sarkisyan 88' },
+  'vedernikov-krasnostop-rose': { winery: 'vedernikov', comparable: 'Savory, structured rosé — dry Tavel / Bandol style', accolade: 'Sarkisyan 88' },
+  'vedernikov-krasnostop-zolotovsky': { winery: 'vedernikov', comparable: 'Dark, peppery red — Saperavi / rustic Syrah-Tannat' },
+  'vedernikov-krasnostop-zolotovsky-oak': { winery: 'vedernikov', comparable: 'Oak-aged — barrel-aged Saperavi / Northern Rhône Syrah', accolade: 'Sarkisyan Reserve 92 · Platinum' },
+  // Aristov
+  'aristov-riesling': { winery: 'aristov', comparable: 'Dry, mineral Riesling — German trocken / Alsace style' },
+  'aristov-cabernet-sauvignon': { winery: 'aristov', comparable: 'Everyday varietal Cabernet — New World / southern-French style' },
+  'aristov-cuvee-alexander-brut': { winery: 'aristov', comparable: 'Traditional-method blanc de blancs — Champagne style' },
+  'aristov-cuvee-alexander-intenso-rosso': { winery: 'aristov', comparable: 'Deep, velvety reserve red — Ancellotta, dark Italian-style' },
+  // Visokiy Bereg
+  'visokiy-bereg-gruner-veltliner': { winery: 'visokiy', comparable: 'Peppery, crisp white — Austria’s signature grape' },
+  'visokiy-bereg-graphite-rose': { winery: 'visokiy', comparable: 'Dry, pale rosé — Provence style' },
+};
+
+const allItems = sections.flatMap((s) => s.items);
+
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const priceBlock = (it) => {
@@ -115,6 +184,40 @@ const section = (s) => `
     </header>
     <div class="grid">${s.items.map(card).join('')}</div>
   </section>`;
+
+const wineryRow = (it) => {
+  const p = profile[it.slug];
+  const price = it.prices ? it.prices.map(([, pr]) => pr).join(' / ') : it.price;
+  return `
+    <div class="wrow">
+      <div class="wmain"><span class="wname">${esc(it.name)}</span><span class="wgrape">${esc(it.variety || '')}</span></div>
+      <div class="wcomp">${esc(p.comparable)}</div>
+      <div class="wacc">${p.accolade ? esc(p.accolade) : '—'}</div>
+      <div class="wprice">${esc(price)}</div>
+    </div>`;
+};
+
+const priceNum = (it) => Number((it.price || (it.prices && it.prices[0][1]) || '0').replace(/[^0-9.]/g, ''));
+
+const wineryPage = (w) => {
+  const items = allItems
+    .filter((it) => profile[it.slug]?.winery === w.id)
+    .sort((a, b) => priceNum(a) - priceNum(b));
+  return `
+  <section class="winery" id="w-${w.id}">
+    <header class="winery-head">
+      <p class="winery-kicker">Producer</p>
+      <h2>${esc(w.name)}</h2>
+      <p class="winery-region">${esc(w.region)}</p>
+      <p class="winery-intro">${esc(w.intro)}</p>
+      <div class="accolades">${w.accolades.map((a) => `<span class="acc">${esc(a)}</span>`).join('')}</div>
+    </header>
+    <div class="wtable">
+      <div class="wrow whead"><div class="wmain">Wine</div><div class="wcomp">Comparable to</div><div class="wacc">Rating / award</div><div class="wprice">฿</div></div>
+      ${items.map(wineryRow).join('')}
+    </div>
+  </section>`;
+};
 
 const html = `<!doctype html>
 <html lang="en">
@@ -182,6 +285,33 @@ const html = `<!doctype html>
   .foot strong{font-family:'DM Sans';font-weight:700;color:var(--wine);letter-spacing:.02em}
   .foot .sep{color:var(--stone);margin:0 8px}
 
+  /* Producers divider */
+  .producers-divider{padding:60px 0 10px}
+  .producers-divider h2{font-family:'Bebas Neue';font-size:52px;letter-spacing:.04em;color:var(--wine);text-transform:uppercase;line-height:1}
+  .producers-divider p{font-family:'Inter';font-size:14px;color:var(--graphite);max-width:680px;margin-top:10px;line-height:1.6}
+  .prod-note{font-size:12px !important;color:var(--graphite);border-left:2px solid var(--gold);padding-left:12px;margin-top:16px !important}
+  .prod-note em{color:var(--burg);font-style:italic}
+
+  /* Winery / producer pages */
+  .winery{padding:54px 0 8px}
+  .winery-head{margin-bottom:22px;max-width:780px}
+  .winery-kicker{font-family:'Inter';font-weight:600;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--gold);margin-bottom:6px}
+  .winery-head h2{font-family:'Bebas Neue';font-size:54px;letter-spacing:.03em;color:var(--wine);line-height:1;text-transform:uppercase;margin-bottom:6px}
+  .winery-region{font-family:'Inter';font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--graphite);margin-bottom:14px}
+  .winery-intro{font-family:'Inter';font-size:14px;line-height:1.6;color:var(--black);margin-bottom:16px}
+  .accolades{display:flex;flex-wrap:wrap;gap:8px}
+  .acc{font-family:'Inter';font-weight:600;font-size:11px;color:var(--burg);background:var(--cream);border:1px solid var(--stone);border-radius:999px;padding:5px 12px}
+
+  .wtable{display:flex;flex-direction:column;border-top:2px solid var(--wine)}
+  .wrow{display:grid;grid-template-columns:2.2fr 3fr 2fr .8fr;gap:14px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--stone)}
+  .wrow.whead div{font-family:'Inter';font-weight:600;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--graphite)}
+  .wmain{display:flex;flex-direction:column;gap:2px}
+  .wname{font-family:'DM Sans';font-weight:600;font-size:14px;color:var(--black);line-height:1.2}
+  .wgrape{font-family:'Inter';font-size:11.5px;color:var(--graphite)}
+  .wcomp{font-family:'Inter';font-size:12.5px;color:var(--black);line-height:1.4}
+  .wacc{font-family:'Inter';font-weight:600;font-size:11.5px;color:var(--burg);line-height:1.3}
+  .wprice{font-family:'Bebas Neue';font-size:20px;color:var(--wine);text-align:right;letter-spacing:.02em}
+
   /* Print: A4. Cover = full-bleed own page (no margin); content pages keep margins. */
   @page{size:A4;margin:14mm 12mm}
   @page cover{margin:0}
@@ -195,12 +325,20 @@ const html = `<!doctype html>
     .grid{grid-template-columns:repeat(3,1fr);gap:10mm 8mm}
     .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
     .card .shot{height:42mm}.card .shot img{max-height:42mm;filter:none}
+    .producers-divider{page-break-before:always;padding-top:0}
+    .winery{padding:18px 0 6px}
+    .winery-head{break-inside:avoid}
+    .wrow{break-inside:avoid}
     .foot{page-break-before:avoid}
   }
-  @media (max-width:520px){
+  @media (max-width:640px){
     .grid{grid-template-columns:repeat(2,1fr);gap:14px}
     .card .shot{height:150px}.card .shot img{max-height:150px}
     .cat-head h2{font-size:36px}
+    .wrow,.wrow.whead{grid-template-columns:1fr;gap:3px;padding:14px 2px}
+    .wrow.whead{display:none}
+    .wprice{text-align:left}
+    .wcomp::before{content:"≈ "}
   }
 </style>
 </head>
@@ -215,6 +353,14 @@ const html = `<!doctype html>
 
   <main class="page">
     ${sections.map(section).join('')}
+
+    <section class="producers-divider" id="producers">
+      <h2>Our Producers</h2>
+      <p>The houses behind the list — what each estate is known for, how the wines compare to international styles, and their key ratings and awards.</p>
+      <p class="prod-note">Ratings cite the <em>Authoritative Guide to Russian Wines</em> (Artur Sarkisyan) and international competitions (Decanter, IWC, MUNDUS VINI, CSWWC). “Comparable to” lines are editorial style guides based on grape character, to help place each wine for guests.</p>
+    </section>
+    ${wineries.map(wineryPage).join('')}
+
     <footer class="foot">
       <strong>Wine &amp; Whiskey</strong><span class="sep">·</span>wine-whiskey.com<span class="sep">·</span>Prices exclude 7% VAT
     </footer>
