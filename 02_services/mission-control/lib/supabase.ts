@@ -72,6 +72,8 @@ export type Supplier = {
   type: SupplierType
   payment_terms_days: number
   monthly_cycle_start_day: number   // 1 = calendar month; e.g. Harvest = 5 (5th-to-5th)
+  settlement_mode: 'cost_plus' | 'retail_minus'   // cost_plus = HC + VAT (Harvest); retail_minus = list price less discount, + VAT (Cigar Empire)
+  consignment_discount_pct: number  // retail_minus discount %, e.g. 30; 0 for cost_plus
   notes: string | null
   created_at: string
   updated_at: string
@@ -233,6 +235,7 @@ export type ConsignmentPrice = {
   sku_id: string
   price_hc: number
   price_retail: number | null
+  discount_pct: number | null   // retail_minus per-SKU override; null = supplier default
   notes: string | null
   created_at: string
   updated_at: string
