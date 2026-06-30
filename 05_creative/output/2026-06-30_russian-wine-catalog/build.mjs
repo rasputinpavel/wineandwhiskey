@@ -81,6 +81,7 @@ const sections = [
       { name: 'Barrister Gin Dry', slug: 'barrister-dry-gin', price: '฿910', detail: 'London dry gin · 0.7 L · 40%' },
       { name: 'Barrister Gin Pink', slug: 'barrister-pink-gin', price: '฿990', detail: 'Pink gin · 0.7 L · 40%' },
       { name: 'Barrister Gin Blue', slug: 'barrister-blue-gin', price: '฿990', detail: 'Blue gin · 0.7 L · 40%' },
+      { name: 'Barrister Gin Sloe', slug: 'barrister-sloe-gin', price: '฿990', detail: 'Sloe gin · Limited Edition · 26%' },
     ],
   },
 ];
@@ -325,6 +326,8 @@ const html = `<!doctype html>
     .grid{grid-template-columns:repeat(3,1fr);gap:10mm 8mm}
     .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
     .card .shot{height:42mm}.card .shot img{max-height:42mm;filter:none}
+    /* Spirits: 7 items — compact so all 3 rows fit one page (no orphan) */
+    #cat-spirits .card .shot{height:30mm}#cat-spirits .card .shot img{max-height:30mm}
     .producers-divider{page-break-before:always;padding-top:0}
     .winery{padding:18px 0 6px}
     .winery-head{break-inside:avoid}
