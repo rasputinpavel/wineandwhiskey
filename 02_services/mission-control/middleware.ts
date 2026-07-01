@@ -16,6 +16,13 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value
   const user = token ? await verifyToken(token) : null
   if (!user) {
+    // API routes must fail loudly with 401 — never a redirect. A redirect to
+    // /login returns the login page with HTTP 200, which `fetch` follows and
+    // client code reads as success, silently dropping the mutation (e.g. a
+    // supplier Terms save that "saved" but never reached the DB).
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -25,6 +32,10 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/m/')) {
     const slug = pathname.split('/')[2]
     if (slug && ITEMS.some(i => i.slug === slug) && !hasAccess(user, slug)) {
+      // Same rule for API: 403 JSON, not an HTML redirect.
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+      }
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)
