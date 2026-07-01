@@ -816,13 +816,14 @@ async function writeExpensesTab(sid: string) {
     if (rawVat > 0) {
       vat = rawVat;
       net = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? rawTotal - vat);
-      // Enforce the invariant Total = Net + VAT. total_thb is scraped separately
-      // and can glitch (e.g. PO2971 Jun-2026 stored total = subtotal, VAT dropped).
-      // Net (subtotal) and VAT are the reliable pair, so recompute the total from
-      // them instead of trusting the scraped grand total. Warn when they disagree.
+      // Enforce the invariant Total = Net + VAT. When total_thb excludes the VAT
+      // it means the VAT line was cancelled in Loyverse (manager error) — the
+      // scrape still reads the cancelled VAT amount into vat_thb but the grand
+      // total drops it (e.g. PO2971 Jun / PO2951 May 2026). Per the W&W rule
+      // "every PO carries VAT", book net+vat and flag it for a Loyverse fix.
       gross = Math.round((net + vat) * 100) / 100;
       if (Math.abs(gross - rawTotal) > 0.5) {
-        console.warn(`  ⚠ ${po.po_number}: scraped total_thb=${rawTotal.toFixed(2)} ≠ net+vat=${gross.toFixed(2)} — using net+vat (re-scrape to verify)`);
+        console.warn(`  ⚠ ${po.po_number}: total_thb=${rawTotal.toFixed(2)} excludes its VAT (cancelled VAT line in Loyverse — manager error). Booking net+vat=${gross.toFixed(2)} per W&W VAT rule; un-cancel the VAT in Loyverse.`);
       }
     } else {
       // VAT not separately broken out → assume total is VAT-inclusive.
