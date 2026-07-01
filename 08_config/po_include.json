@@ -1,0 +1,11 @@
+{
+  "_comment": "PO numbers to force-include in the Expenses tab even though their status is not Closed. Consignment suppliers (Harvest, Cigar Empire) keep POs in Pending on purpose so the units don't re-enter Loyverse stock — but the PO still carries the real amount we paid. `month` = the accounting month the expense belongs to (usually the tax-invoice month, which can differ from order_date). An entry is applied only when its `month` matches the report month.",
+  "include": [
+    {
+      "po_number": "PO2955",
+      "month": "2026-06",
+      "supplier": "Harvest Creation",
+      "reason": "Harvest consignment. PO kept Pending (received 0 of 39) so units don't re-enter stock; total_thb is the actual amount paid in June. Net 21,225 + VAT 1,485.75 = 22,710.75."
+    }
+  ]
+}

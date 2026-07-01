@@ -368,18 +368,18 @@ async function writeSalesTab(sid: string, payload: SalesPayload) {
   for (const [day, b] of [...payload.byDay.entries()].sort()) {
     rows.push([
       day,
-      Math.round(b.b2cRev),
-      Math.round(b.b2bRev),
-      Math.round(b.b2cRev + b.b2bRev),
+      Math.round(b.b2cRev * 100) / 100,
+      Math.round(b.b2bRev * 100) / 100,
+      Math.round((b.b2cRev + b.b2bRev) * 100) / 100,
     ]);
   }
   const dataEnd = rows.length;
   const t = payload.totals;
   rows.push([
     "TOTAL",
-    Math.round(t.b2cRev),
-    Math.round(t.b2bRev),
-    Math.round(t.b2cRev + t.b2bRev),
+    Math.round(t.b2cRev * 100) / 100,
+    Math.round(t.b2bRev * 100) / 100,
+    Math.round((t.b2cRev + t.b2bRev) * 100) / 100,
   ]);
   const totalRow = rows.length - 1;
 
@@ -387,7 +387,7 @@ async function writeSalesTab(sid: string, payload: SalesPayload) {
 
   const dark = { red: 0.15, green: 0.15, blue: 0.15 };
   const white = { red: 1, green: 1, blue: 1 };
-  const FMT_BAHT = { type: "CURRENCY", pattern: "#,##0\\ \"฿\"" };
+  const FMT_BAHT = { type: "CURRENCY", pattern: "#,##0.00\\ \"฿\"" };
 
   await sheets(sid, "POST", ":batchUpdate", {
     requests: [
@@ -745,7 +745,33 @@ async function writeExpensesTab(sid: string) {
   pos = pos.filter(p => !excludedPOs.has(String(p.po_number)));
   if (before !== pos.length) console.log(`  excluded ${before - pos.length} PO(s) per 08_config/po_exclude.json`);
 
-  console.log(`[Expenses] ${pos.length} closed POs in ${monthArg}`);
+  // Force-include consignment POs (Harvest, Cigar Empire) that are kept in
+  // Pending on purpose (so units don't re-enter Loyverse stock) but still
+  // represent a real payment. They're missed by the status=Closed filter.
+  // 08_config/po_include.json pins them to the accounting month they belong to.
+  try {
+    const incPath = nodePath.join(process.cwd(), "08_config", "po_include.json");
+    if (fs.existsSync(incPath)) {
+      const cfg = JSON.parse(fs.readFileSync(incPath, "utf-8"));
+      const wanted = (cfg.include ?? [])
+        .filter((e: any) => e?.po_number && String(e.month) === monthArg)
+        .map((e: any) => String(e.po_number))
+        .filter((n: string) => !pos.some(p => String(p.po_number) === n));
+      if (wanted.length) {
+        const { data: extra } = await supabase
+          .from("purchase_orders")
+          .select("po_number, order_date, supplier, status, subtotal_thb, vat_thb, total_thb")
+          .in("po_number", wanted);
+        for (const po of extra ?? []) {
+          pos.push(po);
+          console.log(`  force-included ${po.po_number} (${po.supplier}, status=${po.status}) per 08_config/po_include.json`);
+        }
+        pos.sort((a, b) => String(a.order_date ?? "").localeCompare(String(b.order_date ?? "")));
+      }
+    }
+  } catch (e) { console.warn("[Expenses] failed to load po_include.json:", e); }
+
+  console.log(`[Expenses] ${pos.length} POs in ${monthArg} (Closed + force-included consignment)`);
 
   // Net / VAT / Total come straight from the XHR-derived columns:
   //   subtotal_thb = orderData.amount/100   (after PO-level discount, no VAT)
@@ -782,15 +808,25 @@ async function writeExpensesTab(sid: string) {
   let totalNet = 0, totalVat = 0, totalGross = 0;
   let inclusiveCount = 0;
   pos.forEach((po, i) => {
-    const gross = Number(po.total_thb ?? 0);
+    const rawTotal = Number(po.total_thb ?? 0);
     const rawVat = Number(po.vat_thb ?? 0);
     let net: number;
     let vat: number;
+    let gross: number;
     if (rawVat > 0) {
       vat = rawVat;
-      net = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? gross - vat);
+      net = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? rawTotal - vat);
+      // Enforce the invariant Total = Net + VAT. total_thb is scraped separately
+      // and can glitch (e.g. PO2971 Jun-2026 stored total = subtotal, VAT dropped).
+      // Net (subtotal) and VAT are the reliable pair, so recompute the total from
+      // them instead of trusting the scraped grand total. Warn when they disagree.
+      gross = Math.round((net + vat) * 100) / 100;
+      if (Math.abs(gross - rawTotal) > 0.5) {
+        console.warn(`  ⚠ ${po.po_number}: scraped total_thb=${rawTotal.toFixed(2)} ≠ net+vat=${gross.toFixed(2)} — using net+vat (re-scrape to verify)`);
+      }
     } else {
       // VAT not separately broken out → assume total is VAT-inclusive.
+      gross = rawTotal;
       vat = Math.round((gross * 7 / 107) * 100) / 100;
       net = Math.round((gross - vat) * 100) / 100;
       inclusiveCount++;
@@ -820,7 +856,7 @@ async function writeExpensesTab(sid: string) {
 
   const dark = { red: 0.15, green: 0.15, blue: 0.15 };
   const white = { red: 1, green: 1, blue: 1 };
-  const FMT_BAHT = { type: "CURRENCY", pattern: "#,##0\\ \"฿\"" };
+  const FMT_BAHT = { type: "CURRENCY", pattern: "#,##0.00\\ \"฿\"" };
 
   await sheets(sid, "POST", ":batchUpdate", {
     requests: [
@@ -848,9 +884,14 @@ interface ManagerSchedule {
   // Per-manager commission percentage (fallback when sheet cell is empty).
   commissions?: Record<string, number>;
   // Per-manager fixed monthly salary in THB (fallback when sheet cell empty).
+  // Already prorated by shifts when shift-based pay applies.
   fixed?: Record<string, number>;
   // Per-manager advances already paid this month (fallback when sheet cell empty).
   paid?: Record<string, number>;
+  // Shift-based pay breakdown (optional) — used to explain how `fixed` was derived.
+  nominal_fixed?: Record<string, number>; // full-month salary before proration
+  shifts?: Record<string, number>;        // shifts actually worked (halves allowed)
+  shift_baseline?: number;                 // shifts = full pay (days-in-month ÷ 2)
   days: Record<string, Record<string, number | string>>;
   remarks?: Record<string, string>;
 }
@@ -994,11 +1035,26 @@ async function writeBonusesTab(sid: string) {
   const bonusRow = rows.length - 1;
 
   // Fix ฿ row — editable monthly fixed salary per manager.
+  // When the schedule carries shift-based pay data, explain how each fix was
+  // derived (nominal × worked/baseline) so the deviation from the nominal
+  // salary is auditable later.
+  const fmtN = (n: number) => n.toLocaleString("en-US");
+  const baseline = sched.shift_baseline;
+  const fixNote = (sched.shifts && sched.nominal_fixed && baseline)
+    ? managers.map(m => {
+        const sh = sched.shifts![m], nom = sched.nominal_fixed![m];
+        if (sh == null || nom == null) return null;
+        const prorated = Math.round(nom * sh / baseline * 100) / 100;
+        const dev = Math.round((sh - baseline) * 10) / 10;
+        const devStr = dev === 0 ? "on baseline" : `${dev > 0 ? "+" : ""}${dev} shift${Math.abs(dev) === 1 ? "" : "s"}`;
+        return `${m}: ${fmtN(nom)} × ${sh}/${baseline} = ${fmtN(prorated)} (${devStr})`;
+      }).filter(Boolean).join("  ·  ")
+    : "↑ edit to adjust monthly fixed salary";
   rows.push([
     "Fix ฿",
     ...managers.map(m => initialFixed[m]),
     "",
-    "↑ edit to adjust monthly fixed salary",
+    fixNote,
   ]);
   const fixRow = rows.length - 1;
 
