@@ -409,7 +409,11 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
 
   // Projection logic only matters for the current month. Past months are final.
   const currentBucket = byMonth.get(currentYm) ?? empty()
-  const scale = isCurrent && currentDaysPassed > 0 ? currentDaysInMonth / currentDaysPassed : 1
+  // B2C pace is based on *completed* days only — today is still in progress, so
+  // counting it as a full elapsed day (daysPassed) halves the run-rate on early
+  // days. Denominator = daysPassed − 1, floored at 1 to avoid /0 on day 1.
+  const completedDays = Math.max(1, currentDaysPassed - 1)
+  const scale = isCurrent && currentDaysPassed > 0 ? currentDaysInMonth / completedDays : 1
   const projB2C        = (isCurrent ? selectedBucket.b2c : 0) * (isCurrent ? scale : 1)
   const projRevenue    = isCurrent
     ? projB2C + selectedBucket.b2b + b2bDueByEom
@@ -727,7 +731,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           <p><span className="text-deep-black">Supplier payments</span> = Σ purchase orders whose payment date falls in the month. Payment date = <span className="font-mono">paid_at</span> if explicitly set, else <span className="font-mono">order_date + supplier.payment_terms_days</span> (0d for unknown suppliers). POs without paid_at whose computed date ≤ today are treated as paid. Consignment (Harvest) is taken from the monthly settlement PO — Harvest raises one PO per month (the invoice; other arrivals are Loyverse stock adjustments, not POs), so the PO is the source of truth. It&apos;s booked by payment date. POs settled before the ownership handover (before May 2026) are excluded and flagged.</p>
           <p><span className="text-deep-black">Gross Profit</span> = Revenue − Supplier payments. Not the bookkeeping COGS — it&apos;s the cash margin after settling what&apos;s due to suppliers this month. <span className="text-deep-black">GM% (reference)</span> in the waterfall sub-line is the unit-economics margin from Loyverse cost_total — not used in Net.</p>
           <p><span className="text-deep-black">Fixed costs MTD</span> = fixed-THB portion (rent, payroll, …) pro-rated by days, plus pct-of-revenue rows (taxes, royalties, …) × revenue. No buffer. The list is configured in <Link href="/m/fixed-costs" className="text-wine-red hover:underline">Fixed Costs</Link>. For closed months in the 12-month trend we apply the current monthly value to all of them — no history yet.</p>
-          <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace × scale + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
+          <p><span className="text-deep-black">Projection EOM</span>: revenue = B2C pace (MTD ÷ completed days, i.e. excluding today-in-progress) × days-in-month + B2B already paid this month + open FA invoices whose due date falls by month-end. Supplier payments = full-month sum (already known). Net = projected revenue − projected supplier payments − full monthly fixed.</p>
           <p><span className="text-deep-black">Cash control AP</span> = supplier payments scheduled <em>after</em> today (future obligations). &quot;We pay on time&quot; → past-due POs are assumed settled. Operations tab applies a 14-day grace for surfacing recently-issued invoices; that view is intentionally different.</p>
           <p><span className="text-deep-black">Owner salary</span> is not in fixed costs by current policy — Net is the full take-home before tax.</p>
         </div>
