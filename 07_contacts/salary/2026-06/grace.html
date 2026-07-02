@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Payslip — Grace — June 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F0EB;
+    --cream: #EDE0D0;
+    --text: #1A1A1A;
+    --text-2: #3D3D3D;
+    --border: #D4C9BC;
+    --wine: #8C1C1C;
+    --gold: #C9A84C;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--cream);
+    color: var(--text);
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    width: 480px;
+    max-width: calc(100% - 32px);
+    margin: 48px auto;
+    background: var(--bg);
+    padding: 48px 40px 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 18px rgba(26, 26, 26, 0.06);
+  }
+
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+    margin-bottom: 36px;
+  }
+  .wordmark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.18em;
+    color: var(--text);
+  }
+  .overline {
+    font-family: "Inter", sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
+  .title-block { margin-bottom: 32px; }
+  .display {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 56px;
+    line-height: 0.95;
+    letter-spacing: 0.04em;
+    margin: 0;
+    color: var(--text);
+  }
+  .display .accent { color: var(--wine); display: block; }
+  .recipient {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--text-2);
+    margin-top: 14px;
+  }
+  .recipient strong { color: var(--text); font-weight: 600; }
+
+  .section {
+    margin-bottom: 28px;
+  }
+  .section-label {
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--wine);
+    margin: 0 0 8px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    gap: 16px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--text-2); }
+  .row .v {
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .row .v.minus { color: var(--wine); }
+  .row.total {
+    border-top: 1.5px solid var(--text);
+    border-bottom: none;
+    margin-top: 2px;
+    padding-top: 12px;
+    font-weight: 600;
+  }
+  .row.total .k { color: var(--text); }
+
+  .net {
+    background: var(--text);
+    color: var(--bg);
+    border-radius: 8px;
+    padding: 24px 28px;
+    margin-top: 12px;
+    margin-bottom: 32px;
+    text-align: left;
+  }
+  .net-label {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .net-amount {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 56px;
+    letter-spacing: 0.03em;
+    line-height: 1;
+    color: var(--bg);
+  }
+  .net-amount .currency {
+    font-size: 18px;
+    color: var(--gold);
+    margin-right: 8px;
+    letter-spacing: 0.18em;
+  }
+  .net-sub {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(245, 240, 235, 0.18);
+    display: flex;
+    justify-content: space-between;
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    color: rgba(245, 240, 235, 0.85);
+    font-variant-numeric: tabular-nums;
+  }
+  .net-sub.balance {
+    font-weight: 600;
+    color: var(--gold);
+    font-size: 14px;
+  }
+
+  .meta {
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+  .meta .k {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .note {
+    margin-top: 18px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .footer {
+    margin-top: 28px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+  .footer .mark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  /* Single continuous page sized to content — no pagination, for messenger sharing. */
+  @page { size: 480px 1382px; margin: 0; }
+  @media print {
+    html, body { background: #fff; }
+    .sheet {
+      width: 480px;
+      max-width: none;
+      margin: 0 auto;
+      box-shadow: none;
+      border: none;
+      border-radius: 0;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+  }
+  @media (max-width: 520px) {
+    .sheet { padding: 32px 24px; }
+    .display { font-size: 44px; }
+    .net-amount { font-size: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="topbar">
+    <div class="wordmark">WINE &amp; WHISKEY</div>
+    <div class="overline">June 2026</div>
+  </div>
+
+  <div class="title-block">
+    <h1 class="display">Payslip<span class="accent">June 2026</span></h1>
+    <div class="recipient">Issued to <strong>Ms. Nutsaphorn (Grace) Sakulsrisurin</strong></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Earnings</div>
+    <div class="row"><span class="k">Base salary (full month = 15 shifts)</span><span class="v">18,000.00</span></div>
+    <div class="row"><span class="k">Commission (1% of B2C ฿106,879.50)</span><span class="v">1,068.80</span></div>
+    <div class="row"><span class="k">Shift adjustment (17 shifts worked · +2 × ฿1,200)</span><span class="v">2,400.00</span></div>
+    <div class="row total"><span class="k">Total</span><span class="v">21,468.80</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Deductions</div>
+    <div class="row"><span class="k">Withholding tax</span><span class="v">—</span></div>
+    <div class="row"><span class="k">SSO (5%)</span><span class="v">875.00</span></div>
+    <div class="row"><span class="k">Other</span><span class="v">—</span></div>
+    <div class="row total"><span class="k">Total</span><span class="v">875.00</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Advances Paid in June</div>
+    <div class="row"><span class="k">4 June — advance</span><span class="v">2,000.00</span></div>
+    <div class="row"><span class="k">15 June — advance</span><span class="v">7,000.00</span></div>
+    <div class="row total"><span class="k">Total advanced</span><span class="v">9,000.00</span></div>
+  </div>
+
+  <div class="net">
+    <div class="net-label">Balance to Transfer — June 2026</div>
+    <div class="net-amount"><span class="currency">THB</span>11,593.80</div>
+    <div class="net-sub"><span>Net salary (after SSO)</span><span>20,593.80</span></div>
+    <div class="net-sub"><span>Less advances paid</span><span>− 9,000.00</span></div>
+  </div>
+
+  <div class="meta">
+    <div>
+      <span class="k">Employer</span>
+      New Latitude Co., Ltd.
+    </div>
+    <div>
+      <span class="k">National ID</span>
+      1 3014 00147 77 3
+    </div>
+    <div>
+      <span class="k">Transferred to</span>
+      Kasikorn Bank · 1332988170<br>
+      Nutsaphorn Sakulsrisurin
+    </div>
+  </div>
+
+  <div class="note">
+    Base salary covers a full 2:2 month of 15 shifts. Shifts above or below 15 are settled at ฿1,200/shift (Shift adjustment). Store hours 11:00&nbsp;–&nbsp;22:00.
+  </div>
+
+  <div class="footer">
+    <div class="mark">WINE &amp; WHISKEY</div>
+    Phuket, Thailand · Open daily 11:00 – 22:00
+  </div>
+
+</div>
+
+</body>
+</html>
