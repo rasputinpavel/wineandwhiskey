@@ -885,14 +885,9 @@ interface ManagerSchedule {
   // Per-manager commission percentage (fallback when sheet cell is empty).
   commissions?: Record<string, number>;
   // Per-manager fixed monthly salary in THB (fallback when sheet cell empty).
-  // Already prorated by shifts when shift-based pay applies.
   fixed?: Record<string, number>;
   // Per-manager advances already paid this month (fallback when sheet cell empty).
   paid?: Record<string, number>;
-  // Shift-based pay breakdown (optional) — used to explain how `fixed` was derived.
-  nominal_fixed?: Record<string, number>; // full-month salary before proration
-  shifts?: Record<string, number>;        // shifts actually worked (halves allowed)
-  shift_baseline?: number;                 // shifts = full pay (days-in-month ÷ 2)
   days: Record<string, Record<string, number | string>>;
   remarks?: Record<string, string>;
 }
@@ -1036,26 +1031,11 @@ async function writeBonusesTab(sid: string) {
   const bonusRow = rows.length - 1;
 
   // Fix ฿ row — editable monthly fixed salary per manager.
-  // When the schedule carries shift-based pay data, explain how each fix was
-  // derived (nominal × worked/baseline) so the deviation from the nominal
-  // salary is auditable later.
-  const fmtN = (n: number) => n.toLocaleString("en-US");
-  const baseline = sched.shift_baseline;
-  const fixNote = (sched.shifts && sched.nominal_fixed && baseline)
-    ? managers.map(m => {
-        const sh = sched.shifts![m], nom = sched.nominal_fixed![m];
-        if (sh == null || nom == null) return null;
-        const prorated = Math.round(nom * sh / baseline * 100) / 100;
-        const dev = Math.round((sh - baseline) * 10) / 10;
-        const devStr = dev === 0 ? "on baseline" : `${dev > 0 ? "+" : ""}${dev} shift${Math.abs(dev) === 1 ? "" : "s"}`;
-        return `${m}: ${fmtN(nom)} × ${sh}/${baseline} = ${fmtN(prorated)} (${devStr})`;
-      }).filter(Boolean).join("  ·  ")
-    : "↑ edit to adjust monthly fixed salary";
   rows.push([
     "Fix ฿",
     ...managers.map(m => initialFixed[m]),
     "",
-    fixNote,
+    "↑ edit to adjust monthly fixed salary",
   ]);
   const fixRow = rows.length - 1;
 
