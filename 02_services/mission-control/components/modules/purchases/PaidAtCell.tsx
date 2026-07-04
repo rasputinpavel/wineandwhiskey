@@ -71,10 +71,9 @@ export function PaidAtCell({ poId, initial }: {
   if (!paidAt) {
     return (
       <button
-        onClick={() => save(bangkokToday())}
+        onClick={() => setEditing(true)}
         disabled={saving}
-        title="Click — отметить оплаченным сегодня. Дважды-click — выбрать дату."
-        onDoubleClick={() => setEditing(true)}
+        title="Click — открыть форму оплаты (дата сегодня по умолчанию, подтвердить ✓)."
         className="text-xs px-2 py-0.5 rounded-sm border bg-cream text-graphite border-pale-stone hover:border-wine-red hover:text-wine-red disabled:opacity-50"
       >
         + paid
