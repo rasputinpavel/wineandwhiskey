@@ -35,6 +35,7 @@ export type SettlementRow = {
   b2c: number; b2cAuto: number; b2cOverride: number | null
   b2b: number; b2bAuto: number; b2bOverride: number | null
   tastings: number; sold: number; hc: number | null; amount: number | null
+  onHand: number | null   // live Loyverse stock (v_sku_breakdown.on_hand) for period-end reconciliation
 }
 
 export type ConsignmentSettlement = {
@@ -49,6 +50,7 @@ export type ConsignmentSettlement = {
   excluded: string[]; exclTableMissing: boolean; delTableMissing: boolean
   closedAt: string | null
   closings: { sku_id: string; closing: number }[]
+  reconMismatches: number   // # of SKUs whose Closing ≠ Loyverse ON HAND — must be reviewed before Close
 }
 
 export async function computeConsignmentSettlement(
@@ -169,6 +171,24 @@ export async function computeConsignmentSettlement(
     }
   }
 
+  // Live Loyverse on-hand per SKU (inventory.v_sku_breakdown). The report's
+  // Closing is a forward formula (Opening + Delivered − Sold − Tastings) seeded
+  // from a hand-entered Opening — it NEVER reads live stock, so it drifts
+  // silently (tastings/breakage not logged, deliveries not entered, off-till
+  // festival pours, handover-count errors). Surfacing ON HAND next to Closing is
+  // the period-end reconciliation: at Close, every SKU's Closing must equal it.
+  const onHandBySku = new Map<string, number>()
+  {
+    const ids = reportSkus.map(r => r.sku_id)
+    if (ids.length) {
+      const { data } = await sbInventory
+        .from('v_sku_breakdown').select('sku_id, on_hand').in('sku_id', ids)
+      for (const b of (data ?? []) as Array<{ sku_id: string; on_hand: number }>) {
+        onHandBySku.set(b.sku_id, Number(b.on_hand))
+      }
+    }
+  }
+
   // Build rows.
   const rows: SettlementRow[] = reportSkus
     .map(rs => {
@@ -196,7 +216,8 @@ export async function computeConsignmentSettlement(
       const effDiscount = mode === 'retail_minus' ? (rs.skuDiscount ?? supplierDiscountPct) : 0
       const hc = consignmentLineCost({ mode, basePrice, discountPct: effDiscount })
       const amount = hc == null ? null : sold * hc         // tastings are free → excluded
-      return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount }
+      const onHand = onHandBySku.get(rs.sku_id) ?? null
+      return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount, onHand }
     })
     .sort((a, b) => (b.sold + b.tastings + b.delivered) - (a.sold + a.tastings + a.delivered) || a.sku_name.localeCompare(b.sku_name))
 
@@ -218,6 +239,10 @@ export async function computeConsignmentSettlement(
   }
   const closings = rows.filter(r => r.closing != null).map(r => ({ sku_id: r.sku_id, closing: r.closing as number }))
 
+  // Reconciliation: count SKUs whose Closing ≠ live Loyverse on-hand. Only rows
+  // where both are known count (unpriced/no-opening rows have null closing).
+  const reconMismatches = rows.filter(r => r.closing != null && r.onHand != null && r.closing !== r.onHand).length
+
   const subtotal = totals.amount
   const vat = subtotal * CONSIGNMENT_VAT_RATE
   const grandTotal = subtotal + vat
@@ -232,5 +257,6 @@ export async function computeConsignmentSettlement(
     unpricedSold,
     excluded, exclTableMissing, delTableMissing,
     closedAt, closings,
+    reconMismatches,
   }
 }

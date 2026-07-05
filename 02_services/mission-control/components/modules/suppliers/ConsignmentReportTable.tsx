@@ -11,9 +11,10 @@ export type ReportRow = {
   sold: number; tastings: number
   closing: number | null; closingAuto: number | null; closingManual: number | null
   hc: number | null; amount: number | null
+  onHand: number | null
 }
 
-type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'sold' | 'tastings' | 'closing' | 'hc' | 'amount'
+type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'sold' | 'tastings' | 'closing' | 'onHand' | 'hc' | 'amount'
 
 const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right' }> = [
   { key: 'sku_name', label: 'SKU', align: 'left' },
@@ -24,6 +25,7 @@ const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right' }> = [
   { key: 'sold', label: 'TOTAL', align: 'right' },
   { key: 'tastings', label: 'Tastings', align: 'right' },
   { key: 'closing', label: 'Closing', align: 'right' },
+  { key: 'onHand', label: 'Loyverse', align: 'right' },
   { key: 'hc', label: 'HC ฿', align: 'right' },
   { key: 'amount', label: 'Amount ฿', align: 'right' },
 ]
@@ -76,9 +78,9 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
   const totals = rows.reduce((acc, r) => {
     acc.opening += r.opening ?? 0; acc.delivered += r.delivered
     acc.b2c += r.b2c; acc.b2b += r.b2b; acc.sold += r.sold; acc.tastings += r.tastings
-    acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0
+    acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0; acc.onHand += r.onHand ?? 0
     return acc
-  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, sold: 0, tastings: 0, closing: 0, amount: 0 })
+  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, sold: 0, tastings: 0, closing: 0, amount: 0, onHand: 0 })
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
@@ -101,7 +103,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
         </thead>
         <tbody>
           {sorted.length === 0 && (
-            <tr><td colSpan={10} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
+            <tr><td colSpan={11} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
           )}
           {sorted.map(r => (
             <tr key={r.sku_id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
@@ -130,6 +132,15 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
               <td className="py-2 px-3 text-right">
                 <ClosingCell supplierId={supplierId} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
               </td>
+              <td className="py-2 px-3 text-right tabular-nums">
+                {r.onHand == null
+                  ? <span className="text-graphite/40">—</span>
+                  : (r.closing != null && r.closing !== r.onHand)
+                    ? <span className="text-wine-red font-medium" title={`Closing ${r.closing} ≠ Loyverse on-hand ${r.onHand} — reconcile before closing`}>
+                        {r.onHand}<span className="ml-1 text-[10px]">Δ{r.closing - r.onHand > 0 ? '+' : ''}{r.closing - r.onHand}</span>
+                      </span>
+                    : <span className="text-emerald-700">{r.onHand}</span>}
+              </td>
               <td className="py-2 px-3 text-right tabular-nums text-graphite">{r.hc == null ? <span className="text-amber-gold">n/a</span> : r.hc.toLocaleString('en-US')}</td>
               <td className="py-2 px-3 text-right tabular-nums font-medium">{r.amount == null ? <span className="text-amber-gold">n/a</span> : r.amount ? `฿${Math.round(r.amount).toLocaleString('en-US')}` : <span className="text-graphite/40">—</span>}</td>
             </tr>
@@ -144,6 +155,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
               <td className="py-2 px-3 text-right tabular-nums">{totals.sold}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.tastings}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.closing}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{totals.onHand}</td>
               <td className="py-2 px-3"></td>
               <td className="py-2 px-3 text-right tabular-nums">฿{Math.round(totals.amount).toLocaleString('en-US')}</td>
             </tr>

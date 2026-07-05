@@ -350,12 +350,12 @@ export function ClosePeriodButton({ supplierId, period, closings, closedAt }: {
 }
 
 export function ExportCsvButton({ rows, period, supplierName }: {
-  rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; hc: number | string; amount: number | string }>
+  rows: Array<{ sku: string; opening: number | null; delivered: number; b2c: number; b2b: number; total: number; tastings: number; closing: number | null; on_hand: number | null; hc: number | string; amount: number | string }>
   period: string
   supplierName: string
 }) {
   function download() {
-    const header = ['SKU', `Opening (${period})`, 'Delivered', 'Sold B2C', 'Sold B2B', 'TOTAL', 'Tastings', `Closing (${period})`, 'HC price', 'Amount (HC)']
+    const header = ['SKU', `Opening (${period})`, 'Delivered', 'Sold B2C', 'Sold B2B', 'TOTAL', 'Tastings', `Closing (${period})`, 'Loyverse on-hand', 'HC price', 'Amount (HC)']
     const csv = [header.join(',')].concat(
       rows.map(r => [
         JSON.stringify(r.sku),
@@ -366,6 +366,7 @@ export function ExportCsvButton({ rows, period, supplierName }: {
         r.total,
         r.tastings,
         r.closing ?? '',
+        r.on_hand ?? '',
         r.hc,
         r.amount,
       ].join(','))

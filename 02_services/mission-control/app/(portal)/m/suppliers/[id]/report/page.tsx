@@ -32,7 +32,7 @@ export default async function SupplierMonthlyReportPage({
   if (!settlement) return <div className="text-graphite">Supplier not found.</div>
   const {
     supplier: s, mode, label, rows, subtotal, vat, grandTotal, unpricedSold,
-    excluded, exclTableMissing, delTableMissing, closedAt, closings,
+    excluded, exclTableMissing, delTableMissing, closedAt, closings, reconMismatches,
   } = settlement
   const unitWord = mode === 'retail_minus' ? 'list' : 'HC'   // 'HC' is Harvest jargon
 
@@ -60,7 +60,7 @@ export default async function SupplierMonthlyReportPage({
           >next →</Link>
           <ClosePeriodButton supplierId={id} period={period} closedAt={closedAt} closings={closings} />
           <ExportCsvButton
-            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, hc: r.hc == null ? 'n/a' : r.hc, amount: r.amount == null ? 'n/a' : Math.round(r.amount) }))}
+            rows={rows.map(r => ({ sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b, total: r.sold, tastings: r.tastings, closing: r.closing, on_hand: r.onHand, hc: r.hc == null ? 'n/a' : r.hc, amount: r.amount == null ? 'n/a' : Math.round(r.amount) }))}
             period={period}
             supplierName={s.name}
           />
@@ -69,6 +69,20 @@ export default async function SupplierMonthlyReportPage({
 
       {delTableMissing && (
         <p className="mb-3 text-[12px] text-wine-red">Deliveries table missing — apply migration 022_consignment_delivery.sql in Supabase (the Delivered column reads 0 until then).</p>
+      )}
+
+      {rows.length > 0 && (
+        reconMismatches === 0 ? (
+          <p className="mb-3 text-[12px] text-emerald-700">
+            ✓ Closing reconciles with Loyverse on-hand on every SKU — safe to close the period.
+          </p>
+        ) : (
+          <p className="mb-3 text-[12px] text-wine-red">
+            ⚠ {reconMismatches} SKU{reconMismatches > 1 ? 's' : ''} differ from Loyverse on-hand (see the <strong>Loyverse</strong> column, red Δ).
+            Reconcile before closing — every Closing should equal Loyverse ON HAND. Formula &gt; Loyverse = stock left without a sale (tasting/breakage/loss or opening drift);
+            formula &lt; Loyverse = an arrival not logged on Deliveries.
+          </p>
+        )
       )}
 
       <ConsignmentReportTable supplierId={id} period={period} rows={rows} mode={mode} />
