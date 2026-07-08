@@ -13,9 +13,12 @@ function fmtShort(iso: string): string {
   return `${d}.${m}.${y.slice(2)}`
 }
 
-export function PaidAtCell({ poId, initial }: {
+export function PaidAtCell({ poId, initial, onSaved }: {
   poId: number
   initial: string | null
+  // Если задан — родитель сам решает, что делать после сохранения (анимация ухода
+  // строки + ресинк). Иначе делаем router.refresh() как раньше.
+  onSaved?: (value: string | null) => void
 }) {
   const router = useRouter()
   const [paidAt, setPaidAt] = useState<string | null>(initial)
@@ -34,7 +37,8 @@ export function PaidAtCell({ poId, initial }: {
       if (res.ok) {
         setPaidAt(value)
         setEditing(false)
-        router.refresh()
+        if (onSaved) onSaved(value)
+        else router.refresh()
       }
     } finally { setSaving(false) }
   }
