@@ -29,7 +29,8 @@ async function stockTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[]>
   const items = await fetchStockCandidates();
   if (items.length === 0) return [];
   const cands = items.map((it, i) => ({ ref: i, text: stockText(it) }));
-  const picks = await rankCandidates(profile.label, profile.grape, cands, lang);
+  const anchorNote = [profile.grape, profile.region].filter(Boolean).join(", ");
+  const picks = await rankCandidates(profile.label, anchorNote, cands, lang);
   return picks.map((p) => {
     const it = items[p.ref];
     const dir = directionForThb(profile.marketUsd, it.priceThb);
@@ -41,7 +42,8 @@ async function catalogTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[
   const items = await fetchCatalogCandidates(profile);
   if (items.length === 0) return [];
   const cands = items.map((it, i) => ({ ref: i, text: catalogText(it) }));
-  const picks = await rankCandidates(profile.label, profile.grape, cands, lang);
+  const anchorNote = [profile.grape, profile.region].filter(Boolean).join(", ");
+  const picks = await rankCandidates(profile.label, anchorNote, cands, lang);
   return picks.map((p) => {
     const it = items[p.ref];
     const dir = directionForThb(profile.marketUsd, it.priceThb);

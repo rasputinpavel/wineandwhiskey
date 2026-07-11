@@ -59,13 +59,16 @@ export async function rankCandidates(
     const resp = await anthropic.messages.create(params);
     if (resp.stop_reason === "refusal") return [];
     const txt = resp.content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
       .join("")
       .trim();
     const parsed = JSON.parse(txt) as { picks: RankPick[] };
     const valid = new Set(candidates.map((c) => c.ref));
-    return parsed.picks.filter((p) => valid.has(p.ref)).slice(0, 3);
+    const seen = new Set<number>();
+    return parsed.picks
+      .filter((p) => valid.has(p.ref) && !seen.has(p.ref) && (seen.add(p.ref), true))
+      .slice(0, 3);
   } catch (err) {
     console.error("rank failed:", err);
     return [];
