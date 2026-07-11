@@ -29,17 +29,24 @@
 
 - **Сток Loyverse** и **каталог поставщиков** (`wine_items`) живут в **mission-control**
   (туда переехал бывший price-service; там же Loyverse-синк и Vivino-обогащение).
-  `wine_items` структурирован: `supplier_name, name, country, region, grape_variety,
-  price, year, volume, description` + Vivino-поля.
-- У Алана **отдельный Supabase-проект** (`arbturzdpqvulsqwqpbd`) — там только его кэш
-  `alan_wine_cache`. Поэтому к стоку и каталогу Алан ходит **через публичный read-API
-  mission-control**, а не в чужую БД напрямую (схема каталога живёт под миграциями
-  mission-control и меняется).
-- Уже есть образец публичного эндпоинта с секретом: `/api/public/payables-alerts`
-  (`PAYABLES_ALERT_SECRET`), `/api/public/vivino/lookup` (`STOREFRONT_API_KEY`).
+- **Проект Supabase у Алана и mission-control — ОДИН И ТОТ ЖЕ** (`arbturzdpqvulsqwqpbd`),
+  подтверждено: ключом Алана читаются `wine_items` (public), `purchase_orders` (public)
+  и `inventory.v_sku_breakdown` — все HTTP 200. Поэтому Алан читает сток и каталог
+  **напрямую из Supabase своим существующим ключом** — новые эндпоинты/секреты не нужны
+  (решение пользователя, 2026-07-11).
+- **Каталог поставщиков** — таблица `public.wine_items`. Ключевые поля:
+  `name, supplier_name, country, region, grape_variety, price, year, volume,
+  winery, category ('wine'|'spirits'|'beer'|'other'), wine_type
+  ('red'|'white'|'rose'|'orange'|'sparkling'), vivino_rating, vivino_reviews_count`.
+- **Сток в наличии** — вью `inventory.v_sku_breakdown` (схема `inventory`, читается через
+  заголовок `Accept-Profile: inventory`). Поля: `sku_id, loyverse_product_code, name,
+  wine_color ('red'|'white'|'rose'|'sparkling'|'orange'|null), grape_variety,
+  wine_country, default_price, on_hand`. Вино = `wine_color` не null; в наличии = `on_hand > 0`.
+- Цены `wine_items.price` и `v_sku_breakdown.default_price` — в **THB** (тайские прайсы
+  и Loyverse). Мировые аналоги — в **USD**. Нормализуем через `priceLocal.ts`.
 - В Алане есть seam `src/sources/` (реализации `WineDataSource`) и утилиты
-  `priceLocal.ts` (THB↔USD, курс и тайский импортный множитель), `session.ts`
-  (контекст последнего разбора, TTL 1 час).
+  `priceLocal.ts` (THB↔USD `thbToUsd`/`usdToThb`, `THAI_IMPORT_MULT = 2.4`),
+  `session.ts` (контекст последнего разбора, TTL 1 час), `qpr.ts` (`qprRating`).
 
 ## UX и поток
 
@@ -90,25 +97,26 @@
   - `цена и качество рядом` → «ровня»
   - `дороже + заметно качественнее` → «апгрейд»
 
-## Новые публичные эндпоинты (mission-control)
+## Доступ к данным (напрямую из Supabase)
 
-Оба — read-only, авторизация общим секретом в заголовке (новый env `RECO_API_SECRET`,
-задаётся в mission-control и в Алане), по образцу payables-alerts.
+Алан заводит собственный Supabase-клиент (тот же URL/ключ, что у кэша — `cache.ts`),
+и читает две сущности:
 
-**`GET /api/public/stock-candidates`**
-Винный сток в наличии из Loyverse-инвентаря (on-hand > 0). Поля: name, price THB,
-category, on-hand; если позиция слинкована с каталогом (`supplier_sku` /
-`sku_wine_match_report`) — обогащённая сортом/страной. Возвращает весь винный сток
-(сотни строк). Только вино (spirits/сигары отсекаются по категории).
+**Сток в наличии** — `inventory.v_sku_breakdown`, клиент со схемой `inventory`
+(`{ db: { schema: 'inventory' } }`), фильтры `.gt('on_hand', 0)` и `wine_color` не null.
+Возвращает весь винный сток в наличии (сотни строк — весь список идёт в LLM).
 
-**`GET /api/public/catalog-candidates?type=&grape=&country=&priceMinUsd=&priceMaxUsd=`**
-Префильтр по `wine_items`: тот же тип + совпадение по сорту/стране + ценовой коридор,
-лимит ~50, только вино. Поля: name, supplier_name, price, country, region,
-grape_variety, year, Vivino-поля.
+**Каталог поставщиков** — `public.wine_items`, префильтр:
+`category = 'wine'`, `wine_type = <тип якоря>`, совпадение по сорту (`ilike grape_variety`)
+или стране (`ilike country`), ценовой коридор в THB (см. ниже), лимит 50, сортировка по
+`vivino_rating desc nulls last`. Шортлист (~50) идёт в LLM.
 
-**Проверить на этапе плана (verifiable):** совпадает ли Supabase-проект Алана с
-mission-control. Эндпоинты предпочтительны в любом случае (изоляция схемы), но факт
-влияет на то, как mission-control достаёт Loyverse-инвентарь.
+**Ценовой коридор (грубый, задача — срезать тысячи строк до ~50):** если у якоря известен
+`marketUsd`, тайский эквивалент ≈ `marketUsd × THAI_IMPORT_MULT (2.4)`; коридор в THB —
+`[usdToThb(marketUsd) × 0.7 … usdToThb(marketUsd × 2.4) × 1.6]` (широкий, чтобы захватить
+и «дешевле», и «апгрейд»). Если `marketUsd` неизвестен — фильтр по цене пропускается,
+опираемся на тип+сорт/страну+лимит. Точную «дешевле/ровня/апгрейд» считает уже
+детерминированный шаг ярлыка, не префильтр.
 
 ## Структура кода в Алане
 
@@ -116,22 +124,34 @@ mission-control. Эндпоинты предпочтительны в любом
 
 | Файл | Ответственность |
 |------|-----------------|
+| `store.ts` | Supabase-клиент(ы) для чтения стока/каталога (тот же URL/ключ, что `cache.ts`) |
 | `profile.ts` | `Verdict → MatchProfile` (чистая функция, юнит-тест) |
-| `sources/stock.ts` | `StockSource` — дёргает `/api/public/stock-candidates` |
-| `sources/catalog.ts` | `SupplierCatalogSource` — дёргает `/api/public/catalog-candidates` с префильтром |
+| `priceMatch.ts` | `priceDirection()` + `pickLabel()` — детерминированный ярлык (чистые, юнит-тест) |
+| `sources/stock.ts` | `fetchStockCandidates()` — читает `inventory.v_sku_breakdown` |
+| `sources/catalog.ts` | `fetchCatalogCandidates(profile)` — префильтр `wine_items` |
 | `sources/world.ts` | тонкая обёртка над существующим `findAnalogues` |
-| `rank.ts` | LLM-реранк + детерминированный ярлык (код считает цену, LLM судит стиль) |
-| `format.ts` (доп. к текущему) | сборка трёх блоков для Telegram |
-| `recommend.ts` | оркестратор: профиль → 3 тира параллельно → сборка |
+| `rank.ts` | LLM-реранк (structured output): выбирает топ, судит стиль/качество |
+| `format.ts` (доп. к текущему) | `recommendationsMessage()` — сборка трёх блоков |
+| `recommend.ts` | оркестратор: профиль → 3 тира параллельно → ярлык → сборка |
 
-Кнопка и обработка callback — в `index.ts` (там уже telegram-хэндлеры и inline-кнопки).
+Кнопка и обработка callback — в `index.ts` (там уже `InlineKeyboard` и
+`bot.callbackQuery("details", …)`; добавляем кнопку «Похожие у нас» и
+`bot.callbackQuery("similar", …)`).
+
+**Разделение «код считает цену / LLM судит стиль»:** `rank.ts` возвращает по каждой
+позиции `{ ref, why, qualityVsAnchor: 'lower'|'similar'|'higher' }`. Направление цены
+(`cheaper`/`same`/`pricier`) считает `priceMatch.priceDirection()` из чисел. Итоговый
+ярлык собирает `priceMatch.pickLabel(direction, qualityVsAnchor)`:
+- `cheaper` + качество `similar`/`higher` → «дешевле и почти так же»
+- `pricier` + качество `higher` → «апгрейд»
+- иначе → «ровня»
 
 ## Обработка ошибок (best-effort, не роняем разбор)
 
-- Тиры **независимы и идут параллельно**; упавший/пустой тир пропускается с тихой
-  пометкой, а не ломает ответ.
-- Если mission-control недоступен — тиры «наличие» и «поставщики» выпадают, **мир
-  остаётся как fallback** (web-поиск ни от чего не зависит).
+- Тиры **независимы и идут параллельно** (`Promise.allSettled`); упавший/пустой тир
+  пропускается, а не ломает ответ.
+- Если Supabase недоступен — тиры «наличие» и «поставщики» выпадают, **мир остаётся как
+  fallback** (web-поиск ни от чего не зависит).
 - Если пусто во всех трёх — честное «Похожего не нашёл» в голосе Алана, без выдумок.
 - Бюджеты/таймауты — как в существующем ресёрче (лимит web-поиска у мира уже зашит).
 
