@@ -10,6 +10,14 @@ search) → structured-output extraction of `WineEvidence` → deterministic
 normalization (100-pt) + QPR verdict. Honesty is enforced by the system prompt and
 output contract — confidence and sources always shown, never fabricated.
 
+## Similar wines ("Похожие у нас")
+After a verdict, the **Похожие у нас** button recommends similar wines in three tiers:
+in-stock (Loyverse `inventory.v_sku_breakdown`), supplier catalog (`public.wine_items`),
+and the world (existing analogues search). Attribute prefilter → LLM re-rank; price
+direction and the ровня/дешевле/апгрейд label are computed deterministically in code.
+Reads Supabase directly with the bot's existing `SUPABASE_URL`/`SUPABASE_SERVICE_KEY`
+(same project as mission-control). Code lives in `src/recommend/`.
+
 ## Env (root `.env.local` / Railway)
 - `ALAN_BOT_TOKEN` — BotFather token (new bot)
 - `ANTHROPIC_API_KEY` — Claude (shared)
