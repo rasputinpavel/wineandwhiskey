@@ -2,7 +2,7 @@ import type { Lang } from "./types.js";
 import { qprRating } from "./qpr.js";
 
 const THB_RATE = 0.028;            // THB → USD
-const THAI_IMPORT_MULT = 2.4;      // typical Thai imported-wine markup over origin price
+export const THAI_IMPORT_MULT = 2.4;  // typical Thai imported-wine markup over origin price
 
 export function thbToUsd(thb: number): number { return thb * THB_RATE; }
 export function usdToThb(usd: number): number { return Math.round(usd / THB_RATE); }
