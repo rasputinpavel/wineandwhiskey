@@ -205,7 +205,7 @@ export default function PriceListsPage() {
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full" title={pl.error_message ?? ''}>Ошибка</span>
                 )}
                 {pl.status === 'review' && (
-                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">На проверке</span>
+                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">In review</span>
                 )}
                 {pl.status === 'review' && pl.review_update_id && (
                   <a href={`/m/price/updates/${pl.review_update_id}`}
