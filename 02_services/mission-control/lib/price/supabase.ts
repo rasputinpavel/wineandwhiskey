@@ -23,7 +23,7 @@ export type PriceList = {
   supplier_name: string | null
   date: string | null
   pdf_url: string | null
-  status: 'pending' | 'processing' | 'done' | 'error'
+  status: 'pending' | 'processing' | 'review' | 'done' | 'error'
   item_count: number
   error_message: string | null
   uploaded_at: string
@@ -61,5 +61,18 @@ export type WineItem = {
   wine_type: 'red' | 'white' | 'rose' | 'orange' | 'sparkling' | null
   spirit_type: string | null
   supplier_sku: string | null
+  status: 'active' | 'discontinued'
+  match_key: string | null
+  discontinued_at: string | null
   created_at: string
+}
+
+export type CatalogUpdate = {
+  id: string
+  supplier_id: string | null
+  new_price_list_id: string | null
+  status: 'pending_review' | 'applied' | 'discarded'
+  diff: import('./reconcile').CatalogDiff
+  created_at: string
+  applied_at: string | null
 }
