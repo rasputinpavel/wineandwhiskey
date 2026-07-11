@@ -3,12 +3,13 @@ import { TELEGRAM_TOKEN, SESSION_TTL_MS, assertEnv } from "./config.js";
 import { buildQuery, photoToBase64 } from "./input.js";
 import { transcribeVoice } from "./voice.js";
 import { assessWine, findAnalogues } from "./pipeline.js";
-import { shortVerdict, fullCard, analoguesMessage } from "./format.js";
+import { shortVerdict, fullCard, analoguesMessage, recommendationsMessage } from "./format.js";
 import { SessionStore } from "./session.js";
 import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
 import { localPriceVerdict } from "./priceLocal.js";
+import { recommend } from "./recommend.js";
 import type { WineQuery, WineImage, Lang } from "./types.js";
 
 assertEnv();
@@ -119,8 +120,9 @@ async function handleQuery(ctx: any, query: WineQuery): Promise<void> {
     const verdict = await assessWine(query, onProgress);
     sessions.set(userKey(ctx), verdict, query.lang);
     await dropProgress(ctx, progress.message_id);
-    const kb = new InlineKeyboard().text(
-      query.lang === "ru" ? "Подробнее" : "Details", "details");
+    const kb = new InlineKeyboard()
+      .text(query.lang === "ru" ? "Подробнее" : "Details", "details")
+      .text(query.lang === "ru" ? "Похожие у нас" : "Similar in stock", "similar");
     await sendLong(ctx, shortVerdict(verdict, query.lang), { reply_markup: kb });
   } catch (err) {
     console.error("query failed:", err);
@@ -227,6 +229,29 @@ bot.callbackQuery("details", async (ctx) => {
     return;
   }
   await sendLong(ctx, fullCard(entry.verdict, entry.lang));
+});
+
+bot.callbackQuery("similar", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const key = userKey(ctx);
+  const entry = sessions.get(key);
+  if (!entry) {
+    await ctx.reply(
+      DEFAULT_LANG === "ru"
+        ? "Сессия истекла, пришли вино заново."
+        : "Session expired, send the wine again.");
+    return;
+  }
+  const working = await ctx.reply(entry.lang === "ru" ? "Подбираю похожее…" : "Finding similar wines…");
+  try {
+    const recs = await recommend(entry.verdict, entry.lang);
+    await dropProgress(ctx, working.message_id);
+    await sendLong(ctx, recommendationsMessage(recs, entry.lang));
+  } catch (err) {
+    console.error("similar failed:", err);
+    await dropProgress(ctx, working.message_id);
+    await ctx.reply(FAIL[entry.lang]);
+  }
 });
 
 bot.catch((err) => console.error("bot error:", err));
