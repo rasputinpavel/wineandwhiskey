@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   priceDirection, pickLabel, thaiAnchorUsd, catalogPriceRangeThb, directionForThb, parseUsd,
 } from "../src/recommend/priceMatch.js";
+import { toCatalogItem } from "../src/recommend/sources/catalog.js";
 
 describe("priceDirection", () => {
   it("classifies by ratio", () => {
@@ -69,5 +70,22 @@ describe("parseUsd", () => {
     expect(parseUsd("$1,200")).toBe(1200);
     expect(parseUsd("around 18 USD")).toBe(18);
     expect(parseUsd("n/a")).toBeNull();
+  });
+});
+
+describe("toCatalogItem", () => {
+  it("maps a wine_items row, coalescing nulls", () => {
+    const it = toCatalogItem({
+      name: "Errazuriz Max Reserva", supplier_name: "IWS", grape_variety: "Cabernet Sauvignon",
+      country: "Chile", region: "Aconcagua", year: 2021, price: 1200, vivino_rating: 4.1,
+    });
+    expect(it).toEqual({
+      name: "Errazuriz Max Reserva", supplier: "IWS", grape: "Cabernet Sauvignon",
+      country: "Chile", region: "Aconcagua", year: 2021, priceThb: 1200, vivinoRating: 4.1,
+    });
+  });
+  it("coalesces null text fields to empty string", () => {
+    const it = toCatalogItem({ name: "X", supplier_name: null, grape_variety: null, country: null, region: null, year: null, price: null, vivino_rating: null });
+    expect(it).toEqual({ name: "X", supplier: "", grape: "", country: "", region: "", year: null, priceThb: null, vivinoRating: null });
   });
 });
