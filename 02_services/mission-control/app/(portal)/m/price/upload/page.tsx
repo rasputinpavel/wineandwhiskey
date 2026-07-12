@@ -48,13 +48,17 @@ export default function UploadPage() {
         setItemCount(pl.item_count)
         setSupplierName(pl.supplier_name ?? '')
         setState('done')
+      } else if (pl.status === 'review') {
+        // Reconciliation produced a diff — jump to the review screen.
+        stopPolling()
+        router.push(pl.review_update_id ? `/m/price/updates/${pl.review_update_id}` : '/m/price/price-lists')
       } else if (pl.status === 'error') {
         stopPolling()
         setError(pl.error_message ?? 'Ошибка при обработке')
         setState('error')
       }
     }, 2000)
-  }, [])
+  }, [router])
 
   const upload = useCallback(async (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type) && !ACCEPTED_EXTENSIONS.split(',').some(ext => file.name.toLowerCase().endsWith(ext))) {

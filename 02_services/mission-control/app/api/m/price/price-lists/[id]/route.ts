@@ -11,7 +11,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
-  return NextResponse.json(data)
+
+  // When awaiting review, resolve the open catalog_update so the upload-screen
+  // poller can jump straight to the diff instead of spinning forever.
+  let review_update_id: string | null = null
+  if (data?.status === 'review') {
+    const { data: cu } = await supabase
+      .from('catalog_updates').select('id')
+      .eq('new_price_list_id', id).eq('status', 'pending_review')
+      .maybeSingle()
+    review_update_id = cu?.id ?? null
+  }
+  return NextResponse.json({ ...data, review_update_id })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
