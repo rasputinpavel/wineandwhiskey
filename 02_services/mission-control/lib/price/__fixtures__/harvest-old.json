@@ -1,0 +1,5 @@
+[
+  { "id": "o1", "name": "Cabernet Reserve", "price": 300, "volume": "750ml", "status": "active", "match_key": "cabernet reserve|750", "supplier_name": "Harvest", "description": "oak", "year": 2016 },
+  { "id": "o2", "name": "Grape Dance Blanc", "price": 500, "volume": "750ml", "status": "active", "match_key": "grape dance blanc|750", "supplier_name": "Harvest", "description": "", "year": 2023, "wine_type": "white" },
+  { "id": "o3", "name": "Old Delisted Wine", "price": 400, "volume": "750ml", "status": "active", "match_key": "old delisted wine|750", "supplier_name": "Harvest", "description": "", "year": 2020 }
+]

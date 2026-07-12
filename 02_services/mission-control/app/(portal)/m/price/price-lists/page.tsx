@@ -10,6 +10,7 @@ type PriceList = {
   item_count: number
   uploaded_at: string
   error_message: string | null
+  review_update_id?: string | null
 }
 
 type EnrichState = 'idle' | 'starting' | 'running' | 'paused' | 'done' | 'error'
@@ -202,6 +203,13 @@ export default function PriceListsPage() {
                 )}
                 {pl.status === 'error' && (
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full" title={pl.error_message ?? ''}>Ошибка</span>
+                )}
+                {pl.status === 'review' && (
+                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">In review</span>
+                )}
+                {pl.status === 'review' && pl.review_update_id && (
+                  <a href={`/m/price/updates/${pl.review_update_id}`}
+                     className="text-sm underline text-amber-700">Review changes</a>
                 )}
               </div>
               <div className="text-xs text-graphite mt-0.5 flex gap-2">

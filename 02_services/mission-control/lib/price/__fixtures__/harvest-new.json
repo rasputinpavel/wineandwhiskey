@@ -1,0 +1,5 @@
+[
+  { "name": "Cabernet Reserve 2020", "price": 350, "volume": "750ml", "description": "oak", "year": 2020, "category": "wine", "wine_type": "red", "country": null, "region": null, "grape_variety": null },
+  { "name": "Grape Dance Blanc", "price": 500, "volume": "750ml", "description": "", "year": 2023, "category": "wine", "wine_type": "white", "country": null, "region": null, "grape_variety": null },
+  { "name": "Nude Saperavi", "price": 590, "volume": "750ml", "description": "", "year": 2024, "category": "wine", "wine_type": "red", "country": null, "region": null, "grape_variety": null }
+]

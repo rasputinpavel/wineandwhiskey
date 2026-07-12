@@ -10,7 +10,23 @@ export async function GET() {
     .order('uploaded_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Attach the open catalog_update id (if any) so the UI can link lists in
+  // 'review' status to their diff screen. Degrades to null if the
+  // catalog_updates table isn't there yet (migration 010 not applied).
+  const { data: openUpdates } = await supabase
+    .from('catalog_updates')
+    .select('id,new_price_list_id')
+    .eq('status', 'pending_review')
+  const updateIdByList: Record<string, string> = {}
+  for (const u of openUpdates ?? []) {
+    if (u.new_price_list_id) updateIdByList[u.new_price_list_id] = u.id
+  }
+  const withReview = (data ?? []).map(pl => ({
+    ...pl,
+    review_update_id: updateIdByList[pl.id] ?? null,
+  }))
+  return NextResponse.json(withReview)
 }
 
 // Accepts { path, filename, mimeType, kind } — file already uploaded to Supabase Storage
@@ -101,14 +117,38 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       supplierId = newSupplier?.id ?? null
     }
 
+    // Does this supplier already have an active catalog? If so, reconcile
+    // instead of blindly inserting duplicates.
+    const { data: existingItems } = await supabase
+      .from('wine_items')
+      .select('*')
+      .eq('supplier_id', supplierId)
+      .eq('status', 'active')
+
     await supabase.from('price_lists').update({
       supplier_id: supplierId,
       supplier_name: result.supplier_name,
       date: result.price_list_date ?? null,
       item_count: result.items.length,
       progress: 95,
-      progress_phase: 'inserting',
+      progress_phase: existingItems && existingItems.length ? 'reconciling' : 'inserting',
     }).eq('id', priceListId)
+
+    if (existingItems && existingItems.length > 0) {
+      const { computeDiff } = await import('@/lib/price/reconcile')
+      const diff = computeDiff(existingItems as unknown as import('@/lib/price/supabase').WineItem[], result.items)
+      const { error: cuErr } = await supabase.from('catalog_updates').insert({
+        supplier_id: supplierId,
+        new_price_list_id: priceListId,
+        status: 'pending_review',
+        diff,
+      })
+      if (cuErr) throw new Error(`catalog_updates insert failed: ${cuErr.message}`)
+      await supabase.from('price_lists')
+        .update({ status: 'review', progress: 100, progress_phase: null })
+        .eq('id', priceListId)
+      return
+    }
 
     const VALID_CATEGORY = new Set(['wine', 'spirits', 'beer', 'other'])
     const VALID_WINE_TYPE = new Set(['red', 'white', 'rose', 'orange', 'sparkling'])
