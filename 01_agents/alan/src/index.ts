@@ -9,7 +9,7 @@ import { detectLang } from "./lang.js";
 import { triage } from "./triage.js";
 import { DEFAULT_LANG } from "./config.js";
 import { localPriceVerdict } from "./priceLocal.js";
-import { recommend } from "./recommend.js";
+import { recommend, worldAnalogues } from "./recommend.js";
 import type { WineQuery, WineImage, Lang } from "./types.js";
 
 assertEnv();
@@ -246,9 +246,39 @@ bot.callbackQuery("similar", async (ctx) => {
   try {
     const recs = await recommend(entry.verdict, entry.lang);
     await dropProgress(ctx, working.message_id);
-    await sendLong(ctx, recommendationsMessage(recs, entry.lang));
+    // World analogues are opt-in — our stock and suppliers lead, the world is one tap away.
+    const worldKb = new InlineKeyboard().text(
+      entry.lang === "ru" ? "🌍 Мировые аналоги" : "🌍 World analogues", "world");
+    await sendLong(ctx, recommendationsMessage(recs, entry.lang), { reply_markup: worldKb });
   } catch (err) {
     console.error("similar failed:", err);
+    await dropProgress(ctx, working.message_id);
+    await ctx.reply(FAIL[entry.lang]);
+  }
+});
+
+bot.callbackQuery("world", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const key = userKey(ctx);
+  const entry = sessions.get(key);
+  if (!entry) {
+    await ctx.reply(
+      DEFAULT_LANG === "ru"
+        ? "Сессия истекла, пришли вино заново."
+        : "Session expired, send the wine again.");
+    return;
+  }
+  const working = await ctx.reply(entry.lang === "ru" ? "Ищу мировые аналоги…" : "Finding world analogues…");
+  try {
+    const recs = await worldAnalogues(entry.verdict, entry.lang);
+    await dropProgress(ctx, working.message_id);
+    if (recs.tiers.length === 0) {
+      await ctx.reply(entry.lang === "ru" ? "В мире похожего не нашёл." : "Found no world analogues.");
+      return;
+    }
+    await sendLong(ctx, recommendationsMessage(recs, entry.lang));
+  } catch (err) {
+    console.error("world analogues failed:", err);
     await dropProgress(ctx, working.message_id);
     await ctx.reply(FAIL[entry.lang]);
   }

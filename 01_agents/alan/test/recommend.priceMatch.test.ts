@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   priceDirection, pickLabel, thaiAnchorUsd, catalogPriceRangeThb, directionForThb, parseUsd,
+  anchorThb, sortByPriceProximity,
 } from "../src/recommend/priceMatch.js";
-import { toCatalogItem } from "../src/recommend/sources/catalog.js";
+import { toCatalogItem, grapeTokens } from "../src/recommend/sources/catalog.js";
 
 describe("priceDirection", () => {
   it("classifies by ratio", () => {
@@ -19,17 +20,18 @@ describe("priceDirection", () => {
 });
 
 describe("pickLabel", () => {
-  it("cheaper + comparable quality → value", () => {
+  it("cheaper → value regardless of quality (price gap never hidden)", () => {
     expect(pickLabel("cheaper", "similar")).toBe("value");
     expect(pickLabel("cheaper", "higher")).toBe("value");
+    expect(pickLabel("cheaper", "lower")).toBe("value");
   });
   it("pricier + higher quality → upgrade", () => {
     expect(pickLabel("pricier", "higher")).toBe("upgrade");
   });
-  it("everything else → peer", () => {
+  it("same price, or pricier without a quality gain, or unknown → peer", () => {
     expect(pickLabel("same", "similar")).toBe("peer");
-    expect(pickLabel("cheaper", "lower")).toBe("peer");
     expect(pickLabel("pricier", "similar")).toBe("peer");
+    expect(pickLabel("pricier", "lower")).toBe("peer");
     expect(pickLabel("unknown", "similar")).toBe("peer");
   });
 });
@@ -70,6 +72,47 @@ describe("parseUsd", () => {
     expect(parseUsd("$1,200")).toBe(1200);
     expect(parseUsd("around 18 USD")).toBe(18);
     expect(parseUsd("n/a")).toBeNull();
+  });
+});
+
+describe("anchorThb", () => {
+  it("returns the Thai-market anchor in THB, null when unknown", () => {
+    expect(anchorThb(20)).toBeGreaterThan(0);   // 20 × 2.4 USD, converted to THB
+    expect(anchorThb(null)).toBeNull();
+    expect(anchorThb(0)).toBeNull();
+  });
+});
+
+describe("sortByPriceProximity", () => {
+  it("orders by closeness to the anchor THB, price-less last", () => {
+    const items = [
+      { priceThb: 3000 }, { priceThb: 1000 }, { priceThb: null }, { priceThb: 1600 },
+    ];
+    const sorted = sortByPriceProximity(items, 1500);
+    expect(sorted.map((i) => i.priceThb)).toEqual([1600, 1000, 3000, null]);
+  });
+  it("leaves order unchanged when anchor is unknown", () => {
+    const items = [{ priceThb: 3000 }, { priceThb: 1000 }];
+    expect(sortByPriceProximity(items, null)).toEqual(items);
+  });
+});
+
+describe("grapeTokens", () => {
+  it("splits a blend into core grapes, drops colour words, adds synonyms", () => {
+    const toks = grapeTokens("Garnacha Negra, Carignan, Merlot");
+    expect(toks).toContain("garnacha");
+    expect(toks).toContain("carignan");
+    expect(toks).toContain("merlot");
+    expect(toks).toContain("grenache");   // garnacha synonym
+    expect(toks).not.toContain("negra");  // colour qualifier dropped
+  });
+  it("expands a single grape to its synonyms", () => {
+    expect(grapeTokens("Grenache")).toContain("garnacha");
+    expect(grapeTokens("Shiraz")).toContain("syrah");
+  });
+  it("returns [] for empty/unknown grape", () => {
+    expect(grapeTokens("")).toEqual([]);
+    expect(grapeTokens("   ")).toEqual([]);
   });
 });
 
