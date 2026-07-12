@@ -10,9 +10,12 @@ export function priceDirection(anchorUsd: number | null, candidateUsd: number | 
   return "pricier";
 }
 
-/** Combine the (code-computed) price direction with the (LLM-judged) quality to a label. */
+/** Combine the (code-computed, reliable) price direction with the (LLM-judged) quality
+ *  into one label. Price leads: a cheaper wine always reads as the value pick — the
+ *  reliable price gap is never hidden behind a quality guess. Quality only decides
+ *  whether a pricier wine earns "upgrade". */
 export function pickLabel(dir: PriceDirection, quality: QualityVsAnchor): LabelKey {
-  if (dir === "cheaper" && (quality === "similar" || quality === "higher")) return "value";
+  if (dir === "cheaper") return "value";
   if (dir === "pricier" && quality === "higher") return "upgrade";
   return "peer";
 }
@@ -42,4 +45,22 @@ export function directionForThb(marketUsd: number | null, priceThb: number | nul
 export function parseUsd(approx: string): number | null {
   const m = approx.replace(/[,\s]/g, "").match(/\$?(\d+(?:\.\d+)?)/);
   return m ? parseFloat(m[1]) : null;
+}
+
+/** The scanned wine's expected Thailand price in THB (its anchor for proximity/labels).
+ *  null when the world price is unknown. */
+export function anchorThb(marketUsd: number | null): number | null {
+  const usd = thaiAnchorUsd(marketUsd);
+  return usd !== null ? usdToThb(usd) : null;
+}
+
+/** Order candidates by how close their THB price sits to the anchor (soft — nothing is
+ *  dropped, price-less items sort last). Returns the anchor's own order when unknown. */
+export function sortByPriceProximity<T extends { priceThb: number | null }>(
+  items: T[],
+  anchor: number | null,
+): T[] {
+  if (anchor === null) return items;
+  const dist = (p: number | null): number => (p === null ? Infinity : Math.abs(p - anchor));
+  return [...items].sort((a, b) => dist(a.priceThb) - dist(b.priceThb));
 }

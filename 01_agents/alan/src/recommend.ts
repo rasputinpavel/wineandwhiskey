@@ -5,7 +5,7 @@ import { fetchStockCandidates } from "./recommend/sources/stock.js";
 import { fetchCatalogCandidates } from "./recommend/sources/catalog.js";
 import { worldTier } from "./recommend/sources/world.js";
 import { rankCandidates } from "./recommend/rank.js";
-import { directionForThb, pickLabel } from "./recommend/priceMatch.js";
+import { directionForThb, pickLabel, anchorThb, sortByPriceProximity } from "./recommend/priceMatch.js";
 
 /** "฿890" (rounded, grouped) or "" when price unknown. */
 function bahtLabel(thb: number | null): string {
@@ -26,8 +26,10 @@ function catalogText(it: CatalogItem): string {
 }
 
 async function stockTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[]> {
-  const items = await fetchStockCandidates();
-  if (items.length === 0) return [];
+  const all = await fetchStockCandidates();
+  if (all.length === 0) return [];
+  // Bias the LLM toward price-relevant stock: nearest to the anchor first, cap the pool.
+  const items = sortByPriceProximity(all, anchorThb(profile.marketUsd)).slice(0, 50);
   const cands = items.map((it, i) => ({ ref: i, text: stockText(it) }));
   const anchorNote = [profile.grape, profile.region].filter(Boolean).join(", ");
   const picks = await rankCandidates(profile.label, anchorNote, cands, lang);
@@ -39,8 +41,9 @@ async function stockTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[]>
 }
 
 async function catalogTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[]> {
-  const items = await fetchCatalogCandidates(profile);
-  if (items.length === 0) return [];
+  const pool = await fetchCatalogCandidates(profile);
+  if (pool.length === 0) return [];
+  const items = sortByPriceProximity(pool, anchorThb(profile.marketUsd)).slice(0, 40);
   const cands = items.map((it, i) => ({ ref: i, text: catalogText(it) }));
   const anchorNote = [profile.grape, profile.region].filter(Boolean).join(", ");
   const picks = await rankCandidates(profile.label, anchorNote, cands, lang);
@@ -51,20 +54,32 @@ async function catalogTier(profile: MatchProfile, lang: Lang): Promise<RecoItem[
   });
 }
 
-/** Build three-tier recommendations for an assessed wine. Tiers run in parallel;
- *  any failed/empty tier is dropped. World is a fallback that never needs Supabase. */
+/** Our-assortment recommendations for an assessed wine: in-stock + supplier catalog.
+ *  Tiers run in parallel; any failed/empty tier is dropped. World analogues are a
+ *  separate on-demand step (see worldAnalogues) — our stock and suppliers come first. */
 export async function recommend(verdict: Verdict, lang: Lang): Promise<Recommendations> {
   const profile = buildProfile(verdict);
-  const [stock, catalog, world] = await Promise.allSettled([
+  const [stock, catalog] = await Promise.allSettled([
     stockTier(profile, lang),
     catalogTier(profile, lang),
-    worldTier(verdict, profile.label, lang),
   ]);
   const val = (r: PromiseSettledResult<RecoItem[]>): RecoItem[] => (r.status === "fulfilled" ? r.value : []);
   const tiers = [
     { key: "stock" as const, items: val(stock) },
     { key: "catalog" as const, items: val(catalog) },
-    { key: "world" as const, items: val(world) },
   ].filter((t) => t.items.length > 0);
   return { tiers };
+}
+
+/** World analogues on demand (separate "Мировые аналоги" button). Web search only —
+ *  never touches Supabase. Returns an empty tier list when nothing turns up. */
+export async function worldAnalogues(verdict: Verdict, lang: Lang): Promise<Recommendations> {
+  const label = buildProfile(verdict).label;
+  let items: RecoItem[] = [];
+  try {
+    items = await worldTier(verdict, label, lang);
+  } catch (err) {
+    console.error("world analogues failed:", err);
+  }
+  return { tiers: items.length ? [{ key: "world", items }] : [] };
 }

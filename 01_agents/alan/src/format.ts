@@ -149,8 +149,8 @@ const RECO_LABEL = {
 export function recommendationsMessage(recs: Recommendations, lang: Lang): string {
   if (recs.tiers.length === 0) {
     return lang === "ru"
-      ? "Похожего не нашёл — ни в наличии, ни у поставщиков, ни в мире."
-      : "Found nothing similar — not in stock, at suppliers, or out in the world.";
+      ? "У нас похожего не нашёл — ни в наличии, ни у поставщиков. Загляни в мировые аналоги ниже."
+      : "Nothing similar in our stock or at suppliers. Try the world analogues below.";
   }
   const out: string[] = [];
   for (const tier of recs.tiers) {

@@ -110,6 +110,6 @@ describe("recommendationsMessage", () => {
 
   it("returns an honest empty message when no tiers", () => {
     const msg = recommendationsMessage({ tiers: [] }, "ru");
-    expect(msg).toContain("Похожего не нашёл");
+    expect(msg).toContain("похожего не нашёл");
   });
 });
