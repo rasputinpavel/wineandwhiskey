@@ -33,15 +33,30 @@ export type DiffKind =
   | 'added' | 'price_changed' | 'updated' | 'unchanged'
   | 'discontinued' | 'reactivated' | 'ambiguous'
 
+// Comparable fields of an existing catalog row, snapshotted into the diff so the
+// review screen can render a full before → after without a second DB read.
+export type ItemSnapshot = {
+  name: string
+  price: number | null
+  year: number | null
+  volume: string | null
+  description: string | null
+  grape_variety: string | null
+  region: string | null
+  country: string | null
+  wine_type: string | null
+}
+
 export type DiffChange = {
   kind: DiffKind
   match_key: string
   existing_id: string | null        // null for 'added'
   existing_name: string | null
   old_price: number | null
-  incoming: ExtractedItem | null     // null for 'discontinued'
+  existing: ItemSnapshot | null      // 'before' snapshot; null for 'added'
+  incoming: ExtractedItem | null     // 'after'; null for 'discontinued'
   // ambiguous only: candidate existing items the user can bind to
-  candidates?: { id: string; name: string; price: number | null }[]
+  candidates?: { id: string; name: string; price: number | null; snapshot: ItemSnapshot }[]
   changed_fields?: string[]          // for 'updated'
 }
 
@@ -121,8 +136,8 @@ export function computeDiff(existing: WineItem[], incoming: ExtractedItem[]): Ca
       cands.forEach(c => boundExisting.add(c.e.id))
       changes.push({
         kind: 'ambiguous', match_key: matchKey(inc.name, inc.volume),
-        existing_id: null, existing_name: null, old_price: null, incoming: inc,
-        candidates: cands.map(c => ({ id: c.e.id, name: c.e.name, price: c.e.price })),
+        existing_id: null, existing_name: null, old_price: null, existing: null, incoming: inc,
+        candidates: cands.map(c => ({ id: c.e.id, name: c.e.name, price: c.e.price, snapshot: snap(c.e) })),
       })
     } else {
       stillNew.push(inc)
@@ -139,10 +154,18 @@ export function computeDiff(existing: WineItem[], incoming: ExtractedItem[]): Ca
   return { supplier_name: existing[0]?.supplier_name ?? incoming[0]?.name ?? null, changes }
 }
 
+function snap(e: WineItem): ItemSnapshot {
+  return {
+    name: e.name, price: e.price, year: e.year, volume: e.volume,
+    description: e.description, grape_variety: e.grape_variety,
+    region: e.region, country: e.country, wine_type: e.wine_type,
+  }
+}
+
 function mk(kind: DiffKind, key: string, e: WineItem | null, inc: ExtractedItem | null): DiffChange {
   return {
     kind, match_key: key,
     existing_id: e?.id ?? null, existing_name: e?.name ?? null,
-    old_price: e?.price ?? null, incoming: inc,
+    old_price: e?.price ?? null, existing: e ? snap(e) : null, incoming: inc,
   }
 }
