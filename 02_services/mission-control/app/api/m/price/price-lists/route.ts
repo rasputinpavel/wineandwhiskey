@@ -31,7 +31,7 @@ export async function GET() {
 
 // Accepts { path, filename, mimeType, kind } — file already uploaded to Supabase Storage
 export async function POST(req: NextRequest) {
-  const { path, filename, mimeType, kind } = await req.json()
+  const { path, filename, mimeType, kind, supplierId } = await req.json()
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
 
   const validKinds = ['regular', 'promo', 'wholesale', 'closeout', 'vip']
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertError?.message }, { status: 500 })
   }
 
-  runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf').catch(console.error)
+  runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf', supplierId || undefined).catch(console.error)
 
   return NextResponse.json({ id: priceList.id, status: 'processing', kind: resolvedKind })
 }
@@ -63,7 +63,7 @@ function detectKindFromFilename(name: string): string {
   return 'regular'
 }
 
-async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string) {
+async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string, targetSupplierId?: string) {
   try {
     const { data: blob, error: dlError } = await supabase.storage
       .from('price-pdfs')
@@ -99,22 +99,33 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
     const isUnknown = !rawName || rawName === 'null' || rawName === 'Unknown' || rawName === 'Unknown Supplier'
     result.supplier_name = isUnknown ? 'Unknown Supplier' : rawName
 
-    const supplierSlug = result.supplier_name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'unknown'
-
     let supplierId: string | null = null
-    const { data: existing } = await supabase
-      .from('suppliers').select('id').eq('slug', supplierSlug).single()
-
-    if (existing) {
-      supplierId = existing.id
+    if (targetSupplierId) {
+      // Explicit target: this upload updates a known supplier regardless of the
+      // name printed on the PDF cover (e.g. "Harvest Creation" vs the older
+      // "Russian Wine Harvest"). Adopt the supplier's canonical name so inserted
+      // rows and the diff stay consistent, then reconcile against its catalog.
+      supplierId = targetSupplierId
+      const { data: tgt } = await supabase
+        .from('suppliers').select('name').eq('id', targetSupplierId).single()
+      if (tgt?.name) result.supplier_name = tgt.name
     } else {
-      const { data: newSupplier } = await supabase
-        .from('suppliers').insert({ name: result.supplier_name, slug: supplierSlug })
-        .select('id').single()
-      supplierId = newSupplier?.id ?? null
+      const supplierSlug = result.supplier_name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'unknown'
+
+      const { data: existing } = await supabase
+        .from('suppliers').select('id').eq('slug', supplierSlug).single()
+
+      if (existing) {
+        supplierId = existing.id
+      } else {
+        const { data: newSupplier } = await supabase
+          .from('suppliers').insert({ name: result.supplier_name, slug: supplierSlug })
+          .select('id').single()
+        supplierId = newSupplier?.id ?? null
+      }
     }
 
     // Does this supplier already have an active catalog? If so, reconcile

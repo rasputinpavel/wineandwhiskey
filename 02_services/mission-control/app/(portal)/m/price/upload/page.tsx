@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ACCEPTED_EXTENSIONS, ACCEPTED_TYPES } from '@/lib/price/file-types'
 
@@ -17,9 +17,18 @@ export default function UploadPage() {
   const [extractItemCount, setExtractItemCount] = useState<number>(0)
   const [itemCount, setItemCount] = useState<number | null>(null)
   const [supplierName, setSupplierName] = useState('')
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string; item_count: number }[]>([])
+  const [targetSupplierId, setTargetSupplierId] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    fetch('/api/m/price/suppliers')
+      .then(r => r.ok ? r.json() : [])
+      .then(setSuppliers)
+      .catch(() => {})
+  }, [])
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -94,7 +103,7 @@ export default function UploadPage() {
     const res = await fetch('/api/m/price/price-lists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, filename: file.name, mimeType: file.type }),
+      body: JSON.stringify({ path, filename: file.name, mimeType: file.type, supplierId: targetSupplierId || undefined }),
     })
 
     if (!res.ok) {
@@ -107,7 +116,7 @@ export default function UploadPage() {
     const { id } = await res.json()
     setState('processing')
     pollStatus(id)
-  }, [pollStatus, state])
+  }, [pollStatus, state, targetSupplierId])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -130,6 +139,25 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
+      {state === 'idle' && suppliers.length > 0 && (
+        <div className="bg-white rounded-2xl border border-pale-stone p-4">
+          <label className="block text-sm font-medium text-deep-black mb-1.5">Update an existing supplier</label>
+          <select
+            value={targetSupplierId}
+            onChange={e => setTargetSupplierId(e.target.value)}
+            className="w-full border border-pale-stone rounded-xl px-3 py-2 text-sm bg-white"
+          >
+            <option value="">New price list (auto-detect supplier)</option>
+            {suppliers.map(s => (
+              <option key={s.id} value={s.id}>{s.name} — {s.item_count} items</option>
+            ))}
+          </select>
+          <p className="text-xs text-graphite mt-1.5">
+            Pick a supplier to reconcile this PDF against its catalog (price changes, new & discontinued items) instead of adding a duplicate list.
+          </p>
+        </div>
+      )}
+
       {state === 'idle' && (
         <div
           onDrop={handleDrop}
