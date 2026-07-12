@@ -1,5 +1,6 @@
 import type { Verdict, AnaloguesResult, Lang, ValueRead, EvidenceLevel, PriceTier } from "./types.js";
 import { usdToThb, estimateThaiThb } from "./priceLocal.js";
+import type { Recommendations } from "./recommend/types.js";
 
 const MAX_SOURCES = 6;
 
@@ -130,4 +131,37 @@ export function analoguesMessage(a: AnaloguesResult, lang: Lang): string {
   if (a.dataConfidence === "low") lines.push(t.limited);
   if (a.sources.length) lines.push(`${t.sources}:\n${a.sources.slice(0, MAX_SOURCES).map((s) => `• ${s}`).join("\n")}`);
   return lines.join("\n");
+}
+
+const TIER_TITLE = {
+  stock:   { ru: "🍷 В наличии у нас",              en: "🍷 In stock" },
+  catalog: { ru: "📦 Можем привезти (поставщики)",  en: "📦 Can order (suppliers)" },
+  world:   { ru: "🌍 В мире есть (ориентир)",       en: "🌍 Out in the world (reference)" },
+} as const;
+
+const RECO_LABEL = {
+  value:   { ru: "дешевле и почти так же", en: "cheaper, nearly as good" },
+  peer:    { ru: "ровня",                  en: "peer" },
+  upgrade: { ru: "апгрейд",                en: "upgrade" },
+} as const;
+
+/** Render three-tier recommendations as plain text (no Markdown), Alan's format. */
+export function recommendationsMessage(recs: Recommendations, lang: Lang): string {
+  if (recs.tiers.length === 0) {
+    return lang === "ru"
+      ? "Похожего не нашёл — ни в наличии, ни у поставщиков, ни в мире."
+      : "Found nothing similar — not in stock, at suppliers, or out in the world.";
+  }
+  const out: string[] = [];
+  for (const tier of recs.tiers) {
+    out.push(TIER_TITLE[tier.key][lang]);
+    for (const it of tier.items) {
+      const price = it.priceLabel ? ` — ${it.priceLabel}` : "";
+      const supplier = it.supplier ? ` (${it.supplier})` : "";
+      out.push(`• ${it.name}${price}${supplier} · ${RECO_LABEL[it.labelKey][lang]}`);
+      if (it.why) out.push(`  ${it.why}`);
+    }
+    out.push("");
+  }
+  return out.join("\n").trim();
 }

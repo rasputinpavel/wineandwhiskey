@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { shortVerdict, fullCard, analoguesMessage } from "../src/format.js";
 import type { Verdict, AnaloguesResult } from "../src/types.js";
+import { recommendationsMessage } from "../src/format.js";
+import type { Recommendations } from "../src/recommend/types.js";
 
 const verdict: Verdict = {
   identity: { producer: "Pitars", name: "Genesi", vintage: "", region: "Friuli-Venezia Giulia", grape: "Glera", type: "sparkling", idConfidence: "high" },
@@ -82,5 +84,32 @@ describe("analoguesMessage", () => {
     expect(m).toContain("Wine A");
     expect(m).toContain("same style");
     expect(m).toContain("Wine B");
+  });
+});
+
+describe("recommendationsMessage", () => {
+  const recs: Recommendations = {
+    tiers: [
+      { key: "stock", items: [
+        { name: "Baron Philippe Cab", priceLabel: "฿890", labelKey: "value", why: "Тот же плотный каб, проще." },
+      ] },
+      { key: "catalog", items: [
+        { name: "Errazuriz Max Reserva", supplier: "IWS", priceLabel: "฿1,200", labelKey: "peer", why: "" },
+      ] },
+    ],
+  };
+
+  it("renders tier titles, prices, supplier and label", () => {
+    const msg = recommendationsMessage(recs, "ru");
+    expect(msg).toContain("🍷 В наличии у нас");
+    expect(msg).toContain("Baron Philippe Cab — ฿890 · дешевле и почти так же");
+    expect(msg).toContain("Тот же плотный каб, проще.");
+    expect(msg).toContain("📦 Можем привезти (поставщики)");
+    expect(msg).toContain("Errazuriz Max Reserva — ฿1,200 (IWS) · ровня");
+  });
+
+  it("returns an honest empty message when no tiers", () => {
+    const msg = recommendationsMessage({ tiers: [] }, "ru");
+    expect(msg).toContain("Похожего не нашёл");
   });
 });
