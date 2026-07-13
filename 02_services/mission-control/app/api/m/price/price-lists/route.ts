@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { supabase } from '@/lib/price/supabase'
 import { extractFromFile } from '@/lib/price/extract'
 import { classifyItem } from '@/lib/price/classify'
@@ -12,21 +13,20 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Freshness: newest-dated done catalog per supplier is 'current', rest 'expired'.
-  const { currentIds } = await catalogFreshness()
+  // Freshness: only versions within an explicit group get current/expired;
+  // standalone lists are 'current'.
+  const { statusById } = await catalogFreshness()
 
   const withMeta = (data ?? []).map(pl => ({
     ...pl,
-    freshness: pl.status === 'done' && pl.supplier_id
-      ? (currentIds.has(pl.id) ? 'current' : 'expired')
-      : null,
+    freshness: statusById.get(pl.id) ?? null,
   }))
   return NextResponse.json(withMeta)
 }
 
 // Accepts { path, filename, mimeType, kind } — file already uploaded to Supabase Storage
 export async function POST(req: NextRequest) {
-  const { path, filename, mimeType, kind, supplierId } = await req.json()
+  const { path, filename, mimeType, kind, versionOfPriceListId } = await req.json()
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
 
   const validKinds = ['regular', 'promo', 'wholesale', 'closeout', 'vip']
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertError?.message }, { status: 500 })
   }
 
-  runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf', supplierId || undefined).catch(console.error)
+  runExtraction(priceList.id, path, filename ?? path, mimeType ?? 'application/pdf', versionOfPriceListId || undefined).catch(console.error)
 
   return NextResponse.json({ id: priceList.id, status: 'processing', kind: resolvedKind })
 }
@@ -58,7 +58,7 @@ function detectKindFromFilename(name: string): string {
   return 'regular'
 }
 
-async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string, targetSupplierId?: string) {
+async function runExtraction(priceListId: string, storagePath: string, filename: string, mimeType: string, versionOfPriceListId?: string) {
   try {
     const { data: blob, error: dlError } = await supabase.storage
       .from('price-pdfs')
@@ -95,16 +95,31 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
     result.supplier_name = isUnknown ? 'Unknown Supplier' : rawName
 
     let supplierId: string | null = null
-    if (targetSupplierId) {
-      // Explicit target: this upload updates a known supplier regardless of the
-      // name printed on the PDF cover (e.g. "Harvest Creation" vs the older
-      // "Russian Wine Harvest"). Adopt the supplier's canonical name so inserted
-      // rows and the diff stay consistent, then reconcile against its catalog.
-      supplierId = targetSupplierId
-      const { data: tgt } = await supabase
-        .from('suppliers').select('name').eq('id', targetSupplierId).single()
-      if (tgt?.name) result.supplier_name = tgt.name
-    } else {
+    let versionGroupId: string | null = null
+
+    if (versionOfPriceListId) {
+      // Explicit "new version of this catalog": inherit the target's supplier and
+      // its version group (creating one and backfilling the target if needed).
+      // Only lists that share a group are versions — the newest is 'current',
+      // the rest 'expired'. Adopt the supplier's canonical name for consistency.
+      const { data: target } = await supabase
+        .from('price_lists').select('supplier_id,version_group_id').eq('id', versionOfPriceListId).single()
+      if (target) {
+        supplierId = target.supplier_id ?? null
+        versionGroupId = target.version_group_id ?? null
+        if (!versionGroupId) {
+          versionGroupId = randomUUID()
+          await supabase.from('price_lists')
+            .update({ version_group_id: versionGroupId }).eq('id', versionOfPriceListId)
+        }
+        if (supplierId) {
+          const { data: sup } = await supabase.from('suppliers').select('name').eq('id', supplierId).single()
+          if (sup?.name) result.supplier_name = sup.name
+        }
+      }
+    }
+
+    if (!supplierId) {
       const supplierSlug = result.supplier_name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -123,17 +138,21 @@ async function runExtraction(priceListId: string, storagePath: string, filename:
       }
     }
 
-    // Catalogs are kept as dated versions (freshness model) — each upload just
-    // inserts its items. The target supplier groups versions together so the
-    // newest-dated one shows as "current" and older ones as "expired".
-    await supabase.from('price_lists').update({
+    // Each upload is inserted as its own dated catalog. A version_group_id (set
+    // only when the user picked "new version of…") links it to the catalog it
+    // supersedes so freshness can mark the newest current and older expired.
+    // Only reference the column when versioning, so standalone uploads keep
+    // working before migration 011 adds it.
+    const plUpdate: Record<string, unknown> = {
       supplier_id: supplierId,
       supplier_name: result.supplier_name,
       date: result.price_list_date ?? null,
       item_count: result.items.length,
       progress: 95,
       progress_phase: 'inserting',
-    }).eq('id', priceListId)
+    }
+    if (versionGroupId) plUpdate.version_group_id = versionGroupId
+    await supabase.from('price_lists').update(plUpdate).eq('id', priceListId)
 
     const VALID_CATEGORY = new Set(['wine', 'spirits', 'beer', 'other'])
     const VALID_WINE_TYPE = new Set(['red', 'white', 'rose', 'orange', 'sparkling'])

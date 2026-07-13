@@ -200,19 +200,24 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
             <span className="text-sm" title={item.category}>{categoryEmoji(item.category)}</span>
           )}
           <span>{item.name}</span>
-          <CatalogBadge status={item.catalog_status} />
         </div>
         {item.description && (
           <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
         )}
       </td>
-      <td className="px-2.5 py-3 max-w-[140px]">
+      <td className="px-2.5 py-3 max-w-[150px]">
         <span
           className="inline-flex items-center max-w-full px-2 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium whitespace-nowrap truncate"
           title={(item.supplier_name && item.supplier_name !== 'null') ? item.supplier_name : undefined}
         >
           {(item.supplier_name && item.supplier_name !== 'null') ? item.supplier_name : '—'}
         </span>
+        {(item.catalog_date || item.catalog_status) && (
+          <div className="flex items-center gap-1.5 mt-1">
+            {item.catalog_date && <span className="text-[11px] text-gray-400 whitespace-nowrap">{item.catalog_date}</span>}
+            <CatalogBadge status={item.catalog_status} />
+          </div>
+        )}
       </td>
       <td className="px-2.5 py-3 text-gray-600 whitespace-nowrap">{item.country ?? '—'}</td>
       <td className="px-2.5 py-3 text-gray-600 text-xs max-w-[140px] truncate">{item.winery ?? '—'}</td>
@@ -256,14 +261,15 @@ function MobileCard({ item, onClick }: { item: WineItem; onClick: () => void }) 
           <div className="font-medium text-gray-900 text-sm leading-tight flex items-center gap-1">
             {item.category && item.category !== 'wine' && <span>{categoryEmoji(item.category)}</span>}
             <span>{item.name}</span>
-            <CatalogBadge status={item.catalog_status} />
           </div>
-          <div className="flex flex-wrap gap-1 mt-1.5">
+          <div className="flex flex-wrap items-center gap-1 mt-1.5">
             {item.supplier_name && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-wine-50 text-wine-600 font-medium">
                 {item.supplier_name}
               </span>
             )}
+            {item.catalog_date && <span className="text-[11px] text-gray-400">{item.catalog_date}</span>}
+            <CatalogBadge status={item.catalog_status} />
             {item.country && <span className="text-xs text-gray-500">{item.country}</span>}
             {item.year && <span className="text-xs text-gray-500">{item.year}</span>}
             {item.wine_type && <span className="text-xs text-gray-500">{wineTypeLabel(item.wine_type)}</span>}

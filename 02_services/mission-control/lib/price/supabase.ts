@@ -65,8 +65,9 @@ export type WineItem = {
   match_key: string | null
   discontinued_at: string | null
   created_at: string
-  // Derived at query time (catalog freshness), not a DB column.
+  // Derived at query time (catalog freshness), not DB columns.
   catalog_status?: 'current' | 'expired' | null
+  catalog_date?: string | null
 }
 
 export type CatalogUpdate = {

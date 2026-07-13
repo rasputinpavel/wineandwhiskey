@@ -17,16 +17,16 @@ export default function UploadPage() {
   const [extractItemCount, setExtractItemCount] = useState<number>(0)
   const [itemCount, setItemCount] = useState<number | null>(null)
   const [supplierName, setSupplierName] = useState('')
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string; item_count: number }[]>([])
-  const [targetSupplierId, setTargetSupplierId] = useState('')
+  const [catalogs, setCatalogs] = useState<{ id: string; supplier_name: string | null; date: string | null; uploaded_at: string; item_count: number }[]>([])
+  const [versionOfId, setVersionOfId] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/m/price/suppliers')
+    fetch('/api/m/price/catalogs')
       .then(r => r.ok ? r.json() : [])
-      .then(setSuppliers)
+      .then(setCatalogs)
       .catch(() => {})
   }, [])
 
@@ -107,7 +107,7 @@ export default function UploadPage() {
     const res = await fetch('/api/m/price/price-lists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, filename: file.name, mimeType: file.type, supplierId: targetSupplierId || undefined }),
+      body: JSON.stringify({ path, filename: file.name, mimeType: file.type, versionOfPriceListId: versionOfId || undefined }),
     })
 
     if (!res.ok) {
@@ -120,7 +120,7 @@ export default function UploadPage() {
     const { id } = await res.json()
     setState('processing')
     pollStatus(id)
-  }, [pollStatus, state, targetSupplierId])
+  }, [pollStatus, state, versionOfId])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -143,21 +143,23 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      {state === 'idle' && suppliers.length > 0 && (
+      {state === 'idle' && catalogs.length > 0 && (
         <div className="bg-white rounded-2xl border border-pale-stone p-4">
-          <label className="block text-sm font-medium text-deep-black mb-1.5">Add as a version of an existing supplier</label>
+          <label className="block text-sm font-medium text-deep-black mb-1.5">Is this a new version of an existing catalog?</label>
           <select
-            value={targetSupplierId}
-            onChange={e => setTargetSupplierId(e.target.value)}
+            value={versionOfId}
+            onChange={e => setVersionOfId(e.target.value)}
             className="w-full border border-pale-stone rounded-xl px-3 py-2 text-sm bg-white"
           >
-            <option value="">New supplier (auto-detect from PDF)</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>{s.name} — {s.item_count} items</option>
+            <option value="">No — upload as a new standalone catalog</option>
+            {catalogs.map(c => (
+              <option key={c.id} value={c.id}>
+                {(c.supplier_name && c.supplier_name !== 'null') ? c.supplier_name : '—'} · {c.date ?? c.uploaded_at.slice(0, 10)} · {c.item_count} items
+              </option>
             ))}
           </select>
           <p className="text-xs text-graphite mt-1.5">
-            Pick a supplier to file this PDF as a new dated catalog version under it — the newest date shows as “current”, older ones as “expired”. This keeps price history instead of overwriting.
+            Pick the catalog this PDF replaces — it becomes a newer version of it: the newest date shows as “current”, the one it supersedes as “expired”. Leave as standalone if it’s an unrelated list.
           </p>
         </div>
       )}

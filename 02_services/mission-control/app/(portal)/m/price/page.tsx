@@ -58,14 +58,13 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
   const total = itemsRes.count ?? 0
   const processingCount = priceListsRes.data?.length ?? 0
 
-  // Tag each item current/expired — but only where a supplier has multiple
-  // catalog versions (otherwise the badge is noise: everything is "current").
-  const { currentIds, versionedSuppliers } = await catalogFreshness()
+  // Show each item's catalog date, and a current/expired badge only when its
+  // catalog is part of an explicit version group (unrelated lists get no badge).
+  const { statusById, versionedIds, dateById } = await catalogFreshness()
   const items = rawItems.map(it => ({
     ...it,
-    catalog_status: it.supplier_id && versionedSuppliers.has(it.supplier_id)
-      ? (currentIds.has(it.price_list_id) ? 'current' as const : 'expired' as const)
-      : null,
+    catalog_status: versionedIds.has(it.price_list_id) ? (statusById.get(it.price_list_id) ?? null) : null,
+    catalog_date: dateById.get(it.price_list_id) ?? null,
   }))
 
   return (
