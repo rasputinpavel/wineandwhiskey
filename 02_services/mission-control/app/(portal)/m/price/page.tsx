@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { supabase } from '@/lib/price/supabase'
+import { catalogFreshness } from '@/lib/price/freshness'
 import FilterBar from '@/components/modules/price/FilterBar'
 import PriceTableClient from '@/components/modules/price/PriceTableClient'
 
@@ -53,9 +54,19 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
   const grapes = filterOptions.grapes ?? []
   const spiritTypes = filterOptions.spirit_types ?? []
 
-  const items = itemsRes.data ?? []
+  const rawItems = itemsRes.data ?? []
   const total = itemsRes.count ?? 0
   const processingCount = priceListsRes.data?.length ?? 0
+
+  // Tag each item current/expired — but only where a supplier has multiple
+  // catalog versions (otherwise the badge is noise: everything is "current").
+  const { currentIds, versionedSuppliers } = await catalogFreshness()
+  const items = rawItems.map(it => ({
+    ...it,
+    catalog_status: it.supplier_id && versionedSuppliers.has(it.supplier_id)
+      ? (currentIds.has(it.price_list_id) ? 'current' as const : 'expired' as const)
+      : null,
+  }))
 
   return (
     <div className="space-y-4">

@@ -11,6 +11,7 @@ type PriceList = {
   uploaded_at: string
   error_message: string | null
   review_update_id?: string | null
+  freshness?: 'current' | 'expired' | null
 }
 
 type EnrichState = 'idle' | 'starting' | 'running' | 'paused' | 'done' | 'error'
@@ -171,6 +172,15 @@ export default function PriceListsPage() {
     }
   }
 
+  async function updateDate(id: string, value: string) {
+    setLists(prev => prev.map(l => l.id === id ? { ...l, date: value || null } : l))
+    await fetch(`/api/m/price/price-lists/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: value || null }),
+    })
+  }
+
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Удалить прайс «${name}»? Все позиции будут удалены.`)) return
     setDeleting(id)
@@ -189,7 +199,6 @@ export default function PriceListsPage() {
       )}
       {lists.map(pl => {
         const name = (pl.supplier_name && pl.supplier_name !== 'null') ? pl.supplier_name : 'Без поставщика'
-        const date = pl.date ? new Date(pl.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : null
         const uploadedAt = new Date(pl.uploaded_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
         const es = enrichStatus[pl.id] ?? { state: 'idle', enriched: 0, total: 0 }
 
@@ -211,10 +220,24 @@ export default function PriceListsPage() {
                   <a href={`/m/price/updates/${pl.review_update_id}`}
                      className="text-sm underline text-amber-700">Review changes</a>
                 )}
+                {pl.freshness === 'current' && (
+                  <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium">current</span>
+                )}
+                {pl.freshness === 'expired' && (
+                  <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">expired</span>
+                )}
               </div>
-              <div className="text-xs text-graphite mt-0.5 flex gap-2">
-                {date && <span>{date}</span>}
-                {date && <span>·</span>}
+              <div className="text-xs text-graphite mt-1 flex items-center gap-2 flex-wrap">
+                <label className="flex items-center gap-1">
+                  <span className="text-graphite/70">действует на:</span>
+                  <input
+                    type="date"
+                    value={pl.date ?? ''}
+                    onChange={e => updateDate(pl.id, e.target.value)}
+                    className="border border-pale-stone rounded px-1.5 py-0.5 text-xs bg-white"
+                  />
+                </label>
+                <span>·</span>
                 <span>{pl.item_count} позиций</span>
                 <span>·</span>
                 <span>загружен {uploadedAt}</span>

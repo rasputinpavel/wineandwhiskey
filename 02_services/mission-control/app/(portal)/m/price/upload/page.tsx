@@ -145,19 +145,19 @@ export default function UploadPage() {
     <div className="max-w-3xl mx-auto space-y-4">
       {state === 'idle' && suppliers.length > 0 && (
         <div className="bg-white rounded-2xl border border-pale-stone p-4">
-          <label className="block text-sm font-medium text-deep-black mb-1.5">Update an existing supplier</label>
+          <label className="block text-sm font-medium text-deep-black mb-1.5">Add as a version of an existing supplier</label>
           <select
             value={targetSupplierId}
             onChange={e => setTargetSupplierId(e.target.value)}
             className="w-full border border-pale-stone rounded-xl px-3 py-2 text-sm bg-white"
           >
-            <option value="">New price list (auto-detect supplier)</option>
+            <option value="">New supplier (auto-detect from PDF)</option>
             {suppliers.map(s => (
               <option key={s.id} value={s.id}>{s.name} — {s.item_count} items</option>
             ))}
           </select>
           <p className="text-xs text-graphite mt-1.5">
-            Pick a supplier to reconcile this PDF against its catalog (price changes, new & discontinued items) instead of adding a duplicate list.
+            Pick a supplier to file this PDF as a new dated catalog version under it — the newest date shows as “current”, older ones as “expired”. This keeps price history instead of overwriting.
           </p>
         </div>
       )}

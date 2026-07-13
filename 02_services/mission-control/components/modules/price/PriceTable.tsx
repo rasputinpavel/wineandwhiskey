@@ -22,6 +22,13 @@ function SortIcon({ col, sortCol, sortAsc }: { col: string; sortCol: string; sor
   return <span className="ml-1 text-wine-600">{sortAsc ? '↑' : '↓'}</span>
 }
 
+function CatalogBadge({ status }: { status?: 'current' | 'expired' | null }) {
+  if (!status) return null
+  return status === 'current'
+    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium whitespace-nowrap">current</span>
+    : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 font-medium whitespace-nowrap">expired</span>
+}
+
 export default function PriceTable({ items: initialItems, total: initialTotal, page, limit, sortCol, sortAsc, onPageChange, onSort }: Props) {
   const [items, setItems] = useState<WineItem[]>(initialItems)
   const [total, setTotal] = useState(initialTotal)
@@ -193,6 +200,7 @@ function TableRow({ item, onClick, selected }: { item: WineItem; onClick: () => 
             <span className="text-sm" title={item.category}>{categoryEmoji(item.category)}</span>
           )}
           <span>{item.name}</span>
+          <CatalogBadge status={item.catalog_status} />
         </div>
         {item.description && (
           <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.description}</div>
@@ -248,6 +256,7 @@ function MobileCard({ item, onClick }: { item: WineItem; onClick: () => void }) 
           <div className="font-medium text-gray-900 text-sm leading-tight flex items-center gap-1">
             {item.category && item.category !== 'wine' && <span>{categoryEmoji(item.category)}</span>}
             <span>{item.name}</span>
+            <CatalogBadge status={item.catalog_status} />
           </div>
           <div className="flex flex-wrap gap-1 mt-1.5">
             {item.supplier_name && (

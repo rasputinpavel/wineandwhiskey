@@ -25,6 +25,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...data, review_update_id })
 }
 
+// Edit the catalog's effective date ("valid as of"), which drives current/expired.
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const body = await req.json().catch(() => ({}))
+  const patch: Record<string, unknown> = {}
+  if ('date' in body) patch.date = body.date || null
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+  }
+  const { data, error } = await supabase
+    .from('price_lists').update(patch).eq('id', id).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
