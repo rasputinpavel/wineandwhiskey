@@ -12,6 +12,7 @@ type Props = {
   category: string
   wineType: string
   spiritType: string
+  catalogStatus: string
 }
 
 const CATEGORIES = [
@@ -25,7 +26,7 @@ const CATEGORIES = [
 // render the chip so the UI taxonomy is fixed and predictable.
 const WINE_TYPE_CHIPS = ['', 'red', 'white', 'rose', 'orange', 'sparkling']
 
-export default function FilterBar({ suppliers, countries, grapes, spiritTypes, category, wineType, spiritType }: Props) {
+export default function FilterBar({ suppliers, countries, grapes, spiritTypes, category, wineType, spiritType, catalogStatus }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -48,7 +49,7 @@ export default function FilterBar({ suppliers, countries, grapes, spiritTypes, c
   const supplier = searchParams.get('supplier') ?? ''
   const country = searchParams.get('country') ?? ''
   const grape = searchParams.get('grape') ?? ''
-  const hasFilters = q || supplier || country || grape || category || wineType || spiritType
+  const hasFilters = q || supplier || country || grape || category || wineType || spiritType || catalogStatus
 
   return (
     <div className="flex flex-col gap-3">
@@ -144,6 +145,16 @@ export default function FilterBar({ suppliers, countries, grapes, spiritTypes, c
         <Select value={supplier} onChange={v => update({ supplier: v })} placeholder="Все поставщики" options={suppliers} />
         <Select value={country} onChange={v => update({ country: v })} placeholder="Все страны" options={countries} />
         <Select value={grape} onChange={v => update({ grape: v })} placeholder="Все сорта" options={grapes} />
+        <select
+          value={catalogStatus}
+          onChange={e => update({ status: e.target.value })}
+          className="py-2 pl-3 pr-8 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-wine-500 focus:border-transparent text-gray-700 appearance-none cursor-pointer"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '16px' }}
+        >
+          <option value="">Все каталоги</option>
+          <option value="current">🟢 Актуальные</option>
+          <option value="expired">🔴 Устаревшие</option>
+        </select>
 
         {hasFilters && (
           <button

@@ -12,6 +12,7 @@ type SearchParams = {
   category?: string
   wine_type?: string
   spirit_type?: string
+  status?: string
   page?: string
   sort?: string
   dir?: string
@@ -28,6 +29,12 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
   const sortCol: SortCol = (SORTABLE as readonly string[]).includes(params.sort ?? '') ? params.sort as SortCol : 'name'
   const sortAsc = params.dir !== 'desc'
 
+  // Freshness is derived (version groups) — compute it up front so we can also
+  // filter the catalog by current/expired at the DB level.
+  const { statusById, versionedIds, dateById } = await catalogFreshness()
+  const expiredIds = [...statusById].filter(([, s]) => s === 'expired').map(([id]) => id)
+  const catalogStatus = params.status === 'current' || params.status === 'expired' ? params.status : ''
+
   let query = supabase
     .from('wine_items')
     .select('*', { count: 'exact' })
@@ -41,6 +48,11 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
   if (params.category) query = query.eq('category', params.category)
   if (params.wine_type) query = query.eq('wine_type', params.wine_type)
   if (params.spirit_type) query = query.eq('spirit_type', params.spirit_type)
+  if (catalogStatus === 'current' && expiredIds.length) {
+    query = query.not('price_list_id', 'in', `(${expiredIds.join(',')})`)
+  } else if (catalogStatus === 'expired') {
+    query = query.in('price_list_id', expiredIds.length ? expiredIds : ['00000000-0000-0000-0000-000000000000'])
+  }
 
   const [itemsRes, filterRes, priceListsRes] = await Promise.all([
     query,
@@ -60,7 +72,6 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
 
   // Show each item's catalog date, and a current/expired badge only when its
   // catalog is part of an explicit version group (unrelated lists get no badge).
-  const { statusById, versionedIds, dateById } = await catalogFreshness()
   const items = rawItems.map(it => ({
     ...it,
     catalog_status: versionedIds.has(it.price_list_id) ? (statusById.get(it.price_list_id) ?? null) : null,
@@ -96,6 +107,7 @@ export default async function PriceCatalogPage({ searchParams }: { searchParams:
           category={params.category ?? ''}
           wineType={params.wine_type ?? ''}
           spiritType={params.spirit_type ?? ''}
+          catalogStatus={catalogStatus}
         />
       </Suspense>
 
