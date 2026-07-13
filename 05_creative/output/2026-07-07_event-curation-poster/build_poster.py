@@ -90,7 +90,6 @@ body {{
 .hero h1 {{
   font-family:'Bebas Neue'; font-weight:400; color:var(--black);
   font-size:162px; line-height:.85; letter-spacing:.005em;
-  text-shadow:0 8px 22px rgba(26,26,26,.10);
 }}
 .hero h1 .em {{ color:var(--wine); }}
 .triggers {{
@@ -117,7 +116,6 @@ body {{
 }}
 .step .n {{
   font-family:'Bebas Neue'; font-size:120px; line-height:.9; color:var(--wine);
-  text-shadow:0 6px 18px rgba(140,28,28,.14);
 }}
 .step .t {{ margin-top:14px; font-size:27px; line-height:1.24; color:var(--black); font-weight:500; }}
 
