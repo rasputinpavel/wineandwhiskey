@@ -211,14 +211,16 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: A4. Cover = full-bleed own page; each category starts a new page. */
-  @page{size:A4;margin:0}
+  /* Sides bleed to the paper edge; 11mm top/bottom keeps text off the edge on every sheet */
+  @page{size:A4;margin:11mm 0}
+  @page cover{margin:0}
   @media print{
     html,body{background:var(--white)}
     .page{max-width:none;padding:0 12mm}
-    .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     /* page breaks fall on wine-type (category) boundaries */
-    .cat{page-break-before:always;padding:13mm 0 8mm}
+    .cat{page-break-before:always;padding:0 0 8mm}
     .cat:first-of-type{page-break-before:avoid}
     .cat-head{page-break-after:avoid;break-after:avoid}
     .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}

@@ -113,29 +113,17 @@ const displayName = (it) => {
   return `${n}, ${p}`;
 };
 
-// Third grouping level: collection/series within a wine type. Unmapped slugs are
-// each their own single-item series. Series render as separate grids (own row).
-const seriesOf = {
-  // Abrau-Durso
+// Collection grouping — ONLY Abrau-Durso ranges and Chateau Tamagne's "R" Reserve
+// wines cluster into their own row. Everything else just sorts by price.
+const groupOf = {
+  // Abrau-Durso ranges
   'abrau-durso-reserve-brut': 'Reserve', 'abrau-durso-reserve-brut-rose': 'Reserve',
   'abrau-durso-victor-dravigny-brut': 'Victor Dravigny', 'abrau-durso-victor-dravigny-rose': 'Victor Dravigny', 'abrau-durso-victor-dravigny-extra-brut': 'Victor Dravigny',
   'abrau-durso-brut-dor-blanc-de-noir': "Brut d'Or", 'abrau-durso-brut-dor-riesling': "Brut d'Or",
   'abrau-durso-alexander-ii-brut-vintage': 'Alexander II', 'abrau-durso-alexander-ii-brut-rose': 'Alexander II',
-  'abrau-durso-chardonnay': 'Premium', 'abrau-durso-riesling': 'Premium', 'abrau-durso-pinot-noir': 'Premium',
-  // Aristov
-  'aristov-anima-brut-white': 'Anima', 'aristov-anima-brut-rose': 'Anima',
-  'aristov-cuvee-alexander-brut': 'Cuvée Alexander', 'aristov-cuvee-alexander-intenso-rosso': 'Cuvée Alexander',
-  // Chateau Tamagne
-  'chateau-tamagne-sparkling-brut-white': 'Sparkling', 'chateau-tamagne-sparkling-brut-rose': 'Sparkling',
-  'chateau-tamagne-duo-blanc': 'Duo', 'chateau-tamagne-duo-red': 'Duo',
-  'chateau-tamagne-chardonnay': 'Classic', 'chateau-tamagne-cabernet': 'Classic',
-  'chateau-tamagne-nature-vert': 'Nature', 'chateau-tamagne-nature-orange': 'Nature', 'chateau-tamagne-nature-violet': 'Nature',
-  'chateau-tamagne-krasnostop-saperavi': 'Best Seller', 'chateau-tamagne-nude-saperavi': 'Best Seller',
-  'chateau-tamagne-cabernet-reserve': 'Reserve', 'chateau-tamagne-premier-rouge-reserve': 'Reserve', 'chateau-tamagne-saperavi-reserve': 'Reserve', 'chateau-tamagne-krasnostop-reserve': 'Reserve',
-  'chateau-tamagne-signature-chardonnay': 'Signature', 'chateau-tamagne-signature-saperavi': 'Signature', 'chateau-tamagne-signature-cabernet': 'Signature',
-  'chateau-tamagne-krasnostop-reserve-2016': 'Reserve Limited',
+  // Chateau Tamagne "R" Reserve line only
+  'chateau-tamagne-cabernet-reserve': 'CT-Reserve', 'chateau-tamagne-premier-rouge-reserve': 'CT-Reserve', 'chateau-tamagne-saperavi-reserve': 'CT-Reserve', 'chateau-tamagne-krasnostop-reserve': 'CT-Reserve',
 };
-const getSeries = (it) => seriesOf[it.slug] || it.slug;
 
 const priceBlock = (it) => {
   if (it.prices) {
@@ -172,13 +160,16 @@ const producerSection = (p) => {
     const types = ['sparkling', 'white', 'rose', 'red'].filter((t) => list.some((it) => it.type === t));
     const showSub = types.length > 1;
     body = types.map((t) => {
-      const inType = list.filter((it) => it.type === t);
-      const bySeries = {};
-      for (const it of inType) { const s = getSeries(it); (bySeries[s] = bySeries[s] || []).push(it); }
-      const keys = Object.keys(bySeries).sort((a, b) =>
-        Math.min(...bySeries[a].map(priceNum)) - Math.min(...bySeries[b].map(priceNum)));
-      const grids = keys.map((s) =>
-        `<div class="grid">${bySeries[s].sort((a, b) => priceNum(a) - priceNum(b)).map(card).join('')}</div>`).join('');
+      const inType = list.filter((it) => it.type === t).sort((a, b) => priceNum(a) - priceNum(b));
+      // Segment consecutive same-group items (or runs of ungrouped) into their own grid.
+      const segs = [];
+      for (const it of inType) {
+        const g = groupOf[it.slug] || null;
+        const last = segs[segs.length - 1];
+        if (last && ((g && last.g === g) || (!g && !last.g))) last.items.push(it);
+        else segs.push({ g, items: [it] });
+      }
+      const grids = segs.map((s) => `<div class="grid">${s.items.map(card).join('')}</div>`).join('');
       const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
       return `${sub}${grids}`;
     }).join('');
@@ -265,6 +256,8 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: cover full-bleed own page; producers flow continuously */
+  /* Full-bleed Warm White (margin:0); top gaps come from padding on the elements
+     that can land at a page top, so nothing hugs the edge and the fill reaches it. */
   @page{size:A4;margin:0}
   @media print{
     html,body{background:var(--white)}
@@ -272,12 +265,11 @@ const html = `<!doctype html>
     .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     /* page breaks fall on producer boundaries */
-    .prod{page-break-before:always;padding:13mm 0 8mm}
+    .prod{page-break-before:always;padding:12mm 0 10mm}
     .prod:first-of-type{page-break-before:avoid}
     .prod-head{break-after:avoid;page-break-after:avoid}
-    .subhead{page-break-after:avoid;break-after:avoid;margin:5mm 0 4mm}
-    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
-    .grid + .grid{margin-top:4mm}
+    .subhead{page-break-after:avoid;break-after:avoid;margin:0 0 4mm;padding-top:5mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm;break-inside:avoid;padding-top:5mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}
