@@ -101,6 +101,9 @@ const items = [
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const priceNum = (it) => Number((it.price || (it.prices && it.prices[0][1]) || '0').replace(/[^0-9.]/g, ''));
+// Split into small grids (≤4 cards) so each stays whole across page breaks — full
+// Warm White bleed (margin:0) with no top-edge hug and no big empty gaps.
+const chunkArr = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
 
 // Uniform "<Wine name>, <Producer>" — strip a producer prefix/suffix, then append.
 const pname = Object.fromEntries(producers.map((p) => [p.id, p.name]));
@@ -169,7 +172,7 @@ const producerSection = (p) => {
         if (last && ((g && last.g === g) || (!g && !last.g))) last.items.push(it);
         else segs.push({ g, items: [it] });
       }
-      const grids = segs.map((s) => `<div class="grid${s.g ? ' keep' : ''}">${s.items.map(card).join('')}</div>`).join('');
+      const grids = segs.map((s) => chunkArr(s.items, 4).map((ch) => `<div class="grid">${ch.map(card).join('')}</div>`).join('')).join('');
       const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
       return `${sub}${grids}`;
     }).join('');
@@ -256,23 +259,20 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: cover full-bleed own page; producers flow continuously */
-  /* Sides bleed to the paper edge; 11mm top/bottom keeps text off the edge. Only
-     grouped segments (.keep) stay whole; plain grids flow to fill the page. */
-  @page{size:A4;margin:11mm 0}
-  @page cover{margin:0}
+  /* Full-bleed Warm White to every edge (margin:0). Small ≤4-card grids stay whole
+     and carry a top pad, so nothing hugs the top edge and no big gaps form. */
+  @page{size:A4;margin:0}
   @media print{
     html,body{background:var(--white)}
     .page{max-width:none;padding:0 12mm}
-    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     /* page breaks fall on producer boundaries */
-    .prod{page-break-before:always;padding:0 0 10mm}
+    .prod{page-break-before:always;padding:12mm 0 10mm}
     .prod:first-of-type{page-break-before:avoid}
     .prod-head{break-after:avoid;page-break-after:avoid}
-    .subhead{page-break-after:avoid;break-after:avoid;margin:5mm 0 4mm}
-    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
-    .grid.keep{break-inside:avoid}
-    .grid + .grid{margin-top:4mm}
+    .subhead{page-break-after:avoid;break-after:avoid;margin:0 0 4mm;padding-top:6mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm;break-inside:avoid;padding-top:5mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}

@@ -113,6 +113,9 @@ const displayName = (it) => {
   return `${n}, ${p}`;
 };
 
+// Split a type into small grids (≤4) so each stays whole — full-bleed with no hug/gaps.
+const chunkArr = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+
 const priceBlock = (it) => {
   if (it.prices) {
     return `<div class="prices">${it.prices.map(([v, p]) =>
@@ -141,7 +144,7 @@ const section = (s) => `
       <h2>${esc(s.title)}</h2>
       <span class="cat-rule"></span>
     </header>
-    <div class="grid">${s.items.map(card).join('')}</div>
+    ${chunkArr(s.items, 4).map((ch) => `<div class="grid">${ch.map(card).join('')}</div>`).join('')}
   </section>`;
 
 const html = `<!doctype html>
@@ -211,19 +214,18 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: A4. Cover = full-bleed own page; each category starts a new page. */
-  /* Sides bleed to the paper edge; 11mm top/bottom keeps text off the edge on every sheet */
-  @page{size:A4;margin:11mm 0}
-  @page cover{margin:0}
+  /* Full-bleed Warm White to every edge (margin:0); small ≤4-card grids stay whole + top pad */
+  @page{size:A4;margin:0}
   @media print{
     html,body{background:var(--white)}
     .page{max-width:none;padding:0 12mm}
-    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     /* page breaks fall on wine-type (category) boundaries */
-    .cat{page-break-before:always;padding:0 0 8mm}
+    .cat{page-break-before:always;padding:12mm 0 10mm}
     .cat:first-of-type{page-break-before:avoid}
     .cat-head{page-break-after:avoid;break-after:avoid}
-    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm;break-inside:avoid;padding-top:5mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}
