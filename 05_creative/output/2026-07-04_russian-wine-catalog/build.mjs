@@ -171,7 +171,7 @@ const html = `<!doctype html>
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
 
-  .card{position:relative;background:var(--cream);border:1px solid var(--stone);border-radius:14px;
+  .card{position:relative;background:transparent;border:1px solid #cbbfae;border-radius:14px;
     padding:20px 18px 18px;display:flex;flex-direction:column;overflow:hidden}
   .card .shot{height:200px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:14px}
   .card .shot img{max-height:200px;max-width:82%;width:auto;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(26,26,26,.18))}
@@ -202,7 +202,7 @@ const html = `<!doctype html>
   @page{size:A4;margin:14mm 12mm}
   @page cover{margin:0}
   @media print{
-    body{background:#fff}
+    body{background:var(--white)}
     .page{max-width:none;padding:0}
     .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
