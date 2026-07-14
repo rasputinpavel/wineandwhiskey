@@ -144,7 +144,7 @@ const section = (s) => `
       <h2>${esc(s.title)}</h2>
       <span class="cat-rule"></span>
     </header>
-    ${chunkArr(s.items, 4).map((ch) => `<div class="grid">${ch.map(card).join('')}</div>`).join('')}
+    <div class="grid">${s.items.map(card).join('')}</div>
   </section>`;
 
 const html = `<!doctype html>
@@ -225,7 +225,7 @@ const html = `<!doctype html>
     .cat{page-break-before:always;padding:12mm 0 10mm}
     .cat:first-of-type{page-break-before:avoid}
     .cat-head{page-break-after:avoid;break-after:avoid}
-    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm;break-inside:avoid;padding-top:5mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:5mm 8mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}
