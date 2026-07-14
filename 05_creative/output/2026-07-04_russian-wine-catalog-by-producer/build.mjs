@@ -169,7 +169,7 @@ const producerSection = (p) => {
         if (last && ((g && last.g === g) || (!g && !last.g))) last.items.push(it);
         else segs.push({ g, items: [it] });
       }
-      const grids = segs.map((s) => `<div class="grid">${s.items.map(card).join('')}</div>`).join('');
+      const grids = segs.map((s) => `<div class="grid${s.g ? ' keep' : ''}">${s.items.map(card).join('')}</div>`).join('');
       const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
       return `${sub}${grids}`;
     }).join('');
@@ -256,20 +256,23 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: cover full-bleed own page; producers flow continuously */
-  /* Full-bleed Warm White (margin:0); top gaps come from padding on the elements
-     that can land at a page top, so nothing hugs the edge and the fill reaches it. */
-  @page{size:A4;margin:0}
+  /* Sides bleed to the paper edge; 11mm top/bottom keeps text off the edge. Only
+     grouped segments (.keep) stay whole; plain grids flow to fill the page. */
+  @page{size:A4;margin:11mm 0}
+  @page cover{margin:0}
   @media print{
     html,body{background:var(--white)}
     .page{max-width:none;padding:0 12mm}
-    .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     /* page breaks fall on producer boundaries */
-    .prod{page-break-before:always;padding:12mm 0 10mm}
+    .prod{page-break-before:always;padding:0 0 10mm}
     .prod:first-of-type{page-break-before:avoid}
     .prod-head{break-after:avoid;page-break-after:avoid}
-    .subhead{page-break-after:avoid;break-after:avoid;margin:0 0 4mm;padding-top:5mm}
-    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm;break-inside:avoid;padding-top:5mm}
+    .subhead{page-break-after:avoid;break-after:avoid;margin:5mm 0 4mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
+    .grid.keep{break-inside:avoid}
+    .grid + .grid{margin-top:4mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}
