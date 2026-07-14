@@ -65,7 +65,6 @@ OSWALD_LATIN = b64(ROOT / "04_brand/logo/fonts/Oswald500-latin.woff2")
 OSWALD_CYRILLIC = b64(ROOT / "04_brand/logo/fonts/Oswald500-cyrillic.woff2")
 INTER = b64(ROOT / "04_brand/logo/fonts/Inter500.woff2")
 LOGO = b64(ROOT / "04_brand/logo/channel_avatar_light.png")
-QR = b64(HERE / "assets/wa_qr.png")
 
 FONT_FACES = f"""
 @font-face {{ font-family:'Bebas Neue'; src:url(data:font/woff2;base64,{BEBAS}) format('woff2'); font-weight:400; font-display:block; }}
@@ -75,6 +74,11 @@ FONT_FACES = f"""
 """
 
 WA_LABEL = {"en": "Message us", "ru": "Напишите нам"}
+# Clarifying tagline so a glanceable Story reads as "birthday drinks", not just a logo.
+TAGLINE = {
+    "en": "Birthday drinks · curated &amp; delivered",
+    "ru": "Напитки на праздник · подберём и привезём",
+}
 
 # --- shared brand tokens, verbatim from build.py -----------------------
 BASE_CSS = """
@@ -158,20 +162,19 @@ html,body {{ width:{W}px; height:{H}px; }}
 .subline {{ margin-top:36px; font-size:40px; line-height:1.3; color:var(--graphite);
   font-weight:500; max-width:760px; }}
 
+.tagline {{ flex:0 0 auto; margin-top:26px; font-family:'Inter'; font-weight:600;
+  font-size:25px; letter-spacing:.13em; text-transform:uppercase; color:var(--wine);
+  text-align:center; max-width:840px; line-height:1.35; }}
+
 .cta {{
-  position:absolute; left:96px; right:96px; bottom:262px;
-  display:flex; align-items:center; gap:28px;
+  position:absolute; left:0; right:0; bottom:280px; margin:0 auto; width:max-content;
+  display:inline-flex; align-items:center; gap:20px;
   background:var(--black); color:var(--white);
-  border-radius:20px; padding:32px 36px;
-  box-shadow:0 22px 50px rgba(26,26,26,.28);
+  border-radius:999px; padding:32px 68px;
+  font-family:'Inter'; font-weight:600; font-size:42px; letter-spacing:.05em;
+  text-transform:uppercase; box-shadow:0 22px 50px rgba(26,26,26,.28);
 }}
-.cta .qr {{ flex:0 0 auto; width:140px; height:140px; background:#fff; border-radius:14px;
-  padding:10px; box-shadow:0 6px 18px rgba(0,0,0,.28); }}
-.cta .qr img {{ width:100%; height:100%; display:block; }}
-.cta .msg {{ flex:1; }}
-.cta .msg .lead {{ font-family:'Inter'; font-weight:500; font-size:19px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--gold); }}
-.cta .msg .num {{ margin-top:9px; font-family:'Inter'; font-weight:500; font-size:30px; color:#fff; }}
+.cta .arrow {{ color:var(--gold); font-weight:700; }}
 """
 
 
@@ -180,23 +183,19 @@ def render_html(angle: str, lang: str) -> str:
     headline = entry["headline"]
     sub = entry["sub"]
     wa_label = WA_LABEL[lang]
+    tagline = TAGLINE[lang]
 
     body = f"""
 <div class="card">
   <div class="decor" aria-hidden="true">{DECOR_ST}</div>
   <canvas id="fx" width="{W}" height="{H}"></canvas>
   <div class="head"><img src="data:image/png;base64,{LOGO}" alt="Wine &amp; Whiskey"></div>
+  <div class="tagline">{tagline}</div>
   <div class="copy">
     <h1 class="headline lang-{lang}" id="headline">{headline}</h1>
     <p class="subline" id="subline">{sub}</p>
   </div>
-  <div class="cta">
-    <div class="qr"><img src="data:image/png;base64,{QR}" alt="WhatsApp QR"></div>
-    <div class="msg">
-      <div class="lead">{wa_label}</div>
-      <div class="num">WhatsApp +66 80 902 0550</div>
-    </div>
-  </div>
+  <div class="cta"><span class="label">{wa_label}</span><span class="arrow">&rarr;</span></div>
 </div>
 """
 
