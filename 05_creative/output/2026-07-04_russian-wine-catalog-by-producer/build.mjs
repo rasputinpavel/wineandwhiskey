@@ -102,6 +102,41 @@ const items = [
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const priceNum = (it) => Number((it.price || (it.prices && it.prices[0][1]) || '0').replace(/[^0-9.]/g, ''));
 
+// Uniform "<Wine name>, <Producer>" — strip a producer prefix/suffix, then append.
+const pname = Object.fromEntries(producers.map((p) => [p.id, p.name]));
+const displayName = (it) => {
+  if (it.type === 'spirit') return it.name;
+  const p = pname[it.winery];
+  let n = it.name;
+  if (n.startsWith(p + ' ')) n = n.slice(p.length + 1);
+  else if (n.endsWith(', ' + p)) n = n.slice(0, -(p.length + 2));
+  return `${n}, ${p}`;
+};
+
+// Third grouping level: collection/series within a wine type. Unmapped slugs are
+// each their own single-item series. Series render as separate grids (own row).
+const seriesOf = {
+  // Abrau-Durso
+  'abrau-durso-reserve-brut': 'Reserve', 'abrau-durso-reserve-brut-rose': 'Reserve',
+  'abrau-durso-victor-dravigny-brut': 'Victor Dravigny', 'abrau-durso-victor-dravigny-rose': 'Victor Dravigny', 'abrau-durso-victor-dravigny-extra-brut': 'Victor Dravigny',
+  'abrau-durso-brut-dor-blanc-de-noir': "Brut d'Or", 'abrau-durso-brut-dor-riesling': "Brut d'Or",
+  'abrau-durso-alexander-ii-brut-vintage': 'Alexander II', 'abrau-durso-alexander-ii-brut-rose': 'Alexander II',
+  'abrau-durso-chardonnay': 'Premium', 'abrau-durso-riesling': 'Premium', 'abrau-durso-pinot-noir': 'Premium',
+  // Aristov
+  'aristov-anima-brut-white': 'Anima', 'aristov-anima-brut-rose': 'Anima',
+  'aristov-cuvee-alexander-brut': 'Cuvée Alexander', 'aristov-cuvee-alexander-intenso-rosso': 'Cuvée Alexander',
+  // Chateau Tamagne
+  'chateau-tamagne-sparkling-brut-white': 'Sparkling', 'chateau-tamagne-sparkling-brut-rose': 'Sparkling',
+  'chateau-tamagne-duo-blanc': 'Duo', 'chateau-tamagne-duo-red': 'Duo',
+  'chateau-tamagne-chardonnay': 'Classic', 'chateau-tamagne-cabernet': 'Classic',
+  'chateau-tamagne-nature-vert': 'Nature', 'chateau-tamagne-nature-orange': 'Nature', 'chateau-tamagne-nature-violet': 'Nature',
+  'chateau-tamagne-krasnostop-saperavi': 'Best Seller', 'chateau-tamagne-nude-saperavi': 'Best Seller',
+  'chateau-tamagne-cabernet-reserve': 'Reserve', 'chateau-tamagne-premier-rouge-reserve': 'Reserve', 'chateau-tamagne-saperavi-reserve': 'Reserve', 'chateau-tamagne-krasnostop-reserve': 'Reserve',
+  'chateau-tamagne-signature-chardonnay': 'Signature', 'chateau-tamagne-signature-saperavi': 'Signature', 'chateau-tamagne-signature-cabernet': 'Signature',
+  'chateau-tamagne-krasnostop-reserve-2016': 'Reserve Limited',
+};
+const getSeries = (it) => seriesOf[it.slug] || it.slug;
+
 const priceBlock = (it) => {
   if (it.prices) {
     return `<div class="prices">${it.prices.map(([v, p]) =>
@@ -115,7 +150,7 @@ const card = (it) => `
     ${it.best ? '<span class="ribbon">Best Seller</span>' : ''}
     <div class="shot"><img src="${img(it.slug)}" alt="${esc(it.name)}" loading="lazy"></div>
     <div class="info">
-      <h3 class="name">${esc(it.name)}</h3>
+      <h3 class="name">${esc(displayName(it))}</h3>
       ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
       ${it.type === 'spirit'
         ? `<p class="meta">${esc(it.detail)}</p>`
@@ -134,13 +169,18 @@ const producerSection = (p) => {
       return `<h3 class="subhead"><span class="sdot sdot-spirit"></span>${label}</h3><div class="grid">${g.map(card).join('')}</div>`;
     }).join('');
   } else {
-    const sorted = list.sort((a, b) => (typeOrder[a.type] - typeOrder[b.type]) || (priceNum(a) - priceNum(b)));
-    const types = ['sparkling', 'white', 'rose', 'red'].filter((t) => sorted.some((it) => it.type === t));
+    const types = ['sparkling', 'white', 'rose', 'red'].filter((t) => list.some((it) => it.type === t));
     const showSub = types.length > 1;
     body = types.map((t) => {
-      const g = sorted.filter((it) => it.type === t);
+      const inType = list.filter((it) => it.type === t);
+      const bySeries = {};
+      for (const it of inType) { const s = getSeries(it); (bySeries[s] = bySeries[s] || []).push(it); }
+      const keys = Object.keys(bySeries).sort((a, b) =>
+        Math.min(...bySeries[a].map(priceNum)) - Math.min(...bySeries[b].map(priceNum)));
+      const grids = keys.map((s) =>
+        `<div class="grid">${bySeries[s].sort((a, b) => priceNum(a) - priceNum(b)).map(card).join('')}</div>`).join('');
       const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
-      return `${sub}<div class="grid">${g.map(card).join('')}</div>`;
+      return `${sub}${grids}`;
     }).join('');
   }
   return `
@@ -197,6 +237,7 @@ const html = `<!doctype html>
 
   /* Horizontal cards: bottle at full height on the left, info on the right */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .grid + .grid{margin-top:9px}
 
   .card{position:relative;display:flex;align-items:center;gap:14px;background:transparent;border:1px solid #cbbfae;
     border-radius:12px;padding:14px 16px;overflow:hidden}
@@ -236,6 +277,7 @@ const html = `<!doctype html>
     .prod-head{break-after:avoid;page-break-after:avoid}
     .subhead{page-break-after:avoid;break-after:avoid;margin:5mm 0 4mm}
     .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
+    .grid + .grid{margin-top:4mm}
     .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
     .card .name{font-size:12.5px;margin-bottom:5px}
     .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}

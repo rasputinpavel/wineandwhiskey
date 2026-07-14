@@ -103,6 +103,16 @@ const sections = [
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Uniform "<Wine name>, <Producer>" — strip a producer prefix/suffix, then append.
+const displayName = (it) => {
+  if (!it.variety) return it.name; // spirits
+  const p = it.producer.split(' · ')[0];
+  let n = it.name;
+  if (n.startsWith(p + ' ')) n = n.slice(p.length + 1);
+  else if (n.endsWith(', ' + p)) n = n.slice(0, -(p.length + 2));
+  return `${n}, ${p}`;
+};
+
 const priceBlock = (it) => {
   if (it.prices) {
     return `<div class="prices">${it.prices.map(([v, p]) =>
@@ -116,7 +126,7 @@ const card = (it) => `
     ${it.best ? '<span class="ribbon">Best Seller</span>' : ''}
     <div class="shot"><img src="${img(it.slug)}" alt="${esc(it.name)}" loading="lazy"></div>
     <div class="info">
-      <h3 class="name">${esc(it.name)}</h3>
+      <h3 class="name">${esc(displayName(it))}</h3>
       ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
       ${it.variety
         ? `<p class="meta">${esc(it.producer)} · ${esc(it.abv)}</p>`
