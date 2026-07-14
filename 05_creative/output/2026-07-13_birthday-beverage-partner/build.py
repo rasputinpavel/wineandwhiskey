@@ -72,7 +72,7 @@ body {
 }
 .headline { text-transform:uppercase; letter-spacing:.01em; }
 .headline.lang-en { font-family:'Bebas Neue'; font-weight:400; }
-.headline.lang-ru { font-family:'Oswald'; font-weight:500; letter-spacing:.005em; }
+.headline.lang-ru { font-family:'Oswald'; font-weight:500; letter-spacing:.005em; line-height:1.16; }
 """
 
 # Decor: brand-tint balloons + confetti dots, kept out of the safe zone
