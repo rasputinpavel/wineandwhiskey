@@ -202,7 +202,7 @@ const html = `<!doctype html>
   @page{size:A4;margin:14mm 12mm}
   @page cover{margin:0}
   @media print{
-    body{background:var(--white)}
+    html,body{background:var(--white)}
     .page{max-width:none;padding:0}
     .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}

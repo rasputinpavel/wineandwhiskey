@@ -118,7 +118,7 @@ const card = (it) => `
     ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
     ${it.type === 'spirit'
       ? `<p class="meta">${esc(it.detail)}</p>`
-      : `<p class="meta"><span class="tt tt-${it.type}">${typeLabel[it.type]}</span> · ${esc(it.abv)}</p>`}
+      : `<p class="meta">ABV ${esc(it.abv)}</p>`}
     ${priceBlock(it)}
   </article>`;
 
@@ -126,6 +126,13 @@ const producerSection = (p) => {
   const list = items
     .filter((it) => it.winery === p.id)
     .sort((a, b) => (typeOrder[a.type] - typeOrder[b.type]) || (priceNum(a) - priceNum(b)));
+  const types = ['sparkling', 'white', 'rose', 'red', 'spirit'].filter((t) => list.some((it) => it.type === t));
+  const showSub = p.id !== 'spirits' && types.length > 1;
+  const body = types.map((t) => {
+    const g = list.filter((it) => it.type === t);
+    const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
+    return `${sub}<div class="grid">${g.map(card).join('')}</div>`;
+  }).join('');
   return `
   <section class="prod" id="prod-${p.id}">
     <header class="prod-head">
@@ -133,7 +140,7 @@ const producerSection = (p) => {
       <p class="prod-sub">${esc(p.sub)}</p>
       <span class="prod-rule"></span>
     </header>
-    <div class="grid">${list.map(card).join('')}</div>
+    ${body}
   </section>`;
 };
 
@@ -174,6 +181,9 @@ const html = `<!doctype html>
   .prod-head h2{font-family:'Bebas Neue';font-size:48px;letter-spacing:.04em;color:var(--wine);line-height:1;text-transform:uppercase}
   .prod-sub{font-family:'Inter';font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--graphite);margin-top:4px}
   .prod-rule{display:block;height:2px;background:linear-gradient(90deg,var(--wine) 0%,var(--stone) 30%,transparent 100%);margin-top:12px}
+  .subhead{display:flex;align-items:center;gap:9px;font-family:'Inter';font-weight:600;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--graphite);margin:22px 0 14px}
+  .sdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .sdot-sparkling{background:#c8a94c}.sdot-white{background:#a7b56a}.sdot-rose{background:#d08a99}.sdot-red{background:var(--wine)}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
 
@@ -208,8 +218,9 @@ const html = `<!doctype html>
   @page{size:A4;margin:14mm 12mm}
   @page cover{margin:0}
   @media print{
-    body{background:var(--white)}
+    html,body{background:var(--white)}
     .page{max-width:none;padding:0}
+    .subhead{page-break-after:avoid;break-after:avoid;margin:6mm 0 4mm}
     .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
     .prod{padding:12px 0 6px}
@@ -217,7 +228,7 @@ const html = `<!doctype html>
     .prod-head{break-after:avoid;page-break-after:avoid}
     .grid{grid-template-columns:repeat(3,1fr);gap:9mm 8mm}
     .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
-    .card .shot{height:34mm}.card .shot img{max-height:34mm;filter:none}
+    .card .shot{height:27mm}.card .shot img{max-height:27mm;filter:none}
     .foot{page-break-before:avoid;margin-top:14px;padding:16px 0 0}
   }
   @media (max-width:640px){
