@@ -172,7 +172,7 @@ const producerSection = (p) => {
         if (last && ((g && last.g === g) || (!g && !last.g))) last.items.push(it);
         else segs.push({ g, items: [it] });
       }
-      const grids = segs.map((s) => `<div class="grid${s.g ? ' keep' : ''}">${s.items.map(card).join('')}</div>`).join('');
+      const grids = segs.map((s) => `<div class="grid${(s.g || s.items.length <= 4) ? ' keep' : ''}">${s.items.map(card).join('')}</div>`).join('');
       const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
       return `${sub}${grids}`;
     }).join('');
