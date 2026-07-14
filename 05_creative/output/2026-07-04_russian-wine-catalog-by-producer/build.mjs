@@ -90,13 +90,13 @@ const items = [
   { winery: 'sikory', type: 'red', name: 'Sikory Cabernet Sauvignon', slug: 'sikory-cabernet-family-reserve', price: '฿1,900', variety: 'Cabernet Sauvignon', abv: '14%' },
 
   // --- Spirits ---
-  { winery: 'spirits', type: 'spirit', name: 'Ladoga', slug: 'ladoga-vodka', prices: [['1 L', '฿749'], ['0.7 L', '฿599']], detail: 'Premium Russian vodka · St-Petersburg · 40%' },
-  { winery: 'spirits', type: 'spirit', name: "Czar's Original", slug: 'czars-original', prices: [['1 L', '฿810'], ['0.7 L', '฿610']], detail: 'Super-premium Russian vodka · St-Petersburg · 40%' },
-  { winery: 'spirits', type: 'spirit', name: "Czar's Gold", slug: 'czars-gold', prices: [['1 L', '฿1,185'], ['0.7 L', '฿1,060']], detail: 'Luxury Russian vodka · St-Petersburg · 40%' },
-  { winery: 'spirits', type: 'spirit', name: 'Barrister Gin Dry', slug: 'barrister-dry-gin', price: '฿910', detail: 'London dry gin · 0.7 L · 40%' },
-  { winery: 'spirits', type: 'spirit', name: 'Barrister Gin Pink', slug: 'barrister-pink-gin', price: '฿990', detail: 'Pink gin · 0.7 L · 40%' },
-  { winery: 'spirits', type: 'spirit', name: 'Barrister Gin Blue', slug: 'barrister-blue-gin', price: '฿990', detail: 'Blue gin · 0.7 L · 40%' },
-  { winery: 'spirits', type: 'spirit', name: 'Barrister Gin Sloe', slug: 'barrister-sloe-gin', price: '฿990', detail: 'Sloe gin · Limited Edition · 26%' },
+  { winery: 'spirits', type: 'spirit', stype: 'vodka', name: 'Ladoga', slug: 'ladoga-vodka', prices: [['1 L', '฿749'], ['0.7 L', '฿599']], detail: 'Premium Russian vodka · St-Petersburg · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'vodka', name: "Czar's Original", slug: 'czars-original', prices: [['1 L', '฿810'], ['0.7 L', '฿610']], detail: 'Super-premium Russian vodka · St-Petersburg · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'vodka', name: "Czar's Gold", slug: 'czars-gold', prices: [['1 L', '฿1,185'], ['0.7 L', '฿1,060']], detail: 'Luxury Russian vodka · St-Petersburg · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'gin', name: 'Barrister Gin Dry', slug: 'barrister-dry-gin', price: '฿910', detail: 'London dry gin · 0.7 L · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'gin', name: 'Barrister Gin Pink', slug: 'barrister-pink-gin', price: '฿990', detail: 'Pink gin · 0.7 L · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'gin', name: 'Barrister Gin Blue', slug: 'barrister-blue-gin', price: '฿990', detail: 'Blue gin · 0.7 L · 40%' },
+  { winery: 'spirits', type: 'spirit', stype: 'gin', name: 'Barrister Gin Sloe', slug: 'barrister-sloe-gin', price: '฿990', detail: 'Sloe gin · Limited Edition · 26%' },
 ];
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -114,25 +114,35 @@ const card = (it) => `
   <article class="card${it.best ? ' is-best' : ''}">
     ${it.best ? '<span class="ribbon">Best Seller</span>' : ''}
     <div class="shot"><img src="${img(it.slug)}" alt="${esc(it.name)}" loading="lazy"></div>
-    <h3 class="name">${esc(it.name)}</h3>
-    ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
-    ${it.type === 'spirit'
-      ? `<p class="meta">${esc(it.detail)}</p>`
-      : `<p class="meta">ABV ${esc(it.abv)}</p>`}
-    ${priceBlock(it)}
+    <div class="info">
+      <h3 class="name">${esc(it.name)}</h3>
+      ${it.variety ? `<div class="grape"><span class="glabel">Grape</span><span class="gval">${esc(it.variety)}</span></div>` : ''}
+      ${it.type === 'spirit'
+        ? `<p class="meta">${esc(it.detail)}</p>`
+        : `<p class="meta">ABV ${esc(it.abv)}</p>`}
+      ${priceBlock(it)}
+    </div>
   </article>`;
 
 const producerSection = (p) => {
-  const list = items
-    .filter((it) => it.winery === p.id)
-    .sort((a, b) => (typeOrder[a.type] - typeOrder[b.type]) || (priceNum(a) - priceNum(b)));
-  const types = ['sparkling', 'white', 'rose', 'red', 'spirit'].filter((t) => list.some((it) => it.type === t));
-  const showSub = p.id !== 'spirits' && types.length > 1;
-  const body = types.map((t) => {
-    const g = list.filter((it) => it.type === t);
-    const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
-    return `${sub}<div class="grid">${g.map(card).join('')}</div>`;
-  }).join('');
+  const list = items.filter((it) => it.winery === p.id);
+  let body;
+  if (p.id === 'spirits') {
+    body = [['vodka', 'Vodka'], ['gin', 'Gin']].map(([s, label]) => {
+      const g = list.filter((it) => it.stype === s).sort((a, b) => priceNum(a) - priceNum(b));
+      if (!g.length) return '';
+      return `<h3 class="subhead"><span class="sdot sdot-spirit"></span>${label}</h3><div class="grid">${g.map(card).join('')}</div>`;
+    }).join('');
+  } else {
+    const sorted = list.sort((a, b) => (typeOrder[a.type] - typeOrder[b.type]) || (priceNum(a) - priceNum(b)));
+    const types = ['sparkling', 'white', 'rose', 'red'].filter((t) => sorted.some((it) => it.type === t));
+    const showSub = types.length > 1;
+    body = types.map((t) => {
+      const g = sorted.filter((it) => it.type === t);
+      const sub = showSub ? `<h3 class="subhead"><span class="sdot sdot-${t}"></span>${typeLabel[t]}</h3>` : '';
+      return `${sub}<div class="grid">${g.map(card).join('')}</div>`;
+    }).join('');
+  }
   return `
   <section class="prod" id="prod-${p.id}">
     <header class="prod-head">
@@ -183,31 +193,30 @@ const html = `<!doctype html>
   .prod-rule{display:block;height:2px;background:linear-gradient(90deg,var(--wine) 0%,var(--stone) 30%,transparent 100%);margin-top:12px}
   .subhead{display:flex;align-items:center;gap:9px;font-family:'Inter';font-weight:600;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--graphite);margin:22px 0 14px}
   .sdot{width:9px;height:9px;border-radius:50%;flex:none}
-  .sdot-sparkling{background:#c8a94c}.sdot-white{background:#a7b56a}.sdot-rose{background:#d08a99}.sdot-red{background:var(--wine)}
+  .sdot-sparkling{background:#c8a94c}.sdot-white{background:#a7b56a}.sdot-rose{background:#d08a99}.sdot-red{background:var(--wine)}.sdot-spirit{background:#7a8a99}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
+  /* Horizontal cards: bottle at full height on the left, info on the right */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
 
-  .card{position:relative;background:transparent;border:1px solid #cbbfae;border-radius:14px;
-    padding:20px 18px 18px;display:flex;flex-direction:column;overflow:hidden}
-  .card .shot{height:190px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:14px}
-  .card .shot img{max-height:190px;max-width:82%;width:auto;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(26,26,26,.18))}
-  .card .name{font-family:'DM Sans';font-weight:600;font-size:16.5px;line-height:1.25;color:var(--black);margin-bottom:8px}
-  .grape{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--stone)}
-  .grape .glabel{flex:none;font-family:'Inter';font-weight:600;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
-  .grape .gval{font-family:'DM Sans';font-weight:600;font-size:13.5px;line-height:1.3;color:var(--burg)}
-  .card .meta{font-family:'Inter';font-size:12.5px;color:var(--graphite);line-height:1.45;margin-bottom:10px}
-  .tt{font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:11px}
-  .tt-sparkling{color:#8a6d1f}.tt-white{color:#6b7a2f}.tt-rose{color:#b05a6a}.tt-red{color:var(--wine)}
-  .card .prices{margin-top:auto;display:flex;flex-direction:column;gap:6px}
-  .prow{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .prow.single{justify-content:flex-start}
-  .prow .vol{font-family:'Inter';font-weight:500;font-size:12.5px;color:var(--graphite)}
-  .pill{font-family:'Bebas Neue';font-size:22px;letter-spacing:.03em;color:#fff;background:var(--wine);
-    border-radius:8px;padding:3px 13px 1px;line-height:1.1;white-space:nowrap}
+  .card{position:relative;display:flex;align-items:center;gap:14px;background:transparent;border:1px solid #cbbfae;
+    border-radius:12px;padding:14px 16px;overflow:hidden}
+  .card .shot{flex:0 0 78px;display:flex;align-items:center;justify-content:center}
+  .card .shot img{height:160px;max-width:78px;width:auto;object-fit:contain;filter:drop-shadow(0 6px 12px rgba(26,26,26,.16))}
+  .info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+  .card .name{font-family:'DM Sans';font-weight:600;font-size:14.5px;line-height:1.22;color:var(--black);margin-bottom:7px}
+  .grape{display:flex;align-items:baseline;gap:6px;margin-bottom:6px;padding-bottom:7px;border-bottom:1px solid var(--stone)}
+  .grape .glabel{flex:none;font-family:'Inter';font-weight:600;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+  .grape .gval{font-family:'DM Sans';font-weight:600;font-size:12.5px;line-height:1.3;color:var(--burg)}
+  .card .meta{font-family:'Inter';font-size:11.5px;color:var(--graphite);line-height:1.4;margin:0 0 9px}
+  .card .prices{display:flex;flex-direction:column;gap:5px}
+  .prow{display:flex;align-items:center;justify-content:flex-start;gap:9px}
+  .prow .vol{font-family:'Inter';font-weight:500;font-size:11.5px;color:var(--graphite);min-width:32px}
+  .pill{font-family:'Bebas Neue';font-size:20px;letter-spacing:.03em;color:#fff;background:var(--wine);
+    border-radius:7px;padding:2px 12px 0;line-height:1.15;white-space:nowrap}
 
-  .ribbon{position:absolute;top:14px;left:14px;background:var(--gold);color:var(--black);
-    font-family:'Inter';font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
-    padding:5px 10px;border-radius:6px;z-index:2}
+  .ribbon{position:absolute;top:10px;right:10px;background:var(--gold);color:var(--black);
+    font-family:'Inter';font-weight:700;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 8px;border-radius:5px;z-index:2}
 
   .foot{border-top:1px solid var(--stone);margin-top:48px;padding:22px 0 40px;text-align:center;
     font-family:'Inter';font-size:12px;color:var(--graphite);letter-spacing:.04em}
@@ -215,21 +224,25 @@ const html = `<!doctype html>
   .foot .sep{color:var(--stone);margin:0 8px}
 
   /* Print: cover full-bleed own page; producers flow continuously */
-  @page{size:A4;margin:14mm 12mm}
-  @page cover{margin:0}
+  @page{size:A4;margin:0}
   @media print{
     html,body{background:var(--white)}
-    .page{max-width:none;padding:0}
-    .subhead{page-break-after:avoid;break-after:avoid;margin:6mm 0 4mm}
-    .cover{page:cover;min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
+    .page{max-width:none;padding:0 12mm}
+    .cover{min-height:auto;height:297mm;width:210mm;overflow:hidden;page-break-after:always;padding:0 24mm}
     .cover .logo{width:54mm;height:54mm}
-    .prod{padding:12px 0 6px}
-    .prod:first-of-type{padding-top:0}
+    /* page breaks fall on producer boundaries */
+    .prod{page-break-before:always;padding:13mm 0 8mm}
+    .prod:first-of-type{page-break-before:avoid}
     .prod-head{break-after:avoid;page-break-after:avoid}
-    .grid{grid-template-columns:repeat(3,1fr);gap:9mm 8mm}
-    .card{break-inside:avoid;border-radius:10px;padding:12px 12px 12px}
-    .card .shot{height:27mm}.card .shot img{max-height:27mm;filter:none}
-    .foot{page-break-before:avoid;margin-top:14px;padding:16px 0 0}
+    .subhead{page-break-after:avoid;break-after:avoid;margin:5mm 0 4mm}
+    .grid{grid-template-columns:repeat(2,1fr);gap:6mm 9mm}
+    .card{break-inside:avoid;border-radius:9px;padding:8px 12px}
+    .card .name{font-size:12.5px;margin-bottom:5px}
+    .grape{margin-bottom:4px;padding-bottom:5px}.grape .gval{font-size:11px}
+    .card .meta{margin-bottom:6px}
+    .card .shot{flex:0 0 17mm}.card .shot img{height:38mm;max-width:17mm;filter:none}
+    .pill{font-size:17px}
+    .foot{page-break-before:avoid;padding:8mm 0 0;margin-top:8mm}
   }
   @media (max-width:640px){
     .grid{grid-template-columns:repeat(2,1fr);gap:14px}
