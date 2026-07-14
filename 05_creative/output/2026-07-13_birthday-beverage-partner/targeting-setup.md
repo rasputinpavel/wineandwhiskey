@@ -144,10 +144,10 @@ audience, not the creative set). Angle `bulk` and `brief` are static-only;
 |---|---|---|---|---|---|---|
 | `bd_curate_en_sq_v01` | curate | EN | 1080×1080 feed | `.png` | Feed | `BD \| EN` |
 | `bd_curate_en_st_v01` | curate | EN | 1080×1920 story | `.png` | Story/Reels | `BD \| EN` |
-| `bd_curate_en_st_v01` (animated) | curate | EN | 1080×1920 story | `.mp4` | Story/Reels | `BD \| EN` |
+| `bd_curate_en_stv_v01` | curate | EN | 1080×1920 story (video) | `.mp4` | Story/Reels | `BD \| EN` |
 | `bd_curate_ru_sq_v01` | curate | RU | 1080×1080 feed | `.png` | Feed | `BD \| RU` |
 | `bd_curate_ru_st_v01` | curate | RU | 1080×1920 story | `.png` | Story/Reels | `BD \| RU` |
-| `bd_curate_ru_st_v01` (animated) | curate | RU | 1080×1920 story | `.mp4` | Story/Reels | `BD \| RU` |
+| `bd_curate_ru_stv_v01` | curate | RU | 1080×1920 story (video) | `.mp4` | Story/Reels | `BD \| RU` |
 | `bd_brief_en_sq_v01` | brief | EN | feed | `.png` | Feed | `BD \| EN` |
 | `bd_brief_en_st_v01` | brief | EN | story | `.png` | Story/Reels | `BD \| EN` |
 | `bd_brief_ru_sq_v01` | brief | RU | feed | `.png` | Feed | `BD \| RU` |
@@ -158,31 +158,24 @@ audience, not the creative set). Angle `bulk` and `brief` are static-only;
 | `bd_bulk_ru_st_v01` | bulk | RU | story | `.png` | Story/Reels | `BD \| RU` |
 | `bd_delivered_en_sq_v01` | delivered | EN | feed | `.png` | Feed | `BD \| EN` |
 | `bd_delivered_en_st_v01` | delivered | EN | story | `.png` | Story/Reels | `BD \| EN` |
-| `bd_delivered_en_st_v01` (animated) | delivered | EN | story | `.mp4` | Story/Reels | `BD \| EN` |
+| `bd_delivered_en_stv_v01` | delivered | EN | story (video) | `.mp4` | Story/Reels | `BD \| EN` |
 | `bd_delivered_ru_sq_v01` | delivered | RU | feed | `.png` | Feed | `BD \| RU` |
 | `bd_delivered_ru_st_v01` | delivered | RU | story | `.png` | Story/Reels | `BD \| RU` |
-| `bd_delivered_ru_st_v01` (animated) | delivered | RU | story | `.mp4` | Story/Reels | `BD \| RU` |
+| `bd_delivered_ru_stv_v01` | delivered | RU | story (video) | `.mp4` | Story/Reels | `BD \| RU` |
 
 That's 16 static PNGs (4 angles × 2 langs × 2 formats) + 4 MP4s (curate +
 delivered, 2 langs each) = 20 ads per campaign × 2 campaigns = 40 ads total
 across the two A1/A2 ad sets — 20 ads live under each campaign, duplicated
 identically into both its A1 and A2 ad set.
 
-> **Static vs. animated story — name collision, read before uploading:** the
-> `curate` and `delivered` MP4s are rendered from the *same slug* as their
-> static story PNG (`bd_curate_en_st_v01.png` and `bd_curate_en_st_v01.mp4`
-> share one filename stem). If you run both as separate ads in the same ad
-> set to A/B test motion vs. static, Meta will let you name two ads
-> identically but your own reporting won't be able to tell them apart. Pick
-> one approach and stay consistent across all 4 pairs:
-> - **Recommended:** run the MP4 *instead of* the static PNG in the story
->   placement for `curate`/`delivered` (replace, don't duplicate) — the feed
->   placement still uses the PNG. This keeps one ad = one creative_id, no
->   collision, matches Step 6 exactly.
-> - **If you want the A/B test:** keep both, but suffix the Meta ad name
->   only — `bd_curate_en_st_v01-static` / `bd_curate_en_st_v01-anim` — and
->   add the same suffix to those two rows in `creative-tracker.csv` so
->   exported stats still map back cleanly.
+> **Static vs. animated story:** the static story PNG (`bd_curate_en_st_v01.png`)
+> and the animated story MP4 (`bd_curate_en_stv_v01.mp4`) are two distinct
+> creative_ids with the `st` vs `stv` format code doing the disambiguation —
+> no filename collision. Run **both** as separate ads in the same ad set:
+> this gives you a clean static-vs-video A/B for the same angle/language in
+> the story/Reels placement, with performance tracked independently in
+> `creative-tracker.csv` under each creative's own row. The feed placement
+> only ever uses the `sq` static PNG (no video feed variant exists).
 
 ---
 
@@ -193,6 +186,7 @@ In the ad-level **Ad name** field, type the file stem exactly:
 ```
 bd_curate_en_sq_v01
 bd_curate_en_st_v01
+bd_curate_en_stv_v01
 bd_brief_ru_st_v01
 ...
 ```
