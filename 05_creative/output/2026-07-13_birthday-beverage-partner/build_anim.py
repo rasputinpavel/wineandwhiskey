@@ -178,16 +178,51 @@ html,body {{ width:{W}px; height:{H}px; }}
 """
 
 
+# ---- Phuket geo-cue: full-canvas island coastline behind the copy + geopin. ----
+PHUKET_D = (HERE / "assets/phuket_path.txt").read_text().strip()
+PHUKET_VB = "0 0 300 725"
+_PIN = (
+    '<svg width="36" height="48" viewBox="0 0 24 32" style="display:block;'
+    'filter:drop-shadow(0 3px 5px rgba(26,26,26,.28))">'
+    '<path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" '
+    'fill="#8C1C1C"/><circle cx="12" cy="11.5" r="4.3" fill="#F5F0EB"/></svg>'
+)
+
+
+def phuket_stamp() -> str:
+    isl_h = 1620
+    isl_w = round(isl_h * 300 / 725)
+    island = (
+        f'<div style="position:absolute;z-index:0;left:50%;top:50%;'
+        f'transform:translate(-50%,-50%);pointer-events:none;">'
+        f'<svg viewBox="{PHUKET_VB}" width="{isl_w}" height="{isl_h}" '
+        f'preserveAspectRatio="xMidYMid meet" style="display:block">'
+        f'<path d="{PHUKET_D}" fill="rgba(140,28,28,0.05)" '
+        f'stroke="rgba(140,28,28,0.32)" stroke-width="2" stroke-linejoin="round"/></svg></div>'
+    )
+    # Sit the pin below the tagline (which lives right under the logo on video),
+    # in the empty band on the island body before the headline.
+    pin = (
+        f'<div style="position:absolute;z-index:1;top:512px;left:50%;'
+        f'transform:translateX(-50%);display:flex;align-items:center;gap:12px;'
+        f'pointer-events:none;">{_PIN}'
+        f'<span style="font-family:\'DM Sans\',\'Inter\',sans-serif;font-weight:600;'
+        f'font-size:36px;color:#8C1C1C;letter-spacing:.01em;">Phuket</span></div>'
+    )
+    return island + pin
+
+
 def render_html(angle: str, lang: str) -> str:
     entry = COPY[angle][lang]
     headline = entry["headline"]
     sub = entry["sub"]
     wa_label = WA_LABEL[lang]
     tagline = TAGLINE[lang]
+    phuket = phuket_stamp()
 
     body = f"""
 <div class="card">
-  <div class="decor" aria-hidden="true">{DECOR_ST}</div>
+  {phuket}<div class="decor" aria-hidden="true">{DECOR_ST}</div>
   <canvas id="fx" width="{W}" height="{H}"></canvas>
   <div class="head"><img src="data:image/png;base64,{LOGO}" alt="Wine &amp; Whiskey"></div>
   <div class="tagline">{tagline}</div>
