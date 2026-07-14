@@ -30,7 +30,7 @@ Legal frame (non-negotiable, applied to every row): no alcohol brand names, no p
 | EN | Sub | Send the budget — we build the list. | 37 |
 | EN | Primary | Send us your budget and guest count. We build the drinks list — with and without alcohol — around it. | 101 |
 | EN | CTA | Message us | — |
-| RU | Headline | ТВОЯ ПАТИ — ТВОЙ БЮДЖЕТ. | 24 |
+| RU | Headline | ТВОЯ ВЕЧЕРИНКА — ТВОЙ БЮДЖЕТ. | 29 |
 | RU | Sub | Пришли бюджет — соберём список. | 32 |
 | RU | Primary | Пришли бюджет и число гостей. Соберём список напитков — с градусами и без — под него. | 85 |
 | RU | CTA | Напишите нам | — |
@@ -45,7 +45,7 @@ Legal frame (non-negotiable, applied to every row): no alcohol brand names, no p
 | EN | Sub | Light wholesale for your celebration. | 38 |
 | EN | Primary | Light wholesale for your celebration — one order, one delivery, a friendlier price. | 83 |
 | EN | CTA | Message us | — |
-| RU | Headline | КРУПНЕЕ ПАТИ — ИНТЕРЕСНЕЕ ЦЕНА. | 31 |
+| RU | Headline | БОЛЬШЕ ГОСТЕЙ — ИНТЕРЕСНЕЕ ЦЕНА. | 32 |
 | RU | Sub | Мелкий опт на твой праздник. | 29 |
 | RU | Primary | Мелкий опт на твой праздник — один заказ, одна доставка, приятнее цена. | 71 |
 | RU | CTA | Напишите нам | — |

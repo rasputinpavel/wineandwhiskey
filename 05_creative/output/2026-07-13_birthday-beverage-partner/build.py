@@ -49,7 +49,6 @@ OSWALD_LATIN = b64(ROOT / "04_brand/logo/fonts/Oswald500-latin.woff2")
 OSWALD_CYRILLIC = b64(ROOT / "04_brand/logo/fonts/Oswald500-cyrillic.woff2")
 INTER = b64(ROOT / "04_brand/logo/fonts/Inter500.woff2")
 LOGO = b64(ROOT / "04_brand/logo/channel_avatar_light.png")
-QR = b64(HERE / "assets/wa_qr.png")
 
 FONT_FACES = f"""
 @font-face {{ font-family:'Bebas Neue'; src:url(data:font/woff2;base64,{BEBAS}) format('woff2'); font-weight:400; font-display:block; }}
@@ -196,18 +195,13 @@ html,body {{ width:{w}px; height:{h}px; }}
   font-weight:500; max-width:760px; }}
 
 .cta {{
-  flex:0 0 auto; display:flex; align-items:center; gap:22px;
+  flex:0 0 auto; align-self:center; display:inline-flex; align-items:center; gap:16px;
   background:var(--black); color:var(--white);
-  border-radius:16px; padding:22px 28px; width:100%;
-  box-shadow:0 18px 40px rgba(26,26,26,.22);
+  border-radius:999px; padding:24px 52px;
+  font-family:'Inter'; font-weight:600; font-size:30px; letter-spacing:.05em;
+  text-transform:uppercase; box-shadow:0 18px 40px rgba(26,26,26,.22);
 }}
-.cta .qr {{ flex:0 0 auto; width:96px; height:96px; background:#fff; border-radius:10px;
-  padding:7px; box-shadow:0 6px 16px rgba(0,0,0,.28); }}
-.cta .qr img {{ width:100%; height:100%; display:block; }}
-.cta .msg {{ flex:1; }}
-.cta .msg .lead {{ font-family:'Inter'; font-weight:500; font-size:15px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--gold); }}
-.cta .msg .num {{ margin-top:6px; font-family:'Inter'; font-weight:500; font-size:24px; color:#fff; }}
+.cta .arrow {{ color:var(--gold); font-weight:700; }}
 """
         body = f"""
 <div class="card">
@@ -217,13 +211,7 @@ html,body {{ width:{w}px; height:{h}px; }}
     <h1 class="headline lang-{lang}">{headline}</h1>
     <p class="subline">{sub}</p>
   </div>
-  <div class="cta">
-    <div class="qr"><img src="data:image/png;base64,{QR}" alt="WhatsApp QR"></div>
-    <div class="msg">
-      <div class="lead">{wa_label}</div>
-      <div class="num">WhatsApp +66 80 902 0550</div>
-    </div>
-  </div>
+  <div class="cta"><span class="label">{wa_label}</span><span class="arrow">&rarr;</span></div>
 </div>
 """
     else:  # story
@@ -261,19 +249,14 @@ html,body {{ width:{w}px; height:{h}px; }}
   font-weight:500; max-width:760px; }}
 
 .cta {{
-  position:absolute; left:96px; right:96px; bottom:262px;
-  display:flex; align-items:center; gap:28px;
+  position:absolute; left:0; right:0; bottom:280px; margin:0 auto; width:max-content;
+  display:inline-flex; align-items:center; gap:20px;
   background:var(--black); color:var(--white);
-  border-radius:20px; padding:32px 36px;
-  box-shadow:0 22px 50px rgba(26,26,26,.28);
+  border-radius:999px; padding:32px 68px;
+  font-family:'Inter'; font-weight:600; font-size:42px; letter-spacing:.05em;
+  text-transform:uppercase; box-shadow:0 22px 50px rgba(26,26,26,.28);
 }}
-.cta .qr {{ flex:0 0 auto; width:140px; height:140px; background:#fff; border-radius:14px;
-  padding:10px; box-shadow:0 6px 18px rgba(0,0,0,.28); }}
-.cta .qr img {{ width:100%; height:100%; display:block; }}
-.cta .msg {{ flex:1; }}
-.cta .msg .lead {{ font-family:'Inter'; font-weight:500; font-size:19px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--gold); }}
-.cta .msg .num {{ margin-top:9px; font-family:'Inter'; font-weight:500; font-size:30px; color:#fff; }}
+.cta .arrow {{ color:var(--gold); font-weight:700; }}
 """
         body = f"""
 <div class="card">
@@ -283,13 +266,7 @@ html,body {{ width:{w}px; height:{h}px; }}
     <h1 class="headline lang-{lang}">{headline}</h1>
     <p class="subline">{sub}</p>
   </div>
-  <div class="cta">
-    <div class="qr"><img src="data:image/png;base64,{QR}" alt="WhatsApp QR"></div>
-    <div class="msg">
-      <div class="lead">{wa_label}</div>
-      <div class="num">WhatsApp +66 80 902 0550</div>
-    </div>
-  </div>
+  <div class="cta"><span class="label">{wa_label}</span><span class="arrow">&rarr;</span></div>
 </div>
 """
 
