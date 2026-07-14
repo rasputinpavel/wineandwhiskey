@@ -52,18 +52,36 @@ type Props = {
   onDeleted: (id: string) => void
 }
 
+type HistoryRow = {
+  price_list_id: string
+  price: number | null
+  date: string | null
+  catalog_status: 'current' | 'expired' | null
+  is_self: boolean
+}
+
 export default function WineItemPanel({ item, mode: initialMode, onClose, onSaved, onDeleted }: Props) {
   const [mode, setMode] = useState<Mode>(initialMode)
   const [form, setForm] = useState<FormData>(item ? itemToForm(item) : EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<HistoryRow[]>([])
 
   useEffect(() => {
     setMode(initialMode)
     setForm(item ? itemToForm(item) : EMPTY_FORM)
     setError(null)
   }, [item, initialMode])
+
+  useEffect(() => {
+    setHistory([])
+    if (!item) return
+    fetch(`/api/m/price/wine-items/${item.id}/history`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(setHistory)
+      .catch(() => setHistory([]))
+  }, [item])
 
   function set(key: keyof FormData, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -265,6 +283,36 @@ export default function WineItemPanel({ item, mode: initialMode, onClose, onSave
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Price history across this supplier's catalog versions */}
+          {mode === 'view' && history.length > 1 && (
+            <div className="space-y-2 pb-1 border-b border-gray-100">
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">История цены</div>
+              <div className="space-y-1">
+                {history.map((h, i) => {
+                  const prev = i > 0 ? history[i - 1] : null
+                  const delta = prev && h.price != null && prev.price != null ? h.price - prev.price : null
+                  return (
+                    <div key={`${h.price_list_id}-${i}`} className={`flex items-center justify-between text-sm ${h.is_self ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+                      <span className="flex items-center gap-1.5">
+                        <span>{h.date ?? '—'}</span>
+                        {h.catalog_status === 'current' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">current</span>}
+                        {h.catalog_status === 'expired' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">expired</span>}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span>{h.price != null ? `฿${h.price.toLocaleString('ru-RU')}` : '—'}</span>
+                        {delta != null && delta !== 0 && (
+                          <span className={`text-xs ${delta > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                            {delta > 0 ? '▲' : '▼'}{Math.abs(delta).toLocaleString('ru-RU')}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
