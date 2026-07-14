@@ -152,6 +152,42 @@ DECOR_ST = """
 """
 
 
+# ---- Phuket geo-cue: full-canvas island coastline (accurate, from Thailand
+# provinces GeoJSON) behind the copy + a wine-red geopin labelled "Phuket". ----
+PHUKET_D = (HERE / "assets/phuket_path.txt").read_text().strip()
+PHUKET_VB = "0 0 300 725"  # real Phuket proportions (tall & narrow)
+_PIN = (
+    '<svg width="{w}" height="{h}" viewBox="0 0 24 32" style="display:block;'
+    'filter:drop-shadow(0 3px 5px rgba(26,26,26,.28))">'
+    '<path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" '
+    'fill="#8C1C1C"/><circle cx="12" cy="11.5" r="4.3" fill="#F5F0EB"/></svg>'
+)
+
+
+def phuket_stamp(fmt: str) -> str:
+    isl_h = 960 if fmt == "sq" else 1620
+    isl_w = round(isl_h * 300 / 725)
+    island = (
+        f'<div style="position:absolute;z-index:0;left:50%;top:50%;'
+        f'transform:translate(-50%,-50%);pointer-events:none;">'
+        f'<svg viewBox="{PHUKET_VB}" width="{isl_w}" height="{isl_h}" '
+        f'preserveAspectRatio="xMidYMid meet" style="display:block">'
+        f'<path d="{PHUKET_D}" fill="rgba(140,28,28,0.05)" '
+        f'stroke="rgba(140,28,28,0.32)" stroke-width="2" stroke-linejoin="round"/></svg></div>'
+    )
+    pw, ph = (30, 40) if fmt == "sq" else (36, 48)
+    lab = 30 if fmt == "sq" else 36
+    top = 250 if fmt == "sq" else 372
+    pin = (
+        f'<div style="position:absolute;z-index:1;top:{top}px;left:50%;'
+        f'transform:translateX(-50%);display:flex;align-items:center;gap:12px;'
+        f'pointer-events:none;">{_PIN.format(w=pw, h=ph)}'
+        f'<span style="font-family:\'DM Sans\',\'Inter\',sans-serif;font-weight:600;'
+        f'font-size:{lab}px;color:#8C1C1C;letter-spacing:.01em;">Phuket</span></div>'
+    )
+    return island + pin
+
+
 def render_html(angle: str, lang: str, fmt: str) -> str:
     """Build the full self-contained HTML for one angle/lang/format combo."""
     entry = COPY[angle][lang]
@@ -269,6 +305,12 @@ html,body {{ width:{w}px; height:{h}px; }}
   <div class="cta"><span class="label">{wa_label}</span><span class="arrow">&rarr;</span></div>
 </div>
 """
+
+    body = body.replace(
+        '<div class="decor" aria-hidden="true">',
+        phuket_stamp(fmt) + '<div class="decor" aria-hidden="true">',
+        1,
+    )
 
     return f"""<!doctype html>
 <html lang="{lang}">
