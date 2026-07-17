@@ -7,6 +7,9 @@ Prices = placeholder `XXX ฿`, fill in before posting.
 ## Batch 1 — "Serious Americans" 🇺🇸
 Photo: `2026-07-17_arrivals_americans.jpeg`
 
+🍷 **New on the shelf**
+**Serious Americans** 🇺🇸
+
 Three California Pinot Noirs — easy to serious.
 
 **Ca' Momi** Pinot Noir, Napa Valley 2022 — soft, ripe cherry, no homework. Your everyday Pinot. 1 690 ฿
@@ -19,6 +22,9 @@ Come taste the difference.
 
 ## Batch 2 — "Playful French naturals" 🫧
 Photo: `2026-07-17_arrivals_naturals.jpeg`
+
+🍷 **New on the shelf**
+**Playful French naturals** 🫧
 
 Three pét-nats and one still natural — with the best labels in the shop.
 

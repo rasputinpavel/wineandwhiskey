@@ -44,7 +44,10 @@ product content — take Alan's **truth and "why interesting"**, but the tone is
 3. **Prices** — **always ask the user** (text). Never look them up in inventory. No price yet
    → placeholder `XXX ฿`.
 4. **Assemble the batch post:**
-   - Theme headline (from the user's line, e.g. "Серьёзные американцы" / "Serious Americans").
+   - **Rubric header (constant):** `🍷 Новое на полке` (RU) / `🍷 New on the shelf` (EN).
+     Always the first line — it's the recurring channel rubric so followers recognise the format.
+   - Theme headline (from the user's line, e.g. "Серьёзные американцы" / "Serious Americans"),
+     on the line under the rubric.
    - One line per bottle: `Name · grape/region/vintage · one concrete note · price ฿`.
    - Soft CTA at the end (drop by / message us). Vary it, don't template it.
 5. **Two languages** — RU (Telegram) and EN (WhatsApp). Wine names stay in the original
@@ -68,6 +71,7 @@ Output BOTH posts, clearly separated, ready to copy:
 
 ```
 === TELEGRAM (RU) ===
+🍷 Новое на полке
 [theme headline]
 
 [Wine 1] — [grape/region/vintage], [one note]. [price ฿]
@@ -77,6 +81,7 @@ Output BOTH posts, clearly separated, ready to copy:
 [soft CTA]
 
 === WHATSAPP (EN) ===
+🍷 New on the shelf
 [theme headline]
 
 [Wine 1] — [grape/region/vintage], [one note]. [price ฿]
