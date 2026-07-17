@@ -78,7 +78,7 @@ HTML = f"""<!doctype html>
          margin-top:-12mm;position:relative;z-index:3}}
 
   .headline{{font-family:'Bebas Neue',sans-serif;color:var(--ink);
-    font-size:50px;line-height:.92;letter-spacing:1.5px;text-transform:uppercase}}
+    font-size:96px;line-height:.9;letter-spacing:2px;text-transform:uppercase}}
   .headline .em{{color:var(--wine)}}
 
   .sub{{margin-top:9px;font-size:11px;line-height:1.55;color:var(--graphite);
@@ -122,9 +122,9 @@ HTML = f"""<!doctype html>
     </div>
 
     <div class="body">
-      <h1 class="headline">Wine while<br>your <span class="em">nails dry</span></h1>
-      <p class="sub">A proper glass, poured next door and brought straight to your chair.
-        Sit back, let the polish set — we handle the rest.</p>
+      <h1 class="headline">Wine <span class="em">not?</span></h1>
+      <p class="sub">Getting your nails done? A proper glass from the wine bar next door —
+        poured and brought straight to your chair while the polish sets.</p>
 
       <div class="row">
         <div class="opts">
