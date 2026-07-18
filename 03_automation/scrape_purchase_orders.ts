@@ -4,11 +4,17 @@
  * Stores results in Supabase: purchase_orders + purchase_order_items.
  *
  * Usage:
- *   npm run orders                                # default: discover newest POs + scrape new/errored
+ *   npm run orders                                # default: discover newest POs + scrape new/errored + refresh 10 most recent
  *   npm run orders -- --all                       # re-scrape every PO in Supabase
- *   npm run orders -- --po PO2890                 # single order
+ *   npm run orders -- --po PO2890                 # single order — always re-scraped, even if already stored
  *   npm run orders -- --no-discover               # skip the discover pass
  *   npm run orders -- --discover-pages 10         # widen the discover scan (default 5)
+ *   npm run orders -- --refresh-recent 20         # re-scrape the N newest POs each run (default 10; 0 = off)
+ *
+ * Why --refresh-recent: new arrivals enter a PO with placeholder article codes
+ * (e.g. "X7") and get their real SKU on the item card only afterwards. Loyverse
+ * never tells us about that edit and we never re-scrape a PO once it has items,
+ * so those corrections would be lost. Refreshing the tail of the list fixes it.
  *
  * Discover pass walks the Loyverse PO list page and inserts headers for any
  * po_number not yet in Supabase. This is the only way new POs enter the system.
@@ -67,6 +73,20 @@ const DISCOVER_PAGES = (() => {
   const v = idx !== -1 ? args[idx + 1] : args.find(a => a.startsWith("--discover-pages="))?.split("=")[1];
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : 5;
+})();
+// Re-scrape the N most recent POs (by order_date) on every run, even if we
+// already have their items. New arrivals enter a PO with placeholder article
+// codes (e.g. "X7"); the real SKU is assigned to the item card afterwards.
+// Loyverse never notifies us of that edit, and we otherwise never re-scrape a
+// PO once it has items — so those corrections (and any post-hoc cost/qty edits)
+// would be lost forever. Refreshing the tail of the list catches them cheaply.
+// Set --refresh-recent 0 to disable.
+const REFRESH_RECENT = (() => {
+  const idx = args.indexOf("--refresh-recent");
+  const v = idx !== -1 ? args[idx + 1] : args.find(a => a.startsWith("--refresh-recent="))?.split("=")[1];
+  if (v == null) return 10; // default
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : 10;
 })();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -674,15 +694,30 @@ async function main() {
 
     // --month implies a forced re-scrape of every PO in that range.
     const forceAll = ALL_MODE || MONTH_FILTER !== null;
-    const targetSet: Set<string> = forceAll
-      ? new Set(allPOList.map(po => po.po_number))
-      : new Set(allPOList
-          .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
-          .map(po => po.po_number));
+    let targetSet: Set<string>;
+    if (SINGLE_PO) {
+      // Explicitly named → always (re)scrape it, even if we already have items.
+      targetSet = new Set(allPOList.map(po => po.po_number));
+    } else if (forceAll) {
+      targetSet = new Set(allPOList.map(po => po.po_number));
+    } else {
+      // Baseline: never-scraped or previously-errored POs …
+      targetSet = new Set(allPOList
+        .filter(po => !hasItems.has(po.po_number) || po.scrape_error)
+        .map(po => po.po_number));
+      // … plus the N most recent (allPOList is ordered by order_date desc), so
+      // post-hoc edits in Loyverse (SKU/cost/qty) on fresh POs propagate to us.
+      if (REFRESH_RECENT > 0) {
+        for (const po of allPOList.slice(0, REFRESH_RECENT)) targetSet.add(po.po_number);
+      }
+    }
 
     if (targetSet.size === 0) {
       console.log("Nothing to scrape — all orders are up to date.");
     } else {
+      if (!SINGLE_PO && !forceAll && REFRESH_RECENT > 0) {
+        console.log(`[refresh] re-checking ${Math.min(REFRESH_RECENT, allPOList.length)} most recent PO(s) for post-hoc edits`);
+      }
       console.log(`\n[3/3] Scraping ${targetSet.size} orders via list clicks...`);
       const { success, failed } = await scrapeViaListClick(page, targetSet);
       console.log(`\n✓ Done. ${success} succeeded, ${failed} failed.`);
