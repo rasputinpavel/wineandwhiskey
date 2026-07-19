@@ -1,7 +1,7 @@
 'use client'
 
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback, useTransition } from 'react'
+import { useSearchParams, usePathname } from 'next/navigation'
+import { useCallback } from 'react'
 import { WINE_TYPE_LABELS, SPIRIT_TYPE_LABELS } from '@/lib/price/types-display'
 
 type Props = {
@@ -27,11 +27,15 @@ const CATEGORIES = [
 const WINE_TYPE_CHIPS = ['', 'red', 'white', 'rose', 'orange', 'sparkling']
 
 export default function FilterBar({ suppliers, countries, grapes, spiritTypes, category, wineType, spiritType, catalogStatus }: Props) {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [, startTransition] = useTransition()
 
+  // Navigate with a real (full) navigation, NOT router.push. On this heavy page
+  // Next 15.5's client router intermittently aborts the searchParam-only RSC
+  // navigation and drops it — the filter "does nothing" ~40% of clicks (prod
+  // build only; dev recovers, which is why it slipped through). A hard nav is
+  // immune. See the supplier-filter investigation. If a future Next upgrade
+  // fixes the client-router abort, this can go back to router.push.
   const update = useCallback(
     (updates: Record<string, string>) => {
       const params = new URLSearchParams(searchParams.toString())
@@ -40,9 +44,9 @@ export default function FilterBar({ suppliers, countries, grapes, spiritTypes, c
         else params.delete(key)
       }
       params.delete('page')
-      startTransition(() => router.push(`${pathname}?${params.toString()}`))
+      window.location.assign(`${pathname}?${params.toString()}`)
     },
-    [pathname, router, searchParams]
+    [pathname, searchParams]
   )
 
   const q = searchParams.get('q') ?? ''
@@ -133,11 +137,14 @@ export default function FilterBar({ suppliers, countries, grapes, spiritTypes, c
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
           </svg>
+          {/* Enter/blur to search — each filter change is a full navigation
+              (see `update`), so we can't fire it per keystroke. */}
           <input
             type="text"
             defaultValue={q}
-            onChange={e => update({ q: e.target.value })}
-            placeholder="Поиск..."
+            onKeyDown={e => { if (e.key === 'Enter') update({ q: (e.target as HTMLInputElement).value.trim() }) }}
+            onBlur={e => { if (e.target.value.trim() !== q) update({ q: e.target.value.trim() }) }}
+            placeholder="Поиск… (Enter)"
             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-wine-500 focus:border-transparent"
           />
         </div>
@@ -158,7 +165,7 @@ export default function FilterBar({ suppliers, countries, grapes, spiritTypes, c
 
         {hasFilters && (
           <button
-            onClick={() => startTransition(() => router.push(pathname))}
+            onClick={() => window.location.assign(pathname)}
             className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-xl hover:bg-gray-100 whitespace-nowrap"
           >
             Сбросить
