@@ -159,6 +159,9 @@ function WalletCard({ w, salesSyncedAt }: { w: WalletBalance; salesSyncedAt: str
           <>
             <Line label="sales" v={Math.abs(w.sales)} sign={w.sales < 0 ? '−' : '+'} />
             <SalesFreshness syncedAt={salesSyncedAt} />
+            {w.cardFees > 0 && (
+              <div className="text-[9px] text-graphite/70 pl-2 -mt-0.5 mb-0.5">↳ incl. −{fmtThb(w.cardFees)} card fees (2.94%)</div>
+            )}
           </>
         )}
         {w.ownerContrib > 0 && (

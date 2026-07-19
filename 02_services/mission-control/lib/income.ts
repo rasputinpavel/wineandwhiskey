@@ -23,6 +23,14 @@ import type { MoneyWallet, MoneyMovement, WalletId, LoyverseReceipt } from './su
 const SHEET_ID = '1rWDWoo9L23WwVG6bbl-Z6tC-klIoN6FNie_kNECRmrY'
 const EXPENSES_RANGE = 'Expenses!A2:H'
 
+// Card acquiring fee — KBank MDR 2.75% + 7% VAT = 2.9425% effective. Verified to
+// the satang against settlements (e.g. LV ฿110.00 card → bank ฿106.76). QR
+// (PromptPay) and bank transfers settle at par, so the fee applies to CARD sales
+// only. Netted off card sales dated on/after CARD_FEE_SINCE; earlier balances are
+// reconciled manually against the bank, so we leave historical sales at gross.
+export const CARD_FEE_RATE = 0.0275 * 1.07   // 0.029425
+export const CARD_FEE_SINCE = '2026-07-19'   // 'YYYY-MM-DD' — first day the fee is netted
+
 export type WalletExpense = {
   date: string            // 'YYYY-MM-DD'
   amount: number
@@ -105,7 +113,9 @@ export async function fetchExpenses(): Promise<WalletExpense[]> {
 // else (card / QR / bank transfer) → company Account. Signed by SALE/REFUND.
 
 export type IncomeReceipt = Pick<LoyverseReceipt, 'receipt_date' | 'receipt_type' | 'total' | 'payment_method' | 'is_bank_transfer' | 'is_b2b'>
-export type AutoInflow = { date: string; wallet: WalletId; amount: number }
+// `amount` is the money that actually lands in the wallet (card sales are already
+// net of the acquiring fee); `cardFee` is the fee deducted, kept for display.
+export type AutoInflow = { date: string; wallet: WalletId; amount: number; cardFee: number }
 
 // Which wallet a sale's money lands in.
 export function receiptWallet(r: IncomeReceipt): WalletId {
@@ -116,11 +126,13 @@ export function receiptWallet(r: IncomeReceipt): WalletId {
 }
 
 export function autoInflows(receipts: IncomeReceipt[]): AutoInflow[] {
-  return receipts.map(r => ({
-    date: r.receipt_date.slice(0, 10),
-    wallet: receiptWallet(r),
-    amount: (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total),
-  }))
+  return receipts.map(r => {
+    const date = r.receipt_date.slice(0, 10)
+    const gross = (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total)
+    // Net the acquiring fee off card sales from the effective date onward.
+    const cardFee = (r.payment_method === 'card' && date >= CARD_FEE_SINCE) ? gross * CARD_FEE_RATE : 0
+    return { date, wallet: receiptWallet(r), amount: gross - cardFee, cardFee }
+  })
 }
 
 // ─── Balance computation ─────────────────────────────────────────────────────
@@ -130,7 +142,8 @@ export type WalletBalance = {
   name: string
   opening: number
   openingDate: string
-  sales: number            // auto inflows from Loyverse
+  sales: number            // auto inflows from Loyverse (card sales already net of fee)
+  cardFees: number         // acquiring fee netted off card sales — shown for transparency
   inflow: number           // manual inflows (incl. owner contributions)
   ownerContrib: number     // owner financing — subset of inflow, surfaced separately
   transferIn: number
@@ -161,7 +174,9 @@ export function computeBalances(
     .map(w => {
       const since = w.opening_date
       const mv = movements.filter(m => m.occurred_on >= since)
-      const sales = auto.filter(a => a.wallet === w.id && a.date >= since).reduce((s, a) => s + a.amount, 0)
+      const salesInflows = auto.filter(a => a.wallet === w.id && a.date >= since)
+      const sales = salesInflows.reduce((s, a) => s + a.amount, 0)        // net of card fee
+      const cardFees = salesInflows.reduce((s, a) => s + a.cardFee, 0)
       const inflowMv = mv.filter(m => m.kind === 'inflow' && m.wallet_id === w.id)
       const inflow = sum(inflowMv)
       const ownerContrib = sum(inflowMv.filter(m => m.owner_contribution))
@@ -172,7 +187,7 @@ export function computeBalances(
       const opening = Number(w.opening_balance)
       return {
         id: w.id, name: w.name, opening, openingDate: since,
-        sales, inflow, ownerContrib, transferIn, transferOut, outflowManual, expenses: exp,
+        sales, cardFees, inflow, ownerContrib, transferIn, transferOut, outflowManual, expenses: exp,
         balance: opening + sales + inflow + transferIn - transferOut - outflowManual - exp,
       }
     })
