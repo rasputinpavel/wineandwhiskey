@@ -34,26 +34,34 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]           # repo root (Cats/ is 4 levels deep)
-SCENES = HERE / "assets" / "scenes"
-RUNWAY = HERE / "assets" / "runway"
 AUDIO_DIR = HERE / "assets" / "audio"
 WORK = HERE / "assets" / "montage_work"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+# Two parallel style versions (A/B): cartoon 3D cats vs photoreal adult cats.
+# Each reads its own scenes/runway dirs and gets its own final-file prefix.
+STYLE_DIRS = {
+    "cartoon": {"scenes": HERE / "assets" / "scenes",
+                "runway": HERE / "assets" / "runway", "prefix": "bd_cat"},
+    "real": {"scenes": HERE / "assets" / "scenes_real",
+             "runway": HERE / "assets" / "runway_real", "prefix": "bd_catreal"},
+}
+
 FPS = 30
 FORMATS = {"stv": (1080, 1920), "fv": (1080, 1350)}
 VERSION = "v01"
-HOOK_DUR = 1.5
+HOOK_DUR = 2.8           # holds long enough to read the offer (staged reveal)
 PARTY_DUR = 1.2          # snappy
-CTA_DUR = 3.0
+CTA_DUR = 3.6            # lingers so the CTA + special-price message land
 XFADE = 0.35
 ORDER = ["bbq", "pool", "yacht", "bachelor"]
 RUNWAY_TRIM_START = 1.0   # skip the near-static first second of each Runway clip
 
-JINGLES = {"house": AUDIO_DIR / "cat_house.mp3", "meme": AUDIO_DIR / "cat_meme.mp3"}
-# The jingles build to a drop/peak near their end; we align that peak to the
-# moment the CTA card lands so the energy hits the call to action.
-DROP_TARGET = 4.9         # seconds into the montage where the CTA becomes visible
+JINGLES = {"house": AUDIO_DIR / "cat_house.mp3",
+           "meme": AUDIO_DIR / "cat_meme.mp3",
+           "club": AUDIO_DIR / "cat_club.mp3"}
+# The jingles build to a drop/peak near their end; mux aligns that peak to the
+# moment the CTA card lands. The exact CTA-onset time is computed in build().
 
 
 def b64(path: Path) -> str:
@@ -84,10 +92,10 @@ HOOK = {
 
 CTA = {
     "en": {"headline": "CURATED DRINKS FOR YOUR PARTY",
-           "sub": "With or without bubbles — matched to your budget.",
+           "sub": "With or without bubbles — at a special party price.",
            "cta": "Message us"},
     "ru": {"headline": "НАПИТКИ НА ВАШ ПРАЗДНИК — ПОД КЛЮЧ",
-           "sub": "С пузырьками и без — точно в ваш бюджет.",
+           "sub": "С пузырьками и без — по специальной цене.",
            "cta": "Напишите нам"},
 }
 
@@ -132,8 +140,13 @@ CTA_CSS = """.cta { display:inline-flex; align-items:center; gap:18px; backgroun
 .cta .arrow { color:var(--wine); font-weight:800; }"""
 
 
-def hook_card_html(lang: str, w: int, h: int) -> str:
+def hook_card_html(lang: str, w: int, h: int, stage: int = 3) -> str:
+    """Hook card. `stage` gates a staged reveal (opacity only, no layout shift):
+    1 = kicker only, 2 = + headline/rule, 3 = + sub. Crossfading the stages in
+    build gives a word-by-word 'reveal' that guides reading."""
     e = HOOK[lang]
+    head_op = 1 if stage >= 2 else 0
+    sub_op = 1 if stage >= 3 else 0
     if lang == "en":
         head_font = "font-family:'Bebas Neue';font-weight:400;letter-spacing:.02em;line-height:1.0;"
         head_size = 118
@@ -163,9 +176,9 @@ html,body {{ width:{w}px; height:{h}px; }}
 <div class="card">
   <svg class="bubbles" viewBox="0 0 {w} {h}" aria-hidden="true">{bubbles_svg(w, h)}</svg>
   <p class="kicker">{e['kicker']}</p>
-  <h1 class="headline">{e['headline']}</h1>
-  <div class="rule"></div>
-  <p class="sub">{e['sub']}</p>
+  <h1 class="headline" style="opacity:{head_op}">{e['headline']}</h1>
+  <div class="rule" style="opacity:{head_op}"></div>
+  <p class="sub" style="opacity:{sub_op}">{e['sub']}</p>
 </div></body></html>"""
 
 
@@ -214,10 +227,12 @@ def _caption_css(lang: str, h: int) -> str:
     cap_font = ("font-family:'Bebas Neue';font-weight:400;letter-spacing:.04em;"
                 if lang == "en"
                 else "font-family:'Oswald';font-weight:500;letter-spacing:.02em;")
+    # Caption sits in the clean UPPER third — the lower-center is where the cats
+    # move, so a bottom caption gets overlapped. Scrim points downward from the top.
     return f"""
-.scrim {{ position:absolute; left:0; right:0; bottom:0; height:{int(h * 0.29)}px;
-  background:linear-gradient(to top, rgba(0,0,0,.72), transparent); }}
-.caption {{ position:absolute; left:140px; right:140px; bottom:{int(h * 0.167)}px; z-index:1;
+.scrim {{ position:absolute; left:0; right:0; top:0; height:{int(h * 0.26)}px;
+  background:linear-gradient(to bottom, rgba(0,0,0,.72), transparent); }}
+.caption {{ position:absolute; left:140px; right:140px; top:{int(h * 0.085)}px; z-index:1;
   {cap_font} font-size:118px; line-height:1.06; text-transform:uppercase;
   color:#F5F0EB; text-align:center; text-shadow:0 6px 28px rgba(0,0,0,.65); }}"""
 
@@ -278,6 +293,39 @@ def ken_burns(src: Path, out: Path, dur: float, zoom_in: bool, w: int, h: int) -
         "ffmpeg", "-y", "-i", str(src), "-vf", vf, "-c:v", "libx264",
         "-r", str(FPS), "-crf", "18", "-preset", "medium", str(out),
     ], check=True, capture_output=True)
+
+
+def still_clip(png: Path, out: Path, dur: float, w: int, h: int, fade_in: float = 0.0) -> None:
+    """A static PNG held for `dur` seconds as an libx264 clip (optional fade-in)."""
+    vf = f"fps={FPS},format=yuv420p"
+    if fade_in > 0:
+        vf += f",fade=t=in:st=0:d={fade_in:.2f}"
+    subprocess.run([
+        "ffmpeg", "-y", "-loop", "1", "-t", f"{dur:.2f}", "-i", str(png),
+        "-vf", vf, "-c:v", "libx264", "-r", str(FPS), "-crf", "18",
+        "-preset", "medium", "-pix_fmt", "yuv420p", str(out),
+    ], check=True, capture_output=True)
+
+
+def hook_reveal_clip(lang: str, w: int, h: int, out: Path) -> None:
+    """Staged hook reveal: kicker -> +headline -> +sub, crossfaded, ~HOOK_DUR.
+
+    Elements appear in reading order so the offer is easy to take in. Stage
+    durations are tuned so the crossfaded total equals HOOK_DUR."""
+    stages = []
+    for s in (1, 2, 3):
+        png = WORK / f"hook_{lang}_s{s}.png"
+        render_png(hook_card_html(lang, w, h, stage=s), png, w, h)
+        stages.append(png)
+    # concat_xfade length = d1 + d2 + d3 - 2*XFADE; solve d3 so it equals HOOK_DUR.
+    d1, d2 = 0.85, 0.80
+    d3 = HOOK_DUR - d1 - d2 + 2 * XFADE
+    clips = []
+    for s, (png, d, fi) in enumerate(zip(stages, (d1, d2, d3), (0.4, 0.0, 0.0))):
+        c = WORK / f"hook_{lang}_c{s}.mp4"
+        still_clip(png, c, d, w, h, fade_in=fi)
+        clips.append(c)
+    concat_xfade(clips, [d1, d2, d3], out)
 
 
 def runway_scene_clip(src: Path, overlay_png: Path, out: Path, dur: float, w: int, h: int) -> None:
@@ -346,11 +394,11 @@ def detect_peak(audio: Path) -> float:
     return best_t
 
 
-def mux_audio(video: Path, audio: Path, dur: float, out: Path) -> None:
+def mux_audio(video: Path, audio: Path, dur: float, out: Path, drop_target: float) -> None:
     alen = audio_len(audio)
     peak = detect_peak(audio)
     # Align the peak to the CTA moment, clamped so the window stays inside the track.
-    start = min(max(peak - DROP_TARGET, 0.0), max(0.0, alen - dur))
+    start = min(max(peak - drop_target, 0.0), max(0.0, alen - dur))
     subprocess.run([
         "ffmpeg", "-y", "-i", str(video),
         "-ss", f"{start:.2f}", "-i", str(audio),
@@ -362,25 +410,28 @@ def mux_audio(video: Path, audio: Path, dur: float, out: Path) -> None:
     ], check=True, capture_output=True)
 
 
-def build(motion: str) -> None:
+def build(motion: str, style: str) -> None:
     WORK.mkdir(parents=True, exist_ok=True)
+    scenes_dir = STYLE_DIRS[style]["scenes"]
+    runway_dir = STYLE_DIRS[style]["runway"]
+    prefix = STYLE_DIRS[style]["prefix"]
     durs = [HOOK_DUR] + [PARTY_DUR] * len(ORDER) + [CTA_DUR]
     total = durs[0] + sum(d - XFADE for d in durs[1:])
+    # Time the CTA card becomes fully visible = where the jingle drop should land.
+    drop_target = HOOK_DUR + len(ORDER) * (PARTY_DUR - XFADE)
 
     for fmt, (w, h) in FORMATS.items():
         w2, h2 = w * 2, h * 2
         for lang in ("ru", "en"):
-            # --- hook card ---
-            hook_png = WORK / f"hook_{fmt}_{lang}.png"
-            render_png(hook_card_html(lang, w, h), hook_png, w, h)
-            hook_clip = WORK / f"kb_{fmt}_hook_{lang}.mp4"
-            ken_burns(hook_png, hook_clip, HOOK_DUR, zoom_in=True, w=w, h=h)
+            # --- hook card (staged text reveal) ---
+            hook_clip = WORK / f"hook_{style}_{fmt}_{lang}.mp4"
+            hook_reveal_clip(lang, w, h, hook_clip)
 
             # --- scenes ---
             scene_clips = []
             for i, name in enumerate(ORDER):
-                out = WORK / f"{motion}_{fmt}_{name}_{lang}.mp4"
-                rw = RUNWAY / f"{name}.mp4"
+                out = WORK / f"{style}_{motion}_{fmt}_{name}_{lang}.mp4"
+                rw = runway_dir / f"{name}.mp4"
                 use_runway = (motion == "runway" and rw.exists())
                 if use_runway:
                     ov = WORK / f"cap_{fmt}_{name}_{lang}.png"
@@ -390,8 +441,8 @@ def build(motion: str) -> None:
                 else:
                     if motion == "runway":
                         print(f"  [fallback] {name}: no Runway clip -> Ken Burns", flush=True)
-                    still = WORK / f"scene_{fmt}_{name}_{lang}.png"
-                    render_png(captioned_scene_html(SCENES / f"{name}.png",
+                    still = WORK / f"scene_{style}_{fmt}_{name}_{lang}.png"
+                    render_png(captioned_scene_html(scenes_dir / f"{name}.png",
                                                     CAPTIONS[lang][name], lang, w2, h2),
                                still, w2, h2)
                     ken_burns(still, out, PARTY_DUR, zoom_in=(i % 2 == 0), w=w, h=h)
@@ -404,21 +455,21 @@ def build(motion: str) -> None:
             ken_burns(cta_png, cta_clip, CTA_DUR, zoom_in=False, w=w, h=h)
 
             # --- assemble (silent) ---
-            silent = WORK / f"silent_{lang}_{fmt}_{motion}.mp4"
+            silent = WORK / f"silent_{style}_{lang}_{fmt}_{motion}.mp4"
             concat_xfade([hook_clip] + scene_clips + [cta_clip], durs, silent)
 
             present = {k: p for k, p in JINGLES.items() if p.exists()}
             if not present:
-                final = HERE / f"bd_cat_{lang}_{fmt}_{motion}_silent_{VERSION}.mp4"
+                final = HERE / f"{prefix}_{lang}_{fmt}_{motion}_silent_{VERSION}.mp4"
                 silent.replace(final)
                 print(f"FINAL (silent): {final.name}", flush=True)
             else:
                 for jname, jpath in present.items():
-                    final = HERE / f"bd_cat_{lang}_{fmt}_{motion}_{jname}_{VERSION}.mp4"
-                    mux_audio(silent, jpath, total, final)
+                    final = HERE / f"{prefix}_{lang}_{fmt}_{motion}_{jname}_{VERSION}.mp4"
+                    mux_audio(silent, jpath, total, final, drop_target)
                     print(f"FINAL: {final.name}", flush=True)
 
-    print(f"[{motion}] total ~{total:.1f}s\n", flush=True)
+    print(f"[{style}/{motion}] total ~{total:.1f}s\n", flush=True)
 
 
 def main() -> None:
@@ -427,9 +478,16 @@ def main() -> None:
     if "--motion" in args:
         i = args.index("--motion")
         motions = [args[i + 1]]
-    for m in motions:
-        print(f"=== building motion={m} ===", flush=True)
-        build(m)
+        args = args[:i] + args[i + 2:]
+    styles = ["cartoon"]
+    if "--style" in args:
+        i = args.index("--style")
+        styles = [args[i + 1]]
+        args = args[:i] + args[i + 2:]
+    for st in styles:
+        for m in motions:
+            print(f"=== building style={st} motion={m} ===", flush=True)
+            build(m, st)
 
 
 if __name__ == "__main__":

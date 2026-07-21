@@ -63,6 +63,33 @@ mix, meme-friendly, instrumental, no vocals.
 
 ---
 
+## Вариант В — «Club Drive» (движовый, мощно-взрослый, под реалистичных котов)
+
+**Style prompt (Instrumental = ON):**
+
+```
+Driving adult afro-house / tech-house party track, powerful and grown-up,
+124 BPM, deep rolling sub-bass, punchy club kick, tight percussion and
+congas, hypnotic synth pluck riff, filtered build with a riser and a big
+confident drop at the very end, dark-gold nighttime rooftop-party energy,
+sophisticated and sexy, festival main-stage power, clean loud commercial
+master, instrumental, no vocals.
+```
+
+**Structure hint:**
+
+```
+[Intro] deep bass + percussion groove
+[Build] filter sweep + riser, tension climbing
+[Drop] big confident club drop — the CTA moment
+[Outro] one clean tail
+```
+
+Цель: взрослая клубная энергия, чтобы креатив читался как тусовка 20+, а не
+детский праздник. → сохранить как `assets/audio/cat_club.mp3`
+
+---
+
 ### После генерации
 Положи оба mp3 по путям выше и запусти сборку — скрипт соберёт по 2 джингла ×
 RU/EN × stv/fv для каждой анимации. Пока mp3 нет — скрипт собирает немые версии.

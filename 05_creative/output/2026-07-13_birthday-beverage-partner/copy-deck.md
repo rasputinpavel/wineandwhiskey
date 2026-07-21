@@ -94,13 +94,17 @@ Video flow: 4 party scenes (BBQ → Villa → Yacht → Bachelor) → brand card
 
 **Legal check:** No brand names. No pouring/drinking verbs ("curate"/"подберём"). Celebration-led (party types + birthday framing). "With or without bubbles" / "с пузырьками и без" explicit in every primary. ✅
 
-## Angle: cat — video `Cats/bd_cat_*` (A/B variant · 3D cats · offer-first)
+## Angle: cat — video `Cats/bd_cat_*` (cartoon) + `Cats/bd_catreal_*` (photoreal)
 
-Parallel scroll-stopper to the human montage: charming 3D cats, offer stated up
-front, snappy 1.2s cuts. Two animation modes (`kenburns` / `runway`) × two Suno
-jingles (`house` / `meme`) × RU/EN × stv+fv. In-video strings (hook / captions /
-CTA) live in `Cats/build_cat_montage.py`. Ad-level text below — reuse the montage
-angle's primaries too; these are cat-flavored additions.
+Parallel scroll-stoppers to the human montage: anthropomorphic cats, offer stated
+up front (staged hook reveal), snappy 1.2s cuts, drop-aligned jingle on the CTA.
+Full A/B grid = **2 styles** (`cat` cartoon 3D · `catreal` photoreal adult cats,
+built via `gen_cat_scenes.py --style`) × **2 motions** (`kenburns` / `runway`) ×
+**3 Suno jingles** (`house` tropical-house · `meme` playful · `club` adult
+afro/tech-house) × RU/EN × stv+fv = 48 finals. In-video strings (hook / captions /
+CTA) live in `Cats/build_cat_montage.py`. CTA sub now leads with a **special
+party price** (not "budget"). Ad-level text below — reuse the montage angle's
+primaries too; these are cat-flavored additions.
 
 | Lang | Field | Copy | Chars |
 |---|---|---|---|

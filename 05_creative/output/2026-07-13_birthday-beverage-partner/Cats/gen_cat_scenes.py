@@ -13,8 +13,9 @@ Reads OPENAI_API_KEY from the repo-root .env.local.
 Saves PNGs to assets/scenes/<angle>.png.
 
 Usage:
-    python3 gen_cat_scenes.py                 # all 4 scenes
-    python3 gen_cat_scenes.py bbq yacht       # only these
+    python3 gen_cat_scenes.py                       # all 4, cartoon style
+    python3 gen_cat_scenes.py --style real          # all 4, photoreal adult cats
+    python3 gen_cat_scenes.py --style real bbq yacht  # only these
 """
 import base64
 import json
@@ -25,10 +26,39 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Cats/ is one level deeper than the human scripts → repo root is 4 up.
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
-SCENES = os.path.join(HERE, "assets", "scenes")
+
+# Two parallel style versions (A/B). Cartoon = original 3D-Pixar set; real =
+# photoreal adult cats. Each writes to its own scenes dir so neither clobbers
+# the other.
+SCENE_DIRS = {"cartoon": os.path.join(HERE, "assets", "scenes"),
+              "real": os.path.join(HERE, "assets", "scenes_real")}
 
 # ---- shared style anchor (identical across all 4 for a consistent set) ----
-ANCHOR = (
+ANCHOR_REAL = (
+    "Photorealistic cinematic film still — believable anthropomorphic cats with "
+    "real, natural fur (individually rendered strands, realistic sheen and depth), "
+    "natural feline eyes and realistic proportions, expressive but restrained, "
+    "appealing and charming (NOT creepy, NOT uncanny, NOT cartoon, NOT chibi, NOT "
+    "big-eyed toy, NOT childish, NOT Pixar, NOT flat 2D). High-end live-action VFX "
+    "creature realism, like the talking-animal characters in a premium feature "
+    "film. The cats stand and behave like stylish ADULTS at a grown-up party — "
+    "fashionable adult summer nightlife wardrobe: crisp linen shirts, tailored "
+    "shorts and chinos, elegant summer cocktail dresses, blazers, sunglasses, "
+    "tasteful jewelry and watches. A sophisticated, upscale adult birthday "
+    "celebration in Phuket, Thailand — luxury tropical vacation and nightlife "
+    "energy: turquoise sea, palm trees, a chic villa, warm golden light. The cats "
+    "laugh, dance and celebrate together, caught mid-motion, full of grown-up "
+    "personality and cool confidence. Warm natural color palette — honey-amber "
+    "#C9A84C, cream #F5F0EB, deep teal water, lush green palms. "
+    "IMPORTANT: absolutely NO alcohol anywhere in the frame — no bottles, no wine "
+    "or champagne glasses, no cocktails, no drinks in paws or on tables. Festive "
+    "props are welcome: balloons, confetti, paper streamers, string fairy lights, "
+    "a birthday cake, pool floats, sparklers, colorful fruity smoothies in fun "
+    "cups. A subtle 'bubbles' cue: iridescent floating soap bubbles drifting "
+    "through the warm light — the only 'sparkling' hint, never a drink."
+)
+
+ANCHOR_CARTOON = (
     "Charming, friendly 3D animated feature-film still — Pixar / Illumination "
     "quality CGI, cinematic soft global illumination, subsurface-scattered fluffy "
     "fur with individually rendered strands, big expressive glossy eyes, warm and "
@@ -48,13 +78,25 @@ ANCHOR = (
     "drifting through the warm light — the only 'sparkling' hint, never a drink."
 )
 
+ANCHORS = {"cartoon": ANCHOR_CARTOON, "real": ANCHOR_REAL}
+
 # One recurring hero to anchor character consistency across the 4 scenes.
-HERO = (
-    "Recurring hero character across all scenes: a charming ginger-orange tabby "
-    "cat with a cream chest, bright green eyes and small round tortoiseshell "
-    "sunglasses pushed up — always present and recognizable, joined by a small "
-    "friend group of other cute cats (a fluffy grey cat, a white cat, a black cat)."
-)
+HEROES = {
+    "cartoon": (
+        "Recurring hero character across all scenes: a charming ginger-orange tabby "
+        "cat with a cream chest, bright green eyes and small round tortoiseshell "
+        "sunglasses pushed up — always present and recognizable, joined by a small "
+        "friend group of other cute cats (a fluffy grey cat, a white cat, a black cat)."
+    ),
+    "real": (
+        "Recurring hero character across all scenes: a handsome, realistic "
+        "ginger-orange tabby tomcat with a cream chest, natural amber-green eyes and "
+        "an open patterned linen resort shirt, wearing stylish sunglasses — a "
+        "confident adult, always present and recognizable, joined by a small group of "
+        "well-dressed adult cat friends (a sleek grey cat, an elegant white cat, a "
+        "cool black cat) in fashionable party outfits."
+    ),
+}
 
 SCENE = {
     "bbq": (
@@ -79,10 +121,12 @@ SCENE = {
         "Composition: a joyful birthday celebration on the deck of a luxury yacht "
         "cruising past Phuket's green tropical islands and turquoise sea — a group "
         "of stylish girl-cats in cute summer dresses and sun hats laughing, dancing "
-        "and throwing their paws up, a birthday cake with lit sparklers, colorful "
-        "balloons and a 'HAPPY BIRTHDAY' banner, floating soap bubbles, golden "
-        "late-afternoon light (NO bottles, NO drink glasses). Keep the UPPER portion "
-        "(sky, sea, horizon) clean. Mood: celebratory girls' yacht trip."
+        "and throwing their paws up, a birthday cake with lit sparklers, a few "
+        "colorful balloons low in the frame, floating soap bubbles, golden "
+        "late-afternoon light (NO bottles, NO drink glasses, NO banners or text). "
+        "Keep the UPPER THIRD completely clean — open bright sky and sea horizon "
+        "only, no banners, no bunting, no lettering — as negative space for a "
+        "headline overlay. Mood: celebratory girls' yacht trip."
     ),
     "bachelor": (
         "Composition: a fun beach party on a Phuket beach at golden hour — a group "
@@ -139,11 +183,22 @@ def main():
     if not key:
         sys.exit("No OPENAI_API_KEY in .env.local")
 
-    os.makedirs(SCENES, exist_ok=True)
-    angles = [a for a in sys.argv[1:] if a in SCENE] or list(SCENE)
+    args = sys.argv[1:]
+    style = "cartoon"
+    if "--style" in args:
+        i = args.index("--style")
+        style = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    if style not in ANCHORS:
+        sys.exit(f"unknown --style {style} (choose: {', '.join(ANCHORS)})")
+
+    scenes_dir = SCENE_DIRS[style]
+    os.makedirs(scenes_dir, exist_ok=True)
+    anchor, hero = ANCHORS[style], HEROES[style]
+    angles = [a for a in args if a in SCENE] or list(SCENE)
     for angle in angles:
-        prompt = f"{ANCHOR} {HERO} {SCENE[angle]} Format: vertical 9:16 story."
-        out = os.path.join(SCENES, f"{angle}.png")
+        prompt = f"{anchor} {hero} {SCENE[angle]} Format: vertical 9:16 story."
+        out = os.path.join(scenes_dir, f"{angle}.png")
         print(f"[gen] {angle} -> {out} ...", flush=True)
         try:
             gen_openai(key, prompt, out)
