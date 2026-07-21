@@ -3,7 +3,7 @@
 Source of truth: [`copy.py`](./copy.py) — the `COPY` dict, consumed by `build.py` (Task 3).
 This table is the paste-into-Ads-Manager reference. If it ever disagrees with `copy.py`, `copy.py` wins — update this file to match.
 
-Meta limits: headline ≤ 40 chars, primary text ≤ 125 chars (before "…more" truncation). All rows below passed the automated check.
+Meta limits: headline ≤ 40 chars, primary text ≤ 125 chars (before "…more" truncation), description ≤ 25 chars. All rows below passed the automated check.
 
 RU voice: formal "вы" (Планируете / ваш / вам), not "ты".
 
@@ -68,3 +68,55 @@ Legal frame (non-negotiable, applied to every row): no alcohol brand names, no p
 | RU | CTA | Напишите нам | — |
 
 **Legal check:** No brand names. No pouring/drinking verbs ("order"/"bring"/"закажем"/"привезём"). Celebration/logistics-led. Beverages framing carried by the campaign; no product claim made. ✅
+
+## Angle: montage — video `bd_montage_*` (stv 9:16 + fv 4:5)
+
+Video flow: 4 party scenes (BBQ → Villa → Yacht → Bachelor) → brand card → wholesale card with CTA. Ad-level text below (not baked into the video). Meta allows up to 5 primary/headline options — 3 given, add more by duplicating the winning pattern.
+
+| Lang | Field | Copy | Chars |
+|---|---|---|---|
+| EN | Primary 1 | BBQ, villa party, yacht birthday or a bachelor night — drinks curated to your budget, with or without bubbles. | 110 |
+| EN | Primary 2 | Tell us the date, guest count and budget — we curate the party drinks, with or without bubbles, and deliver. | 108 |
+| EN | Primary 3 | The bigger the party, the friendlier the price — light wholesale on party drinks, with or without bubbles. | 106 |
+| EN | Headline 1 | YOUR DRINK PARTNER | 18 |
+| EN | Headline 2 | BIGGER PARTY, BETTER PRICE. | 27 |
+| EN | Headline 3 | DRINKS FOR EVERY PARTY. | 23 |
+| EN | Description | Light wholesale in Phuket | 25 |
+| EN | CTA | Message us | — |
+| RU | Primary 1 | Барбекю, вечеринка на вилле, день рождения на яхте или мальчишник — напитки под ваш бюджет, с пузырьками и без. | 112 |
+| RU | Primary 2 | Скажите дату, число гостей и бюджет — подберём напитки на праздник, с пузырьками и без, и привезём. | 97 |
+| RU | Primary 3 | Чем больше праздник — тем приятнее цена. Напитки на вечеринку мелким оптом, с пузырьками и без. | 95 |
+| RU | Headline 1 | НАПИТКИ НА ПРАЗДНИК — НАША ЗАБОТА | 33 |
+| RU | Headline 2 | БОЛЬШЕ ГОСТЕЙ — ИНТЕРЕСНЕЕ ЦЕНА. | 32 |
+| RU | Headline 3 | ЛЮБОЙ ПРАЗДНИК — НАШИ НАПИТКИ | 29 |
+| RU | Description | Мелкий опт в Пхукете | 20 |
+| RU | CTA | Напишите нам | — |
+
+**Legal check:** No brand names. No pouring/drinking verbs ("curate"/"подберём"). Celebration-led (party types + birthday framing). "With or without bubbles" / "с пузырьками и без" explicit in every primary. ✅
+
+## Angle: cat — video `Cats/bd_cat_*` (A/B variant · 3D cats · offer-first)
+
+Parallel scroll-stopper to the human montage: charming 3D cats, offer stated up
+front, snappy 1.2s cuts. Two animation modes (`kenburns` / `runway`) × two Suno
+jingles (`house` / `meme`) × RU/EN × stv+fv. In-video strings (hook / captions /
+CTA) live in `Cats/build_cat_montage.py`. Ad-level text below — reuse the montage
+angle's primaries too; these are cat-flavored additions.
+
+| Lang | Field | Copy | Chars |
+|---|---|---|---|
+| EN | Hook (in-video) | PLANNING SOMETHING SPECIAL? | 27 |
+| EN | Primary 1 | Planning something special? BBQ, pool day or a yacht birthday — we curate the party drinks, with or without bubbles. | 116 |
+| EN | Primary 2 | Tell us the date, guests and budget — we curate your party drinks, with or without bubbles, and deliver in Phuket. | 114 |
+| EN | Headline 1 | CURATED DRINKS FOR YOUR PARTY | 29 |
+| EN | Headline 2 | YOUR PARTY, SORTED. | 19 |
+| EN | Description | Curated in Phuket | 17 |
+| EN | CTA | Message us | — |
+| RU | Hook (in-video) | ПЛАНИРУЕТЕ ЧТО-ТО ОСОБЕННОЕ? | 28 |
+| RU | Primary 1 | Планируете что-то особенное? Шашлыки, бассейн или день рождения на яхте — подберём напитки, с пузырьками и без. | 111 |
+| RU | Primary 2 | Скажите дату, гостей и бюджет — подберём напитки на праздник, с пузырьками и без, и привезём по Пхукету. | 103 |
+| RU | Headline 1 | НАПИТКИ НА ВАШ ПРАЗДНИК — ПОД КЛЮЧ | 34 |
+| RU | Headline 2 | ВАШ ПРАЗДНИК — НАША ЗАБОТА | 26 |
+| RU | Description | Подбор в Пхукете | 16 |
+| RU | CTA | Напишите нам | — |
+
+**Legal check:** No brand names. No pouring/drinking verbs ("curate"/"подберём"). Celebration-led (party types + birthday framing). "With or without bubbles" / "с пузырьками и без" carried in CTA card + primaries. Cats remove any human-consumption cue entirely. ✅
