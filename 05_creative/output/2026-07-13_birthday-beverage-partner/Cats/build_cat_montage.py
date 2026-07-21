@@ -51,7 +51,9 @@ ORDER = ["bbq", "pool", "yacht", "bachelor"]
 RUNWAY_TRIM_START = 1.0   # skip the near-static first second of each Runway clip
 
 JINGLES = {"house": AUDIO_DIR / "cat_house.mp3", "meme": AUDIO_DIR / "cat_meme.mp3"}
-AUDIO_START = 0.0         # Suno prompts here start on the beat; no long silent intro
+# The jingles build to a drop/peak near their end; we align that peak to the
+# moment the CTA card lands so the energy hits the call to action.
+DROP_TARGET = 4.9         # seconds into the montage where the CTA becomes visible
 
 
 def b64(path: Path) -> str:
@@ -310,13 +312,51 @@ def concat_xfade(clips, durs, out: Path) -> None:
     subprocess.run(args, check=True, capture_output=True)
 
 
+import array
+
+
+def audio_len(audio: Path) -> float:
+    out = subprocess.run([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=nw=1:nk=1", str(audio),
+    ], check=True, capture_output=True, text=True)
+    return float(out.stdout.strip())
+
+
+def detect_peak(audio: Path) -> float:
+    """Return the time (s) of the highest-energy 0.25s window — the drop/peak.
+
+    Decodes to 8kHz mono PCM and scans RMS per window, ignoring the first 15%
+    (avoids an intro transient winning) so the build's climax is what we find.
+    """
+    raw = subprocess.run([
+        "ffmpeg", "-v", "error", "-i", str(audio),
+        "-ac", "1", "-ar", "8000", "-f", "s16le", "-",
+    ], check=True, capture_output=True).stdout
+    samples = array.array("h")
+    samples.frombytes(raw[: len(raw) - (len(raw) % 2)])
+    sr, win = 8000, 2000  # 0.25s windows
+    n = len(samples)
+    start_i = int(n * 0.15)
+    best_e, best_t = -1.0, 0.0
+    for i in range(start_i, n - win, win):
+        e = sum(s * s for s in samples[i:i + win])
+        if e > best_e:
+            best_e, best_t = e, i / sr
+    return best_t
+
+
 def mux_audio(video: Path, audio: Path, dur: float, out: Path) -> None:
+    alen = audio_len(audio)
+    peak = detect_peak(audio)
+    # Align the peak to the CTA moment, clamped so the window stays inside the track.
+    start = min(max(peak - DROP_TARGET, 0.0), max(0.0, alen - dur))
     subprocess.run([
         "ffmpeg", "-y", "-i", str(video),
-        "-ss", f"{AUDIO_START:.2f}", "-i", str(audio),
+        "-ss", f"{start:.2f}", "-i", str(audio),
         "-filter_complex",
         f"[1:a]atrim=0:{dur:.2f},afade=t=in:st=0:d=0.4,"
-        f"afade=t=out:st={max(dur - 1.2, 0):.2f}:d=1.2[a]",
+        f"afade=t=out:st={max(dur - 1.0, 0):.2f}:d=1.0[a]",
         "-map", "0:v", "-map", "[a]", "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out),
     ], check=True, capture_output=True)
