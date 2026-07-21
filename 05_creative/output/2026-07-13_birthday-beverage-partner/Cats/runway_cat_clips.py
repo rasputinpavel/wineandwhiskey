@@ -29,9 +29,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 # Style versions (cartoon vs photoreal adult cats) read/write separate dirs.
 SCENE_DIRS = {"cartoon": os.path.join(HERE, "assets", "scenes"),
-              "real": os.path.join(HERE, "assets", "scenes_real")}
+              "real": os.path.join(HERE, "assets", "scenes_real"),
+              "gatsby": os.path.join(HERE, "assets", "scenes_gatsby")}
 OUT_DIRS = {"cartoon": os.path.join(HERE, "assets", "runway"),
-            "real": os.path.join(HERE, "assets", "runway_real")}
+            "real": os.path.join(HERE, "assets", "runway_real"),
+            "gatsby": os.path.join(HERE, "assets", "runway_gatsby")}
 
 API_BASE = "https://api.dev.runwayml.com/v1"
 API_VERSION = "2024-11-06"
@@ -61,6 +63,32 @@ MOTION = {
         "sparkler and everyone cheers. Slow push in, subtle handheld. The bonfire "
         "flickers, bubbles float, waves roll behind."
     ),
+    # --- Gatsby (people) scenes ---
+    "gala": (
+        "The elegant guests twirl and dance beneath the chandeliers, gowns "
+        "flowing. Slow push in, smooth cinematic gimbal. Confetti drifts down and "
+        "the chandelier crystals sparkle."
+    ),
+    "tower": (
+        "The friends raise their coupe glasses in a toast and laugh, bubbles rising "
+        "in the glasses. Slow push in, gentle gimbal. Candles flicker and confetti "
+        "drifts through the warm light."
+    ),
+    "jazz": (
+        "The couples dance the Charleston with energy as the band plays. Slow "
+        "gentle push in, subtle handheld. Spotlights sweep and confetti rains down."
+    ),
+    "rooftop": (
+        "The guests laugh and toast on the terrace, hair moving in the breeze. Slow "
+        "orbit, smooth gimbal. City lights twinkle behind and confetti drifts."
+    ),
+}
+
+# Default scene keys per style version.
+STYLE_KEYS = {
+    "cartoon": ["bbq", "pool", "yacht", "bachelor"],
+    "real": ["bbq", "pool", "yacht", "bachelor"],
+    "gatsby": ["gala", "tower", "jazz", "rooftop"],
 }
 
 
@@ -154,7 +182,7 @@ def main():
     if style not in SCENE_DIRS:
         sys.exit(f"unknown --style {style}")
     scenes_dir, out_dir = SCENE_DIRS[style], OUT_DIRS[style]
-    scenes = [a for a in args if a in MOTION] or list(MOTION)
+    scenes = [a for a in args if a in MOTION] or STYLE_KEYS[style]
 
     env = load_env(os.path.join(REPO_ROOT, ".env.local"))
     key = env.get("RUNWAY_API_KEY") or os.environ.get("RUNWAY_API_KEY")

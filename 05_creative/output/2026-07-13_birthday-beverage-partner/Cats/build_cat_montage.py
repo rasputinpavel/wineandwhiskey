@@ -45,6 +45,8 @@ STYLE_DIRS = {
                 "runway": HERE / "assets" / "runway", "prefix": "bd_cat"},
     "real": {"scenes": HERE / "assets" / "scenes_real",
              "runway": HERE / "assets" / "runway_real", "prefix": "bd_catreal"},
+    "gatsby": {"scenes": HERE / "assets" / "scenes_gatsby",
+               "runway": HERE / "assets" / "runway_gatsby", "prefix": "bd_gatsby"},
 }
 
 FPS = 30
@@ -54,7 +56,12 @@ HOOK_DUR = 2.8           # holds long enough to read the offer (staged reveal)
 PARTY_DUR = 1.2          # snappy
 CTA_DUR = 3.6            # lingers so the CTA + special-price message land
 XFADE = 0.35
-ORDER = ["bbq", "pool", "yacht", "bachelor"]
+# Scene order + count per style (all currently 4-scene montages).
+STYLE_ORDER = {
+    "cartoon": ["bbq", "pool", "yacht", "bachelor"],
+    "real": ["bbq", "pool", "yacht", "bachelor"],
+    "gatsby": ["gala", "tower", "jazz", "rooftop"],
+}
 RUNWAY_TRIM_START = 1.0   # skip the near-static first second of each Runway clip
 
 JINGLES = {"house": AUDIO_DIR / "cat_house.mp3",
@@ -99,12 +106,22 @@ CTA = {
            "cta": "Напишите нам"},
 }
 
-CAPTIONS = {
-    "en": {"bbq": "BBQ with the crew", "pool": "Villa pool party",
-           "yacht": "Birthday on a yacht", "bachelor": "Beach bash"},
-    "ru": {"bbq": "Шашлыки с компанией", "pool": "Вечеринка у бассейна",
-           "yacht": "День рождения на яхте", "bachelor": "Пляжный движ"},
+# Per-style, per-language lower-... (now upper) scene captions.
+STYLE_CAPTIONS = {
+    "cartoon": {
+        "en": {"bbq": "BBQ with the crew", "pool": "Villa pool party",
+               "yacht": "Birthday on a yacht", "bachelor": "Beach bash"},
+        "ru": {"bbq": "Шашлыки с компанией", "pool": "Вечеринка у бассейна",
+               "yacht": "День рождения на яхте", "bachelor": "Пляжный движ"},
+    },
+    "gatsby": {
+        "en": {"gala": "A night to remember", "tower": "Raise a glass",
+               "jazz": "Dance till dawn", "rooftop": "Under the city lights"},
+        "ru": {"gala": "Ночь, что запомнится", "tower": "Поднимем бокалы",
+               "jazz": "Танцы до рассвета", "rooftop": "Под огнями города"},
+    },
 }
+STYLE_CAPTIONS["real"] = STYLE_CAPTIONS["cartoon"]  # same party-type scenes
 
 PIN = (
     '<svg width="34" height="45" viewBox="0 0 24 32" style="display:block;'
@@ -415,10 +432,12 @@ def build(motion: str, style: str) -> None:
     scenes_dir = STYLE_DIRS[style]["scenes"]
     runway_dir = STYLE_DIRS[style]["runway"]
     prefix = STYLE_DIRS[style]["prefix"]
-    durs = [HOOK_DUR] + [PARTY_DUR] * len(ORDER) + [CTA_DUR]
+    order = STYLE_ORDER[style]
+    captions = STYLE_CAPTIONS[style]
+    durs = [HOOK_DUR] + [PARTY_DUR] * len(order) + [CTA_DUR]
     total = durs[0] + sum(d - XFADE for d in durs[1:])
     # Time the CTA card becomes fully visible = where the jingle drop should land.
-    drop_target = HOOK_DUR + len(ORDER) * (PARTY_DUR - XFADE)
+    drop_target = HOOK_DUR + len(order) * (PARTY_DUR - XFADE)
 
     for fmt, (w, h) in FORMATS.items():
         w2, h2 = w * 2, h * 2
@@ -429,13 +448,13 @@ def build(motion: str, style: str) -> None:
 
             # --- scenes ---
             scene_clips = []
-            for i, name in enumerate(ORDER):
+            for i, name in enumerate(order):
                 out = WORK / f"{style}_{motion}_{fmt}_{name}_{lang}.mp4"
                 rw = runway_dir / f"{name}.mp4"
                 use_runway = (motion == "runway" and rw.exists())
                 if use_runway:
-                    ov = WORK / f"cap_{fmt}_{name}_{lang}.png"
-                    render_png(caption_overlay_html(CAPTIONS[lang][name], lang, w, h),
+                    ov = WORK / f"cap_{style}_{fmt}_{name}_{lang}.png"
+                    render_png(caption_overlay_html(captions[lang][name], lang, w, h),
                                ov, w, h, transparent=True)
                     runway_scene_clip(rw, ov, out, PARTY_DUR, w, h)
                 else:
@@ -443,7 +462,7 @@ def build(motion: str, style: str) -> None:
                         print(f"  [fallback] {name}: no Runway clip -> Ken Burns", flush=True)
                     still = WORK / f"scene_{style}_{fmt}_{name}_{lang}.png"
                     render_png(captioned_scene_html(scenes_dir / f"{name}.png",
-                                                    CAPTIONS[lang][name], lang, w2, h2),
+                                                    captions[lang][name], lang, w2, h2),
                                still, w2, h2)
                     ken_burns(still, out, PARTY_DUR, zoom_in=(i % 2 == 0), w=w, h=h)
                 scene_clips.append(out)

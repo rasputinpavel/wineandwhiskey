@@ -124,3 +124,24 @@ primaries too; these are cat-flavored additions.
 | RU | CTA | Напишите нам | — |
 
 **Legal check:** No brand names. No pouring/drinking verbs ("curate"/"подберём"). Celebration-led (party types + birthday framing). "With or without bubbles" / "с пузырьками и без" carried in CTA card + primaries. Cats remove any human-consumption cue entirely. ✅
+
+## Angle: gatsby — video `Cats/bd_gatsby_*` (people · Art Deco · HIGHER-RISK test)
+
+⚠️ **Separate-adset experiment that deliberately relaxes the alcohol shield.**
+Real people, 1920s Great Gatsby glamour; scenes gala → tower → jazz → rooftop.
+Unlike every other creative here, alcohol **is** shown — an ice bucket with a
+sparkling-wine bottle and coupe glasses with bubbles — but with **no readable
+brand/label** so "sparkling" stays ambiguous. Built via `--style gatsby`
+(`gen_cat_scenes.py` / `runway_cat_clips.py` / `build_cat_montage.py`), 2 motions
+× 3 jingles × RU/EN × stv+fv = 24 finals.
+
+**Run guardrails (non-negotiable for this version):** isolated ad set, **age-gate
+25+**, Meta alcohol-policy flag on, Phuket only. Higher rejection + regulatory
+risk than the cat/human versions (Thai Alcoholic Beverage Control Act) — this is a
+watched test, not a default. In-video captions: `A night to remember` / `Raise a
+glass` / `Dance till dawn` / `Under the city lights` (+ RU). Same offer-first hook
+and special-price CTA as the cat versions.
+
+**Legal check:** No brand names/labels visible. Alcohol depicted (bucket + bubbly
+coupes) — **accepted risk**, hedged by no-label + 25+ + isolated ad set. Not for
+Thai-language targeting. ⚠️ (higher risk by design)

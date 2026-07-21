@@ -31,7 +31,8 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 # photoreal adult cats. Each writes to its own scenes dir so neither clobbers
 # the other.
 SCENE_DIRS = {"cartoon": os.path.join(HERE, "assets", "scenes"),
-              "real": os.path.join(HERE, "assets", "scenes_real")}
+              "real": os.path.join(HERE, "assets", "scenes_real"),
+              "gatsby": os.path.join(HERE, "assets", "scenes_gatsby")}
 
 # ---- shared style anchor (identical across all 4 for a consistent set) ----
 ANCHOR_REAL = (
@@ -78,7 +79,29 @@ ANCHOR_CARTOON = (
     "drifting through the warm light — the only 'sparkling' hint, never a drink."
 )
 
-ANCHORS = {"cartoon": ANCHOR_CARTOON, "real": ANCHOR_REAL}
+# Gatsby version: REAL PEOPLE, 1920s Art Deco glamour. NOTE — this version
+# deliberately RELAXES the no-alcohol shield (owner's call, isolated adset): a
+# champagne bucket and coupe glasses with bubbles ARE allowed, but with NO
+# visible brands/labels so "sparkling" stays ambiguous. Adults only, 25+ read.
+ANCHOR_GATSBY = (
+    "Photorealistic cinematic film still — a lavish 1920s Great Gatsby Art Deco "
+    "party, roaring-twenties glamour, opulent and elegant. Real, beautiful adult "
+    "PEOPLE (not animals) in exquisite vintage 1920s eveningwear — beaded flapper "
+    "gowns, feather headbands, long gloves, tuxedos and black tie, pearls, "
+    "art-deco jewelry. Warm golden chandelier and candle light, gold-and-black "
+    "deco patterns, marble and brass, live jazz-age energy, confetti and "
+    "streamers, a sophisticated grown-up celebration. Cinematic 35mm film look, "
+    "shallow depth of field, rich warm color grade — champagne-gold #C9A84C, "
+    "cream #F5F0EB, deep black and wine tones. Glamorous, aspirational, "
+    "unmistakably an adult (25+) upscale party, never childish. "
+    "Alcohol styling (allowed here, tasteful): a silver ice bucket with a bottle "
+    "of sparkling wine and elegant coupe/flute glasses with rising bubbles may "
+    "appear — but with absolutely NO readable brand names or labels of any kind, "
+    "and no drunk or excessive behaviour. Keep the UPPER portion of the frame "
+    "calmer (ceiling, chandeliers, sky) as clean negative space for a headline."
+)
+
+ANCHORS = {"cartoon": ANCHOR_CARTOON, "real": ANCHOR_REAL, "gatsby": ANCHOR_GATSBY}
 
 # One recurring hero to anchor character consistency across the 4 scenes.
 HEROES = {
@@ -95,6 +118,13 @@ HEROES = {
         "confident adult, always present and recognizable, joined by a small group of "
         "well-dressed adult cat friends (a sleek grey cat, an elegant white cat, a "
         "cool black cat) in fashionable party outfits."
+    ),
+    "gatsby": (
+        "Recurring characters across all scenes: an elegant, glamorous group of "
+        "well-dressed adult friends — a striking woman in a golden beaded flapper "
+        "dress and feather headband, a dapper man in a black tuxedo, and a few "
+        "more stylish guests in 1920s eveningwear — the same chic international "
+        "group, recognizable and consistent from scene to scene."
     ),
 }
 
@@ -137,6 +167,42 @@ SCENE = {
         "Keep the UPPER portion (sky, sea) clean. Mood: beach birthday bash."
     ),
 }
+
+# Bespoke 1920s Art Deco moments for the Gatsby (people) version.
+GATSBY_SCENE = {
+    "gala": (
+        "Composition: a grand Art Deco mansion ballroom gala at night — elegant "
+        "guests in 1920s eveningwear dancing and laughing beneath enormous crystal "
+        "chandeliers, sweeping marble staircase, gold deco columns, confetti and "
+        "streamers in the air, opulent and glamorous. Keep the UPPER portion "
+        "(ceiling, chandeliers) as clean negative space. Mood: the grand celebration."
+    ),
+    "tower": (
+        "Composition: the champagne moment — a glamorous couple and friends raising "
+        "elegant coupe glasses filled with golden sparkling wine and rising bubbles "
+        "in a toast, a silver ice bucket with a bottle of sparkling wine on a "
+        "candlelit Art Deco table, a tiered coupe-glass champagne tower behind, warm "
+        "golden light, confetti (NO readable brand names or labels on any bottle or "
+        "glass). Keep the UPPER portion calmer. Mood: the celebratory toast."
+    ),
+    "jazz": (
+        "Composition: a lively jazz-age dancefloor — stylish couples doing the "
+        "Charleston, a brass jazz band on a small Art Deco stage behind, feather "
+        "headbands and tuxedos, warm spotlights and golden bokeh, confetti raining "
+        "down, high-energy roaring-twenties dancing. Keep the UPPER portion (stage "
+        "lights, ceiling) usable as negative space. Mood: dance till dawn."
+    ),
+    "rooftop": (
+        "Composition: a glamorous 1920s rooftop terrace party at night — elegant "
+        "guests in eveningwear celebrating against a backdrop of a glittering "
+        "Art Deco city skyline and warm string lights, a few coupe glasses with "
+        "bubbles on a deco balustrade (NO readable labels), confetti drifting, "
+        "sophisticated nighttime glamour. Keep the UPPER portion (night sky, "
+        "skyline lights) clean. Mood: under the city lights."
+    ),
+}
+
+STYLE_SCENES = {"cartoon": SCENE, "real": SCENE, "gatsby": GATSBY_SCENE}
 
 
 def load_env(path):
@@ -195,9 +261,10 @@ def main():
     scenes_dir = SCENE_DIRS[style]
     os.makedirs(scenes_dir, exist_ok=True)
     anchor, hero = ANCHORS[style], HEROES[style]
-    angles = [a for a in args if a in SCENE] or list(SCENE)
+    scene_set = STYLE_SCENES[style]
+    angles = [a for a in args if a in scene_set] or list(scene_set)
     for angle in angles:
-        prompt = f"{anchor} {hero} {SCENE[angle]} Format: vertical 9:16 story."
+        prompt = f"{anchor} {hero} {scene_set[angle]} Format: vertical 9:16 story."
         out = os.path.join(scenes_dir, f"{angle}.png")
         print(f"[gen] {angle} -> {out} ...", flush=True)
         try:
