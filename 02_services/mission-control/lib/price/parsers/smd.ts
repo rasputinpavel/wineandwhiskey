@@ -131,7 +131,7 @@ export async function parseSMD(
     supplier_name: SUPPLIER_NAME,
     price_list_date: null,
     currency: 'THB',
-    items: dedupBy(all, (it) => `${(it.name || '').toLowerCase().trim()}|${it.year ?? ''}|${it.price ?? ''}`),
+    items: dedupBy(all, (it) => `${(it.name || '').toLowerCase().trim()}|${it.year ?? ''}|${it.volume ?? ''}|${it.price ?? ''}`),
   }
 }
 
@@ -156,7 +156,7 @@ For EACH card return ONE item:
   "grape_variety": "<the grape composition line, or null>",
   "year": <vintage integer, or null if NV>,
   "price": <integer THB from the price number>,
-  "volume": "750ml",
+  "volume": "<bottle size if the card prints one (e.g. '1,000 ML' -> '1000ml'), else '750ml'>",
   "wine_type": "red"|"white"|"rose"|"orange"|"sparkling"|null,
   "category": "wine",
   "spirit_type": null,
@@ -166,6 +166,7 @@ For EACH card return ONE item:
 Infer wine_type: sparkling for Spumante/Prosecco/Champagne/"Gran Cuvee"/"Extra Dry";
 rose for "Rosé"/"Rosato"; white for white grapes or "WHITE"; red for red grapes or "RED".
 Skip cover pages, section dividers, and any page with no price cards.
+Most cards are 750ml and print no size; only emit a different volume when a size like "1,000 ML" is printed on the card. A "100%" inside a grape composition is NOT a price or a volume.
 Return ONLY JSON: {"items": [...]}.`
 
 const GCC_PROMPT = `This is 1-2 pages of the SMD "Grand Cru Classé 1855" fine-Bordeaux brochure —
@@ -195,4 +196,5 @@ For EACH priced card return ONE item:
 }
 
 Nearly all are red; use "white" only if the card clearly says a white wine.
+A single card may list MULTIPLE vintage/price pairs (e.g. "2022 / 4,200" and "2015 / 4,500"). Emit ONE item per pair, matching each year to the price printed on its own line.
 Return ONLY JSON: {"items": [...]}.`
