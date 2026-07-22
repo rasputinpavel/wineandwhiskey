@@ -1,3 +1,5 @@
+// smoke 2026-07-22: wine=156 items, gcc1855=62 items (both PDFs, live extraction).
+//
 // SMD (Smiling Dark Horse) — two magazine-grid brochures, one supplier:
 //
 //   WINE  (SMD_BROCHURE_WINE_JUL26.pdf, 14 pp) — "DARK HORSE POURING" pouring
