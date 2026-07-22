@@ -32,7 +32,8 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 # the other.
 SCENE_DIRS = {"cartoon": os.path.join(HERE, "assets", "scenes"),
               "real": os.path.join(HERE, "assets", "scenes_real"),
-              "gatsby": os.path.join(HERE, "assets", "scenes_gatsby")}
+              "gatsby": os.path.join(HERE, "assets", "scenes_gatsby"),
+              "phangan": os.path.join(HERE, "assets", "scenes_phangan")}
 
 # ---- shared style anchor (identical across all 4 for a consistent set) ----
 ANCHOR_REAL = (
@@ -101,7 +102,32 @@ ANCHOR_GATSBY = (
     "calmer (ceiling, chandeliers, sky) as clean negative space for a headline."
 )
 
-ANCHORS = {"cartoon": ANCHOR_CARTOON, "real": ANCHOR_REAL, "gatsby": ANCHOR_GATSBY}
+# Phangan version: REAL PEOPLE, Koh Phangan / Thai tropical beach-party glamour
+# (Full Moon-party energy, but upscale and tasteful). Same relaxed-alcohol rule
+# as gatsby (isolated adset, owner's call): a champagne/sparkling bucket and
+# glasses with bubbles ARE allowed, NO readable labels. This is the HIGHEST legal
+# risk version (Thai theme + alcohol) — keep it classy, adults 25+, no drunkenness.
+ANCHOR_PHANGAN = (
+    "Photorealistic cinematic film still — a stylish, upscale tropical beach party "
+    "on Koh Phangan / Phuket, Thailand at night: warm Full Moon-party energy but "
+    "classy and aspirational, not messy. Real, beautiful adult PEOPLE (25+) in "
+    "chic beach-party outfits — flowy summer dresses, linen shirts, tasteful "
+    "festival glow accents — dancing and celebrating on a palm-lined beach. Fire "
+    "dancers, glowing paper lanterns and fairy lights, neon and warm bokeh, a big "
+    "full moon over the sea, bonfires and sparklers, confetti. Cinematic 35mm "
+    "look, shallow depth of field, warm tropical night color grade — honey-amber "
+    "#C9A84C, cream #F5F0EB, deep teal sea, warm firelight, cool neon accents. "
+    "Glamorous international crowd, joyful and celebratory, unmistakably an adult "
+    "beach party, never messy or drunk. "
+    "Alcohol styling (allowed here, tasteful): a bucket of ice with a bottle of "
+    "sparkling wine and elegant glasses with rising bubbles may appear — but with "
+    "absolutely NO readable brand names or labels, and no drunk or excessive "
+    "behaviour. Keep the UPPER portion (night sky, full moon, palms) as clean "
+    "negative space for a headline."
+)
+
+ANCHORS = {"cartoon": ANCHOR_CARTOON, "real": ANCHOR_REAL,
+           "gatsby": ANCHOR_GATSBY, "phangan": ANCHOR_PHANGAN}
 
 # One recurring hero to anchor character consistency across the 4 scenes.
 HEROES = {
@@ -125,6 +151,13 @@ HEROES = {
         "dress and feather headband, a dapper man in a black tuxedo, and a few "
         "more stylish guests in 1920s eveningwear — the same chic international "
         "group, recognizable and consistent from scene to scene."
+    ),
+    "phangan": (
+        "Recurring characters across all scenes: a chic international group of "
+        "adult friends — a radiant woman in a flowy summer dress with a flower in "
+        "her hair, a tanned man in an open linen shirt, and a few more stylish "
+        "friends in beach-party outfits — the same recognizable, consistent group "
+        "from scene to scene, having a joyful classy time."
     ),
 }
 
@@ -202,7 +235,44 @@ GATSBY_SCENE = {
     ),
 }
 
-STYLE_SCENES = {"cartoon": SCENE, "real": SCENE, "gatsby": GATSBY_SCENE}
+# Bespoke Koh Phangan / Thai beach-party moments for the Phangan (people) version.
+PHANGAN_SCENE = {
+    "fire": (
+        "Composition: a spectacular fire show on a tropical Thai beach at night — a "
+        "fire dancer spinning glowing poi and flame staffs, an excited crowd of "
+        "stylish young adults cheering and dancing around, palm trees silhouetted, "
+        "a big full moon over the dark sea, sparks flying, warm firelight. "
+        "Energetic and thrilling. Keep the UPPER portion (night sky, moon) clean. "
+        "Mood: fire on the beach."
+    ),
+    "neon": (
+        "Composition: a vibrant neon beach dancefloor at night (Full Moon-party "
+        "energy, but classy) — a crowd of beautiful adult friends dancing under "
+        "glowing UV and neon lights, tasteful festival glow accents and light "
+        "jewelry, a DJ booth and paper lanterns behind, the sea and a full moon in "
+        "the distance, confetti. Electric and joyful. Keep the UPPER portion (sky, "
+        "lights) usable as negative space. Mood: full moon nights."
+    ),
+    "boat": (
+        "Composition: a golden-sunset party on the deck of a catamaran / longtail "
+        "boat off Thailand's coast — stylish adult friends dancing and laughing, "
+        "turquoise sea and green islands behind, warm string lights, a few glasses "
+        "with bubbles being raised (NO readable labels), soft confetti, glowing "
+        "late-afternoon light. Relaxed upscale fun. Keep the UPPER portion (sky, "
+        "sea horizon) clean. Mood: sunset on the water."
+    ),
+    "beachbar": (
+        "Composition: a chic tropical beach bar at night — elegant adult friends "
+        "toasting with glasses of sparkling wine with rising bubbles, a bucket of "
+        "ice with a sparkling-wine bottle on the bar (NO readable brand or labels), "
+        "sparklers, glowing paper lanterns and fairy lights, palm trees and the "
+        "moonlit sea behind, warm inviting light. Sophisticated celebration. Keep "
+        "the UPPER portion (lanterns, palms, sky) calmer. Mood: raise a glass."
+    ),
+}
+
+STYLE_SCENES = {"cartoon": SCENE, "real": SCENE,
+                "gatsby": GATSBY_SCENE, "phangan": PHANGAN_SCENE}
 
 
 def load_env(path):

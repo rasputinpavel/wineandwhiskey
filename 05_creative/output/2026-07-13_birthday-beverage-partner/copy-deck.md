@@ -145,3 +145,22 @@ and special-price CTA as the cat versions.
 **Legal check:** No brand names/labels visible. Alcohol depicted (bucket + bubbly
 coupes) — **accepted risk**, hedged by no-label + 25+ + isolated ad set. Not for
 Thai-language targeting. ⚠️ (higher risk by design)
+
+## Angle: phangan — video `Cats/bd_phangan_*` (people · Thai beach party · HIGHEST-RISK test)
+
+⚠️⚠️ **The most legally sensitive version — Thai-themed AND alcohol.** Real people,
+upscale Koh Phangan / Full Moon beach-party glamour (classy, not messy); scenes
+fire → neon → boat → beachbar. Like gatsby, alcohol **is** shown (ice bucket +
+glasses with bubbles) with **no readable label**. Built via `--style phangan`,
+2 motions × 3 jingles × RU/EN × stv+fv = 24 finals.
+
+**Run guardrails (hard):** isolated ad set, **age-gate 25+**, Meta alcohol flag on,
+Phuket only, **absolutely no Thai-language targeting** — the campaign brief flags
+Thai + alcohol as the single highest legal risk under the Alcoholic Beverage
+Control Act. Treat as a closely-watched experiment; pull fast if flagged.
+Captions: `Fire on the beach` / `Full moon nights` / `Sunset on the water` /
+`Raise a glass` (+ RU). Same offer-first hook + special-price CTA.
+
+**Legal check:** No brand names/labels; no drunk/excessive behaviour; celebration-
+led. Alcohol + Thai theme = **highest accepted risk**, hedged by no-label + 25+ +
+isolated ad set + EN/RU-only targeting. ⚠️⚠️

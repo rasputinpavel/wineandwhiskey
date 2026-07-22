@@ -47,6 +47,8 @@ STYLE_DIRS = {
              "runway": HERE / "assets" / "runway_real", "prefix": "bd_catreal"},
     "gatsby": {"scenes": HERE / "assets" / "scenes_gatsby",
                "runway": HERE / "assets" / "runway_gatsby", "prefix": "bd_gatsby"},
+    "phangan": {"scenes": HERE / "assets" / "scenes_phangan",
+                "runway": HERE / "assets" / "runway_phangan", "prefix": "bd_phangan"},
 }
 
 FPS = 30
@@ -61,6 +63,7 @@ STYLE_ORDER = {
     "cartoon": ["bbq", "pool", "yacht", "bachelor"],
     "real": ["bbq", "pool", "yacht", "bachelor"],
     "gatsby": ["gala", "tower", "jazz", "rooftop"],
+    "phangan": ["fire", "neon", "boat", "beachbar"],
 }
 RUNWAY_TRIM_START = 1.0   # skip the near-static first second of each Runway clip
 
@@ -119,6 +122,12 @@ STYLE_CAPTIONS = {
                "jazz": "Dance till dawn", "rooftop": "Under the city lights"},
         "ru": {"gala": "Ночь, что запомнится", "tower": "Поднимем бокалы",
                "jazz": "Танцы до рассвета", "rooftop": "Под огнями города"},
+    },
+    "phangan": {
+        "en": {"fire": "Fire on the beach", "neon": "Full moon nights",
+               "boat": "Sunset on the water", "beachbar": "Raise a glass"},
+        "ru": {"fire": "Огонь на пляже", "neon": "Ночи полнолуния",
+               "boat": "Закат на воде", "beachbar": "Поднимем бокалы"},
     },
 }
 STYLE_CAPTIONS["real"] = STYLE_CAPTIONS["cartoon"]  # same party-type scenes
