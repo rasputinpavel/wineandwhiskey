@@ -1,13 +1,20 @@
 import { findSectionForItem } from './registry'
+import { getAuthUsersCached } from './portal/users-store'
+import { verifyPassword } from './portal/password'
 
 const SECRET = process.env.MC_SECRET || 'change-me-in-production'
 
 export type User = {
   login: string
-  password: string
-  // '*' = full access. Otherwise: a mix of section keys (grants all items in that section)
-  // and item slugs (granular grant for a single item). Both are matched by hasAccess.
+  // '*' = full access. Otherwise: a mix of section keys (grants all items in that
+  // section) and item slugs (granular grant for a single item), matched by hasAccess.
   allowed: '*' | string[]
+  is_admin?: boolean
+  disabled?: boolean
+  // Exactly one is set depending on source: env users carry plaintext `password`,
+  // DB users carry `password_hash`.
+  password?: string
+  password_hash?: string
 }
 
 export const COOKIE_NAME = 'mc_auth'
@@ -15,7 +22,7 @@ export const COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 const ENC = new TextEncoder()
 
-function parseUsers(): User[] {
+function parseEnvUsers(): User[] {
   const raw = process.env.MC_USERS
   if (raw) {
     try {
@@ -52,14 +59,24 @@ function b64uDecode(str: string): string {
   return decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/'))))
 }
 
-export function findUser(login: string): User | null {
-  return parseUsers().find(u => u.login === login) ?? null
+async function resolveAllUsers(): Promise<User[]> {
+  const db = await getAuthUsersCached()
+  if (db && db.length > 0) return db
+  return parseEnvUsers()
 }
 
-export function checkCredentials(login: string, password: string): User | null {
-  const u = findUser(login)
-  if (!u) return null
-  return u.password === password ? u : null
+export async function findUser(login: string): Promise<User | null> {
+  const users = await resolveAllUsers()
+  return users.find(u => u.login === login) ?? null
+}
+
+export async function checkCredentials(login: string, password: string): Promise<User | null> {
+  const u = await findUser(login)
+  if (!u || u.disabled) return null
+  const ok = u.password_hash
+    ? await verifyPassword(password, u.password_hash)
+    : u.password === password
+  return ok ? u : null
 }
 
 export async function createToken(login: string): Promise<string> {
@@ -82,13 +99,15 @@ export async function verifyToken(token: string): Promise<User | null> {
     if (diff !== 0) return null
     const parsed = JSON.parse(payload) as { l?: string }
     if (!parsed.l) return null
-    return findUser(parsed.l)
+    const u = await findUser(parsed.l)
+    return u && !u.disabled ? u : null
   } catch {
     return null
   }
 }
 
 export function hasAccess(user: User, slug: string): boolean {
+  if (user.is_admin) return true
   if (user.allowed === '*') return true
   if (!Array.isArray(user.allowed)) return false
   if (user.allowed.includes(slug)) return true
