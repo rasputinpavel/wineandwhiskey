@@ -63,3 +63,136 @@ export function toIntPrice(v: unknown): number | null {
   }
   return null
 }
+
+// ─── Entry point ───────────────────────────────────────────────────────────
+
+export async function parseSMD(
+  buf: Buffer,
+  filename: string,
+  onProgress?: ProgressCb,
+): Promise<ExtractionResult> {
+  const totalPages = await getPageCount(buf)
+
+  const path = await writeTemp(buf)
+  let firstPage = ''
+  try {
+    firstPage = await pdftotextLayout(path, 1, 1)
+  } finally {
+    safeUnlink(path)
+  }
+
+  const variant = detectVariant(filename, firstPage)
+  console.log(`[smd] ${variant} brochure (${totalPages} pages)`)
+  await onProgress?.(5, `reading ${variant}`)
+
+  const prompt = variant === 'gcc1855' ? GCC_PROMPT : WINE_PROMPT
+
+  // 2 PDF pages per chunk. Cover / section-only pages yield [] via the prompt,
+  // so we chunk from page 1 without guessing a start page.
+  const chunks: { from: number; to: number }[] = []
+  for (let p = 1; p <= totalPages; p += 2) {
+    chunks.push({ from: p, to: Math.min(p + 1, totalPages) })
+  }
+
+  const PARALLEL = 5
+  const all: ExtractedItem[] = []
+  let done = 0
+
+  for (let i = 0; i < chunks.length; i += PARALLEL) {
+    const batch = chunks.slice(i, i + PARALLEL)
+    const results = await Promise.all(
+      batch.map(async (c) => {
+        try {
+          const chunkBuf = await extractPdfPages(buf, c.from, c.to)
+          const raw = await callWithPdf(prompt, chunkBuf.toString('base64'))
+          const parsed = parseJson<{ items: ExtractedItem[] }>(raw)
+          const items = (parsed?.items ?? []).map((it) => ({
+            ...it,
+            price: toIntPrice(it.price),
+            volume: it.volume || '750ml',
+            category: 'wine' as const,
+          }))
+          console.log(`[smd] pages ${c.from}-${c.to} → ${items.length} items`)
+          return items
+        } catch (e) {
+          console.error(`[smd] pages ${c.from}-${c.to} failed:`, e instanceof Error ? e.message : e)
+          return [] as ExtractedItem[]
+        }
+      }),
+    )
+    results.forEach((items) => all.push(...items))
+    done += batch.length
+    const pct = 5 + Math.round((done / chunks.length) * 90)
+    await onProgress?.(pct, `extracting ${done}/${chunks.length}`, all.length)
+  }
+
+  await onProgress?.(95, 'inserting')
+  return {
+    supplier_name: SUPPLIER_NAME,
+    price_list_date: null,
+    currency: 'THB',
+    items: dedupBy(all, (it) => `${(it.name || '').toLowerCase().trim()}|${it.year ?? ''}|${it.price ?? ''}`),
+  }
+}
+
+// ─── Prompts ───────────────────────────────────────────────────────────────
+
+const WINE_PROMPT = `This is 1-2 pages of the SMD "DARK HORSE POURING" wine brochure — a
+magazine grid of ~4 wine cards per row band. Each card is a vertical stack:
+
+  COUNTRY            (e.g. AUSTRALIA, FRANCE, ITALY, PORTUGAL)
+  PRODUCER / WINE    (one or more lines — brand then wine name)
+  appellation/type   (e.g. BORDEAUX, CHIANTI DOCG, VIN DE FRANCE, WHITE/RED)
+  grape composition  (e.g. "60% MERLOT, 40% CABERNET SAUVIGNON" or "PINOT GRIGIO")
+  YEAR               (4-digit vintage, or absent for NV)
+  ABV%               (e.g. 13.0%)
+  PRICE              (a bare number like 330, 360, 410 — THB per bottle, VAT-exclusive)
+
+For EACH card return ONE item:
+{
+  "name": "<producer + wine name joined, e.g. 'Grand Louis Bordeaux White'>",
+  "country": "<canonical country from the card>",
+  "region": "<appellation line, e.g. 'Bordeaux', 'Chianti DOCG', or null>",
+  "grape_variety": "<the grape composition line, or null>",
+  "year": <vintage integer, or null if NV>,
+  "price": <integer THB from the price number>,
+  "volume": "750ml",
+  "wine_type": "red"|"white"|"rose"|"orange"|"sparkling"|null,
+  "category": "wine",
+  "spirit_type": null,
+  "description": "<ABV if useful, max 120 chars, or null>"
+}
+
+Infer wine_type: sparkling for Spumante/Prosecco/Champagne/"Gran Cuvee"/"Extra Dry";
+rose for "Rosé"/"Rosato"; white for white grapes or "WHITE"; red for red grapes or "RED".
+Skip cover pages, section dividers, and any page with no price cards.
+Return ONLY JSON: {"items": [...]}.`
+
+const GCC_PROMPT = `This is 1-2 pages of the SMD "Grand Cru Classé 1855" fine-Bordeaux brochure —
+a magazine grid of cards. Some pages are cover or section dividers (e.g.
+"SECOND GROWTH / DEUXIÈME GRAND CRU CLASSÉ") with no prices — skip those.
+
+Each priced card is a vertical stack:
+
+  CHÂTEAU <name>      (may span multiple lines)
+  appellation         (e.g. ST.JULIEN, PAUILLAC, MARGAUX, ST.ESTÈPHE)
+  YEAR                (4-digit vintage)
+  PRICE               (a number like 9,400 or 5,500 — THB per bottle, VAT-exclusive)
+
+For EACH priced card return ONE item:
+{
+  "name": "<full château name, e.g. 'Château Ducru-Beaucaillou'>",
+  "country": "France",
+  "region": "<appellation, e.g. 'Saint-Julien', 'Pauillac', 'Margaux', 'Saint-Estèphe'>",
+  "grape_variety": null,
+  "year": <vintage integer>,
+  "price": <integer THB, thousands separators removed (9,400 -> 9400)>,
+  "volume": "750ml",
+  "wine_type": "red",
+  "category": "wine",
+  "spirit_type": null,
+  "description": "<growth classification if shown on the page, e.g. 'Second Growth', else null>"
+}
+
+Nearly all are red; use "white" only if the card clearly says a white wine.
+Return ONLY JSON: {"items": [...]}.`
