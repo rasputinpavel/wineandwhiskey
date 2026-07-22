@@ -12,14 +12,17 @@ function toB64(bytes: Uint8Array): string {
   return btoa(s)
 }
 
-function fromB64(str: string): Uint8Array {
+function fromB64(str: string): Uint8Array<ArrayBuffer> {
   const bin = atob(str)
   const out = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
   return out
 }
 
-async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+// `salt` is typed to an ArrayBuffer-backed view because TS 5.9's DOM lib requires
+// BufferSource (ArrayBufferView<ArrayBuffer>) for deriveBits — a plain Uint8Array
+// is Uint8Array<ArrayBufferLike>, which admits SharedArrayBuffer and is rejected.
+async function derive(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey('raw', ENC.encode(password), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, KEY_BITS,
@@ -38,7 +41,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
   const iterations = parseInt(parts[1], 10)
   if (!Number.isFinite(iterations) || iterations <= 0) return false
-  let salt: Uint8Array, expected: Uint8Array
+  let salt: Uint8Array<ArrayBuffer>, expected: Uint8Array<ArrayBuffer>
   try { salt = fromB64(parts[2]); expected = fromB64(parts[3]) } catch { return false }
   const actual = await derive(password, salt, iterations)
   if (actual.length !== expected.length) return false
