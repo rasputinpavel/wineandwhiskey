@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   if (typeof login !== 'string' || typeof password !== 'string') {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   }
-  const user = checkCredentials(login, password)
+  const user = await checkCredentials(login, password)
   if (!user) {
     return NextResponse.json({ error: 'Wrong login or password' }, { status: 401 })
   }

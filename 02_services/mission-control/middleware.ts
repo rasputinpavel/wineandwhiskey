@@ -28,6 +28,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Users admin is is_admin-only — a stronger gate than the allowlist, since the
+  // `users` item lives in the tech section and could otherwise be reached via a
+  // `tech` section grant. Covers both the page (/m/users) and its API (/api/m/users).
+  if (pathname.startsWith('/m/users') || pathname.startsWith('/api/m/users')) {
+    if (!user.is_admin) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+  }
+
   // Section-level access check for /m/<slug>/...
   if (pathname.startsWith('/m/')) {
     const slug = pathname.split('/')[2]
