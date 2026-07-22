@@ -34,6 +34,7 @@ function parseEnvUsers(): User[] {
             login: u.login,
             password: u.password,
             allowed: u.allowed === '*' ? '*' : Array.isArray(u.allowed) ? u.allowed : [],
+            is_admin: u.is_admin === true,
           }))
       }
     } catch {}
