@@ -18,6 +18,10 @@ export const sbSales = createClient(url, key, { db: { schema: 'sales' } })
 // Schema `promo` must also be added to "Exposed schemas".
 export const sbPromo = createClient(url, key, { db: { schema: 'promo' } })
 
+// Portal user administration — logins, access, admin flags. See migration
+// 032_portal_users.sql. Schema `portal` must be added to "Exposed schemas".
+export const sbPortal = createClient(url, key, { db: { schema: 'portal' } })
+
 // Default `public` schema client — used for tables that live outside our
 // custom inventory schema (today: purchase_orders + purchase_order_items
 // populated by 03_automation/scrape_purchase_orders.ts).
