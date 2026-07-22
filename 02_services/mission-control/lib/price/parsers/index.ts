@@ -29,6 +29,7 @@ import { isWineGarage, parseWineGarage } from './wine-garage'
 import { isWinePro, parseWinePro } from './wine-pro'
 import { isEnoteca, parseEnoteca } from './enoteca'
 import { isBoozia, parseBoozia } from './boozia'
+import { isSMD, parseSMD } from './smd'
 import {
   isWineGallery, parseWineGallery,
   isWineGalleryOffer, parseWineGalleryOffer,
@@ -157,6 +158,12 @@ export const PARSERS: Parser[] = [
     fileTypes: ['pdf'],
     detect: (buf, fn) => isUniversal(buf, fn),
     run: (buf, fn, _m, cb) => parseUniversal(buf, fn, cb),
+  },
+  {
+    id: 'smd',
+    fileTypes: ['pdf'],
+    detect: (buf, fn) => isSMD(buf, fn),
+    run: (buf, fn, _m, cb) => parseSMD(buf, fn, cb),
   },
 
   // ── Excel ───────────────────────────────────────────────────────────────
