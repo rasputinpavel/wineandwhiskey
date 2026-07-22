@@ -7,6 +7,13 @@
       "supplier": "Wine Garage Co.Ltd",
       "amount": 1501,
       "reason": "Artificial PO created in Loyverse to fix a stock discrepancy — not a real purchase."
+    },
+    {
+      "po_number": "PO2993",
+      "date": "2026-07-21",
+      "supplier": "Enotega Thailand",
+      "amount": null,
+      "reason": "Entered by mistake with wrong prices; already reversed by a manual stock adjustment (reason: loss). Not a real purchase — must not count as an expense or a payable."
     }
   ]
 }
