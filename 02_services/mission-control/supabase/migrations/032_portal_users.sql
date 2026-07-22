@@ -38,3 +38,19 @@ $$ language plpgsql;
 drop trigger if exists trg_users_touch on portal.users;
 create trigger trg_users_touch before update on portal.users
   for each row execute function portal.touch_updated_at();
+
+-- Grants. Unlike the other schemas, this table holds password hashes, so ONLY
+-- service_role gets access — mission-control talks to it exclusively with the
+-- service-role key. anon/authenticated are deliberately NOT granted usage here.
+-- Without these grants a freshly-created schema exposes nothing to PostgREST and
+-- every sbPortal query fails → lib/auth silently falls back to the env source.
+grant usage on schema portal to service_role;
+grant all on all tables    in schema portal to service_role;
+grant all on all sequences in schema portal to service_role;
+alter default privileges in schema portal grant all on tables to service_role;
+alter default privileges in schema portal grant all on sequences to service_role;
+
+-- Defense-in-depth: enable RLS with no policies. service_role bypasses RLS, so
+-- the app keeps working; but if anon/authenticated ever gets exposed to this
+-- schema by mistake, no rows are readable.
+alter table portal.users enable row level security;
