@@ -346,6 +346,12 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'external', href: 'https://supabase.com/dashboard' },
       },
       {
+        slug: 'users', name: 'Users', icon: '👥', status: 'live',
+        description: 'Portal accounts and access. Admins only.',
+        route: m('users'),
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'loyverse', name: 'Loyverse (POS)', icon: '🛒', status: 'live',
         description: 'Розничная POS: продажи, остатки, gross profit. Источник данных №1.',
         route: m('loyverse'),
