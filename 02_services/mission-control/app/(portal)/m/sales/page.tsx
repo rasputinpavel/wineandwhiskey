@@ -1,7 +1,10 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { sbSales } from '@/lib/supabase'
+import { verifyToken, COOKIE_NAME } from '@/lib/auth'
+import { resolveOwner } from '@/lib/sales/dedup'
 import {
   LEAD_STAGES, LEAD_STAGE_LABEL, ACTIVE_PIPELINE_STAGES,
   type Lead, isStale,
@@ -36,12 +39,17 @@ type SearchParams = {
   // Multiple checkboxes → Next.js gives us string | string[] depending on how
   // many were checked.
   priceLevel?: string | string[]
+  owner?: 'mine' | 'all'
 }
 
 const PRICE_LEVELS = ['$', '$$', '$$$', '$$$$'] as const
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
+  const token = (await cookies()).get(COOKIE_NAME)?.value
+  const currentUser = token ? await verifyToken(token) : null
+  const salesName = currentUser?.sales_name
+  const owner = resolveOwner({ paramOwner: sp.owner, salesName, isAdmin: currentUser?.is_admin })
   const item = findItem('sales-crm')!
   const view: 'table' | 'kanban' = sp.view === 'kanban' ? 'kanban' : 'table'
   const sort: SalesSortCol = parseSort(sp.sort, SORT_COLS, 'updated_at')
@@ -61,6 +69,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   }
   if (sp.district) {
     query = query.eq('district', sp.district)
+  }
+  if (owner === 'mine' && salesName) {
+    query = query.eq('assignee', salesName)
   }
   if (sp.q) {
     query = query.ilike('name', `%${sp.q}%`)
@@ -126,6 +137,18 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         item={item}
         rightSlot={
           <div className="flex items-center gap-2">
+            {salesName && (
+              <div className="flex border border-pale-stone rounded-sm overflow-hidden">
+                <Link
+                  href={makeHref(sp, { owner: 'mine' })}
+                  className={owner === 'mine' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
+                >My leads</Link>
+                <Link
+                  href={makeHref(sp, { owner: 'all' })}
+                  className={owner === 'all' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
+                >All</Link>
+              </div>
+            )}
             <div className="flex border border-pale-stone rounded-sm overflow-hidden">
               <Link
                 href={makeHref(sp, { view: undefined })}
