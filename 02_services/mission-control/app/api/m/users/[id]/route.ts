@@ -17,6 +17,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   else if (Array.isArray(body.allowed)) input.allowed = body.allowed.filter((s): s is string => typeof s === 'string')
   if (typeof body.is_admin === 'boolean') input.is_admin = body.is_admin
   if (typeof body.disabled === 'boolean') input.disabled = body.disabled
+  if (typeof body.sales_name === 'string') input.sales_name = body.sales_name.trim() || null
+  else if (body.sales_name === null) input.sales_name = null
   if (typeof body.password === 'string' && body.password) input.password = body.password
 
   if (Object.keys(input).length === 0) return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
