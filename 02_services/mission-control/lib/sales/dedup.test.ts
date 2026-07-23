@@ -6,6 +6,11 @@ describe('normalizeName (must match SQL name_norm)', () => {
   it('collapses internal whitespace', () => { expect(normalizeName('Kata   Rock')).toBe('kata rock') })
   it('trims ends', () => { expect(normalizeName('  Kata Rock  ')).toBe('kata rock') })
   it('normalizes tabs/newlines', () => { expect(normalizeName('Kata\tRock\nCafe')).toBe('kata rock cafe') })
+  it('folds non-ASCII spaces (NBSP, narrow-NBSP, ideographic) like the SQL translate()', () => {
+    expect(normalizeName('Kata Rock')).toBe('kata rock')
+    expect(normalizeName('Kata Rock')).toBe('kata rock')
+    expect(normalizeName('Kata　Rock')).toBe('kata rock')
+  })
 })
 
 describe('resolveOwner', () => {
