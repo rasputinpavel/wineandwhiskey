@@ -8,9 +8,25 @@ import { computeDueDate, daysBetween, todayBkk } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
+type SortKey = 'po_number' | 'order_date' | 'total_thb' | 'status' | 'paid_at'
+type SortDir = 'asc' | 'desc'
+
 type SearchParams = {
   paid?: 'all' | 'yes' | 'no'
   status?: 'all' | 'closed' | 'draft'
+  sort?: SortKey
+  dir?: SortDir
+}
+
+const SORT_KEYS: readonly SortKey[] = ['po_number', 'order_date', 'total_thb', 'status', 'paid_at']
+// Dates and money default to newest/largest first; text defaults to A→Z.
+function defaultDir(key: SortKey): SortDir {
+  return key === 'po_number' || key === 'status' ? 'asc' : 'desc'
+}
+function dateVal(v: string | null | undefined): number {
+  if (!v) return -Infinity
+  const t = Date.parse(v)
+  return Number.isNaN(t) ? -Infinity : t
 }
 
 export default async function SupplierDetail({
@@ -23,6 +39,8 @@ export default async function SupplierDetail({
   const sp = await searchParams
   const paidFilter   = sp.paid   ?? 'all'
   const statusFilter = sp.status ?? 'closed'
+  const sortKey: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : 'order_date'
+  const sortDir: SortDir = sp.dir === 'asc' || sp.dir === 'desc' ? sp.dir : defaultDir(sortKey)
 
   const { data: sup, error: supErr } = await sbInventory
     .from('supplier')
@@ -51,6 +69,17 @@ export default async function SupplierDetail({
   if (paidFilter !== 'all') {
     pos = pos.filter(p => paidFilter === 'yes' ? p.paid_at != null : p.paid_at == null)
   }
+
+  function sortCmp(a: PurchaseOrder, b: PurchaseOrder): number {
+    switch (sortKey) {
+      case 'total_thb':  return Number(a.total_thb ?? 0) - Number(b.total_thb ?? 0)
+      case 'order_date': return dateVal(a.order_date) - dateVal(b.order_date)
+      case 'paid_at':    return dateVal(a.paid_at)    - dateVal(b.paid_at)
+      case 'po_number':  return (a.po_number ?? '').localeCompare(b.po_number ?? '', undefined, { numeric: true })
+      case 'status':     return (a.status ?? '').localeCompare(b.status ?? '')
+    }
+  }
+  pos = [...pos].sort((a, b) => sortDir === 'asc' ? sortCmp(a, b) : -sortCmp(a, b))
 
   // Cashflow inclusion: override='exclude' → out, override='include' → in,
   // override='auto' → follow supplier type. Consignment suppliers always
@@ -132,9 +161,9 @@ export default async function SupplierDetail({
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4 flex-wrap text-xs">
         <FilterPills label="Status" current={statusFilter}
-          options={['all', 'closed', 'draft']} keep={{ paid: paidFilter }} paramKey="status" supId={id} />
+          options={['all', 'closed', 'draft']} keep={{ paid: paidFilter, sort: sortKey, dir: sortDir }} paramKey="status" supId={id} />
         <FilterPills label="Paid" current={paidFilter}
-          options={['all', 'yes', 'no']} keep={{ status: statusFilter }} paramKey="paid" supId={id} />
+          options={['all', 'yes', 'no']} keep={{ status: statusFilter, sort: sortKey, dir: sortDir }} paramKey="paid" supId={id} />
       </div>
 
       {/* PO table */}
@@ -142,12 +171,12 @@ export default async function SupplierDetail({
         <table className="w-full text-[13px]">
           <thead className="text-graphite border-b border-pale-stone bg-cream/40">
             <tr>
-              <th className="text-left py-2 px-4 font-medium">PO</th>
-              <th className="text-left py-2 px-4 font-medium">Date</th>
-              <th className="text-right py-2 px-4 font-medium">Total</th>
-              <th className="text-left py-2 px-4 font-medium">Status</th>
+              <SortHeader label="PO"     sortKey="po_number"  current={sortKey} dir={sortDir} keep={{ status: statusFilter, paid: paidFilter }} supId={id} />
+              <SortHeader label="Date"   sortKey="order_date" current={sortKey} dir={sortDir} keep={{ status: statusFilter, paid: paidFilter }} supId={id} />
+              <SortHeader label="Total"  sortKey="total_thb"  current={sortKey} dir={sortDir} keep={{ status: statusFilter, paid: paidFilter }} supId={id} align="right" />
+              <SortHeader label="Status" sortKey="status"     current={sortKey} dir={sortDir} keep={{ status: statusFilter, paid: paidFilter }} supId={id} />
               <th className="text-left py-2 px-4 font-medium">Cashflow</th>
-              <th className="text-left py-2 px-4 font-medium">Paid</th>
+              <SortHeader label="Paid"   sortKey="paid_at"    current={sortKey} dir={sortDir} keep={{ status: statusFilter, paid: paidFilter }} supId={id} />
               <th className="text-left py-2 px-4 font-medium">Docs</th>
             </tr>
           </thead>
@@ -219,6 +248,34 @@ function KPI({ label, value, note, highlight, muted }: { label: string; value: s
       <div className={`text-lg font-medium tabular-nums ${highlight ? '' : 'text-deep-black'}`}>{value}</div>
       {note && <div className={`text-[11px] ${highlight ? 'opacity-70' : 'text-graphite/70'}`}>{note}</div>}
     </div>
+  )
+}
+
+function SortHeader({ label, sortKey, current, dir, keep, supId, align }: {
+  label: string
+  sortKey: SortKey
+  current: SortKey
+  dir: SortDir
+  keep: Record<string, string>
+  supId: string
+  align?: 'left' | 'right'
+}) {
+  const active = current === sortKey
+  const nextDir: SortDir = active ? (dir === 'asc' ? 'desc' : 'asc') : defaultDir(sortKey)
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(keep)) if (v && v !== 'all') params.set(k, v)
+  params.set('sort', sortKey)
+  params.set('dir', nextDir)
+  const arrow = active ? (dir === 'asc' ? ' ↑' : ' ↓') : ''
+  return (
+    <th className={`${align === 'right' ? 'text-right' : 'text-left'} py-2 px-4 font-medium`}>
+      <Link
+        href={`/m/suppliers/${supId}?${params.toString()}`}
+        className={`inline-flex items-center gap-0.5 hover:text-wine-red ${active ? 'text-wine-red' : ''}`}
+      >
+        {label}<span className="tabular-nums">{arrow}</span>
+      </Link>
+    </th>
   )
 }
 
