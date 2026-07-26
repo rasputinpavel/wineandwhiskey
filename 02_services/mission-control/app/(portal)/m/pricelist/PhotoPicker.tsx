@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { LineItem } from '@/lib/pricelist/types'
 
 // Per-card photo control: shows the current bottle shot and opens a popover to
@@ -15,6 +15,18 @@ export function PhotoPicker({ item, images, onChange }: {
   const [tab, setTab] = useState<'library' | 'upload'>('library')
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click / Escape so a left-open popover never overlays and
+  // swallows clicks on the card's other controls (e.g. Remove).
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
 
   const current = item.imageUrl ?? (item.imageSlug ? `/brand/products/${item.imageSlug}.png` : null)
 
@@ -60,7 +72,7 @@ export function PhotoPicker({ item, images, onChange }: {
     : images.slice(0, 60)
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block" ref={ref}>
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-11 h-11 rounded border border-pale-stone bg-white flex items-center justify-center overflow-hidden shrink-0"
         title="Photo">

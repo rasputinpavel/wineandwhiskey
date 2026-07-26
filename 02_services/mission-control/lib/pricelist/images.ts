@@ -42,23 +42,35 @@ export function imageKey(name: string): string {
 export const COLOR_TOKENS = new Set(['red', 'white', 'blanc', 'blancs', 'rouge',
   'rose', 'rosato', 'rosado', 'noir', 'orange', 'nero', 'tinto', 'bianco'])
 
-// Best existing-library slug for a SKU: a file whose tokens are all present in
-// the SKU name (subset), preferring the most specific and colour-consistent one.
-// Returns undefined when nothing is a safe subset.
+// Best existing-library slug for a SKU. A file matches when one token set is a
+// subset of the other (file ⊆ sku OR sku ⊆ file) — so "Ant Moore Sauvignon
+// Blanc" still finds "ant-moore-a-plus-sauvignon-blanc". Requires ≥2 shared
+// tokens and NO conflicting colour (a red never takes a white/rosé shot).
+// Prefers the most specific, best-overlapping, colour-consistent file.
 export function bestImageSlug(skuName: string, index: { slug: string; tokens: string[] }[]): string | undefined {
   const sku = new Set(imageTokens(skuName))
   if (sku.size < 2) return undefined
+  const skuColors = new Set([...sku].filter(t => COLOR_TOKENS.has(t)))
   let best: string | undefined
   let bestScore = -1
   for (const f of index) {
-    if (f.tokens.length < 2) continue
-    if (!f.tokens.every(t => sku.has(t))) continue // file ⊆ sku
-    let colorMatch = 0
-    for (const t of f.tokens) if (COLOR_TOKENS.has(t)) colorMatch++
-    // A SKU colour the file omits is a penalty — prefer a file that names it.
-    let skuColorMissed = 0
-    for (const t of sku) if (COLOR_TOKENS.has(t) && !f.tokens.includes(t)) skuColorMissed++
-    const score = f.tokens.length * 2 + colorMatch * 4 - skuColorMissed * 5
+    const fset = new Set(f.tokens)
+    if (fset.size < 2) continue
+    const shared = f.tokens.filter(t => sku.has(t))
+    if (shared.length < 2) continue
+    const fSubsetSku = f.tokens.every(t => sku.has(t))
+    const skuSubsetF = [...sku].every(t => fset.has(t))
+    if (!fSubsetSku && !skuSubsetF) continue // one must contain the other
+    // Colour must never conflict: if both name a colour, they must be the same.
+    const fColors = new Set(f.tokens.filter(t => COLOR_TOKENS.has(t)))
+    if (skuColors.size && fColors.size) {
+      let same = false
+      for (const c of fColors) if (skuColors.has(c)) same = true
+      if (!same) continue
+    }
+    const colorMatch = [...fColors].filter(c => skuColors.has(c)).length
+    const extra = Math.abs(fset.size - sku.size) // token-count distance
+    const score = shared.length * 3 + colorMatch * 4 - extra
     if (score > bestScore) { bestScore = score; best = f.slug }
   }
   return best

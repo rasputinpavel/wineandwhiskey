@@ -127,7 +127,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
       <aside className="w-72 border-r border-pale-stone overflow-auto p-3">
         <div className="flex gap-1 mb-3">
           {(['catalog', 'import', 'manual'] as SourceMode[]).map(m => (
-            <button key={m} onClick={() => setMode(m)}
+            <button type="button" key={m} onClick={() => setMode(m)}
               className={`flex-1 px-2 py-1 rounded text-xs capitalize ${mode === m ? 'bg-wine-red text-white' : 'bg-cream text-graphite'}`}>
               {m}
             </button>
@@ -144,7 +144,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
                   <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PLAQUE_TOKENS[row.zone] }} />
                   <span className="flex-1 truncate" title={row.name}>{row.name}</span>
                   <span className="text-graphite/70 tabular-nums">{row.price ?? '—'}</span>
-                  <button onClick={() => dispatch({ t: 'add', item: catalogRowToLineItem(row, uid()) })}
+                  <button type="button" onClick={() => dispatch({ t: 'add', item: catalogRowToLineItem(row, uid()) })}
                     className="px-1.5 py-0.5 bg-cream rounded text-xs hover:bg-pale-stone">Add</button>
                 </li>
               ))}
@@ -176,7 +176,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
                 <div>Missing name: {imported.report.missingName}</div>
                 <div>Missing price: {imported.report.missingPrice}</div>
                 <div>Headers: {imported.report.matchedHeaders.join(', ') || '—'}</div>
-                <button onClick={() => imported.items.forEach(it => dispatch({ t: 'add', item: { ...it, id: uid() } }))}
+                <button type="button" onClick={() => imported.items.forEach(it => dispatch({ t: 'add', item: { ...it, id: uid() } }))}
                   className="mt-1 px-2 py-1 bg-wine-red text-white rounded text-xs">Add all ({imported.items.length})</button>
               </div>
             )}
@@ -278,9 +278,9 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
                 <input value={it.volume ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { volume: e.target.value || undefined } })} className={inputCls} placeholder="Volume" />
               </div>
               <div className="flex gap-1 justify-end">
-                <button disabled={idx === 0} onClick={() => dispatch({ t: 'reorder', from: idx, to: idx - 1 })} className="px-1.5 py-0.5 bg-cream rounded text-xs disabled:opacity-30">↑</button>
-                <button disabled={idx === doc.items.length - 1} onClick={() => dispatch({ t: 'reorder', from: idx, to: idx + 1 })} className="px-1.5 py-0.5 bg-cream rounded text-xs disabled:opacity-30">↓</button>
-                <button onClick={() => dispatch({ t: 'remove', id: it.id })} className="px-1.5 py-0.5 bg-rose-dust/40 rounded text-xs">Remove</button>
+                <button type="button" disabled={idx === 0} onClick={() => dispatch({ t: 'reorder', from: idx, to: idx - 1 })} className="px-1.5 py-0.5 bg-cream rounded text-xs disabled:opacity-30">↑</button>
+                <button type="button" disabled={idx === doc.items.length - 1} onClick={() => dispatch({ t: 'reorder', from: idx, to: idx + 1 })} className="px-1.5 py-0.5 bg-cream rounded text-xs disabled:opacity-30">↓</button>
+                <button type="button" onClick={() => dispatch({ t: 'remove', id: it.id })} className="px-1.5 py-0.5 bg-rose-dust/40 rounded text-xs">Remove</button>
               </div>
             </div>
           ))}
@@ -289,7 +289,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
         {/* Actions */}
         <div className="mt-3 pt-3 border-t border-pale-stone space-y-2">
           <div className="flex gap-2">
-            <button disabled={saving} onClick={save} className="flex-1 px-3 py-2 bg-graphite text-white rounded text-sm disabled:opacity-50">
+            <button type="button" disabled={saving} onClick={save} className="flex-1 px-3 py-2 bg-graphite text-white rounded text-sm disabled:opacity-50">
               {saving ? 'Saving…' : currentId ? 'Save' : 'Save new'}
             </button>
             <select defaultValue="" onChange={e => loadList(e.target.value)} className={`${inputCls} flex-1`}>
@@ -297,7 +297,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
               {saved.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
             </select>
           </div>
-          <button disabled={rendering} onClick={exportDoc} className="w-full px-3 py-2 bg-wine-red text-white rounded text-sm disabled:opacity-50">
+          <button type="button" disabled={rendering} onClick={exportDoc} className="w-full px-3 py-2 bg-wine-red text-white rounded text-sm disabled:opacity-50">
             {rendering ? 'Rendering…' : 'Export PNG + PDF'}
           </button>
         </div>
