@@ -1,4 +1,4 @@
-import type { Page, PageSettings, LineItem, Row } from './types'
+import type { Page, PageSettings, LineItem, Row, PlaqueZone } from './types'
 import { zoneToken, PLAQUE_LABELS } from './plaques'
 
 export type BuildHtmlArgs = {
@@ -16,18 +16,32 @@ function esc(s: string): string {
 }
 
 function priceHtml(p: number | null): string {
-  if (p == null) return `<span class="price">—</span>`
+  // The render route trusts raw JSON, so treat price as untrusted: only a
+  // finite number reaches the DOM, never an interpolated string.
+  if (typeof p !== 'number' || !Number.isFinite(p)) return `<span class="price">—</span>`
   return `<span class="price">${p}<span class="price__suf">.-</span></span>`
 }
 
+const KNOWN_ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'rose', 'spirits']
+function safeZone(z: unknown): PlaqueZone {
+  return (KNOWN_ZONES as string[]).includes(z as string) ? (z as PlaqueZone) : 'white'
+}
+
+// imageUrl is user-controlled (CSV column / raw POST body). Allow only http(s)
+// and image data URLs; anything else (javascript:, breakout attempts) → dropped.
+// Map values are our own on-disk data URLs and are trusted.
+function safeUserUrl(u: string): string {
+  return /^(https?:\/\/|data:image\/)/i.test(u.trim()) ? u.trim() : ''
+}
+
 function imgSrc(it: LineItem, images?: Map<string, string>): string {
-  if (it.imageUrl) return it.imageUrl
+  if (it.imageUrl) return safeUserUrl(it.imageUrl)
   if (it.imageSlug && images?.get(it.imageSlug)) return images.get(it.imageSlug)!
   return '' // template shows the silhouette placeholder when empty
 }
 
 function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: boolean): string {
-  const zone = it.zone
+  const zone = safeZone(it.zone)
   const src = imgSrc(it, images)
   const meta = [
     it.country || it.region ? `<div class="meta"><span class="ico">🌍</span>${esc([it.country, it.region].filter(Boolean).join(', '))}</div>` : '',
@@ -37,7 +51,7 @@ function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: b
   return `
     <div class="card ${wide ? 'card--wide' : ''} zone--${zone}" style="--plaque:${zoneToken(zone)}">
       <div class="plaque"><span>${PLAQUE_LABELS[zone]}</span></div>
-      <div class="bottle">${src ? `<img src="${src}" alt="">` : `<div class="bottle__ph"></div>`}</div>
+      <div class="bottle">${src ? `<img src="${esc(src)}" alt="">` : `<div class="bottle__ph"></div>`}</div>
       <div class="body">
         <div class="name">${esc(it.name)}</div>
         ${meta}

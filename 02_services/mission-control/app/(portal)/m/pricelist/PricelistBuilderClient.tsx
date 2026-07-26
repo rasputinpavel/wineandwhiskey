@@ -28,7 +28,9 @@ function reducer(doc: PriceListDoc, a: Action): PriceListDoc {
     case 'update': return { ...doc, items: doc.items.map(i => i.id === a.id ? { ...i, ...a.patch } : i) }
     case 'reorder': { const items = [...doc.items]; const [mv] = items.splice(a.from, 1); items.splice(a.to, 0, mv); return { ...doc, items } }
     case 'settings': return { ...doc, settings: { ...doc.settings, ...a.patch } }
-    case 'load': return a.doc
+    // Merge onto defaults so a saved list with partial/empty settings ({} DB
+    // default) can't produce undefined fields → uncontrolled inputs / bad layout.
+    case 'load': return { settings: { ...DEFAULT_SETTINGS, ...a.doc.settings }, items: a.doc.items ?? [] }
   }
 }
 

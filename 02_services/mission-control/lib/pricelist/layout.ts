@@ -72,7 +72,8 @@ function paginate(rows: Row[], cardsPerPage: number): Page[] {
   const pages: Page[] = []
   let cur: Row[] = []
   let count = 0
-  const cardCost = (r: Row) => (r.kind === 'pair' ? 2 : r.kind === 'solo-wide' ? 1 : 0)
+  // A `tight` odd row is a pair with an empty second slot → counts as 1 card.
+  const cardCost = (r: Row) => (r.kind === 'pair' ? (r.items[1] ? 2 : 1) : r.kind === 'solo-wide' ? 1 : 0)
 
   for (const r of rows) {
     const cost = cardCost(r)
