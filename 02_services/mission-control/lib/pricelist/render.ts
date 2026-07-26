@@ -5,6 +5,7 @@ import path from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import { buildHtml } from './template'
 import { buildPages } from './layout'
+import { qrDataUrl } from './qr'
 import type { PriceListDoc } from './types'
 
 const A4 = { width: 794, height: 1123 }
@@ -45,7 +46,8 @@ export async function renderPricelist(doc: PriceListDoc): Promise<RenderResult> 
   const pages = buildPages(doc.items, doc.settings)
   const slugs = doc.items.map(i => i.imageSlug).filter(Boolean) as string[]
   const imageDataUrls = await loadImages(slugs)
-  const html = buildHtml({ pages, settings: doc.settings, imageDataUrls })
+  const qr = doc.settings.qrUrl ? await qrDataUrl(doc.settings.qrUrl) : undefined
+  const html = buildHtml({ pages, settings: doc.settings, imageDataUrls, qrDataUrl: qr })
 
   const browser = await launch()
   const pngs: Buffer[] = []

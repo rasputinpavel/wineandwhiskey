@@ -102,22 +102,18 @@ export function buildHtml(args: BuildHtmlArgs): string {
   .grid { display:flex; flex-direction:column; gap:12px; flex:1; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .row--solo { grid-template-columns:1fr; }
-  .card { position:relative; display:grid; grid-template-columns:22px 78px 1fr auto; align-items:center; gap:10px;
-          background:#fff; border:1px solid #E4DBCE; border-radius:14px; padding:10px 14px 10px 0; min-height:96px; }
-  .card--wide { grid-template-columns:22px 100px 1fr auto; }
+  .card { position:relative; display:grid; grid-template-columns:30px 82px 1fr auto; align-items:center; gap:12px;
+          background:#fff; border:1px solid #E7DFD2; border-radius:16px; overflow:hidden; min-height:106px; padding:0 20px 0 0;
+          box-shadow:0 1px 2px rgba(60,40,20,.04); }
+  .card--wide { grid-template-columns:30px 108px 1fr auto; }
   .card--empty { visibility:hidden; }
-  .plaque { background:var(--plaque); border-radius:14px 0 0 14px; height:100%; width:22px;
-            display:flex; align-items:center; justify-content:center; }
-  .plaque span { writing-mode:vertical-rl; transform:rotate(180deg); color:#fff; font-family:'DM Sans'; font-weight:700;
-                 font-size:11px; letter-spacing:.14em; }
-  .zone--sparkling .plaque { background:
-      radial-gradient(circle at 30% 20%, rgba(255,255,255,.55) 2px, transparent 3px),
-      radial-gradient(circle at 60% 60%, rgba(255,255,255,.45) 2.5px, transparent 3.5px),
-      radial-gradient(circle at 40% 85%, rgba(255,255,255,.5) 2px, transparent 3px),
-      var(--plaque); }
-  .bottle { display:flex; align-items:center; justify-content:center; height:90px; }
-  .bottle img { max-height:90px; max-width:100%; }
-  .bottle__ph { width:30px; height:80px; border-radius:6px 6px 3px 3px; background:linear-gradient(#e9e2d6,#d8cdbc); }
+  /* Full-height flush band; the card's overflow:hidden clips its corners to the radius. */
+  .plaque { align-self:stretch; background:var(--plaque); display:flex; align-items:center; justify-content:center; }
+  .plaque span { writing-mode:vertical-rl; transform:rotate(180deg); color:#fff; font-family:'DM Sans'; font-weight:600;
+                 font-size:10px; letter-spacing:.22em; text-transform:uppercase; }
+  .bottle { display:flex; align-items:center; justify-content:center; height:94px; padding:8px 0; }
+  .bottle img { max-height:94px; max-width:100%; object-fit:contain; }
+  .bottle__ph { width:26px; height:74px; border-radius:7px 7px 3px 3px; background:linear-gradient(160deg,#efe9df,#dcd2c2); }
   .name { font-family:'DM Sans'; font-weight:700; font-size:16px; text-transform:uppercase; line-height:1.05; }
   .meta { font-size:11px; color:var(--graphite); margin-top:4px; display:flex; gap:6px; align-items:center; }
   .meta .ico { opacity:.8; }

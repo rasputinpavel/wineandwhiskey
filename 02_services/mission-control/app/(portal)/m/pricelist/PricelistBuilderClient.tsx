@@ -1,14 +1,15 @@
 'use client'
-import { useReducer, useState } from 'react'
+import { useMemo, useReducer, useState } from 'react'
 import { Preview } from './preview'
 import type { PriceListDoc, LineItem, PageSettings, Grouping, PlaqueZone, RowLayout, CatalogRow } from '@/lib/pricelist/types'
 import { catalogRowToLineItem } from '@/lib/pricelist/types'
 import { PLAQUE_TOKENS } from '@/lib/pricelist/plaques'
+import { COUNTRIES } from '@/lib/pricelist/flags'
 
 const DEFAULT_SETTINGS: PageSettings = {
   title: 'Wine & Whiskey', grouping: 'type', showDividers: false, tierThresholds: [600, 1000],
   oddItemMode: 'solo-wide', headerContact: 'WhatsApp · Irina +66 93 914 0004',
-  vatNote: '7% VAT NOT INCLUDED', cardsPerPage: 14,
+  vatNote: '7% VAT NOT INCLUDED', cardsPerPage: 14, qrUrl: 'https://wa.me/66939140004',
 }
 
 const ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'rose', 'spirits']
@@ -44,9 +45,10 @@ type ImportResult = { items: LineItem[]; report: { total: number; missingName: n
 const inputCls = 'w-full px-2 py-1 border border-pale-stone rounded text-sm bg-white'
 const labelCls = 'text-[11px] uppercase tracking-wide text-graphite/70'
 
-export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow[]; saved: SavedRef[] }) {
+export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog: CatalogRow[]; saved: SavedRef[]; imageSlugs: string[] }) {
   const [doc, dispatch] = useReducer(reducer, { settings: DEFAULT_SETTINGS, items: [] })
   const [rendering, setRendering] = useState(false)
+  const availableImages = useMemo(() => new Set(imageSlugs), [imageSlugs])
 
   // LEFT-pane local state
   const [mode, setMode] = useState<SourceMode>('catalog')
@@ -110,6 +112,7 @@ export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow
 
   return (
     <div className="flex flex-1 min-h-0">
+      <datalist id="pl-countries">{COUNTRIES.map(c => <option key={c} value={c} />)}</datalist>
       {/* LEFT — sources */}
       <aside className="w-72 border-r border-pale-stone overflow-auto p-3">
         <div className="flex gap-1 mb-3">
@@ -141,6 +144,21 @@ export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow
 
         {mode === 'import' && (
           <div className="space-y-3">
+            <div className="text-xs text-graphite/80 space-y-2 rounded-md border border-pale-stone bg-white/60 p-2.5">
+              <p>Upload a <b>CSV</b> or <b>Excel</b> (.xlsx/.xls) — the first sheet, first row = column headers. Headers are matched case-insensitively (EN or RU); unknown columns are ignored.</p>
+              <div>
+                <div className={labelCls}>Recognized columns</div>
+                <ul className="mt-1 space-y-0.5">
+                  <li><b>name</b> <span className="text-graphite/60">(required) — наименование / вино</span></li>
+                  <li><b>price</b> <span className="text-graphite/60">(required) — цена, THB</span></li>
+                  <li><b>type</b> <span className="text-graphite/60">— white / red / sparkling / rosé / spirits (белое/красное/игристое/розе/крепкое)</span></li>
+                  <li><b>country</b> · <b>region</b> · <b>grape</b> <span className="text-graphite/60">— страна / регион / сорт</span></li>
+                  <li><b>producer</b> · <b>volume</b> <span className="text-graphite/60">— производитель / объём (750ml)</span></li>
+                  <li><b>image</b> <span className="text-graphite/60">— ссылка на фото (http/https)</span></li>
+                </ul>
+              </div>
+              <p className="text-graphite/60">Rows without <b>name</b> or <b>price</b> are flagged below but still imported — you can fix them in the editor. <b>type</b> sets the plaque colour; if omitted it defaults to White (change it per card).</p>
+            </div>
             <input type="file" accept=".csv,.xlsx,.xls" onChange={onImportFile} className="text-sm" />
             {imported && (
               <div className="text-xs text-graphite/80 space-y-1">
@@ -215,6 +233,10 @@ export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow
             <label className={labelCls}>VAT note</label>
             <input value={doc.settings.vatNote} onChange={e => dispatch({ t: 'settings', patch: { vatNote: e.target.value } })} className={inputCls} />
           </div>
+          <div>
+            <label className={labelCls}>QR link (header)</label>
+            <input value={doc.settings.qrUrl ?? ''} placeholder="https://wa.me/66939140004" onChange={e => dispatch({ t: 'settings', patch: { qrUrl: e.target.value } })} className={inputCls} />
+          </div>
         </div>
 
         {/* Working list */}
@@ -240,7 +262,7 @@ export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow
               <div className="grid grid-cols-2 gap-1">
                 <input value={it.producer ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { producer: e.target.value || undefined } })} className={inputCls} placeholder="Producer" />
                 <input value={it.region ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { region: e.target.value || undefined } })} className={inputCls} placeholder="Region" />
-                <input value={it.country ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { country: e.target.value || undefined } })} className={inputCls} placeholder="Country" />
+                <input value={it.country ?? ''} list="pl-countries" onChange={e => dispatch({ t: 'update', id: it.id, patch: { country: e.target.value || undefined } })} className={inputCls} placeholder="Country" />
                 <input value={it.grape ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { grape: e.target.value || undefined } })} className={inputCls} placeholder="Grape" />
                 <input value={it.volume ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { volume: e.target.value || undefined } })} className={inputCls} placeholder="Volume" />
               </div>
@@ -271,7 +293,7 @@ export function PricelistBuilderClient({ catalog, saved }: { catalog: CatalogRow
       </section>
 
       {/* RIGHT — preview */}
-      <Preview doc={doc} />
+      <Preview doc={doc} availableImages={availableImages} />
     </div>
   )
 }

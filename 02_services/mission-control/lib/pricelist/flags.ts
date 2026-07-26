@@ -41,6 +41,15 @@ const SPECIAL: Record<string, string> = {
   wales: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', уэльс: '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
 }
 
+// Display list for the Country autocomplete (wine + spirits origins). Order is
+// roughly by how often they appear in the store; the datalist filters as you type.
+export const COUNTRIES: string[] = [
+  'Italy', 'France', 'Spain', 'Portugal', 'Germany', 'Austria', 'Russia', 'Moldova',
+  'Georgia', 'Ukraine', 'Greece', 'Hungary', 'Croatia', 'Slovenia', 'Switzerland',
+  'Armenia', 'Lebanon', 'USA', 'Argentina', 'Chile', 'Australia', 'New Zealand',
+  'South Africa', 'Mexico', 'Japan', 'Scotland', 'Ireland', 'England', 'United Kingdom',
+]
+
 function isoToFlag(iso: string): string {
   return iso.toUpperCase().replace(/[A-Z]/g, c => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
 }

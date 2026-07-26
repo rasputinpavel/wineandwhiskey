@@ -1,4 +1,5 @@
 // Shared, DB-free types for the price-list builder.
+import { slugify } from './images'
 
 export type PlaqueZone = 'white' | 'red' | 'sparkling' | 'rose' | 'spirits'
 
@@ -35,6 +36,7 @@ export type PageSettings = {
   headerContact: string             // e.g. 'WhatsApp · Irina +66 93 914 0004'
   vatNote: string                   // e.g. '7% VAT NOT INCLUDED'
   cardsPerPage: number              // default 14
+  qrUrl?: string                    // header QR target, e.g. 'https://wa.me/66939140004'
 }
 
 export type Row =
@@ -61,6 +63,8 @@ export function catalogRowToLineItem(row: CatalogRow, id: string): LineItem {
     id, code: row.code, name: row.name, price: row.price, zone: row.zone,
     grape: row.grape, country: row.country, region: row.region,
     producer: row.producer, volume: row.volume,
-    imageSlug: row.code, // 04_brand/products/<code>.png
+    // Resolve a bottle shot from 04_brand/products/<slug>.png by the wine-name
+    // slug (exact match only, done in the render/preview layer).
+    imageSlug: slugify(row.name),
   }
 }
