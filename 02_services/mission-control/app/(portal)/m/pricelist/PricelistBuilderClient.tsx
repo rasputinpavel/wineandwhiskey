@@ -61,6 +61,28 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Section entry: show the saved-lists landing first, open the builder on demand.
+  const [view, setView] = useState<'list' | 'builder'>('list')
+  const [lists, setLists] = useState<SavedRef[]>(saved)
+
+  async function refreshLists() {
+    const res = await fetch('/api/m/pricelist/lists').catch(() => null)
+    const json = await res?.json().catch(() => null)
+    if (json?.lists) setLists(json.lists as SavedRef[])
+  }
+
+  function newList() {
+    dispatch({ t: 'load', doc: { settings: DEFAULT_SETTINGS, items: [] } })
+    setCurrentId(null)
+    setMode('catalog')
+    setView('builder')
+  }
+
+  function backToList() {
+    setView('list')
+    refreshLists()
+  }
+
   async function exportDoc() {
     setRendering(true)
     try {
@@ -113,12 +135,43 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
     if (row.error) { alert(row.error); return }
     dispatch({ t: 'load', doc: { settings: row.settings, items: row.items } })
     setCurrentId(id)
+    setView('builder')
   }
 
   const filtered = search.trim()
     ? catalog.filter(r => r.name.toLowerCase().includes(search.trim().toLowerCase()))
     : catalog
   const shown = filtered.slice(0, 100)
+
+  if (view === 'list') {
+    return (
+      <div className="flex-1 overflow-auto bg-warm-white">
+        <div className="max-w-2xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="font-heading text-xl text-deep-black">Price Lists</h1>
+            <button type="button" onClick={newList} className="px-3 py-2 bg-wine-red text-white rounded text-sm">+ New price list</button>
+          </div>
+          {lists.length === 0 ? (
+            <div className="text-sm text-graphite/70 border border-dashed border-pale-stone rounded-lg p-8 text-center">
+              No saved price lists yet. Create your first one.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {lists.map(l => (
+                <li key={l.id}>
+                  <button type="button" onClick={() => loadList(l.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-white border border-pale-stone rounded-lg hover:border-wine-red transition-colors text-left">
+                    <span className="font-heading text-sm text-deep-black truncate">{l.title || 'Untitled'}</span>
+                    <span className="text-xs text-graphite/60 shrink-0 ml-3">{new Date(l.updated_at).toLocaleDateString()}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -289,13 +342,10 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
         {/* Actions */}
         <div className="mt-3 pt-3 border-t border-pale-stone space-y-2">
           <div className="flex gap-2">
+            <button type="button" onClick={backToList} className="px-3 py-2 bg-cream text-graphite rounded text-sm">← Lists</button>
             <button type="button" disabled={saving} onClick={save} className="flex-1 px-3 py-2 bg-graphite text-white rounded text-sm disabled:opacity-50">
               {saving ? 'Saving…' : currentId ? 'Save' : 'Save new'}
             </button>
-            <select defaultValue="" onChange={e => loadList(e.target.value)} className={`${inputCls} flex-1`}>
-              <option value="">Saved lists…</option>
-              {saved.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-            </select>
           </div>
           <button type="button" disabled={rendering} onClick={exportDoc} className="w-full px-3 py-2 bg-wine-red text-white rounded text-sm disabled:opacity-50">
             {rendering ? 'Rendering…' : 'Export PNG + PDF'}
