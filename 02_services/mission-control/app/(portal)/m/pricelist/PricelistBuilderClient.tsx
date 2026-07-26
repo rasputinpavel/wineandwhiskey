@@ -83,15 +83,24 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
   }
 
   async function save() {
+    // Prompt for a name on first save so lists aren't all "Wine & Whiskey".
+    // Editing an existing list keeps its name (rename via the Title field).
+    let title = doc.settings.title
+    if (!currentId) {
+      const name = window.prompt('Name this price list', title || 'Wine & Whiskey')
+      if (name === null) return // cancelled
+      title = name.trim() || title
+    }
+    const toSave = { ...doc, settings: { ...doc.settings, title } }
     setSaving(true)
     try {
       if (currentId) {
-        await fetch(`/api/m/pricelist/lists/${currentId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(doc) })
+        await fetch(`/api/m/pricelist/lists/${currentId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(toSave) })
       } else {
-        const res = await fetch('/api/m/pricelist/lists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(doc) })
+        const res = await fetch('/api/m/pricelist/lists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(toSave) })
         const { id, error } = await res.json()
         if (error) { alert(error); return }
-        if (id) setCurrentId(id)
+        if (id) { setCurrentId(id); dispatch({ t: 'settings', patch: { title } }) }
       }
     } finally { setSaving(false) }
   }
