@@ -1,5 +1,4 @@
 // Shared, DB-free types for the price-list builder.
-import { slugify } from './images'
 
 export type PlaqueZone = 'white' | 'red' | 'sparkling' | 'rose' | 'spirits'
 
@@ -54,17 +53,17 @@ export type PriceListDoc = {
 export type CatalogRow = {
   code: string; name: string; price: number | null; zone: PlaqueZone
   grape?: string; country?: string; region?: string; producer?: string; volume?: string
+  imageUrl?: string; imageSlug?: string
   onHand: number
 }
 
-// Turns a catalog row into a fresh LineItem for the working list.
+// Turns a catalog row into a fresh LineItem for the working list. The photo
+// (imageUrl / imageSlug) is already resolved server-side in readCatalog.
 export function catalogRowToLineItem(row: CatalogRow, id: string): LineItem {
   return {
     id, code: row.code, name: row.name, price: row.price, zone: row.zone,
     grape: row.grape, country: row.country, region: row.region,
     producer: row.producer, volume: row.volume,
-    // Resolve a bottle shot from 04_brand/products/<slug>.png by the wine-name
-    // slug (exact match only, done in the render/preview layer).
-    imageSlug: slugify(row.name),
+    imageUrl: row.imageUrl, imageSlug: row.imageSlug,
   }
 }
