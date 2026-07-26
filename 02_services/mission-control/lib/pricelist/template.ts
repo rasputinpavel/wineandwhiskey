@@ -1,5 +1,6 @@
 import type { Page, PageSettings, LineItem, Row, PlaqueZone } from './types'
 import { zoneToken, PLAQUE_LABELS } from './plaques'
+import { countryToFlag } from './flags'
 
 export type BuildHtmlArgs = {
   pages: Page[]
@@ -44,7 +45,7 @@ function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: b
   const zone = safeZone(it.zone)
   const src = imgSrc(it, images)
   const meta = [
-    it.country || it.region ? `<div class="meta"><span class="ico">🌍</span>${esc([it.country, it.region].filter(Boolean).join(', '))}</div>` : '',
+    it.country || it.region ? `<div class="meta"><span class="ico">${countryToFlag(it.country)}</span>${esc([it.country, it.region].filter(Boolean).join(', '))}</div>` : '',
     it.grape ? `<div class="meta"><span class="ico">🍇</span>${esc(it.grape)}</div>` : '',
     it.volume ? `<div class="meta"><span class="ico">🍾</span>${esc(it.volume)}</div>` : '',
   ].join('')
