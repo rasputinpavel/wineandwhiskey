@@ -5,6 +5,7 @@ import type { PriceListDoc, LineItem, PageSettings, Grouping, PlaqueZone, RowLay
 import { catalogRowToLineItem } from '@/lib/pricelist/types'
 import { PLAQUE_TOKENS } from '@/lib/pricelist/plaques'
 import { COUNTRIES } from '@/lib/pricelist/flags'
+import { GRAPES } from '@/lib/pricelist/grapes'
 import { PhotoPicker } from './PhotoPicker'
 
 const DEFAULT_SETTINGS: PageSettings = {
@@ -176,6 +177,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
   return (
     <div className="flex flex-1 min-h-0">
       <datalist id="pl-countries">{COUNTRIES.map(c => <option key={c} value={c} />)}</datalist>
+      <datalist id="pl-grapes">{GRAPES.map(g => <option key={g} value={g} />)}</datalist>
       {/* LEFT — sources */}
       <aside className="w-72 border-r border-pale-stone overflow-auto p-3">
         <div className="flex gap-1 mb-3">
@@ -327,7 +329,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
                 <input value={it.producer ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { producer: e.target.value || undefined } })} className={inputCls} placeholder="Producer" />
                 <input value={it.region ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { region: e.target.value || undefined } })} className={inputCls} placeholder="Region" />
                 <input value={it.country ?? ''} list="pl-countries" onChange={e => dispatch({ t: 'update', id: it.id, patch: { country: e.target.value || undefined } })} className={inputCls} placeholder="Country" />
-                <input value={it.grape ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { grape: e.target.value || undefined } })} className={inputCls} placeholder="Grape" />
+                <input value={it.grape ?? ''} list="pl-grapes" onChange={e => dispatch({ t: 'update', id: it.id, patch: { grape: e.target.value || undefined } })} className={inputCls} placeholder="Grape" />
                 <input value={it.volume ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { volume: e.target.value || undefined } })} className={inputCls} placeholder="Volume" />
               </div>
               <div className="flex gap-1 justify-end">
