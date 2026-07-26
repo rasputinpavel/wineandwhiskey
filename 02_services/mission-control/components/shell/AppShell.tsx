@@ -11,12 +11,31 @@ type Props = {
   children: React.ReactNode
 }
 
+const COLLAPSE_KEY = 'ww.sidebar.collapsed'
+
 export function AppShell({ allowedSlugs, userLogin, children }: Props) {
   const [open, setOpen] = useState(false)
+  // Desktop-only: collapse the docked sidebar to a narrow icon rail.
+  const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
 
   // Auto-close the mobile drawer whenever the route changes (tapping a link).
   useEffect(() => { setOpen(false) }, [pathname])
+
+  // Restore the persisted collapse preference after mount (avoids hydration mismatch).
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1')
+    } catch { /* localStorage unavailable — keep default */ }
+  }, [])
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
 
   return (
     <div className="flex min-h-screen bg-warm-white">
@@ -25,6 +44,8 @@ export function AppShell({ allowedSlugs, userLogin, children }: Props) {
         userLogin={userLogin}
         open={open}
         onClose={() => setOpen(false)}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapsed}
       />
       {/* min-w-0 lets wide tables scroll inside this column instead of stretching it */}
       <div className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden">
