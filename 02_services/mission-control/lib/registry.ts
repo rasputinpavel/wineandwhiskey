@@ -228,6 +228,12 @@ export const SECTIONS: Section[] = [
           mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/02_services/trendwatch` }] },
       },
       {
+        slug: 'pricelist', name: 'Price Lists', icon: '🧾', status: 'building',
+        description: 'Собери брендовый прайс из каталога/CSV/вручную → PNG + PDF.',
+        route: m('pricelist'),
+        embed: { kind: 'native' },
+      },
+      {
         slug: 'social', name: 'Instagram + FB + Maps', icon: '📣', status: 'planned',
         description: 'Единый маркетинг-хаб: посты, ответы на отзывы Maps, метрики каналов.',
         route: m('social'),

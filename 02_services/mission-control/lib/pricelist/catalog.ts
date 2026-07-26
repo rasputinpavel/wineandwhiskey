@@ -1,12 +1,6 @@
 import { sbInventory, sbMarketing } from '@/lib/supabase'
-import type { LineItem } from './types'
+import type { CatalogRow } from './types'
 import { zoneFromWineColor } from './plaques'
-
-export type CatalogRow = {
-  code: string; name: string; price: number | null; zone: LineItem['zone']
-  grape?: string; country?: string; region?: string; producer?: string; volume?: string
-  onHand: number
-}
 
 // Reads inventory.v_sku_breakdown, left-joins marketing.sku_enrichment by
 // loyverse_product_code so region/producer/volume prefill where known.
@@ -38,14 +32,4 @@ export async function readCatalog(): Promise<CatalogRow[]> {
         onHand: s.on_hand ?? 0,
       }
     })
-}
-
-// Turns a catalog row into a fresh LineItem for the working list.
-export function catalogRowToLineItem(row: CatalogRow, id: string): LineItem {
-  return {
-    id, code: row.code, name: row.name, price: row.price, zone: row.zone,
-    grape: row.grape, country: row.country, region: row.region,
-    producer: row.producer, volume: row.volume,
-    imageSlug: row.code, // 04_brand/products/<code>.png
-  }
 }
