@@ -30,6 +30,18 @@ create table if not exists marketing.price_lists (
   updated_at timestamptz not null default now()
 );
 
--- Service-role-only access (mirrors portal.users). RLS on, no policies.
+-- Grants. mission-control talks to this schema exclusively with the service-role
+-- key, so ONLY service_role gets access (mirrors 032_portal_users.sql). Without
+-- these a freshly-created schema exposes nothing to PostgREST → "permission
+-- denied for schema marketing" even when the schema is in Exposed schemas.
+grant usage on schema marketing to service_role;
+grant all on all tables    in schema marketing to service_role;
+grant all on all sequences in schema marketing to service_role;
+alter default privileges in schema marketing grant all on tables    to service_role;
+alter default privileges in schema marketing grant all on sequences to service_role;
+
+-- Defense-in-depth: RLS on with no policies. service_role bypasses RLS, so the
+-- app works; if the schema were ever exposed to anon/authenticated by mistake,
+-- no rows are readable.
 alter table marketing.sku_enrichment enable row level security;
 alter table marketing.price_lists   enable row level security;
