@@ -63,8 +63,29 @@ export function zoneFromCategory(category: string | null | undefined): PlaqueZon
   return null
 }
 
-// Best zone for a catalog SKU: a curated wine_color wins; otherwise infer from
-// the category; otherwise white (user can override per card).
-export function inferZone(wineColor: string | null | undefined, category: string | null | undefined): PlaqueZone {
-  return zoneFromWineColorStrict(wineColor) ?? zoneFromCategory(category) ?? 'white'
+// Sparkling / rosé cues in the name — needed because many sparkling SKUs sit
+// under a non-colour category (e.g. "RUSSIA") with no wine_color, so they'd
+// otherwise default to White. "Brut" etc. are unambiguous sparkling markers.
+const SPARKLING_NAME = /\b(brut|spumante|prosecco|cava|champagne|cremant|sekt|asti|franciacorta|pet.?nat|blanc de blanc|extra dry|metodo classico)\b/
+const ROSE_NAME = /\b(rose|rosato|rosado|rose)\b/
+
+const RED_GRAPE = /\b(cabernet|merlot|malbec|syrah|shiraz|pinot noir|nebbiolo|sangiovese|tempranillo|grenache|garnacha|zinfandel|montepulciano|nero d.?avola|nero|primitivo|carmenere|mourvedre|barbera|saperavi|aglianico|tannat|pinotage|negroamaro|corvina|petit verdot|touriga|krasnostop)\b/
+const WHITE_GRAPE = /\b(chardonnay|sauvignon|riesling|pinot grigio|pinot gris|gewurztraminer|viognier|chenin|semillon|muscat|moscato|albarino|verdejo|gruner|vermentino|trebbiano|garganega|cortese|fiano|greco|torrontes|rkatsiteli|marsanne|roussanne|colombard|pinot blanc|verdicchio|grillo|catarratto|silvaner|muscadet)\b/
+
+export function zoneFromName(text: string | null | undefined): PlaqueZone | null {
+  const k = String(text ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  if (SPARKLING_NAME.test(k)) return 'sparkling'
+  if (ROSE_NAME.test(k)) return 'rose'
+  // "Blanc de Noirs" is a white made from a red grape — the blanc marker wins.
+  if (/\bblanc\b|\bbianco\b|\bblanco\b/.test(k)) return 'white'
+  if (RED_GRAPE.test(k)) return 'red'
+  if (WHITE_GRAPE.test(k)) return 'white'
+  return null
+}
+
+// Best zone for a catalog SKU: a curated wine_color wins; then an explicit
+// colour/spirit category; then sparkling/rosé/grape cues in the name; else White
+// (user can override per card).
+export function inferZone(wineColor: string | null | undefined, category: string | null | undefined, name?: string | null): PlaqueZone {
+  return zoneFromWineColorStrict(wineColor) ?? zoneFromCategory(category) ?? zoneFromName(name) ?? 'white'
 }

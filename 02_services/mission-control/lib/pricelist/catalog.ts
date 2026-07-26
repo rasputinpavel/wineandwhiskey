@@ -3,23 +3,25 @@ import path from 'node:path'
 import { sbInventory, sbMarketing } from '@/lib/supabase'
 import type { CatalogRow } from './types'
 import { inferZone } from './plaques'
-import { imageKey } from './images'
+import { imageTokens, bestImageSlug } from './images'
 
-// Map exact name-signature → existing product-image slug, for confident
-// (no-wrong-bottle) auto-matching of SKUs to the curated bottle-shot library.
-async function imageLibraryByKey(): Promise<Map<string, string>> {
+// Index of the curated bottle-shot library (slug + significant tokens) for
+// subset-best matching of SKUs to photos.
+async function imageLibraryIndex(): Promise<{ slug: string; tokens: string[] }[]> {
   const dir = path.join(process.cwd(), 'public', 'brand', 'products')
   const files = await readdir(dir).catch(() => [] as string[])
-  const map = new Map<string, string>()
+  const seen = new Set<string>()
+  const index: { slug: string; tokens: string[] }[] = []
   for (const f of files) {
     if (!f.toLowerCase().endsWith('.png')) continue
-    // Skip dated batch variants (e.g. abrau-…_16_may.png) — prefer the clean slug.
-    if (/_(?:\d+_)?(?:may|apr|jun|jul|aug|sep|manual)$/i.test(f.replace(/\.png$/i, ''))) continue
     const slug = f.replace(/\.png$/i, '')
-    const k = imageKey(slug)
-    if (k && !map.has(k)) map.set(k, slug)
+    // Skip dated batch variants (e.g. abrau-…_16_may.png) — prefer the clean slug.
+    if (/_(?:\d+_)?(?:may|apr|jun|jul|aug|sep|manual)$/i.test(slug)) continue
+    if (seen.has(slug)) continue
+    seen.add(slug)
+    index.push({ slug, tokens: imageTokens(slug) })
   }
-  return map
+  return index
 }
 
 // PostgREST caps a single response at ~1000 rows, but the catalog has 3000+
@@ -51,7 +53,7 @@ async function readAllSkus(): Promise<SkuRow[]> {
 // Reads inventory.v_sku_breakdown, left-joins marketing.sku_enrichment by
 // loyverse_product_code so region/producer/volume prefill where known.
 export async function readCatalog(): Promise<CatalogRow[]> {
-  const [skus, imgByKey] = await Promise.all([readAllSkus(), imageLibraryByKey()])
+  const [skus, imgIndex] = await Promise.all([readAllSkus(), imageLibraryIndex()])
 
   // image_slug/image_url arrive with migration 036 — read tolerantly so the
   // catalog still works before it's applied (falls back to the base columns).
@@ -71,12 +73,12 @@ export async function readCatalog(): Promise<CatalogRow[]> {
       // Photo priority: uploaded image_url → explicitly-picked image_slug →
       // confident library match by exact name-signature → none (placeholder).
       const imageUrl = e?.image_url ?? undefined
-      const imageSlug = e?.image_slug ?? imgByKey.get(imageKey(s.name)) ?? undefined
+      const imageSlug = e?.image_slug ?? bestImageSlug(s.name, imgIndex) ?? undefined
       return {
         code: s.loyverse_product_code,
         name: s.name,
         price: s.default_price ?? null,
-        zone: inferZone(s.wine_color, s.category),
+        zone: inferZone(s.wine_color, s.category, s.name),
         grape: s.grape_variety ?? undefined,
         country: s.wine_country ?? undefined,
         region: e?.region ?? undefined,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { slugify, imageKey } from './images'
+import { slugify, imageKey, bestImageSlug } from './images'
 
 describe('slugify', () => {
   it('lowercases and hyphenates', () => {
@@ -20,5 +20,23 @@ describe('imageKey — order/stopword-independent signature', () => {
     // "red"/"white"/"blanc" distinguish siblings of the same line, so they stay.
     expect(imageKey('Chateau Tamagne Duo Blanc')).not.toBe(imageKey('Chateau Tamagne Duo Red'))
     expect(imageKey('Abrau Durso Reserve Brut')).not.toBe(imageKey('Abrau Durso Reserve ROSE Brut'))
+  })
+})
+
+describe('bestImageSlug — subset match, colour-consistent', () => {
+  const index = [
+    { slug: 'abrau-durso-victor-dravigny-brut', tokens: ['abrau', 'durso', 'victor', 'dravigny', 'brut'] },
+    { slug: 'abrau-durso-victor-dravigny-rose', tokens: ['abrau', 'durso', 'victor', 'dravigny', 'rose'] },
+    { slug: 'alamos-malbec', tokens: ['alamos', 'malbec'] },
+  ].map(f => ({ slug: f.slug, tokens: f.tokens }))
+
+  it('matches a longer SKU name to the subset file', () => {
+    expect(bestImageSlug('Alamos Malbec Reserva 2021 750ml', index)).toBe('alamos-malbec')
+  })
+  it('prefers the colour-matching sibling (rosé → rosé, not brut)', () => {
+    expect(bestImageSlug('Abrau Durso Victor Dravigny Premium Brut Rose', index)).toBe('abrau-durso-victor-dravigny-rose')
+  })
+  it('returns undefined when no file is a subset', () => {
+    expect(bestImageSlug('Kapuka Sauvignon Blanc 2021', index)).toBeUndefined()
   })
 })

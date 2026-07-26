@@ -48,7 +48,7 @@ describe('zoneFromCategory', () => {
   })
 })
 
-describe('inferZone — wine_color wins, else category, else white', () => {
+describe('inferZone — wine_color wins, else category, else name, else white', () => {
   it('uses a curated wine_color when present', () => {
     expect(inferZone('sparkling', 'Red Wine')).toBe('sparkling')
   })
@@ -57,8 +57,18 @@ describe('inferZone — wine_color wins, else category, else white', () => {
     expect(inferZone(null, 'White Wine')).toBe('white')
     expect(inferZone(null, 'Whiskey')).toBe('spirits')
   })
-  it('defaults to white when neither is known', () => {
-    expect(inferZone(null, 'Food')).toBe('white')
-    expect(inferZone(null, null)).toBe('white')
+  it('falls back to the NAME for sparkling/grape when category is non-colour (e.g. "RUSSIA")', () => {
+    // the Abrau-Durso case: category "RUSSIA", no wine_color
+    expect(inferZone(null, 'RUSSIA', 'Abrau Durso Victor Dravigny Premium Brut White')).toBe('sparkling')
+    expect(inferZone(null, 'RUSSIA', 'Abrau-Durso "Brut d\'Or" Riesling 2021')).toBe('sparkling')
+    expect(inferZone(null, 'RUSSIA', 'Abrau Durso Pinot Noir')).toBe('red')
+    expect(inferZone(null, 'RUSSIA', 'Abrau Durso Chardonnay')).toBe('white')
+  })
+  it('treats Blanc de Noirs as white despite the red grape', () => {
+    expect(inferZone(null, null, 'Blanc de Noirs')).toBe('white')
+  })
+  it('defaults to white when nothing is known', () => {
+    expect(inferZone(null, 'Food', 'Some Mystery Bottle')).toBe('white')
+    expect(inferZone(null, null, null)).toBe('white')
   })
 })
