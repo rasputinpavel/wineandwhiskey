@@ -20,6 +20,7 @@ const config: Config = {
         'wine-red':      '#8C1C1C', // accent, CTA, Live status
         'burgundy-deep': '#5C1010', // hover, dark accent
         'amber-gold':    '#C9A84C', // premium, Building status
+        'rose-dust':     '#C98C8C', // rosé price-list plaque
       },
       fontFamily: {
         // Body

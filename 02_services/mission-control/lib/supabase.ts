@@ -22,6 +22,10 @@ export const sbPromo = createClient(url, key, { db: { schema: 'promo' } })
 // 032_portal_users.sql. Schema `portal` must be added to "Exposed schemas".
 export const sbPortal = createClient(url, key, { db: { schema: 'portal' } })
 
+// Marketing — price lists + SKU enrichment. See migration 035_marketing_pricelist.sql.
+// Schema `marketing` must be added to "Exposed schemas" in Supabase settings.
+export const sbMarketing = createClient(url, key, { db: { schema: 'marketing' } })
+
 // Default `public` schema client — used for tables that live outside our
 // custom inventory schema (today: purchase_orders + purchase_order_items
 // populated by 03_automation/scrape_purchase_orders.ts).
