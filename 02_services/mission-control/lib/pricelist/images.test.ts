@@ -14,9 +14,11 @@ describe('imageKey — order/stopword-independent signature', () => {
     expect(imageKey('Chardonnay Abrau Durso')).toBe(imageKey('Abrau Durso Chardonnay'))
   })
   it('ignores stopwords, vintages and volumes', () => {
-    expect(imageKey('Alamos Malbec Red Wine 2021 750ml')).toBe(imageKey('Alamos Malbec'))
+    expect(imageKey('Alamos Malbec Wine 2021 750ml')).toBe(imageKey('Alamos Malbec'))
   })
-  it('does NOT equate a rosé with its non-rosé sibling', () => {
+  it('keeps colour words significant (never conflate a red with a white/rosé)', () => {
+    // "red"/"white"/"blanc" distinguish siblings of the same line, so they stay.
+    expect(imageKey('Chateau Tamagne Duo Blanc')).not.toBe(imageKey('Chateau Tamagne Duo Red'))
     expect(imageKey('Abrau Durso Reserve Brut')).not.toBe(imageKey('Abrau Durso Reserve ROSE Brut'))
   })
 })

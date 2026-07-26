@@ -28,6 +28,8 @@ export function imageKey(name: string): string {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .split(/\s+/)
-    .filter(t => t.length > 1 && !STOP.has(t) && !/^\d+ml$/.test(t))
+    // Drop stopwords, bare numbers (vintages), and volumes — the label shot is
+    // the same across years/sizes, so ignoring them matches more, correctly.
+    .filter(t => t.length > 1 && !STOP.has(t) && !/^\d+$/.test(t) && !/^\d+(ml|cl|l)$/.test(t))
   return [...new Set(toks)].sort().join('-')
 }
