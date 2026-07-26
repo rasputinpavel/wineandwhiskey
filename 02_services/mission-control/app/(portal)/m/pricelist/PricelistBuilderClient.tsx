@@ -5,6 +5,7 @@ import type { PriceListDoc, LineItem, PageSettings, Grouping, PlaqueZone, RowLay
 import { catalogRowToLineItem } from '@/lib/pricelist/types'
 import { PLAQUE_TOKENS } from '@/lib/pricelist/plaques'
 import { COUNTRIES } from '@/lib/pricelist/flags'
+import { PhotoPicker } from './PhotoPicker'
 
 const DEFAULT_SETTINGS: PageSettings = {
   title: 'Wine & Whiskey', grouping: 'type', showDividers: false, tierThresholds: [600, 1000],
@@ -256,6 +257,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
               <div className="flex items-center gap-1">
                 <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PLAQUE_TOKENS[it.zone] }} />
                 <input value={it.name} onChange={e => dispatch({ t: 'update', id: it.id, patch: { name: e.target.value } })} className={`${inputCls} flex-1`} placeholder="Name" />
+                <PhotoPicker item={it} images={imageSlugs} onChange={patch => dispatch({ t: 'update', id: it.id, patch })} />
               </div>
               <div className="flex gap-1">
                 <input type="number" value={it.price ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { price: e.target.value === '' ? null : Number(e.target.value) } })} className={`${inputCls} w-20`} placeholder="Price" />
