@@ -41,6 +41,15 @@ function imgSrc(it: LineItem, images?: Map<string, string>): string {
   return '' // template shows the silhouette placeholder when empty
 }
 
+// Auto-fit the name: short names stay big and impactful, long ones shrink so a
+// "…Victor Dravigny Premium Brut Rose" doesn't wrap to five lines.
+function nameCls(name: string): string {
+  const n = name.length
+  if (n > 40) return 'name name--xs'
+  if (n > 26) return 'name name--sm'
+  return 'name'
+}
+
 function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: boolean): string {
   const zone = safeZone(it.zone)
   const src = imgSrc(it, images)
@@ -54,7 +63,7 @@ function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: b
       <div class="plaque"><span>${PLAQUE_LABELS[zone]}</span></div>
       <div class="bottle">${src ? `<img src="${esc(src)}" alt="">` : `<div class="bottle__ph"></div>`}</div>
       <div class="body">
-        <div class="name">${esc(it.name)}</div>
+        <div class="${nameCls(it.name)}">${esc(it.name)}</div>
         ${meta}
       </div>
       <div class="pricecol">${priceHtml(it.price)}</div>
@@ -114,7 +123,9 @@ export function buildHtml(args: BuildHtmlArgs): string {
   .bottle { display:flex; align-items:center; justify-content:center; height:94px; padding:8px 0; }
   .bottle img { max-height:94px; max-width:100%; object-fit:contain; }
   .bottle__ph { width:26px; height:74px; border-radius:7px 7px 3px 3px; background:linear-gradient(160deg,#efe9df,#dcd2c2); }
-  .name { font-family:'DM Sans'; font-weight:700; font-size:16px; text-transform:uppercase; line-height:1.05; }
+  .name { font-family:'DM Sans'; font-weight:700; font-size:16px; text-transform:uppercase; line-height:1.06; }
+  .name--sm { font-size:13.5px; line-height:1.05; }
+  .name--xs { font-size:11.5px; line-height:1.04; letter-spacing:.01em; }
   .meta { font-size:11px; color:var(--graphite); margin-top:4px; display:flex; gap:6px; align-items:center; }
   .meta .ico { opacity:.8; }
   .pricecol { padding-right:6px; }

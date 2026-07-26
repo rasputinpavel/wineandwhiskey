@@ -34,6 +34,21 @@ describe('buildHtml', () => {
   })
 })
 
+describe('buildHtml — name auto-fit', () => {
+  const mk = (name: string) => buildHtml({
+    pages: buildPages([{ id: '1', name, price: 1, zone: 'white' }], s), settings: s,
+  })
+  it('keeps a short name at the base size', () => {
+    expect(mk('Alamos Malbec')).toContain('class="name"')
+  })
+  it('shrinks a medium name', () => {
+    expect(mk('Clearwater Cove Sauvignon Blanc')).toContain('name--sm')
+  })
+  it('shrinks a long name further', () => {
+    expect(mk('Abrau Durso Victor Dravigny Premium Brut Rose')).toContain('name--xs')
+  })
+})
+
 describe('buildHtml — untrusted input hardening (render route trusts raw JSON)', () => {
   it('drops a non-http/data imageUrl and never emits an onerror handler', () => {
     const evil: LineItem[] = [{ id: 'x', name: 'Evil', price: 1, zone: 'white',
