@@ -146,6 +146,22 @@ and special-price CTA as the cat versions.
 coupes) — **accepted risk**, hedged by no-label + 25+ + isolated ad set. Not for
 Thai-language targeting. ⚠️ (higher risk by design)
 
+## Static posters — `posters/pp_*` (single-frame ad cards)
+
+Non-video cards over the photoreal Gatsby/Phangan people stills (no cats, no
+cartoon). Built by `build_posters.py`. Layout: W&W wordmark → headline with the
+drink word in gold → "with or without bubbles" → gold **special-price / light
+wholesale** pill → Phuket. 6 backgrounds (gatsby tower/jazz/rooftop · phangan
+beachbar/boat/neon) × EN/RU × st(9:16)/fv(4:5)/sq(1:1) = 36 posters.
+
+| Lang | Headline (drink word gold) | Sub | Pill |
+|---|---|---|---|
+| EN | YOUR PARTY **DRINK** PARTNER | With or without bubbles | SPECIAL PRICE · LIGHT WHOLESALE |
+| RU | ВАШ ПАРТНЁР **ПО НАПИТКАМ** | С пузырьками и без — на ваш праздник | СПЕЦЦЕНА · МЕЛКИЙ ОПТ |
+
+**Legal:** same as the Gatsby/Phangan videos — alcohol (bucket + bubbly glasses)
+visible but **no labels**; run 25+ / isolated ad set / no Thai targeting. ⚠️
+
 ## Angle: phangan — video `Cats/bd_phangan_*` (people · Thai beach party · HIGHEST-RISK test)
 
 ⚠️⚠️ **The most legally sensitive version — Thai-themed AND alcohol.** Real people,
