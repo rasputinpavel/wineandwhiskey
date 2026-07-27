@@ -7,6 +7,7 @@ import { PLAQUE_TOKENS } from '@/lib/pricelist/plaques'
 import { COUNTRIES } from '@/lib/pricelist/flags'
 import { GRAPES } from '@/lib/pricelist/grapes'
 import { PhotoPicker } from './PhotoPicker'
+import { GrapeInput } from './GrapeInput'
 
 const DEFAULT_SETTINGS: PageSettings = {
   title: 'Wine & Whiskey', grouping: 'type', showDividers: false, tierThresholds: [600, 1000],
@@ -329,7 +330,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
                 <input value={it.producer ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { producer: e.target.value || undefined } })} className={inputCls} placeholder="Producer" />
                 <input value={it.region ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { region: e.target.value || undefined } })} className={inputCls} placeholder="Region" />
                 <input value={it.country ?? ''} list="pl-countries" onChange={e => dispatch({ t: 'update', id: it.id, patch: { country: e.target.value || undefined } })} className={inputCls} placeholder="Country" />
-                <input value={it.grape ?? ''} list="pl-grapes" onChange={e => dispatch({ t: 'update', id: it.id, patch: { grape: e.target.value || undefined } })} className={inputCls} placeholder="Grape" />
+                <GrapeInput value={it.grape} onChange={g => dispatch({ t: 'update', id: it.id, patch: { grape: g } })} />
                 <input value={it.volume ?? ''} onChange={e => dispatch({ t: 'update', id: it.id, patch: { volume: e.target.value || undefined } })} className={inputCls} placeholder="Volume" />
               </div>
               <div className="flex gap-1 justify-end">
