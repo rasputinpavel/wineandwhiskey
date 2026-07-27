@@ -28,7 +28,7 @@ function userContent(input: ResearchInput): Anthropic.MessageParam["content"] {
   blocks.push({
     type: "text",
     text: hint
-      ? `This wine is already identified as: ${hint}. Skip identification — start at grape×country. Be fast: a few targeted web searches (critic scores, Vivino, market price, producer reputation), do not exhaust every source.\n\n${base}`
+      ? `This wine is already identified as: ${hint}. The color/style in parentheses (if any) is the ONE bottle to assess — lock to it and do not describe the producer's other colors. Skip re-identification — start at grape×country. Be fast: a few targeted web searches (critic scores, Vivino, market price, producer reputation), do not exhaust every source.\n\n${base}`
       : base,
   });
   return blocks;

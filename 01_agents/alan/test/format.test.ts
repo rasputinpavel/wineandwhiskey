@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shortVerdict, fullCard, analoguesMessage } from "../src/format.js";
+import { shortVerdict, fullCard, analoguesMessage, typeEmoji } from "../src/format.js";
 import type { Verdict, AnaloguesResult } from "../src/types.js";
 import { recommendationsMessage } from "../src/format.js";
 import type { Recommendations } from "../src/recommend/types.js";
@@ -52,6 +52,35 @@ describe("shortVerdict (summary)", () => {
   });
   it("shows no vintage warning on a normal verdict", () => {
     expect(shortVerdict(verdict, "ru")).not.toContain("вино в целом");
+  });
+});
+
+describe("typeEmoji", () => {
+  it("maps each wine type to a glyph, red as the default", () => {
+    expect(typeEmoji("red")).toBe("🍷");
+    expect(typeEmoji("white")).toBe("🥂");
+    expect(typeEmoji("sparkling")).toBe("🍾");
+    expect(typeEmoji("rosé")).toBe("🌸");
+    expect(typeEmoji("")).toBe("🍷");
+    expect(typeEmoji("something-weird")).toBe("🍷");
+  });
+});
+
+describe("shortVerdict color", () => {
+  const white: Verdict = {
+    ...verdict,
+    identity: { ...verdict.identity, type: "white", grape: "Sauvignon Blanc", region: "Pessac-Léognan" },
+  };
+  it("leads with the type emoji, not a hardcoded red glass", () => {
+    expect(shortVerdict(white, "ru").startsWith("🥂")).toBe(true);
+  });
+  it("names the color in the subtitle so a white is never read as red", () => {
+    const s = shortVerdict(white, "ru");
+    expect(s).toContain("Белое");
+    expect(s).toContain("Sauvignon Blanc, Pessac-Léognan");
+  });
+  it("uses the English color word for en", () => {
+    expect(shortVerdict(white, "en")).toContain("White");
   });
 });
 

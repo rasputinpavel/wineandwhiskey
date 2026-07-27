@@ -4,7 +4,7 @@ import type { WineDataSource } from "./sources/types.js";
 import { researchSystemPrompt, analoguesSystemPrompt } from "./sommelier-prompt.js";
 import { structureEvidence, structureAnalogues } from "./structure.js";
 import { assembleVerdict } from "./assess.js";
-import { identifyWine, identityLabel, identityKey, type Identity } from "./identify.js";
+import { identifyWine, identityLabel, identityHint, identityKey, type Identity } from "./identify.js";
 import { getCached, putCached } from "./cache.js";
 
 type OnProgress = (text: string) => void;
@@ -19,7 +19,8 @@ export async function assessWine(
 ): Promise<Verdict> {
   const identity = await identifyWine(query);
   const label = identityLabel(identity);
-  if (label) onProgress?.(`Вижу: ${label}\n`);
+  const hint = identityHint(identity);
+  if (label) onProgress?.(`Вижу: ${hint}\n`);
 
   const key = identityKey(identity);
 
@@ -28,8 +29,8 @@ export async function assessWine(
   //  which overwrites the poisoned row.)
   const cached = key ? await getCached(key) : null;
   if (cached && hasSubstance(cached.evidence)) {
-    onProgress?.(`Вижу: ${label}\nУже знаю это вино — отдаю готовый разбор.`);
-    return finalize(cached.evidence, cached.brief, "");
+    onProgress?.(`Вижу: ${hint}\nУже знаю это вино — отдаю готовый разбор.`);
+    return finalize(cached.evidence, cached.brief, "", identity.type);
   }
 
   // One research pass for a given identity: research → structure → seed identity.
@@ -51,14 +52,14 @@ export async function assessWine(
   };
 
   // First pass: the wine exactly as identified (with its vintage, if any).
-  let { evidence, brief } = await researchAndStructure(query, identity, label);
+  let { evidence, brief } = await researchAndStructure(query, identity, hint);
   let vintageFallback = "";
 
   // Vintage was specified but the year-specific signals (critics / crowd / price) are
   // all missing → drop the vintage and assess the wine in general, warning the user.
   if (identity.vintage && lacksVintageData(evidence)) {
     const broadId: Identity = { ...identity, vintage: "" };
-    const broadLabel = identityLabel(broadId);
+    const broadHint = identityHint(broadId);
     const broadKey = identityKey(broadId);
     onProgress?.(`${label}\nПо винтажу ${identity.vintage} данных мало — смотрю вино в целом…\n`);
 
@@ -69,7 +70,7 @@ export async function assessWine(
       vintageFallback = identity.vintage;
     } else {
       const broadQuery: WineQuery = { ...query, text: stripVintage(query.text, identity.vintage) };
-      const broad = await researchAndStructure(broadQuery, broadId, broadLabel);
+      const broad = await researchAndStructure(broadQuery, broadId, broadHint);
       if (hasSubstance(broad.evidence)) {
         evidence = broad.evidence;
         brief = broad.brief;
@@ -90,15 +91,26 @@ export async function assessWine(
     throw new Error("empty extraction — likely a transient API failure");
   }
 
-  return finalize(evidence, brief, vintageFallback);
+  return finalize(evidence, brief, vintageFallback, identity.type);
 }
 
-/** Assemble the verdict, attach the full brief, and flag a vintage fallback if any. */
-function finalize(evidence: WineEvidence, brief: string, vintageFallback: string): Verdict {
-  const v = assembleVerdict(evidence);
+/** Assemble the verdict, attach the full brief, and flag a vintage fallback if any.
+ *  The bottle's color is taken from the photo (visionType) rather than the brief. */
+function finalize(evidence: WineEvidence, brief: string, vintageFallback: string, visionType: string): Verdict {
+  const v = assembleVerdict(withVisionColor(evidence, visionType));
   v.detail = brief;
   if (vintageFallback) v.vintageFallback = vintageFallback;
   return v;
+}
+
+/** The color/style read off the bottle by the vision step is more reliable than a
+ *  color re-derived from the wine's NAME by web research — the latter hedges (or
+ *  defaults to the better-known cuvée) for a producer that makes several colors.
+ *  Trust the photo whenever it committed to a type; otherwise keep the brief's. */
+export function withVisionColor(evidence: WineEvidence, visionType: string): WineEvidence {
+  const type = (visionType || "").trim();
+  if (type) evidence.identity = { ...evidence.identity, type };
+  return evidence;
 }
 
 /** True when the evidence carries real data worth reusing (beyond bare identity). */

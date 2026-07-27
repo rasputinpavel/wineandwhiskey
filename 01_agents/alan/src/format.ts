@@ -16,6 +16,7 @@ const T = {
     valueRead: { good: "good price", fair: "fair price", steep: "steep for what it is", unknown: "" } as Record<ValueRead, string>,
     tier: { entry: "entry-level", mid: "mid-range", premium: "premium", luxury: "luxury", icon: "icon/collector", unknown: "" } as Record<PriceTier, string>,
     level: { exact: "this exact wine", producer: "the producer", category: "the category", none: "very little data" } as Record<EvidenceLevel, string>,
+    color: { red: "Red", white: "White", "rosé": "Rosé", rose: "Rosé", sparkling: "Sparkling", orange: "Orange", fortified: "Fortified" } as Record<string, string>,
   },
   ru: {
     critics: "Критики", crowd: "Толпа", value: "Цена/качество",
@@ -28,8 +29,23 @@ const T = {
     valueRead: { good: "цена хорошая", fair: "цена нормальная", steep: "дороговато за такое", unknown: "" } as Record<ValueRead, string>,
     tier: { entry: "входной уровень", mid: "средний сегмент", premium: "премиум", luxury: "люкс", icon: "икона/коллекционное", unknown: "" } as Record<PriceTier, string>,
     level: { exact: "этому вину", producer: "производителю", category: "категории", none: "крайне малому объёму данных" } as Record<EvidenceLevel, string>,
+    color: { red: "Красное", white: "Белое", "rosé": "Розе", rose: "Розе", sparkling: "Игристое", orange: "Оранжевое", fortified: "Крепленое" } as Record<string, string>,
   },
 } as const;
+
+/** Emoji for the wine type/color — replaces the old hardcoded red glass so a white,
+ *  rosé or sparkling is never presented as a red. Falls back to 🍷 when unknown. */
+const TYPE_EMOJI: Record<string, string> = {
+  red: "🍷", white: "🥂", "rosé": "🌸", rose: "🌸", sparkling: "🍾", orange: "🟠", fortified: "🥃",
+};
+export function typeEmoji(type: string): string {
+  return TYPE_EMOJI[type.trim().toLowerCase()] ?? "🍷";
+}
+
+/** Localized color word ("Белое"/"White"), or "" when the type is unknown/unmapped. */
+function colorWord(type: string, lang: Lang): string {
+  return T[lang].color[type.trim().toLowerCase()] ?? "";
+}
 
 function title(v: Verdict): string {
   const i = v.identity;
@@ -47,8 +63,8 @@ function vintageWarn(v: Verdict, lang: Lang): string {
 /** First message: rich digest. */
 export function shortVerdict(v: Verdict, lang: Lang): string {
   const t = T[lang];
-  const lines: string[] = [`🍷 ${title(v)}`];
-  const sub = [v.identity.grape, v.identity.region].filter(Boolean).join(", ");
+  const lines: string[] = [`${typeEmoji(v.identity.type)} ${title(v)}`];
+  const sub = [colorWord(v.identity.type, lang), v.identity.grape, v.identity.region].filter(Boolean).join(", ");
   if (sub) lines.push(sub);
   const warn = vintageWarn(v, lang);
   if (warn) lines.push(warn);
@@ -91,8 +107,8 @@ export function fullCard(v: Verdict, lang: Lang): string {
     return out;
   }
   // Fallback: structured card if no brief was captured.
-  const lines: string[] = [`🍷 ${title(v)}`];
-  const sub = [v.identity.grape, v.identity.region].filter(Boolean).join(", ");
+  const lines: string[] = [`${typeEmoji(v.identity.type)} ${title(v)}`];
+  const sub = [colorWord(v.identity.type, lang), v.identity.grape, v.identity.region].filter(Boolean).join(", ");
   if (sub) lines.push(sub);
   if (warn) lines.push(warn);
   lines.push("");

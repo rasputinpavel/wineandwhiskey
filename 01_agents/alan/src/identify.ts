@@ -68,6 +68,15 @@ export function identityLabel(id: Identity): string {
   return [id.producer, id.name, id.vintage].filter(Boolean).join(" ").trim();
 }
 
+/** Research hint: the label plus the color/style read off the bottle, e.g.
+ *  "Château Haut-Vigneau 2020 (white)". Carrying the color forward stops the
+ *  researcher from hedging both cuvées for a château that makes red AND white. */
+export function identityHint(id: Identity): string {
+  const label = identityLabel(id);
+  const type = id.type.trim();
+  return label && type ? `${label} (${type})` : label;
+}
+
 /** Normalized cache key from producer + name + vintage. */
 export function identityKey(id: Identity): string {
   return [id.producer, id.name, id.vintage]

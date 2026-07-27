@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lacksVintageData, stripVintage } from "../src/pipeline.js";
+import { lacksVintageData, stripVintage, withVisionColor } from "../src/pipeline.js";
 import type { WineEvidence } from "../src/types.js";
 
 const base: WineEvidence = {
@@ -35,6 +35,21 @@ describe("lacksVintageData", () => {
   });
   it("is false when there is a price observation", () => {
     expect(lacksVintageData({ ...base, priceObservations: [{ amount: 16, currency: "USD", context: "avg" }] })).toBe(false);
+  });
+});
+
+describe("withVisionColor", () => {
+  it("overrides a hedged/wrong brief color with the color read off the photo", () => {
+    const e = { ...base, identity: { ...base.identity, type: "red" } };
+    expect(withVisionColor(e, "white").identity.type).toBe("white");
+  });
+  it("keeps the brief color when the photo committed to no color", () => {
+    const e = { ...base, identity: { ...base.identity, type: "red" } };
+    expect(withVisionColor(e, "").identity.type).toBe("red");
+  });
+  it("keeps the brief color when the photo read whitespace-only color", () => {
+    const e = { ...base, identity: { ...base.identity, type: "red" } };
+    expect(withVisionColor(e, "  ").identity.type).toBe("red");
   });
 });
 
