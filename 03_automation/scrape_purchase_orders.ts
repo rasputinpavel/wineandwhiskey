@@ -48,6 +48,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // supplier registry (inventory.supplier) lives. POs are in `public`.
 const sbInventory = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "inventory" } });
 
+// Supplier overrides, keyed by PO number. Loyverse does not let you change the
+// supplier on an existing purchase order, so when staff file a PO under the
+// wrong (e.g. duplicate) supplier we pin the correct one here. Re-applied on
+// every scrape so the correction survives future re-syncs from Loyverse.
+const SUPPLIER_OVERRIDES: Record<string, string> = {
+  PO3000: "IWS", // filed under "IWS (don't use)" duplicate — should be IWS
+  PO3001: "IWS", // filed under "IWS (don't use)" duplicate — should be IWS
+};
+
 // ─── CLI args ─────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -333,7 +342,7 @@ async function discoverNewPOs(page: Page, pagesToScan: number): Promise<number> 
       newRecords.push({
         po_number:   poNumber,
         order_date:  toIso(ordDate),
-        supplier:    (cells[2] ?? "").trim() || null,
+        supplier:    SUPPLIER_OVERRIDES[poNumber] ?? ((cells[2] ?? "").trim() || null),
         store:       (cells[3] ?? "").trim() || null,
         status:      (cells[4] ?? "").trim() || null,
         received:    (cells[5] ?? "").trim() || null,
@@ -540,6 +549,9 @@ async function upsertOrder(
   for (const [k, v] of Object.entries(extras)) {
     if (v !== undefined && v !== null && v !== "") payload[k] = v;
   }
+  // Pin overridden POs to the correct supplier regardless of what Loyverse's
+  // detail XHR reports (the source PO can't be re-filed there).
+  if (SUPPLIER_OVERRIDES[poNumber]) payload.supplier = SUPPLIER_OVERRIDES[poNumber];
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
     .upsert(payload, { onConflict: "po_number" })
