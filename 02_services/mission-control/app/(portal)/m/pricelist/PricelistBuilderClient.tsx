@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: PageSettings = {
   vatNote: '7% VAT NOT INCLUDED', cardsPerPage: 14, qrUrl: 'https://wa.me/66939140004',
 }
 
-const ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'rose', 'spirits']
+const ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'champagne', 'rose', 'spirits']
 const GROUPINGS: Grouping[] = ['producer', 'type', 'region', 'tier', 'grape', 'curated', 'manual']
 
 type SortKey = 'name' | 'price-asc' | 'price-desc'

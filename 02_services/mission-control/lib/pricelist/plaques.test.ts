@@ -46,6 +46,19 @@ describe('zoneFromCategory', () => {
     expect(zoneFromCategory('Cigar')).toBeNull()
     expect(zoneFromCategory(null)).toBeNull()
   })
+  it('separates Champagne from Sparkling', () => {
+    expect(zoneFromCategory('Champagne')).toBe('champagne')
+    expect(zoneFromCategory('Sparkling Wine')).toBe('sparkling')
+  })
+})
+
+describe('inferZone — Champagne is its own type', () => {
+  it('routes a Champagne name to the champagne zone (before generic brut/sparkling)', () => {
+    expect(inferZone(null, 'RUSSIA', 'Moët & Chandon Brut Impérial Champagne')).toBe('champagne')
+  })
+  it('a non-Champagne brut stays sparkling', () => {
+    expect(inferZone(null, 'RUSSIA', 'Abrau Durso Brut')).toBe('sparkling')
+  })
 })
 
 describe('inferZone — wine_color wins, else category, else name, else white', () => {

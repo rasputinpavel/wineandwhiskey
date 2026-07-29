@@ -7,12 +7,13 @@ export const PLAQUE_TOKENS: Record<PlaqueZone, string> = {
   white:     '#C9A84C', // amber-gold
   red:       '#8C1C1C', // wine-red
   sparkling: '#5E9B8E', // eucalyptus teal — distinct from the gold White plaque
+  champagne: '#B98F28', // rich gold — rendered as a gradient on the plaque (template)
   rose:      '#C98C8C', // rose-dust
   spirits:   '#3D3D3D', // graphite
 }
 
 export const PLAQUE_LABELS: Record<PlaqueZone, string> = {
-  white: 'WHITE', red: 'RED', sparkling: 'SPARKLING', rose: 'ROSÉ', spirits: 'SPIRITS',
+  white: 'WHITE', red: 'RED', sparkling: 'SPARKLING', champagne: 'CHAMPAGNE', rose: 'ROSÉ', spirits: 'SPIRITS',
 }
 
 export function zoneFromWineColor(c: string | null | undefined): PlaqueZone {
@@ -51,6 +52,7 @@ const CATEGORY_ZONE: Record<string, PlaqueZone> = {
   'orange wine': 'white',
   'rose wine': 'rose', 'rosé wine': 'rose',
   'sparkling wine': 'sparkling', 'pét-nat': 'sparkling', 'pet-nat': 'sparkling', 'pétnat': 'sparkling',
+  'champagne': 'champagne',
 }
 const SPIRIT_HINTS = ['whisky', 'whiskey', 'bourbon', 'scotch', 'rum', 'gin', 'tequila',
   'vodka', 'cognac', 'armagnac', 'brandy', 'liquor', 'liqueur', 'mezcal', 'sake', 'aperitif', 'vermouth']
@@ -66,14 +68,18 @@ export function zoneFromCategory(category: string | null | undefined): PlaqueZon
 // Sparkling / rosé cues in the name — needed because many sparkling SKUs sit
 // under a non-colour category (e.g. "RUSSIA") with no wine_color, so they'd
 // otherwise default to White. "Brut" etc. are unambiguous sparkling markers.
-const SPARKLING_NAME = /\b(brut|spumante|prosecco|cava|champagne|cremant|sekt|asti|franciacorta|pet.?nat|blanc de blanc|extra dry|metodo classico)\b/
-const ROSE_NAME = /\b(rose|rosato|rosado|rose)\b/
+// Champagne (from the Champagne region) is its own type; check it before the
+// generic sparkling markers so "…Champagne" routes to the champagne zone.
+const CHAMPAGNE_NAME = /\bchampagne\b/
+const SPARKLING_NAME = /\b(brut|spumante|prosecco|cava|cremant|sekt|asti|franciacorta|pet.?nat|blanc de blanc|extra dry|metodo classico)\b/
+const ROSE_NAME = /\b(rose|rosato|rosado)\b/
 
 const RED_GRAPE = /\b(cabernet|merlot|malbec|syrah|shiraz|pinot noir|nebbiolo|sangiovese|tempranillo|grenache|garnacha|zinfandel|montepulciano|nero d.?avola|nero|primitivo|carmenere|mourvedre|barbera|saperavi|aglianico|tannat|pinotage|negroamaro|corvina|petit verdot|touriga|krasnostop)\b/
 const WHITE_GRAPE = /\b(chardonnay|sauvignon|riesling|pinot grigio|pinot gris|gewurztraminer|viognier|chenin|semillon|muscat|moscato|albarino|verdejo|gruner|vermentino|trebbiano|garganega|cortese|fiano|greco|torrontes|rkatsiteli|marsanne|roussanne|colombard|pinot blanc|verdicchio|grillo|catarratto|silvaner|muscadet)\b/
 
 export function zoneFromName(text: string | null | undefined): PlaqueZone | null {
   const k = String(text ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  if (CHAMPAGNE_NAME.test(k)) return 'champagne'
   if (SPARKLING_NAME.test(k)) return 'sparkling'
   if (ROSE_NAME.test(k)) return 'rose'
   // "Blanc de Noirs" is a white made from a red grape — the blanc marker wins.

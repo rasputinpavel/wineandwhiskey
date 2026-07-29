@@ -1,6 +1,6 @@
 // Shared, DB-free types for the price-list builder.
 
-export type PlaqueZone = 'white' | 'red' | 'sparkling' | 'rose' | 'spirits'
+export type PlaqueZone = 'white' | 'red' | 'sparkling' | 'champagne' | 'rose' | 'spirits'
 
 // wine_color from inventory.v_sku_breakdown: red|white|rose|sparkling|orange
 export type WineColor = 'red' | 'white' | 'rose' | 'sparkling' | 'orange'

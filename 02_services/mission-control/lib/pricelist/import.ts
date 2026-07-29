@@ -3,7 +3,8 @@ import type { LineItem, PlaqueZone } from './types'
 const ZONE_SYNONYMS: Record<string, PlaqueZone> = {
   white: 'white', biały: 'white', белое: 'white', белый: 'white', blanc: 'white', orange: 'white',
   red: 'red', красное: 'red', красный: 'red', rouge: 'red',
-  sparkling: 'sparkling', игристое: 'sparkling', spumante: 'sparkling', champagne: 'sparkling',
+  sparkling: 'sparkling', игристое: 'sparkling', spumante: 'sparkling', prosecco: 'sparkling',
+  champagne: 'champagne', шампанское: 'champagne', 'шампань': 'champagne',
   rose: 'rose', 'rosé': 'rose', розе: 'rose', розовое: 'rose',
   spirit: 'spirits', spirits: 'spirits', whisky: 'spirits', whiskey: 'spirits', vodka: 'spirits',
   крепкое: 'spirits', виски: 'spirits',

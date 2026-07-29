@@ -23,7 +23,7 @@ function priceHtml(p: number | null): string {
   return `<span class="price">${p}<span class="price__suf">.-</span></span>`
 }
 
-const KNOWN_ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'rose', 'spirits']
+const KNOWN_ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'champagne', 'rose', 'spirits']
 function safeZone(z: unknown): PlaqueZone {
   return (KNOWN_ZONES as string[]).includes(z as string) ? (z as PlaqueZone) : 'white'
 }
@@ -120,6 +120,10 @@ export function buildHtml(args: BuildHtmlArgs): string {
   .plaque { align-self:stretch; background:var(--plaque); display:flex; align-items:center; justify-content:center; }
   .plaque span { writing-mode:vertical-rl; transform:rotate(180deg); color:#fff; font-family:'DM Sans'; font-weight:600;
                  font-size:10px; letter-spacing:.22em; text-transform:uppercase; }
+  /* Champagne — golden gradient with a metallic sheen; slight shadow keeps the
+     white caption legible over the lighter gold. */
+  .zone--champagne .plaque { background:linear-gradient(150deg,#F0DC94 0%,#D4AF37 38%,#B8901F 68%,#8C6E1A 100%); }
+  .zone--champagne .plaque span { color:#5a4610; text-shadow:0 1px 0 rgba(255,255,255,.35); }
   .bottle { display:flex; align-items:center; justify-content:center; height:94px; padding:8px 0; }
   .bottle img { max-height:94px; max-width:100%; object-fit:contain; }
   .bottle__ph { width:26px; height:74px; border-radius:7px 7px 3px 3px; background:linear-gradient(160deg,#efe9df,#dcd2c2); }

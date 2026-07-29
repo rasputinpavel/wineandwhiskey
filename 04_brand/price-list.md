@@ -39,7 +39,8 @@ Colours are brand tokens (see [`design-system.md`](design-system.md) §2 / `desi
 |------|--------|-------|
 | WHITE | muted amber-gold | `amber-gold` `#C9A84C` |
 | RED | wine red | `wine-red` `#8C1C1C` |
-| SPARKLING | gold + bubble texture (distinct from WHITE) | `amber-gold` + pattern |
+| SPARKLING | eucalyptus teal (distinct from WHITE gold) | `#5E9B8E` |
+| CHAMPAGNE | golden metallic gradient (its own premium type) | `linear-gradient` gold |
 | ROSÉ | dusty rose | `rose-dust` `#C98C8C` |
 | SPIRITS | graphite / whisky-brown (echoes "& WHISKEY") | `graphite` `#3D3D3D` |
 
