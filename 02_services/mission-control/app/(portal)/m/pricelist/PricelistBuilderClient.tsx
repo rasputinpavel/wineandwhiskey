@@ -76,6 +76,14 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Click a preview card → scroll its editor row into view and flash it.
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  function selectItem(id: string) {
+    setHighlightId(id)
+    document.getElementById(`pl-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    window.setTimeout(() => setHighlightId(h => (h === id ? null : h)), 1600)
+  }
+
   // Section entry: show the saved-lists landing first, open the builder on demand.
   const [view, setView] = useState<'list' | 'builder'>('list')
   const [lists, setLists] = useState<SavedRef[]>(saved)
@@ -357,7 +365,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
         </div>
         <div className="space-y-2">
           {doc.items.map((it, idx) => (
-            <div key={it.id} className="border border-pale-stone rounded p-2 space-y-1 bg-warm-white">
+            <div key={it.id} id={`pl-item-${it.id}`} className={`border rounded p-2 space-y-1 bg-warm-white transition-colors ${highlightId === it.id ? 'border-wine-red ring-2 ring-wine-red/40' : 'border-pale-stone'}`}>
               <div className="flex items-center gap-1">
                 <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PLAQUE_TOKENS[it.zone] }} />
                 <input value={it.name} onChange={e => dispatch({ t: 'update', id: it.id, patch: { name: e.target.value } })} className={`${inputCls} flex-1`} placeholder="Name" />
@@ -405,7 +413,7 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
       </section>
 
       {/* RIGHT — preview */}
-      <Preview doc={doc} availableImages={availableImages} />
+      <Preview doc={doc} availableImages={availableImages} onSelect={selectItem} />
     </div>
   )
 }

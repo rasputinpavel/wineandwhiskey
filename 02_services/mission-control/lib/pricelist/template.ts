@@ -8,7 +8,10 @@ export type BuildHtmlArgs = {
   imageDataUrls?: Map<string, string> // key: imageSlug → data URL (render step)
   qrDataUrl?: string
   wordmarkDataUrl?: string
+  interactive?: boolean // preview only: number badges + click-to-jump; never in the exported PNG
 }
+
+type Ctx = { images?: Map<string, string>; interactive: boolean; idx: Map<string, number> }
 
 const A4 = { w: 794, h: 1123 } // px @ 96dpi
 
@@ -50,16 +53,20 @@ function nameCls(name: string): string {
   return 'name'
 }
 
-function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: boolean): string {
+function cardHtml(it: LineItem, wide: boolean, ctx: Ctx): string {
   const zone = safeZone(it.zone)
-  const src = imgSrc(it, images)
+  const src = imgSrc(it, ctx.images)
   const meta = [
     it.country || it.region ? `<div class="meta"><span class="ico">${countryToFlag(it.country)}</span>${esc([it.country, it.region].filter(Boolean).join(', '))}</div>` : '',
     it.grape ? `<div class="meta"><span class="ico">🍇</span>${esc(it.grape)}</div>` : '',
     it.volume ? `<div class="meta"><span class="ico">🍾</span>${esc(it.volume)}</div>` : '',
   ].join('')
+  const n = ctx.idx.get(it.id)
+  const badge = ctx.interactive && n ? `<div class="idx">${n}</div>` : ''
+  const attrs = ctx.interactive ? ` data-item-id="${esc(it.id)}"` : ''
   return `
-    <div class="card ${wide ? 'card--wide' : ''} zone--${zone}" style="--plaque:${zoneToken(zone)}">
+    <div class="card ${wide ? 'card--wide' : ''} ${ctx.interactive ? 'card--interactive' : ''} zone--${zone}" style="--plaque:${zoneToken(zone)}"${attrs}>
+      ${badge}
       <div class="plaque"><span>${PLAQUE_LABELS[zone]}</span></div>
       <div class="bottle">${src ? `<img src="${esc(src)}" alt="">` : `<div class="bottle__ph"></div>`}</div>
       <div class="body">
@@ -70,14 +77,14 @@ function cardHtml(it: LineItem, images: Map<string, string> | undefined, wide: b
     </div>`
 }
 
-function rowHtml(r: Row, images?: Map<string, string>): string {
+function rowHtml(r: Row, ctx: Ctx): string {
   if (r.kind === 'divider') return `<div class="divider">${esc(r.label)}</div>`
-  if (r.kind === 'solo-wide') return `<div class="row row--solo">${cardHtml(r.item, images, true)}</div>`
+  if (r.kind === 'solo-wide') return `<div class="row row--solo">${cardHtml(r.item, true, ctx)}</div>`
   const [a, b] = r.items
-  return `<div class="row">${cardHtml(a, images, false)}${b ? cardHtml(b, images, false) : '<div class="card card--empty"></div>'}</div>`
+  return `<div class="row">${cardHtml(a, false, ctx)}${b ? cardHtml(b, false, ctx) : '<div class="card card--empty"></div>'}</div>`
 }
 
-function pageHtml(page: Page, s: PageSettings, isFirst: boolean, args: BuildHtmlArgs): string {
+function pageHtml(page: Page, s: PageSettings, isFirst: boolean, args: BuildHtmlArgs, ctx: Ctx): string {
   const header = isFirst ? `
     <div class="header">
       <div class="header__left">
@@ -86,12 +93,30 @@ function pageHtml(page: Page, s: PageSettings, isFirst: boolean, args: BuildHtml
       </div>
       <div class="wordmark">${args.wordmarkDataUrl ? `<img src="${args.wordmarkDataUrl}" alt="WINE & WHISKEY">` : `<span class="wm1">WINE</span><span class="wm2">&amp; WHISKEY</span>`}</div>
     </div>` : ''
-  return `<section class="page">${header}<div class="grid">${page.rows.map(r => rowHtml(r, args.imageDataUrls)).join('')}</div><div class="vat">${esc(s.vatNote)}</div></section>`
+  return `<section class="page">${header}<div class="grid">${page.rows.map(r => rowHtml(r, ctx)).join('')}</div><div class="vat">${esc(s.vatNote)}</div></section>`
+}
+
+// Number cards in the exact order they appear on the page (post-grouping), so a
+// badge cross-references the editor and clicking one can jump straight to it.
+function indexCards(pages: Page[]): Map<string, number> {
+  const idx = new Map<string, number>()
+  let n = 0
+  for (const p of pages) for (const r of p.rows) {
+    if (r.kind === 'solo-wide') idx.set(r.item.id, ++n)
+    else if (r.kind === 'pair') for (const it of r.items) if (it) idx.set(it.id, ++n)
+  }
+  return idx
 }
 
 export function buildHtml(args: BuildHtmlArgs): string {
   const { pages, settings } = args
-  const body = pages.map((p, i) => pageHtml(p, settings, i === 0, args)).join('')
+  const ctx: Ctx = { images: args.imageDataUrls, interactive: !!args.interactive, idx: indexCards(pages) }
+  const body = pages.map((p, i) => pageHtml(p, settings, i === 0, args, ctx)).join('')
+  // Preview only: clicking a card tells the parent which item it is, so the
+  // editor can scroll to and highlight that position.
+  const clickScript = ctx.interactive
+    ? `<script>document.addEventListener('click',function(e){var c=e.target.closest&&e.target.closest('[data-item-id]');if(c&&window.parent&&window.parent!==window){window.parent.postMessage({t:'pl-card',id:c.getAttribute('data-item-id')},'*')}})</script>`
+    : ''
   return `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -114,6 +139,11 @@ export function buildHtml(args: BuildHtmlArgs): string {
   .card { position:relative; display:grid; grid-template-columns:30px 82px 1fr auto; align-items:center; gap:12px;
           background:#fff; border:1px solid #E7DFD2; border-radius:16px; overflow:hidden; min-height:106px; padding:0 20px 0 0;
           box-shadow:0 1px 2px rgba(60,40,20,.04); }
+  .card--interactive { cursor:pointer; }
+  .card--interactive:hover { border-color:#8C1C1C; }
+  .idx { position:absolute; top:6px; right:10px; z-index:2; min-width:18px; height:18px; padding:0 4px;
+         border-radius:9px; background:rgba(26,26,26,.72); color:#fff; font-family:'DM Sans'; font-weight:700;
+         font-size:11px; line-height:18px; text-align:center; }
   .card--wide { grid-template-columns:30px 108px 1fr auto; }
   .card--empty { visibility:hidden; }
   /* Full-height flush band; the card's overflow:hidden clips its corners to the radius. */
@@ -138,5 +168,5 @@ export function buildHtml(args: BuildHtmlArgs): string {
   .divider { font-family:'DM Sans'; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
              font-size:13px; color:var(--graphite); padding:6px 2px 2px; border-bottom:2px solid var(--plaque,#8C1C1C); }
   .vat { text-align:center; font-family:'DM Sans'; font-weight:700; letter-spacing:.1em; font-size:13px; margin-top:16px; }
-</style></head><body>${body}</body></html>`
+</style></head><body>${body}${clickScript}</body></html>`
 }

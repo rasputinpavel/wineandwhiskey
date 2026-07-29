@@ -8,7 +8,11 @@ import type { PriceListDoc } from '@/lib/pricelist/types'
 // `availableImages` is the set of product-image slugs that exist on the server
 // (public/brand/products/<slug>.png). We resolve a bottle shot by EXACT slug
 // match only — no fuzzy guessing, so a card never shows the wrong bottle.
-export function Preview({ doc, availableImages }: { doc: PriceListDoc; availableImages: Set<string> }) {
+export function Preview({ doc, availableImages, onSelect }: {
+  doc: PriceListDoc
+  availableImages: Set<string>
+  onSelect?: (id: string) => void
+}) {
   const [qr, setQr] = useState<string | undefined>()
 
   useEffect(() => {
@@ -18,6 +22,17 @@ export function Preview({ doc, availableImages }: { doc: PriceListDoc; available
     return () => { alive = false }
   }, [doc.settings.qrUrl])
 
+  // Clicking a card in the (sandboxed) iframe posts its item id up here.
+  useEffect(() => {
+    if (!onSelect) return
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { t?: string; id?: string } | null
+      if (d && d.t === 'pl-card' && d.id) onSelect(d.id)
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [onSelect])
+
   const html = useMemo(() => {
     const imageDataUrls = new Map<string, string>()
     for (const it of doc.items) {
@@ -26,7 +41,7 @@ export function Preview({ doc, availableImages }: { doc: PriceListDoc; available
         imageDataUrls.set(it.imageSlug, `/brand/products/${it.imageSlug}.png`)
       }
     }
-    return buildHtml({ pages: buildPages(doc.items, doc.settings), settings: doc.settings, imageDataUrls, qrDataUrl: qr })
+    return buildHtml({ pages: buildPages(doc.items, doc.settings), settings: doc.settings, imageDataUrls, qrDataUrl: qr, interactive: true })
   }, [doc, availableImages, qr])
 
   return (
