@@ -12,6 +12,8 @@ export const GRAPES: string[] = [
   'Viognier', 'Chenin Blanc', 'Sémillon', 'Muscat', 'Moscato', 'Albariño', 'Verdejo',
   'Grüner Veltliner', 'Vermentino', 'Trebbiano', 'Garganega', 'Cortese', 'Fiano', 'Greco',
   'Torrontés', 'Rkatsiteli', 'Marsanne', 'Roussanne', 'Verdicchio', 'Grillo',
-  // Sparkling / blends
+  // Generic blends (no grape breakdown) — pick one and leave it as the whole value
+  'Red Blend', 'White Blend', 'Rosé Blend', 'Sparkling Blend', 'Field Blend',
+  // Sparkling / named blends
   'Glera', 'Chardonnay, Pinot Noir', 'Blend',
 ]
