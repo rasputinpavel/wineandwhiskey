@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Salary Advance Agreement — Grace — July 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F0EB;
+    --cream: #EDE0D0;
+    --text: #1A1A1A;
+    --text-2: #3D3D3D;
+    --border: #D4C9BC;
+    --wine: #8C1C1C;
+    --gold: #C9A84C;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--cream);
+    color: var(--text);
+    font-family: "Inter", "Noto Sans Thai", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .th { font-family: "Noto Sans Thai", "Inter", sans-serif; }
+
+  .sheet {
+    width: 480px;
+    max-width: calc(100% - 32px);
+    margin: 48px auto;
+    background: var(--bg);
+    padding: 48px 40px 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 18px rgba(26, 26, 26, 0.06);
+  }
+
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+    margin-bottom: 36px;
+  }
+  .wordmark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.18em;
+    color: var(--text);
+  }
+  .overline {
+    font-family: "Inter", sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
+  .title-block { margin-bottom: 30px; }
+  .display {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 50px;
+    line-height: 0.95;
+    letter-spacing: 0.04em;
+    margin: 0;
+    color: var(--text);
+  }
+  .display .accent { color: var(--wine); display: block; }
+  .subtitle-th {
+    font-family: "Noto Sans Thai", sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
+    margin-top: 10px;
+  }
+  .recipient {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-2);
+    margin-top: 12px;
+  }
+  .recipient strong { color: var(--text); font-weight: 600; }
+
+  .section { margin-bottom: 26px; }
+  .section-label {
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--wine);
+    margin: 0 0 10px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--text-2); }
+  .row .v {
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    font-weight: 500;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .loan {
+    background: var(--text);
+    color: var(--bg);
+    border-radius: 8px;
+    padding: 22px 26px;
+    margin: 8px 0 28px;
+  }
+  .loan-label {
+    font-family: "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .loan-amount {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 52px;
+    letter-spacing: 0.03em;
+    line-height: 1;
+    color: var(--bg);
+  }
+  .loan-amount .currency {
+    font-size: 17px;
+    color: var(--gold);
+    margin-right: 8px;
+    letter-spacing: 0.18em;
+  }
+  .loan-words {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(245, 240, 235, 0.18);
+    font-family: "Inter", sans-serif;
+    font-size: 12.5px;
+    color: rgba(245, 240, 235, 0.85);
+  }
+
+  table.schedule {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.schedule th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.schedule td {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  table.schedule .num { text-align: right; }
+  table.schedule tr.total td {
+    border-top: 1.5px solid var(--text);
+    border-bottom: none;
+    font-weight: 600;
+    padding-top: 11px;
+  }
+
+  .terms {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: t;
+  }
+  .terms li {
+    counter-increment: t;
+    position: relative;
+    padding: 0 0 14px 26px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+  .terms li::before {
+    content: counter(t);
+    position: absolute;
+    left: 0; top: 0;
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 15px;
+    color: var(--wine);
+  }
+  .terms li .th { display: block; margin-top: 3px; color: var(--text); }
+
+  .sign {
+    margin-top: 12px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    gap: 30px;
+  }
+  .sign .slot { font-size: 12.5px; color: var(--text-2); }
+  .sign .line {
+    height: 34px;
+    border-bottom: 1px solid var(--text);
+    margin-bottom: 8px;
+  }
+  .sign .who { color: var(--text); font-weight: 600; }
+  .sign .who .th { font-weight: 500; color: var(--text-2); display: block; }
+
+  .footer {
+    margin-top: 30px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+  .footer .mark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  /* Single continuous page sized to content — no pagination, for messenger sharing. */
+  @page { size: 480px 1875px; margin: 0; }
+  @media print {
+    html, body { background: #fff; }
+    .sheet {
+      width: 480px; max-width: none; margin: 0 auto;
+      box-shadow: none; border: none; border-radius: 0;
+      page-break-inside: avoid; break-inside: avoid;
+    }
+  }
+  @media (max-width: 520px) {
+    .sheet { padding: 32px 24px; }
+    .display { font-size: 40px; }
+    .loan-amount { font-size: 42px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="topbar">
+    <div class="wordmark">WINE &amp; WHISKEY</div>
+    <div class="overline">No. SAL-2026-001 · 29 Jul 2026</div>
+  </div>
+
+  <div class="title-block">
+    <h1 class="display">Salary Advance<span class="accent">Agreement</span></h1>
+    <div class="subtitle-th th">หนังสือรับสภาพหนี้และยินยอมให้หักเงินเดือน</div>
+    <div class="recipient">Between the employee <strong>Ms. Nutsaphorn (Grace) Sakulsrisuk</strong> and the employer <strong>New Latitude Co., Ltd.</strong></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Parties · <span class="th">คู่สัญญา</span></div>
+    <div class="row"><span class="k">Employee / Borrower · <span class="th">พนักงาน</span></span><span class="v">Ms. Nutsaphorn Sakulsrisuk (Grace)</span></div>
+    <div class="row"><span class="k">Role · <span class="th">ตำแหน่ง</span></span><span class="v">Store Manager</span></div>
+    <div class="row"><span class="k">National ID · <span class="th">เลขบัตร ปชช.</span></span><span class="v">1 3014 00147 77 3</span></div>
+    <div class="row"><span class="k">Employer · <span class="th">นายจ้าง</span></span><span class="v">New Latitude Co., Ltd.</span></div>
+    <div class="row"><span class="k">Transferred to · <span class="th">โอนเข้าบัญชี</span></span><span class="v">Kasikorn Bank · 1332988170<br>Nutsaphorn Sakulsrisurin</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Loan Amount · <span class="th">จำนวนเงินกู้</span></div>
+    <div class="loan">
+      <div class="loan-label">Advance received · <span class="th">เงินที่ได้รับ</span></div>
+      <div class="loan-amount"><span class="currency">THB</span>12,000.00</div>
+      <div class="loan-words"><span class="th">หนึ่งหมื่นสองพันบาทถ้วน</span> · Twelve thousand baht only<br>Received on 29 Jul 2026 · <span class="th">รับเงินเมื่อวันที่ 29 ก.ค. 2026</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Repayment Schedule · <span class="th">ตารางการชำระคืน</span></div>
+    <table class="schedule">
+      <thead>
+        <tr>
+          <th>Installment</th>
+          <th>Deduction date</th>
+          <th class="num">Amount</th>
+          <th class="num">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>15 Aug 2026</td><td class="num">3,000.00</td><td class="num">9,000.00</td></tr>
+        <tr><td>2</td><td>15 Sep 2026</td><td class="num">3,000.00</td><td class="num">6,000.00</td></tr>
+        <tr><td>3</td><td>15 Oct 2026</td><td class="num">3,000.00</td><td class="num">3,000.00</td></tr>
+        <tr><td>4</td><td>15 Nov 2026</td><td class="num">3,000.00</td><td class="num">0.00</td></tr>
+        <tr class="total"><td colspan="2">Total · <span class="th">รวม</span></td><td class="num">12,000.00</td><td class="num">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Terms · <span class="th">ข้อตกลง</span></div>
+    <ol class="terms">
+      <li>The employee received an advance from the company in the amount of 12,000 THB on 29 July 2026.
+        <span class="th">พนักงานได้รับเงินทดรอง/เงินยืมจากบริษัทเป็นจำนวน 12,000 บาท เมื่อวันที่ 29 กรกฎาคม 2026</span></li>
+      <li>The employee authorizes the company to deduct 3,000 THB from her salary on the 15th of each month for repayment, in 4 installments per the schedule above, starting 15 August 2026.
+        <span class="th">พนักงานยินยอมให้บริษัทหักเงินเดือนงวดละ 3,000 บาท ทุกวันที่ 15 ของเดือน จำนวน 4 งวด ตามตารางข้างต้น เริ่มวันที่ 15 สิงหาคม 2026</span></li>
+      <li>The advance is interest-free.
+        <span class="th">เงินทดรองนี้ไม่มีดอกเบี้ย</span></li>
+      <li>If employment ends before full repayment, the outstanding balance shall be deducted from the final salary and/or any final amounts payable to the employee.
+        <span class="th">หากพ้นสภาพการเป็นพนักงานก่อนชำระครบ ยอดคงเหลือจะถูกหักจากเงินเดือนงวดสุดท้ายและ/หรือเงินที่บริษัทต้องจ่ายทั้งหมด</span></li>
+    </ol>
+  </div>
+
+  <div class="sign">
+    <div class="slot">
+      <div class="line"></div>
+      <div class="who">Ms. Nutsaphorn Sakulsrisuk<span class="th">ผู้กู้ / พนักงาน (Employee / Borrower)</span></div>
+    </div>
+    <div class="slot">
+      <div class="line"></div>
+      <div class="who">Mr. Pavel Rasputin<span class="th">นายจ้าง / ผู้อนุมัติ (Employer / Approved by)</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="mark">WINE &amp; WHISKEY</div>
+    New Latitude Co., Ltd. · Phuket, Thailand
+  </div>
+
+</div>
+
+</body>
+</html>
