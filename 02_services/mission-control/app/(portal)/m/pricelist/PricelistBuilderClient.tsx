@@ -18,19 +18,32 @@ const DEFAULT_SETTINGS: PageSettings = {
 const ZONES: PlaqueZone[] = ['white', 'red', 'sparkling', 'rose', 'spirits']
 const GROUPINGS: Grouping[] = ['producer', 'type', 'region', 'tier', 'grape', 'curated', 'manual']
 
+type SortKey = 'name' | 'price-asc' | 'price-desc'
+
 type Action =
   | { t: 'add'; item: LineItem } | { t: 'remove'; id: string }
+  | { t: 'addMany'; items: LineItem[] }
   | { t: 'update'; id: string; patch: Partial<LineItem> }
   | { t: 'reorder'; from: number; to: number }
+  | { t: 'sort'; by: SortKey }
   | { t: 'settings'; patch: Partial<PageSettings> }
   | { t: 'load'; doc: PriceListDoc }
+
+function sortItems(items: LineItem[], by: SortKey): LineItem[] {
+  const c = [...items]
+  if (by === 'name') c.sort((a, b) => a.name.localeCompare(b.name))
+  else c.sort((a, b) => ((a.price ?? Infinity) - (b.price ?? Infinity)) * (by === 'price-desc' ? -1 : 1))
+  return c
+}
 
 function reducer(doc: PriceListDoc, a: Action): PriceListDoc {
   switch (a.t) {
     case 'add': return { ...doc, items: [...doc.items, a.item] }
+    case 'addMany': return { ...doc, items: [...doc.items, ...a.items] }
     case 'remove': return { ...doc, items: doc.items.filter(i => i.id !== a.id) }
     case 'update': return { ...doc, items: doc.items.map(i => i.id === a.id ? { ...i, ...a.patch } : i) }
     case 'reorder': { const items = [...doc.items]; const [mv] = items.splice(a.from, 1); items.splice(a.to, 0, mv); return { ...doc, items } }
+    case 'sort': return { ...doc, items: sortItems(doc.items, a.by) }
     case 'settings': return { ...doc, settings: { ...doc.settings, ...a.patch } }
     // Merge onto defaults so a saved list with partial/empty settings ({} DB
     // default) can't produce undefined fields → uncontrolled inputs / bad layout.
@@ -145,6 +158,20 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
     : catalog
   const shown = filtered.slice(0, 100)
 
+  // Category quick-add (by plaque zone). Counts exclude items already in the list.
+  const existingCodes = new Set(doc.items.map(i => i.code).filter(Boolean))
+  const zoneCounts = useMemo(() => {
+    const m = {} as Record<PlaqueZone, number>
+    for (const r of catalog) m[r.zone] = (m[r.zone] ?? 0) + 1
+    return m
+  }, [catalog])
+  function addZone(zone: PlaqueZone) {
+    const toAdd = catalog.filter(r => r.zone === zone && (!r.code || !existingCodes.has(r.code)))
+    if (!toAdd.length) return
+    if (toAdd.length > 40 && !window.confirm(`Add all ${toAdd.length} ${zone} items to the list?`)) return
+    dispatch({ t: 'addMany', items: toAdd.map(r => catalogRowToLineItem(r, uid())) })
+  }
+
   if (view === 'list') {
     return (
       <div className="flex-1 overflow-auto bg-warm-white">
@@ -192,6 +219,18 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
 
         {mode === 'catalog' && (
           <div>
+            <div className="mb-2">
+              <div className={`${labelCls} mb-1`}>Quick-add category</div>
+              <div className="flex flex-wrap gap-1">
+                {ZONES.filter(z => zoneCounts[z]).map(z => (
+                  <button type="button" key={z} onClick={() => addZone(z)}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-pale-stone hover:border-wine-red capitalize">
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: PLAQUE_TOKENS[z] }} />
+                    {z} <span className="text-graphite/50">{zoneCounts[z]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog…" className={`${inputCls} mb-2`} />
             <div className="text-[11px] text-graphite/60 mb-1">{filtered.length} items{filtered.length > 100 ? ' (showing 100)' : ''}</div>
             <ul className="space-y-1">
@@ -306,7 +345,16 @@ export function PricelistBuilderClient({ catalog, saved, imageSlugs }: { catalog
         </div>
 
         {/* Working list */}
-        <div className="font-heading text-sm text-graphite mb-2">Items ({doc.items.length})</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-heading text-sm text-graphite">Items ({doc.items.length})</div>
+          <select defaultValue="" onChange={e => { if (e.target.value) { dispatch({ t: 'sort', by: e.target.value as SortKey }); e.target.value = '' } }}
+            className="px-2 py-1 border border-pale-stone rounded text-xs bg-white text-graphite">
+            <option value="">Sort…</option>
+            <option value="name">Name A–Z</option>
+            <option value="price-asc">Price ↑</option>
+            <option value="price-desc">Price ↓</option>
+          </select>
+        </div>
         <div className="space-y-2">
           {doc.items.map((it, idx) => (
             <div key={it.id} className="border border-pale-stone rounded p-2 space-y-1 bg-warm-white">
