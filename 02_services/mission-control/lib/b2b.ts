@@ -18,6 +18,7 @@
 export const BANK_TRANSFER_TYPE_ID = '6bafa324-92d9-45c9-80d8-0539a65de4cc'
 
 export const B2B_PATTERNS: string[] = [
+  '7 cup session',     // 7 Cup Session Co.,Ltd (added Aug 2026; pays by QR, caught by name)
   'arthouse',          // Arthouse Hotelmanagement Co.,Ltd
   'bella chao',        // Bella Chao Trade Co., Ltd.
   'crepes',            // crepes factory co.ltd
