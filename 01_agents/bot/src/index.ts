@@ -14,6 +14,13 @@ import {
   buildExpenseMessage, buildExpenseKeyboard,
   addExpenseRow, parseExpenseFromMessage,
 } from "./expenses.js";
+import {
+  PendingPO,
+  buildPOMessage, buildPOKeyboard,
+} from "./po-parse.js";
+import {
+  classifyAndExtractPO, isDuplicateDocNumber, savePO,
+} from "./po.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -57,6 +64,33 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 // Expense flow state
 const pendingPhotos   = new Map<number, PendingPhoto>();
 const pendingExpenses = new Map<number, PendingExpense>();
+const pendingPOs      = new Map<number, PendingPO>();
+
+async function startPOFlow(
+  chatId: number,
+  extracted: { supplier: string; docNumber: string; orderDate: string; amount: string },
+  photo: { base64: string; mimeType: "image/jpeg" | "image/png" },
+  uploadedBy: string,
+): Promise<void> {
+  const duplicate = await isDuplicateDocNumber(extracted.docNumber);
+  const po: PendingPO = {
+    supplier:     extracted.supplier,
+    docNumber:    extracted.docNumber,
+    orderDate:    extracted.orderDate,
+    receivedDate: bangkokDate(),
+    amount:       extracted.amount,
+    note:         "",
+    scanBase64:   photo.base64,
+    scanMime:     photo.mimeType,
+    uploadedBy,
+    duplicate,
+  };
+  pendingPOs.set(chatId, po);
+  await bot.api.sendMessage(chatId, buildPOMessage(po), {
+    parse_mode:   "HTML",
+    reply_markup: buildPOKeyboard(),
+  });
+}
 
 async function startExpenseFlow(
   chatId: number,
@@ -345,10 +379,20 @@ bot.on("message:photo", async (ctx) => {
   const photos  = ctx.message.photo;
   const fileId  = photos[photos.length - 1].file_id; // largest size
 
-  const waitMsg = await ctx.reply("Читаю чек...");
+  const waitMsg = await ctx.reply("Читаю документ...");
   try {
     const photo = await downloadTelegramPhoto(process.env.TELEGRAM_BOT_TOKEN!, fileId);
 
+    // 1) Supplier purchase order? Classify first; PO wins over the expense flow.
+    const po = await classifyAndExtractPO(photo.base64, photo.mimeType);
+    if (po) {
+      await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+      await startPOFlow(chatId, po, photo, uploadedBy);
+      return;
+    }
+
+    // 2) Not a PO → existing expense behaviour.
     if (caption) {
       const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
@@ -431,12 +475,68 @@ bot.on("message:text", async (ctx) => {
   }
 });
 
+async function handlePOCallback(ctx: any, chatId: number, data: string): Promise<void> {
+  if (data === "po_cancel") {
+    pendingPOs.delete(chatId);
+    await ctx.answerCallbackQuery("Отменено");
+    await ctx.editMessageText("✖ PO отменён.");
+    return;
+  }
+
+  const po = pendingPOs.get(chatId);
+  if (!po) {
+    await ctx.answerCallbackQuery("Сессия устарела — отправь скан снова.");
+    return;
+  }
+
+  if (data === "po_expense") {
+    // Misclassified — hand the same photo to the expense flow.
+    pendingPOs.delete(chatId);
+    await ctx.answerCallbackQuery("Ок, это расход");
+    const extracted = await extractExpenseFromPhoto(po.scanBase64, po.scanMime, "");
+    if (extracted) {
+      await ctx.editMessageText("↔️ Переключил на расход.");
+      await startExpenseFlow(chatId, extracted);
+    } else {
+      await ctx.editMessageText("↔️ Это расход. Напиши сумму и описание текстом: «856 интернет».");
+    }
+    return;
+  }
+
+  if (data === "po_confirm") {
+    pendingPOs.delete(chatId);
+    await ctx.answerCallbackQuery("Записываю...");
+    try {
+      await savePO(po);
+    } catch (e) {
+      console.error("savePO failed:", e);
+      try {
+        await ctx.editMessageText("❌ Ошибка записи PO. Попробуй ещё раз.");
+      } catch (editErr) { console.error("editMessageText failed:", editErr); }
+      return;
+    }
+    try {
+      await ctx.editMessageText(
+        `✅ PO записан.\n\n` +
+        `🏭 ${po.supplier || "—"}\n` +
+        `🧾 ${po.docNumber || "—"}\n` +
+        `📅 ${po.orderDate || "—"} · 📦 ${po.receivedDate}\n` +
+        `💰 ฿${po.amount || "—"}`,
+      );
+    } catch (editErr) { console.error("confirmation edit failed:", editErr); }
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+}
+
 bot.on("callback_query:data", async (ctx) => {
   const chatId = ctx.chat?.id;
   if (!chatId) { await ctx.answerCallbackQuery(); return; }
 
   const data = ctx.callbackQuery.data;
 
+  if (data.startsWith("po_")) { await handlePOCallback(ctx, chatId, data); return; }
   if (!data.startsWith("exp_")) { await ctx.answerCallbackQuery(); return; }
 
   if (data === "exp_cancel") {
