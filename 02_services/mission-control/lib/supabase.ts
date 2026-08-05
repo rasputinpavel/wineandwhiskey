@@ -69,6 +69,24 @@ export type PurchaseOrderItem = {
   scraped_at: string
 }
 
+// ─── public.po_scans (PO scan archive, migration 037) ────────────────────
+// SEPARATE from purchase_orders above. Rows are written by the Chip & Dale bot
+// from a photographed supplier PO. Scans live in the private `po-scans` bucket.
+
+export type PoScan = {
+  id: string
+  supplier: string | null
+  supplier_raw: string | null
+  doc_number: string | null
+  order_date: string | null       // 'YYYY-MM-DD'
+  received_date: string | null    // 'YYYY-MM-DD'
+  amount_total: number | null
+  scan_path: string               // object path in the `po-scans` bucket
+  note: string | null
+  uploaded_by: string | null
+  created_at: string
+}
+
 // ─── Inventory schema types ─────────────────────────────────────────────
 // Mirror of inventory/supabase/migrations/001_inventory.sql.
 
