@@ -29,6 +29,14 @@ logging with an automated pipeline driven by the Chip & Dale Telegram bot.
 - No connection to existing PO cost data (X/P codes, purchase prices). Kept separate.
 - Not full e-commerce or accounting — retrieval of scanned documents only.
 
+## ⚠️ Naming: do not collide with `public.purchase_orders`
+
+A `public.purchase_orders` table **already exists**, populated by the cost scraper
+`03_automation/scrape_purchase_orders.ts` (Loyverse POs with cost lines, `docs_url`
+pointing to Google Drive). Our scan archive is a **separate concern** and MUST use a
+distinct table: **`public.po_scans`**. Do not read, write, or extend
+`public.purchase_orders`.
+
 ## Storage decision
 
 Registry rows **and** scans live in the **same Supabase** the portal (mission-control)
@@ -57,8 +65,9 @@ Column mapping from Som's original Google Sheet:
 | Original receipt | *(scan itself)*   | Was a link to the scan → replaced by `scan_path` |
 | Remark           | `note`            | Free text |
 
-Table `purchase_orders` (schema TBD in plan — `public` or `finance`), migration applied
-manually by the user in the Supabase SQL Editor (per project convention):
+Table `public.po_scans` (distinct from the existing `public.purchase_orders`, see warning
+above), migration applied manually by the user in the Supabase SQL Editor (per project
+convention):
 
 | field          | type        | notes |
 |----------------|-------------|-------|
@@ -100,7 +109,7 @@ photos to the expense flow. It will first run PO classification and branch.
 
 ## Portal page
 
-**Finance ▸ Purchase Orders** in mission-control:
+**Operations ▸ Purchase Orders** in mission-control (next to Suppliers):
 
 - Table: supplier, doc number, order date, received date, total, scan link.
 - Search by supplier and by doc number; date-range filter.
