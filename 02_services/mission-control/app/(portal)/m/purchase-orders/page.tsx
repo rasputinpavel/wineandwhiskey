@@ -33,7 +33,11 @@ export default async function PurchaseOrdersPage({
     .order('received_date', { ascending: false })
     .limit(500)
 
-  if (q) query = query.or(`supplier.ilike.%${q}%,doc_number.ilike.%${q}%`)
+  // `q` is interpolated into PostgREST's .or() mini-language, where , ( ) * %
+  // are metacharacters. Strip them so a comma/paren in the search box can't
+  // break the filter or inject extra conditions (sbPublic bypasses RLS).
+  const qFilter = q.replace(/[,()*%\\]/g, ' ').trim()
+  if (qFilter) query = query.or(`supplier.ilike.%${qFilter}%,doc_number.ilike.%${qFilter}%`)
   if (from) query = query.gte('order_date', from)
   if (to) query = query.lte('order_date', to)
 

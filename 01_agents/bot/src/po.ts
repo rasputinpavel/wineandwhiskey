@@ -78,7 +78,13 @@ export async function savePO(p: PendingPO): Promise<void> {
     uploaded_by: p.uploadedBy || null,
   });
   if (ins.error) {
-    await supabase.storage.from(PO_BUCKET).remove([path]);
+    // Best-effort cleanup of the just-uploaded object; never let a failed remove
+    // mask the real insert error.
+    try {
+      await supabase.storage.from(PO_BUCKET).remove([path]);
+    } catch (removeErr) {
+      console.error("po_scans rollback remove failed:", removeErr);
+    }
     throw new Error(`DB insert failed: ${ins.error.message}`);
   }
 }

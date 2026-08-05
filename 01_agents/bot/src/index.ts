@@ -383,16 +383,9 @@ bot.on("message:photo", async (ctx) => {
   try {
     const photo = await downloadTelegramPhoto(process.env.TELEGRAM_BOT_TOKEN!, fileId);
 
-    // 1) Supplier purchase order? Classify first; PO wins over the expense flow.
-    const po = await classifyAndExtractPO(photo.base64, photo.mimeType);
-    if (po) {
-      await ctx.api.deleteMessage(chatId, waitMsg.message_id);
-      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
-      await startPOFlow(chatId, po, photo, uploadedBy);
-      return;
-    }
-
-    // 2) Not a PO → existing expense behaviour.
+    // A captioned photo is an explicit expense entry (existing convention: photo
+    // + caption = расход). A supplier PO scan arrives as a plain photo, so we only
+    // run the (costly) PO classification when there is NO caption.
     if (caption) {
       const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
@@ -401,11 +394,21 @@ bot.on("message:photo", async (ctx) => {
       } else {
         await ctx.reply("Не смог распознать сумму. Напиши расход текстом: «856 интернет»");
       }
-    } else {
-      // Store photo, wait for caption in next text message
-      pendingPhotos.set(chatId, photo);
-      await ctx.api.editMessageText(chatId, waitMsg.message_id, "📷 Фото получено. Напиши пояснение (на что потратили и сумму, если не видно):");
+      return;
     }
+
+    // No caption → could be a supplier purchase order. Classify.
+    const po = await classifyAndExtractPO(photo.base64, photo.mimeType);
+    if (po) {
+      await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+      await startPOFlow(chatId, po, photo, uploadedBy);
+      return;
+    }
+
+    // Not a PO → store photo, wait for caption in next text message.
+    pendingPhotos.set(chatId, photo);
+    await ctx.api.editMessageText(chatId, waitMsg.message_id, "📷 Фото получено. Напиши пояснение (на что потратили и сумму, если не видно):");
   } catch (e) {
     console.error(e);
     await ctx.api.editMessageText(chatId, waitMsg.message_id, "Ошибка при обработке фото.");
@@ -490,16 +493,12 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
   }
 
   if (data === "po_expense") {
-    // Misclassified — hand the same photo to the expense flow.
+    // Misclassified — treat the same photo as an expense: store it and ask for a
+    // caption, exactly like a plain no-caption photo would be handled.
     pendingPOs.delete(chatId);
+    pendingPhotos.set(chatId, { base64: po.scanBase64, mimeType: po.scanMime, timestamp: Date.now() });
     await ctx.answerCallbackQuery("Ок, это расход");
-    const extracted = await extractExpenseFromPhoto(po.scanBase64, po.scanMime, "");
-    if (extracted) {
-      await ctx.editMessageText("↔️ Переключил на расход.");
-      await startExpenseFlow(chatId, extracted);
-    } else {
-      await ctx.editMessageText("↔️ Это расход. Напиши сумму и описание текстом: «856 интернет».");
-    }
+    await ctx.editMessageText("↔️ Ок, это расход. Напиши пояснение (на что потратили и сумму, если не видно):");
     return;
   }
 
@@ -511,7 +510,7 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
     } catch (e) {
       console.error("savePO failed:", e);
       try {
-        await ctx.editMessageText("❌ Ошибка записи PO. Попробуй ещё раз.");
+        await ctx.editMessageText("❌ Ошибка записи PO. Отправь скан снова.");
       } catch (editErr) { console.error("editMessageText failed:", editErr); }
       return;
     }
