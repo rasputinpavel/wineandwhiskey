@@ -139,7 +139,16 @@ export const SECTIONS: Section[] = [
         route: '/m/suppliers',
         embed: { kind: 'native' },
       },
-      // Purchase Orders живёт под Suppliers (вкладка), не отдельным пунктом сайдбара.
+      {
+        // Scan archive of paper supplier POs, filled by the Chip & Dale bot
+        // (migration 037_po_scans). Distinct from the scraped public.purchase_orders
+        // tab noted below — this is its own searchable document store.
+        slug: 'purchase-orders', name: 'Purchase Orders', icon: '🧾', status: 'building',
+        description: 'Архив сканов PO от поставщиков: поставщик, № счёта, дата, сумма, скан. Заполняется ботом Chip & Dale из фото прихода.',
+        route: m('purchase-orders'),
+        embed: { kind: 'native' },
+      },
+      // Scraped Purchase Orders живут под Suppliers (вкладка), не отдельным пунктом сайдбара.
       // Tax Invoices — под Customers (вкладка).
       // Payment Calendar вынесен в раздел Payments (первым после Pulse).
       {
