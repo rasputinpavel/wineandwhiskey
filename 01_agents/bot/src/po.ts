@@ -5,7 +5,7 @@ import { parsePOJSON, toISODate, type POExtraction, type PendingPO } from "./po-
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 const PO_PROMPT =
-  `На изображении документ, пришедший с поставкой в винный магазин. ` +
+  `Перед тобой документ, пришедший с поставкой в винный магазин. ` +
   `Определи, это purchase order / инвойс / счёт от ПОСТАВЩИКА ` +
   `(а НЕ кассовый чек об оплате и НЕ квитанция расхода магазина). ` +
   `Если это документ поставщика — извлеки поля: название поставщика, номер документа (PO/invoice №), ` +
@@ -18,18 +18,24 @@ const PO_PROMPT =
 // Returns null when it is not a PO (→ caller falls back to the expense flow).
 export async function classifyAndExtractPO(
   base64: string,
-  mime: "image/jpeg" | "image/png",
+  mime: "image/jpeg" | "image/png" | "application/pdf",
 ): Promise<POExtraction | null> {
+  // PDFs go in a `document` block (Claude reads them natively); images in an
+  // `image` block. The SDK types for these unions vary by version, so the block
+  // is built loosely and passed through.
+  const source = { type: "base64" as const, media_type: mime, data: base64 };
+  const fileBlock: any =
+    mime === "application/pdf"
+      ? { type: "document", source }
+      : { type: "image", source };
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 300,
     messages: [
       {
         role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mime, data: base64 } },
-          { type: "text", text: PO_PROMPT },
-        ],
+        content: [fileBlock, { type: "text", text: PO_PROMPT }],
       },
     ],
   });
@@ -53,7 +59,9 @@ export async function isDuplicateDocNumber(docNumber: string): Promise<boolean> 
 export async function savePO(p: PendingPO): Promise<void> {
   if (!supabase) throw new Error("Supabase не подключён (SUPABASE_URL/SUPABASE_SERVICE_KEY).");
 
-  const ext = p.scanMime === "image/png" ? "png" : "jpg";
+  const ext =
+    p.scanMime === "application/pdf" ? "pdf" :
+    p.scanMime === "image/png"       ? "png" : "jpg";
   const safeSupplier =
     (p.supplier || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
     "unknown";

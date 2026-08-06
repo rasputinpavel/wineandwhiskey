@@ -17,7 +17,7 @@ export interface PendingPO {
   amount: string;       // digits only, or ""
   note: string;
   scanBase64: string;
-  scanMime: "image/jpeg" | "image/png";
+  scanMime: "image/jpeg" | "image/png" | "application/pdf";
   uploadedBy: string;
   duplicate: boolean;   // doc_number already in the registry
 }

@@ -10,7 +10,7 @@ import {
   PendingExpense, PendingPhoto, WALLET_LABEL,
   bangkokDate, looksLikeExpense,
   extractExpenseFromText, extractExpenseFromPhoto,
-  downloadTelegramPhoto,
+  downloadTelegramPhoto, downloadTelegramFile,
   buildExpenseMessage, buildExpenseKeyboard,
   addExpenseRow, parseExpenseFromMessage,
 } from "./expenses.js";
@@ -69,7 +69,7 @@ const pendingPOs      = new Map<number, PendingPO>();
 async function startPOFlow(
   chatId: number,
   extracted: { supplier: string; docNumber: string; orderDate: string; amount: string },
-  photo: { base64: string; mimeType: "image/jpeg" | "image/png" },
+  photo: { base64: string; mimeType: "image/jpeg" | "image/png" | "application/pdf" },
   uploadedBy: string,
 ): Promise<void> {
   const duplicate = await isDuplicateDocNumber(extracted.docNumber);
@@ -415,6 +415,40 @@ bot.on("message:photo", async (ctx) => {
   }
 });
 
+// PO scans also arrive as documents (PDF, or an uncompressed image sent as a
+// file) — these come through message:document, not message:photo. We only act
+// on PDFs and images; other file types are ignored.
+const PO_DOC_MIMES = new Set(["application/pdf", "image/jpeg", "image/png"]);
+
+bot.on("message:document", async (ctx) => {
+  const chatId = ctx.chat.id;
+  const doc    = ctx.message.document;
+  const mime   = doc.mime_type ?? "";
+  if (!PO_DOC_MIMES.has(mime)) return; // not a PO-shaped document — ignore
+
+  const waitMsg = await ctx.reply("Читаю документ...");
+  try {
+    const file = await downloadTelegramFile(process.env.TELEGRAM_BOT_TOKEN!, doc.file_id, mime);
+    const scanMime = file.mimeType as "image/jpeg" | "image/png" | "application/pdf";
+
+    const po = await classifyAndExtractPO(file.base64, scanMime);
+    if (po) {
+      await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+      await startPOFlow(chatId, po, { base64: file.base64, mimeType: scanMime }, uploadedBy);
+      return;
+    }
+
+    await ctx.api.editMessageText(
+      chatId, waitMsg.message_id,
+      "Не распознал это как PO поставщика. Если это расход — напиши сумму текстом: «856 интернет».",
+    );
+  } catch (e) {
+    console.error(e);
+    await ctx.api.editMessageText(chatId, waitMsg.message_id, "Ошибка при обработке документа.");
+  }
+});
+
 bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text   = ctx.message.text;
@@ -493,12 +527,21 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
   }
 
   if (data === "po_expense") {
-    // Misclassified — treat the same photo as an expense: store it and ask for a
-    // caption, exactly like a plain no-caption photo would be handled.
+    // Misclassified — treat it as an expense. The expense flow reads images only,
+    // so for a PDF we just ask for a text amount; for an image we store it and ask
+    // for a caption, exactly like a plain no-caption photo.
     pendingPOs.delete(chatId);
-    pendingPhotos.set(chatId, { base64: po.scanBase64, mimeType: po.scanMime, timestamp: Date.now() });
     await ctx.answerCallbackQuery("Ок, это расход");
-    await ctx.editMessageText("↔️ Ок, это расход. Напиши пояснение (на что потратили и сумму, если не видно):");
+    if (po.scanMime === "application/pdf") {
+      await ctx.editMessageText("↔️ Ок. PDF как расход не читаю — напиши сумму текстом: «856 интернет».");
+    } else {
+      pendingPhotos.set(chatId, {
+        base64: po.scanBase64,
+        mimeType: po.scanMime as "image/jpeg" | "image/png",
+        timestamp: Date.now(),
+      });
+      await ctx.editMessageText("↔️ Ок, это расход. Напиши пояснение (на что потратили и сумму, если не видно):");
+    }
     return;
   }
 

@@ -174,6 +174,26 @@ export async function downloadTelegramPhoto(
   };
 }
 
+// Download any Telegram file (document) and report its mime. Used for PO scans
+// sent as a document — PDFs and uncompressed images. `mimeHint` is the
+// document's declared mime_type; we fall back to the file extension.
+export async function downloadTelegramFile(
+  botToken: string,
+  fileId:   string,
+  mimeHint?: string,
+): Promise<{ base64: string; mimeType: string }> {
+  const r = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+  const { result } = await r.json();
+  const filePath = result.file_path as string;
+  const resp     = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+  const buffer   = await resp.arrayBuffer();
+  const mimeType = mimeHint
+    || (filePath.endsWith(".pdf") ? "application/pdf"
+      : filePath.endsWith(".png") ? "image/png"
+      : "image/jpeg");
+  return { base64: Buffer.from(buffer).toString("base64"), mimeType };
+}
+
 // ─── Message parser (stateless recovery after redeploy) ──────────────────────
 
 export function parseExpenseFromMessage(text: string): PendingExpense | null {
