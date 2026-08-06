@@ -64,10 +64,19 @@ export function buildPOMessage(p: PendingPO): string {
   return lines.join("\n");
 }
 
-export function buildPOKeyboard(): InlineKeyboard {
-  return new InlineKeyboard()
-    .text("✅ Записать", "po_confirm")
-    .text("↔️ Это расход", "po_expense")
-    .row()
-    .text("✖ Отмена", "po_cancel");
+export function buildPOKeyboard(duplicate = false): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  if (duplicate) {
+    // Same № already archived — offer overwrite instead of a blind insert.
+    kb.text("♻️ Перезаписать", "po_overwrite")
+      .text("↔️ Это расход", "po_expense")
+      .row()
+      .text("✖ Отмена", "po_cancel");
+  } else {
+    kb.text("✅ Записать", "po_confirm")
+      .text("↔️ Это расход", "po_expense")
+      .row()
+      .text("✖ Отмена", "po_cancel");
+  }
+  return kb;
 }

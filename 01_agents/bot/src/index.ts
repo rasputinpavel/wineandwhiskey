@@ -88,7 +88,7 @@ async function startPOFlow(
   pendingPOs.set(chatId, po);
   await bot.api.sendMessage(chatId, buildPOMessage(po), {
     parse_mode:   "HTML",
-    reply_markup: buildPOKeyboard(),
+    reply_markup: buildPOKeyboard(po.duplicate),
   });
 }
 
@@ -545,11 +545,12 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
     return;
   }
 
-  if (data === "po_confirm") {
+  if (data === "po_confirm" || data === "po_overwrite") {
+    const overwrite = data === "po_overwrite";
     pendingPOs.delete(chatId);
-    await ctx.answerCallbackQuery("Записываю...");
+    await ctx.answerCallbackQuery(overwrite ? "Перезаписываю..." : "Записываю...");
     try {
-      await savePO(po);
+      await savePO(po, { overwrite });
     } catch (e) {
       console.error("savePO failed:", e);
       try {
@@ -559,7 +560,7 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
     }
     try {
       await ctx.editMessageText(
-        `✅ PO записан.\n\n` +
+        `${overwrite ? "♻️ PO перезаписан." : "✅ PO записан."}\n\n` +
         `🏭 ${po.supplier || "—"}\n` +
         `🧾 ${po.docNumber || "—"}\n` +
         `📅 ${po.orderDate || "—"} · 📦 ${po.receivedDate}\n` +

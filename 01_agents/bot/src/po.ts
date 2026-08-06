@@ -56,8 +56,9 @@ export async function isDuplicateDocNumber(docNumber: string): Promise<boolean> 
 
 // Upload the scan to the private bucket, then insert the row. If the DB insert
 // fails, the just-uploaded object is removed so we don't orphan it.
-export async function savePO(p: PendingPO): Promise<void> {
+export async function savePO(p: PendingPO, opts?: { overwrite?: boolean }): Promise<void> {
   if (!supabase) throw new Error("Supabase не подключён (SUPABASE_URL/SUPABASE_SERVICE_KEY).");
+  const db = supabase;
 
   const ext =
     p.scanMime === "application/pdf" ? "pdf" :
@@ -69,12 +70,7 @@ export async function savePO(p: PendingPO): Promise<void> {
   const path = `${safeSupplier}/${safeDoc}_${Date.now()}.${ext}`;
   const buffer = Buffer.from(p.scanBase64, "base64");
 
-  const up = await supabase.storage
-    .from(PO_BUCKET)
-    .upload(path, buffer, { contentType: p.scanMime, upsert: false });
-  if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
-
-  const ins = await supabase.from("po_scans").insert({
+  const record = {
     supplier: p.supplier || null,
     supplier_raw: p.supplier || null,
     doc_number: p.docNumber || null,
@@ -84,15 +80,48 @@ export async function savePO(p: PendingPO): Promise<void> {
     scan_path: path,
     note: p.note || null,
     uploaded_by: p.uploadedBy || null,
-  });
-  if (ins.error) {
-    // Best-effort cleanup of the just-uploaded object; never let a failed remove
-    // mask the real insert error.
+  };
+
+  // Best-effort scan cleanup; never let a failed remove mask the real DB error.
+  const removeQuietly = async (paths: string[]) => {
+    if (!paths.length) return;
     try {
-      await supabase.storage.from(PO_BUCKET).remove([path]);
-    } catch (removeErr) {
-      console.error("po_scans rollback remove failed:", removeErr);
+      await db.storage.from(PO_BUCKET).remove(paths);
+    } catch (e) {
+      console.error("po_scans scan cleanup failed:", e);
     }
+  };
+
+  const up = await db.storage
+    .from(PO_BUCKET)
+    .upload(path, buffer, { contentType: p.scanMime, upsert: false });
+  if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
+
+  // Overwrite an existing PO with the same doc_number: update its row + scan,
+  // but preserve the human-entered `note` (edited on the portal). Then drop the
+  // stale scan file(s).
+  if (opts?.overwrite && p.docNumber) {
+    const { data: existing } = await db
+      .from("po_scans")
+      .select("scan_path")
+      .eq("doc_number", p.docNumber);
+
+    const { note: _note, ...updateFields } = record;
+    const upd = await db.from("po_scans").update(updateFields).eq("doc_number", p.docNumber);
+    if (upd.error) {
+      await removeQuietly([path]);
+      throw new Error(`DB update failed: ${upd.error.message}`);
+    }
+    const stale = (existing ?? [])
+      .map((r: { scan_path: string | null }) => r.scan_path)
+      .filter((s): s is string => !!s && s !== path);
+    await removeQuietly(stale);
+    return;
+  }
+
+  const ins = await db.from("po_scans").insert(record);
+  if (ins.error) {
+    await removeQuietly([path]);
     throw new Error(`DB insert failed: ${ins.error.message}`);
   }
 }
