@@ -15,11 +15,12 @@ import {
   addExpenseRow, parseExpenseFromMessage,
 } from "./expenses.js";
 import {
-  PendingPO,
-  buildPOMessage, buildPOKeyboard,
+  POCard,
+  buildPOMessage, buildPOKeyboard, parsePOFromMessage,
 } from "./po-parse.js";
 import {
-  classifyAndExtractPO, isDuplicateDocNumber, savePO,
+  classifyAndExtractPO, isDuplicateDocNumber,
+  uploadScan, deleteScan, downloadScan, commitPO,
 } from "./po.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -64,31 +65,28 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 // Expense flow state
 const pendingPhotos   = new Map<number, PendingPhoto>();
 const pendingExpenses = new Map<number, PendingExpense>();
-const pendingPOs      = new Map<number, PendingPO>();
 
+// PO confirmation holds NO in-memory state: the scan is uploaded now, its path
+// travels in the callback data, and the fields are read back from the card text
+// on confirm — so a bot restart (Railway redeploy) mid-flow doesn't lose it.
 async function startPOFlow(
   chatId: number,
   extracted: { supplier: string; docNumber: string; orderDate: string; amount: string },
   photo: { base64: string; mimeType: "image/jpeg" | "image/png" | "application/pdf" },
-  uploadedBy: string,
 ): Promise<void> {
+  const scanPath  = await uploadScan(photo.base64, photo.mimeType);
   const duplicate = await isDuplicateDocNumber(extracted.docNumber);
-  const po: PendingPO = {
+  const card: POCard = {
     supplier:     extracted.supplier,
     docNumber:    extracted.docNumber,
     orderDate:    extracted.orderDate,
     receivedDate: bangkokDate(),
     amount:       extracted.amount,
-    note:         "",
-    scanBase64:   photo.base64,
-    scanMime:     photo.mimeType,
-    uploadedBy,
     duplicate,
   };
-  pendingPOs.set(chatId, po);
-  await bot.api.sendMessage(chatId, buildPOMessage(po), {
+  await bot.api.sendMessage(chatId, buildPOMessage(card), {
     parse_mode:   "HTML",
-    reply_markup: buildPOKeyboard(po.duplicate),
+    reply_markup: buildPOKeyboard(duplicate, scanPath),
   });
 }
 
@@ -401,8 +399,7 @@ bot.on("message:photo", async (ctx) => {
     const po = await classifyAndExtractPO(photo.base64, photo.mimeType);
     if (po) {
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
-      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
-      await startPOFlow(chatId, po, photo, uploadedBy);
+      await startPOFlow(chatId, po, photo);
       return;
     }
 
@@ -434,8 +431,7 @@ bot.on("message:document", async (ctx) => {
     const po = await classifyAndExtractPO(file.base64, scanMime);
     if (po) {
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
-      const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
-      await startPOFlow(chatId, po, { base64: file.base64, mimeType: scanMime }, uploadedBy);
+      await startPOFlow(chatId, po, { base64: file.base64, mimeType: scanMime });
       return;
     }
 
@@ -513,46 +509,69 @@ bot.on("message:text", async (ctx) => {
 });
 
 async function handlePOCallback(ctx: any, chatId: number, data: string): Promise<void> {
-  if (data === "po_cancel") {
-    pendingPOs.delete(chatId);
+  // data = "<action>:<scanPath>" (scanPath survives a bot restart; the card
+  // fields are read back from the message text below).
+  const sep = data.indexOf(":");
+  const action = sep === -1 ? data : data.slice(0, sep);
+  const scanPath = sep === -1 ? "" : data.slice(sep + 1);
+
+  if (action === "po_cancel") {
+    await deleteScan(scanPath);
     await ctx.answerCallbackQuery("Отменено");
     await ctx.editMessageText("✖ PO отменён.");
     return;
   }
 
-  const po = pendingPOs.get(chatId);
-  if (!po) {
-    await ctx.answerCallbackQuery("Сессия устарела — отправь скан снова.");
+  const card = parsePOFromMessage(ctx.callbackQuery?.message?.text ?? "");
+  if (!card) {
+    await ctx.answerCallbackQuery("Не смог прочитать карточку — отправь скан снова.");
     return;
   }
 
-  if (data === "po_expense") {
-    // Misclassified — treat it as an expense. The expense flow reads images only,
-    // so for a PDF we just ask for a text amount; for an image we store it and ask
-    // for a caption, exactly like a plain no-caption photo.
-    pendingPOs.delete(chatId);
+  if (action === "po_expense") {
+    // Misclassified — it is an expense. Pull the bytes back, drop the PO scan,
+    // and hand images to the expense flow (PDF expenses → ask for a text amount).
     await ctx.answerCallbackQuery("Ок, это расход");
-    if (po.scanMime === "application/pdf") {
-      await ctx.editMessageText("↔️ Ок. PDF как расход не читаю — напиши сумму текстом: «856 интернет».");
-    } else {
+    const scan = await downloadScan(scanPath);
+    await deleteScan(scanPath);
+    if (scan && scan.mime !== "application/pdf") {
       pendingPhotos.set(chatId, {
-        base64: po.scanBase64,
-        mimeType: po.scanMime as "image/jpeg" | "image/png",
+        base64: scan.base64,
+        mimeType: scan.mime as "image/jpeg" | "image/png",
         timestamp: Date.now(),
       });
       await ctx.editMessageText("↔️ Ок, это расход. Напиши пояснение (на что потратили и сумму, если не видно):");
+    } else {
+      await ctx.editMessageText("↔️ Ок. Напиши сумму текстом: «856 интернет».");
     }
     return;
   }
 
-  if (data === "po_confirm" || data === "po_overwrite") {
-    const overwrite = data === "po_overwrite";
-    pendingPOs.delete(chatId);
+  if (action === "po_confirm" || action === "po_overwrite") {
+    if (!scanPath) {
+      // An old card shown before this version — no scan reference to save.
+      await ctx.answerCallbackQuery("Старая карточка — отправь скан заново.");
+      try { await ctx.editMessageText("⚠️ Старая карточка. Отправь скан заново."); } catch {}
+      return;
+    }
+    const overwrite = action === "po_overwrite";
     await ctx.answerCallbackQuery(overwrite ? "Перезаписываю..." : "Записываю...");
+    const uploadedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
     try {
-      await savePO(po, { overwrite });
+      await commitPO(
+        {
+          supplier:     card.supplier,
+          docNumber:    card.docNumber,
+          orderDate:    card.orderDate,
+          receivedDate: card.receivedDate,
+          amount:       card.amount,
+          uploadedBy,
+        },
+        scanPath,
+        { overwrite },
+      );
     } catch (e) {
-      console.error("savePO failed:", e);
+      console.error("commitPO failed:", e);
       try {
         await ctx.editMessageText("❌ Ошибка записи PO. Отправь скан снова.");
       } catch (editErr) { console.error("editMessageText failed:", editErr); }
@@ -561,10 +580,10 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
     try {
       await ctx.editMessageText(
         `${overwrite ? "♻️ PO перезаписан." : "✅ PO записан."}\n\n` +
-        `🏭 ${po.supplier || "—"}\n` +
-        `🧾 ${po.docNumber || "—"}\n` +
-        `📅 ${po.orderDate || "—"} · 📦 ${po.receivedDate}\n` +
-        `💰 ฿${po.amount || "—"}`,
+        `🏭 ${card.supplier || "—"}\n` +
+        `🧾 ${card.docNumber || "—"}\n` +
+        `📅 ${card.orderDate || "—"} · 📦 ${card.receivedDate}\n` +
+        `💰 ฿${card.amount || "—"}`,
       );
     } catch (editErr) { console.error("confirmation edit failed:", editErr); }
     return;

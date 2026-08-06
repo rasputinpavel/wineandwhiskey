@@ -9,18 +9,18 @@ export type POExtraction = {
   amount: string;      // digits only, or ""
 };
 
-export interface PendingPO {
+// The fields shown on the confirmation card. State is NOT held in memory — it is
+// reconstructed from the card text (which Telegram returns with the callback) +
+// the scan path in the callback data, so confirming survives a bot restart
+// (Railway redeploy) mid-flow.
+export type POCard = {
   supplier: string;
   docNumber: string;
   orderDate: string;    // DD.MM.YYYY or ""
-  receivedDate: string; // DD.MM.YYYY (defaults to today)
+  receivedDate: string; // DD.MM.YYYY
   amount: string;       // digits only, or ""
-  note: string;
-  scanBase64: string;
-  scanMime: "image/jpeg" | "image/png" | "application/pdf";
-  uploadedBy: string;
-  duplicate: boolean;   // doc_number already in the registry
-}
+  duplicate: boolean;
+};
 
 // ─── Parsing ─────────────────────────────────────────────────────────────
 
@@ -48,35 +48,49 @@ export function toISODate(ddmmyyyy: string): string | null {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 
+// Reconstruct the card fields from the confirmation message text. Telegram
+// delivers message.text without the HTML bold tags, so we match the plain
+// labels. Returns null when the text is not a PO card.
+export function parsePOFromMessage(text: string): POCard | null {
+  if (!/№ счёта\/PO:/.test(text) && !/Поставщик:/.test(text)) return null;
+  const grab = (re: RegExp) => text.match(re)?.[1]?.trim() ?? "";
+  const dash = (s: string) => (s === "—" ? "" : s);
+  return {
+    supplier:     dash(grab(/Поставщик:\s*(.+)/)),
+    docNumber:    dash(grab(/№ счёта\/PO:\s*(.+)/)),
+    orderDate:    dash(grab(/Дата документа:\s*(.+)/)),
+    receivedDate: dash(grab(/Дата прихода:\s*(.+)/)),
+    amount:       grab(/Сумма:\s*฿?\s*([\d.,]+)/).replace(/[^\d.]/g, ""),
+    duplicate:    /уже есть в реестре/.test(text),
+  };
+}
+
 // ─── UI builders ─────────────────────────────────────────────────────────
 
-export function buildPOMessage(p: PendingPO): string {
+export function buildPOMessage(c: POCard): string {
   const lines = [
     `📄 <b>Purchase Order — проверь:</b>`,
     ``,
-    `🏭 <b>Поставщик:</b> ${p.supplier || "—"}`,
-    `🧾 <b>№ счёта/PO:</b> ${p.docNumber || "—"}`,
-    `📅 <b>Дата документа:</b> ${p.orderDate || "—"}`,
-    `📦 <b>Дата прихода:</b> ${p.receivedDate}`,
-    `💰 <b>Сумма:</b> ฿${p.amount || "—"}`,
+    `🏭 <b>Поставщик:</b> ${c.supplier || "—"}`,
+    `🧾 <b>№ счёта/PO:</b> ${c.docNumber || "—"}`,
+    `📅 <b>Дата документа:</b> ${c.orderDate || "—"}`,
+    `📦 <b>Дата прихода:</b> ${c.receivedDate}`,
+    `💰 <b>Сумма:</b> ฿${c.amount || "—"}`,
   ];
-  if (p.duplicate) lines.push(``, `⚠️ <b>Такой № уже есть в реестре</b>`);
+  if (c.duplicate) lines.push(``, `⚠️ <b>Такой № уже есть в реестре</b>`);
   return lines.join("\n");
 }
 
-export function buildPOKeyboard(duplicate = false): InlineKeyboard {
-  const kb = new InlineKeyboard();
-  if (duplicate) {
-    // Same № already archived — offer overwrite instead of a blind insert.
-    kb.text("♻️ Перезаписать", "po_overwrite")
-      .text("↔️ Это расход", "po_expense")
-      .row()
-      .text("✖ Отмена", "po_cancel");
-  } else {
-    kb.text("✅ Записать", "po_confirm")
-      .text("↔️ Это расход", "po_expense")
-      .row()
-      .text("✖ Отмена", "po_cancel");
-  }
-  return kb;
+// The scan is already uploaded when the card is shown; its object path rides in
+// the callback data so the confirm/overwrite/cancel/expense actions work even
+// after a bot restart (no in-memory state).
+export function buildPOKeyboard(duplicate: boolean, scanPath: string): InlineKeyboard {
+  const confirm = duplicate
+    ? { label: "♻️ Перезаписать", action: "po_overwrite" }
+    : { label: "✅ Записать", action: "po_confirm" };
+  return new InlineKeyboard()
+    .text(confirm.label, `${confirm.action}:${scanPath}`)
+    .text("↔️ Это расход", `po_expense:${scanPath}`)
+    .row()
+    .text("✖ Отмена", `po_cancel:${scanPath}`);
 }

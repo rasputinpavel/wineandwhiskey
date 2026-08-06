@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parsePOJSON, toISODate, buildPOMessage, type PendingPO } from "./po-parse.js";
+import { parsePOJSON, toISODate, buildPOMessage, parsePOFromMessage, type POCard } from "./po-parse.js";
+
+// Telegram returns message.text without the HTML bold tags — simulate that.
+const asDelivered = (html: string) => html.replace(/<\/?b>/g, "");
 
 describe("parsePOJSON", () => {
   it("parses a supplier PO", () => {
@@ -46,16 +49,12 @@ describe("toISODate", () => {
 });
 
 describe("buildPOMessage", () => {
-  const base: PendingPO = {
+  const base: POCard = {
     supplier: "Harvest",
     docNumber: "INV-8842",
     orderDate: "05.08.2026",
     receivedDate: "05.08.2026",
     amount: "24500",
-    note: "",
-    scanBase64: "",
-    scanMime: "image/jpeg",
-    uploadedBy: "Grace",
     duplicate: false,
   };
 
@@ -70,5 +69,39 @@ describe("buildPOMessage", () => {
   it("shows a duplicate warning only when flagged", () => {
     expect(buildPOMessage(base)).not.toContain("уже есть");
     expect(buildPOMessage({ ...base, duplicate: true })).toContain("уже есть");
+  });
+});
+
+describe("parsePOFromMessage", () => {
+  it("round-trips a card built by buildPOMessage", () => {
+    const card: POCard = {
+      supplier: "Italasia Trading",
+      docNumber: "IV0326080074",
+      orderDate: "03.08.2026",
+      receivedDate: "06.08.2026",
+      amount: "7049.16",
+      duplicate: false,
+    };
+    expect(parsePOFromMessage(asDelivered(buildPOMessage(card)))).toEqual(card);
+  });
+
+  it("recovers the duplicate flag from the warning line", () => {
+    const card: POCard = {
+      supplier: "Harvest", docNumber: "INV-8842", orderDate: "05.08.2026",
+      receivedDate: "06.08.2026", amount: "24500", duplicate: true,
+    };
+    expect(parsePOFromMessage(asDelivered(buildPOMessage(card)))).toEqual(card);
+  });
+
+  it("maps em-dash placeholders back to empty strings", () => {
+    const card: POCard = {
+      supplier: "", docNumber: "", orderDate: "",
+      receivedDate: "06.08.2026", amount: "", duplicate: false,
+    };
+    expect(parsePOFromMessage(asDelivered(buildPOMessage(card)))).toEqual(card);
+  });
+
+  it("returns null on unrelated text", () => {
+    expect(parsePOFromMessage("just some chat message")).toBeNull();
   });
 });

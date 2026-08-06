@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supabase, PO_BUCKET } from "./db.js";
-import { parsePOJSON, toISODate, type POExtraction, type PendingPO } from "./po-parse.js";
+import { parsePOJSON, toISODate, type POExtraction } from "./po-parse.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -8,14 +8,18 @@ const PO_PROMPT =
   `Перед тобой документ, пришедший с поставкой в винный магазин. ` +
   `Определи, это purchase order / инвойс / счёт от ПОСТАВЩИКА ` +
   `(а НЕ кассовый чек об оплате и НЕ квитанция расхода магазина). ` +
-  `Если это документ поставщика — извлеки поля: название поставщика, номер документа (PO/invoice №), ` +
-  `дату документа (DD.MM.YYYY) и итоговую сумму в THB (только число). ` +
+  `Если это документ поставщика — извлеки поля. ` +
+  `supplier — КРАТКОЕ торговое название компании на латинице/английском (например "Italasia Trading" или "Harvest"); ` +
+  `НЕ включай тайское написание, юридическую форму («Co., Ltd.», «บริษัท … จำกัด»), скобки, адрес и прочий текст; ` +
+  `если на документе есть только тайское название — дай его латинское написание. ` +
+  `doc_number — номер документа (PO / invoice №). order_date — дата документа (DD.MM.YYYY). ` +
+  `amount — итоговая сумма в THB (только число). ` +
   `Ответь ТОЛЬКО валидным JSON без markdown и пояснений. Пример документа поставщика: ` +
-  `{"is_po": true, "supplier": "Harvest", "doc_number": "INV-8842", "order_date": "05.08.2026", "amount": "24500"}. ` +
+  `{"is_po": true, "supplier": "Italasia Trading", "doc_number": "IV0326080074", "order_date": "03.08.2026", "amount": "7049.16"}. ` +
   `Если это НЕ документ поставщика: {"is_po": false}.`;
 
-// Ask Claude vision whether the photo is a supplier PO and extract its fields.
-// Returns null when it is not a PO (→ caller falls back to the expense flow).
+// Ask Claude vision whether the photo/document is a supplier PO and extract its
+// fields. Returns null when it is not a PO (→ caller falls back to expenses).
 export async function classifyAndExtractPO(
   base64: string,
   mime: "image/jpeg" | "image/png" | "application/pdf",
@@ -54,35 +58,81 @@ export async function isDuplicateDocNumber(docNumber: string): Promise<boolean> 
   return !!(data && data.length > 0);
 }
 
-// Upload the scan to the private bucket, then insert the row. If the DB insert
-// fails, the just-uploaded object is removed so we don't orphan it.
-export async function savePO(p: PendingPO, opts?: { overwrite?: boolean }): Promise<void> {
+function extOf(mime: string): string {
+  return mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : "jpg";
+}
+
+// Upload the scan the moment the card is shown, so the bytes are safely
+// persisted before the user confirms. The confirm step then only needs the
+// object path, which rides in the callback data and survives a bot restart.
+export async function uploadScan(
+  base64: string,
+  mime: "image/jpeg" | "image/png" | "application/pdf",
+): Promise<string> {
+  if (!supabase) throw new Error("Supabase не подключён (SUPABASE_URL/SUPABASE_SERVICE_KEY).");
+  const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  const path = `scans/${token}.${extOf(mime)}`;
+  const buffer = Buffer.from(base64, "base64");
+  const up = await supabase.storage.from(PO_BUCKET).upload(path, buffer, { contentType: mime, upsert: false });
+  if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
+  return path;
+}
+
+// Best-effort delete of a scan object (cancel, or "это расход").
+export async function deleteScan(path: string): Promise<void> {
+  if (!supabase || !path) return;
+  try {
+    await supabase.storage.from(PO_BUCKET).remove([path]);
+  } catch (e) {
+    console.error("po_scans deleteScan failed:", e);
+  }
+}
+
+// Fetch a scan's bytes back — used by the "это расход" fallback, which needs the
+// image to hand to the expense flow. Returns null on any failure.
+export async function downloadScan(
+  path: string,
+): Promise<{ base64: string; mime: "image/jpeg" | "image/png" | "application/pdf" } | null> {
+  if (!supabase || !path) return null;
+  const { data, error } = await supabase.storage.from(PO_BUCKET).download(path);
+  if (error || !data) return null;
+  const buf = Buffer.from(await data.arrayBuffer());
+  const mime = path.endsWith(".pdf") ? "application/pdf" : path.endsWith(".png") ? "image/png" : "image/jpeg";
+  return { base64: buf.toString("base64"), mime: mime as "image/jpeg" | "image/png" | "application/pdf" };
+}
+
+export type POFields = {
+  supplier: string;
+  docNumber: string;
+  orderDate: string;    // DD.MM.YYYY or ""
+  receivedDate: string; // DD.MM.YYYY
+  amount: string;       // digits only, or ""
+  uploadedBy: string;
+};
+
+// Write the row for an already-uploaded scan. Insert, or (overwrite) update the
+// existing row with the same doc_number — preserving the portal-entered note —
+// then drop the stale scan file(s).
+export async function commitPO(
+  f: POFields,
+  scanPath: string,
+  opts?: { overwrite?: boolean },
+): Promise<void> {
   if (!supabase) throw new Error("Supabase не подключён (SUPABASE_URL/SUPABASE_SERVICE_KEY).");
   const db = supabase;
 
-  const ext =
-    p.scanMime === "application/pdf" ? "pdf" :
-    p.scanMime === "image/png"       ? "png" : "jpg";
-  const safeSupplier =
-    (p.supplier || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
-    "unknown";
-  const safeDoc = (p.docNumber || "no-number").replace(/[^A-Za-z0-9._-]+/g, "-");
-  const path = `${safeSupplier}/${safeDoc}_${Date.now()}.${ext}`;
-  const buffer = Buffer.from(p.scanBase64, "base64");
-
   const record = {
-    supplier: p.supplier || null,
-    supplier_raw: p.supplier || null,
-    doc_number: p.docNumber || null,
-    order_date: toISODate(p.orderDate),
-    received_date: toISODate(p.receivedDate),
-    amount_total: p.amount ? Number(p.amount) : null,
-    scan_path: path,
-    note: p.note || null,
-    uploaded_by: p.uploadedBy || null,
+    supplier: f.supplier || null,
+    supplier_raw: f.supplier || null,
+    doc_number: f.docNumber || null,
+    order_date: toISODate(f.orderDate),
+    received_date: toISODate(f.receivedDate),
+    amount_total: f.amount ? Number(f.amount) : null,
+    scan_path: scanPath,
+    note: null as string | null,
+    uploaded_by: f.uploadedBy || null,
   };
 
-  // Best-effort scan cleanup; never let a failed remove mask the real DB error.
   const removeQuietly = async (paths: string[]) => {
     if (!paths.length) return;
     try {
@@ -92,36 +142,29 @@ export async function savePO(p: PendingPO, opts?: { overwrite?: boolean }): Prom
     }
   };
 
-  const up = await db.storage
-    .from(PO_BUCKET)
-    .upload(path, buffer, { contentType: p.scanMime, upsert: false });
-  if (up.error) throw new Error(`Storage upload failed: ${up.error.message}`);
-
-  // Overwrite an existing PO with the same doc_number: update its row + scan,
-  // but preserve the human-entered `note` (edited on the portal). Then drop the
-  // stale scan file(s).
-  if (opts?.overwrite && p.docNumber) {
+  if (opts?.overwrite && f.docNumber) {
     const { data: existing } = await db
       .from("po_scans")
       .select("scan_path")
-      .eq("doc_number", p.docNumber);
+      .eq("doc_number", f.docNumber);
 
+    // Preserve the human-entered note on overwrite (edited on the portal).
     const { note: _note, ...updateFields } = record;
-    const upd = await db.from("po_scans").update(updateFields).eq("doc_number", p.docNumber);
+    const upd = await db.from("po_scans").update(updateFields).eq("doc_number", f.docNumber);
     if (upd.error) {
-      await removeQuietly([path]);
+      await removeQuietly([scanPath]);
       throw new Error(`DB update failed: ${upd.error.message}`);
     }
     const stale = (existing ?? [])
       .map((r: { scan_path: string | null }) => r.scan_path)
-      .filter((s): s is string => !!s && s !== path);
+      .filter((s): s is string => !!s && s !== scanPath);
     await removeQuietly(stale);
     return;
   }
 
   const ins = await db.from("po_scans").insert(record);
   if (ins.error) {
-    await removeQuietly([path]);
+    await removeQuietly([scanPath]);
     throw new Error(`DB insert failed: ${ins.error.message}`);
   }
 }
