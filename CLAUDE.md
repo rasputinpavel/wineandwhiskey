@@ -44,7 +44,7 @@ These rules apply to all work in this repo. Follow them strictly. If a new file 
 | Brand assets | `04_brand/` | design-system.md, tokens, logo/, references/ |
 | Social posts & campaigns | `05_creative/social/` | Subdirectory per campaign or date |
 | Product photography | `05_creative/catalog/` | |
-| Generated exports | `05_creative/output/` | Filename must include date: `topic_YYYY-MM.ext` |
+| Generated exports | `05_creative/output/` | Date-first so newest sorts to top: folders `YYYY-MM-DD_topic/` (or `YYYY-MM_topic/`), files `YYYY-MM-DD_topic.ext` |
 | Wine knowledge notes | `06_knowledge/wine/` | Concepts, regions, styles in markdown |
 | Партнёры | `07_contacts/partners/<slug>/` | profile.md + contracts/ + programs.md + notes/ |
 | Сотрудники | `07_contacts/team/<slug>/` | profile.md + compensation.md + notes/ |

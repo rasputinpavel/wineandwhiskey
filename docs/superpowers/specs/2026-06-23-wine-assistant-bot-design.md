@@ -1,4 +1,4 @@
-# Wine Assistant Bot («Алан») — Design
+давай# Wine Assistant Bot («Алан») — Design
 
 **Date:** 2026-06-23
 **Status:** Approved (design); implementation plan pending
