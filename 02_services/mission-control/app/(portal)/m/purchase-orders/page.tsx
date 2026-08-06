@@ -1,10 +1,16 @@
+import { Fragment } from 'react'
 import { sbPublic, type PoScan } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { signScanUrls } from '@/lib/po/scans'
 
 export const dynamic = 'force-dynamic'
 
-type SearchParams = { q?: string; from?: string; to?: string }
+type SearchParams = { q?: string; month?: string }
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 // Render a 'YYYY-MM-DD' date as DD.MM.YYYY; pass through anything else.
 function fmtD(d: string | null): string {
@@ -17,6 +23,23 @@ function fmtAmount(n: number | null): string {
   return n == null ? '—' : `฿${Math.round(n).toLocaleString('en-US')}`
 }
 
+// The month a PO belongs to — by document date, falling back to received date
+// then upload time so a row without an order_date still lands somewhere sane.
+function monthKey(r: PoScan): string {
+  const d = r.order_date ?? r.received_date ?? r.created_at ?? ''
+  return d.slice(0, 7) // 'YYYY-MM'
+}
+
+function sortDate(r: PoScan): string {
+  return r.order_date ?? r.received_date ?? r.created_at ?? ''
+}
+
+function monthLabel(key: string): string {
+  const m = key.match(/^(\d{4})-(\d{2})/)
+  if (!m) return 'Undated'
+  return `${MONTHS[Number(m[2]) - 1]} ${m[1]}`
+}
+
 export default async function PurchaseOrdersPage({
   searchParams,
 }: {
@@ -24,22 +47,27 @@ export default async function PurchaseOrdersPage({
 }) {
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
-  const from = (sp.from ?? '').trim()
-  const to = (sp.to ?? '').trim()
+  const month = (sp.month ?? '').trim() // 'YYYY-MM' from <input type="month">
 
   let query = sbPublic
     .from('po_scans')
     .select('*')
-    .order('received_date', { ascending: false })
+    .order('order_date', { ascending: false, nullsFirst: false })
     .limit(500)
 
-  // `q` is interpolated into PostgREST's .or() mini-language, where , ( ) * %
-  // are metacharacters. Strip them so a comma/paren in the search box can't
-  // break the filter or inject extra conditions (sbPublic bypasses RLS).
-  const qFilter = q.replace(/[,()*%\\]/g, ' ').trim()
-  if (qFilter) query = query.or(`supplier.ilike.%${qFilter}%,doc_number.ilike.%${qFilter}%`)
-  if (from) query = query.gte('order_date', from)
-  if (to) query = query.lte('order_date', to)
+  if (q) {
+    // Strip PostgREST .or() metachars so a comma/paren can't break the filter.
+    const qFilter = q.replace(/[,()*%\\]/g, ' ').trim()
+    if (qFilter) query = query.or(`supplier.ilike.%${qFilter}%,doc_number.ilike.%${qFilter}%`)
+  }
+
+  const monthOk = /^\d{4}-\d{2}$/.test(month)
+  if (monthOk) {
+    const start = `${month}-01`
+    const [y, m] = month.split('-').map(Number)
+    const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+    query = query.gte('order_date', start).lt('order_date', next)
+  }
 
   const { data, error } = await query
   if (error) {
@@ -50,8 +78,16 @@ export default async function PurchaseOrdersPage({
     )
   }
 
-  const rows = (data ?? []) as PoScan[]
+  const rows = ((data ?? []) as PoScan[]).sort((a, b) => {
+    const ka = monthKey(a), kb = monthKey(b)
+    if (ka !== kb) return ka < kb ? 1 : -1 // month desc
+    return sortDate(a) < sortDate(b) ? 1 : -1 // within month, date desc
+  })
+
   const urls = await signScanUrls(rows.map((r) => r.scan_path))
+
+  // Show month separators only when browsing all months (no month filter).
+  const grouped = !monthOk
 
   return (
     <div className="p-6 space-y-4">
@@ -74,26 +110,22 @@ export default async function PurchaseOrdersPage({
           />
         </label>
         <label className="flex flex-col text-xs text-neutral-500">
-          From (order date)
+          Month
           <input
-            type="date"
-            name="from"
-            defaultValue={from}
-            className="mt-1 rounded border border-neutral-300 px-2 py-1 text-sm"
-          />
-        </label>
-        <label className="flex flex-col text-xs text-neutral-500">
-          To
-          <input
-            type="date"
-            name="to"
-            defaultValue={to}
+            type="month"
+            name="month"
+            defaultValue={monthOk ? month : ''}
             className="mt-1 rounded border border-neutral-300 px-2 py-1 text-sm"
           />
         </label>
         <button type="submit" className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white">
           Apply
         </button>
+        {(q || monthOk) && (
+          <a href="/m/purchase-orders" className="px-2 py-1.5 text-sm text-neutral-500 underline">
+            Reset
+          </a>
+        )}
       </form>
 
       <div className="overflow-x-auto">
@@ -113,30 +145,43 @@ export default async function PurchaseOrdersPage({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-6 text-center text-neutral-400">
-                  No purchase orders yet.
+                  No purchase orders {monthOk ? 'this month' : 'yet'}.
                 </td>
               </tr>
             )}
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const url = urls.get(r.scan_path)
+              const showHeader = grouped && (i === 0 || monthKey(r) !== monthKey(rows[i - 1]))
               return (
-                <tr key={r.id} className="border-b border-neutral-100">
-                  <td className="py-2 pr-4 font-medium">{r.supplier ?? '—'}</td>
-                  <td className="py-2 pr-4">{r.doc_number ?? '—'}</td>
-                  <td className="py-2 pr-4">{fmtD(r.order_date)}</td>
-                  <td className="py-2 pr-4">{fmtD(r.received_date)}</td>
-                  <td className="py-2 pr-4 text-right">{fmtAmount(r.amount_total)}</td>
-                  <td className="py-2 pr-4">
-                    {url ? (
-                      <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                        open ↗
-                      </a>
-                    ) : (
-                      <span className="text-neutral-400">—</span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-neutral-500">{r.uploaded_by ?? '—'}</td>
-                </tr>
+                <Fragment key={r.id}>
+                  {showHeader && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="pt-5 pb-1 text-sm font-semibold text-neutral-700 border-b border-neutral-200"
+                      >
+                        {monthLabel(monthKey(r))}
+                      </td>
+                    </tr>
+                  )}
+                  <tr className="border-b border-neutral-100">
+                    <td className="py-2 pr-4 font-medium">{r.supplier ?? '—'}</td>
+                    <td className="py-2 pr-4">{r.doc_number ?? '—'}</td>
+                    <td className="py-2 pr-4">{fmtD(r.order_date)}</td>
+                    <td className="py-2 pr-4">{fmtD(r.received_date)}</td>
+                    <td className="py-2 pr-4 text-right">{fmtAmount(r.amount_total)}</td>
+                    <td className="py-2 pr-4">
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                          open ↗
+                        </a>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 text-neutral-500">{r.uploaded_by ?? '—'}</td>
+                  </tr>
+                </Fragment>
               )
             })}
           </tbody>
