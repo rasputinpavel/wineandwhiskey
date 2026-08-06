@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import { sbPublic, type PoScan } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { signScanUrls } from '@/lib/po/scans'
+import { NoteCell } from '@/components/modules/po/NoteCell'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,7 +139,7 @@ export default async function PurchaseOrdersPage({
               <th className="py-2 pr-4">Received</th>
               <th className="py-2 pr-4 text-right">Total</th>
               <th className="py-2 pr-4">Scan</th>
-              <th className="py-2 pr-4">By</th>
+              <th className="py-2 pr-4">Note</th>
             </tr>
           </thead>
           <tbody>
@@ -179,7 +180,9 @@ export default async function PurchaseOrdersPage({
                         <span className="text-neutral-400">—</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4 text-neutral-500">{r.uploaded_by ?? '—'}</td>
+                    <td className="py-2 pr-4">
+                      <NoteCell scanId={r.id} initial={r.note} />
+                    </td>
                   </tr>
                 </Fragment>
               )
