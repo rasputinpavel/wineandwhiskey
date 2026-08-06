@@ -36,3 +36,22 @@ flow-real-*.png
 # Throwaway scratch dir for debug artifacts, probe scripts, etc.
 .tmp/
 
+# Landing zone — incoming materials (supplier catalogs, screenshots, audio).
+# Temporary, not knowledge/output — never commit.
+.inbox/
+
+# Heavy binary media — keep the repo lean. Creative deliverables are HTML/PNG
+# committed via the creative pipeline; raw video/audio/archives stay out.
+*.mp4
+*.mov
+*.m4a
+*.mp3
+*.zip
+
+# Creative working intermediates (montage frames, scratch renders).
+**/montage_work/
+
+# Supabase CLI temp + Next.js generated env typings.
+**/supabase/.temp/
+next-env.d.ts
+
