@@ -24,6 +24,20 @@ export type POCard = {
 
 // ─── Parsing ─────────────────────────────────────────────────────────────
 
+// Thai suppliers (e.g. HJ Winery) print the document date in the Buddhist Era
+// calendar: BE = CE + 543, so "03.08.2569" means 03.08.2026. The vision model
+// extracts the year exactly as printed, which lands a phantom "August 2569" in
+// the register. Fold any implausibly-large year back to Gregorian. The 2200
+// threshold sits far above any real order year (~2020s) and far below any BE
+// year we'd see (~2560s), so a genuine Gregorian date is never touched.
+export function normalizeBuddhistDate(ddmmyyyy: string): string {
+  const m = ddmmyyyy.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!m) return ddmmyyyy;
+  const year = Number(m[3]);
+  if (year < 2200) return ddmmyyyy;
+  return `${m[1]}.${m[2]}.${year - 543}`;
+}
+
 // Parse the vision model's JSON. Returns null when the image is NOT a supplier
 // PO (is_po false/absent) or the text isn't valid JSON.
 export function parsePOJSON(raw: string): POExtraction | null {
@@ -34,7 +48,7 @@ export function parsePOJSON(raw: string): POExtraction | null {
     return {
       supplier: j.supplier ? String(j.supplier).trim() : "",
       docNumber: j.doc_number ? String(j.doc_number).trim() : "",
-      orderDate: j.order_date ? String(j.order_date).trim() : "",
+      orderDate: j.order_date ? normalizeBuddhistDate(String(j.order_date).trim()) : "",
       amount: j.amount ? String(j.amount).replace(/[^\d.]/g, "") : "",
     };
   } catch {

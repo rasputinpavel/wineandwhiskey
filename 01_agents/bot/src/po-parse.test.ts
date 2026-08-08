@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePOJSON, toISODate, buildPOMessage, parsePOFromMessage, type POCard } from "./po-parse.js";
+import { parsePOJSON, toISODate, normalizeBuddhistDate, buildPOMessage, parsePOFromMessage, type POCard } from "./po-parse.js";
 
 // Telegram returns message.text without the HTML bold tags — simulate that.
 const asDelivered = (html: string) => html.replace(/<\/?b>/g, "");
@@ -35,6 +35,24 @@ describe("parsePOJSON", () => {
 
   it("returns null on garbage", () => {
     expect(parsePOJSON("not json")).toBeNull();
+  });
+
+  it("folds a Thai Buddhist-Era order date to Gregorian (HJ Winery)", () => {
+    const raw = '{"is_po": true, "supplier": "HJ Winery", "doc_number": "HJ2608004", "order_date": "03.08.2569", "amount": "17800"}';
+    expect(parsePOJSON(raw)?.orderDate).toBe("03.08.2026");
+  });
+});
+
+describe("normalizeBuddhistDate", () => {
+  it("converts a Buddhist-Era year to Gregorian", () => {
+    expect(normalizeBuddhistDate("03.08.2569")).toBe("03.08.2026");
+  });
+  it("leaves a Gregorian date untouched", () => {
+    expect(normalizeBuddhistDate("05.08.2026")).toBe("05.08.2026");
+  });
+  it("passes through empty or malformed input unchanged", () => {
+    expect(normalizeBuddhistDate("")).toBe("");
+    expect(normalizeBuddhistDate("5/8/26")).toBe("5/8/26");
   });
 });
 
