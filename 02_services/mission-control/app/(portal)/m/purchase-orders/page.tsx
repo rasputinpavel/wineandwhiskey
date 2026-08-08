@@ -2,26 +2,41 @@ import { Fragment } from 'react'
 import { sbPublic, type PoScan } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { signScanUrls } from '@/lib/po/scans'
-import { NoteCell } from '@/components/modules/po/NoteCell'
+import { PoRow } from '@/components/modules/po/PoRow'
 
 export const dynamic = 'force-dynamic'
 
-type SearchParams = { q?: string; month?: string }
+type SearchParams = { q?: string; month?: string; sort?: string; dir?: string }
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-// Render a 'YYYY-MM-DD' date as DD.MM.YYYY; pass through anything else.
-function fmtD(d: string | null): string {
-  if (!d) return '—'
-  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : d
+// Sortable columns → the value each row sorts by. When a sort is active the
+// month grouping is switched off (a cross-month ordering has no month buckets).
+const SORTS: Record<string, (r: PoScan) => string | number | null> = {
+  supplier: (r) => r.supplier?.toLowerCase() ?? null,
+  doc_number: (r) => r.doc_number ?? null,
+  order_date: (r) => r.order_date ?? null,
+  received_date: (r) => r.received_date ?? null,
+  amount_total: (r) => r.amount_total,
 }
 
-function fmtAmount(n: number | null): string {
-  return n == null ? '—' : `฿${Math.round(n).toLocaleString('en-US')}`
+const COLUMNS: { key: string; label: string; align?: 'right' }[] = [
+  { key: 'supplier', label: 'Supplier' },
+  { key: 'doc_number', label: '№' },
+  { key: 'order_date', label: 'Order date' },
+  { key: 'received_date', label: 'Received' },
+  { key: 'amount_total', label: 'Total', align: 'right' },
+]
+
+// asc comparator; blanks/nulls are partitioned out beforehand so they always
+// stay last regardless of direction.
+function cmpVals(a: string | number | null, b: string | number | null): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  const sa = String(a), sb = String(b)
+  return sa < sb ? -1 : sa > sb ? 1 : 0
 }
 
 // The month a PO belongs to — by document date, falling back to received date
@@ -49,6 +64,9 @@ export default async function PurchaseOrdersPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const month = (sp.month ?? '').trim() // 'YYYY-MM' from <input type="month">
+  const sort = (sp.sort ?? '').trim()
+  const dir = sp.dir === 'asc' ? 'asc' : 'desc'
+  const sortOk = sort in SORTS
 
   let query = sbPublic
     .from('po_scans')
@@ -79,23 +97,46 @@ export default async function PurchaseOrdersPage({
     )
   }
 
-  const rows = ((data ?? []) as PoScan[]).sort((a, b) => {
-    const ka = monthKey(a), kb = monthKey(b)
-    if (ka !== kb) return ka < kb ? 1 : -1 // month desc
-    return sortDate(a) < sortDate(b) ? 1 : -1 // within month, date desc
-  })
+  const all = (data ?? []) as PoScan[]
+  let rows: PoScan[]
+  if (sortOk) {
+    const val = SORTS[sort]
+    const blank = (v: string | number | null) => v == null || v === ''
+    const filled = all.filter((r) => !blank(val(r)))
+    const blanks = all.filter((r) => blank(val(r)))
+    filled.sort((a, b) => cmpVals(val(a), val(b)))
+    if (dir === 'desc') filled.reverse()
+    rows = [...filled, ...blanks] // blanks always last
+  } else {
+    rows = all.sort((a, b) => {
+      const ka = monthKey(a), kb = monthKey(b)
+      if (ka !== kb) return ka < kb ? 1 : -1 // month desc
+      return sortDate(a) < sortDate(b) ? 1 : -1 // within month, date desc
+    })
+  }
 
   const urls = await signScanUrls(rows.map((r) => r.scan_path))
 
-  // Show month separators only when browsing all months (no month filter).
-  const grouped = !monthOk
+  // Show month separators only in the default view — no month filter, no sort.
+  const grouped = !monthOk && !sortOk
+
+  // Build a header link that toggles this column's direction, preserving the
+  // active search/month filter. First click on a column sorts ascending.
+  const sortHref = (col: string) => {
+    const p = new URLSearchParams()
+    if (q) p.set('q', q)
+    if (monthOk) p.set('month', month)
+    p.set('sort', col)
+    p.set('dir', sortOk && sort === col && dir === 'asc' ? 'desc' : 'asc')
+    return `/m/purchase-orders?${p.toString()}`
+  }
 
   return (
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Purchase Orders</h1>
         <p className="text-sm text-neutral-500">
-          Scanned supplier POs. Search by supplier or document number; open a scan to retrieve the copy.
+          Scanned supplier POs. Search by supplier or document number; click a column to sort, ✎ to correct a row, open a scan to retrieve the copy.
         </p>
       </div>
 
@@ -122,7 +163,7 @@ export default async function PurchaseOrdersPage({
         <button type="submit" className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white">
           Apply
         </button>
-        {(q || monthOk) && (
+        {(q || monthOk || sortOk) && (
           <a href="/m/purchase-orders" className="px-2 py-1.5 text-sm text-neutral-500 underline">
             Reset
           </a>
@@ -133,57 +174,48 @@ export default async function PurchaseOrdersPage({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-neutral-500">
-              <th className="py-2 pr-4">Supplier</th>
-              <th className="py-2 pr-4">№</th>
-              <th className="py-2 pr-4">Order date</th>
-              <th className="py-2 pr-4">Received</th>
-              <th className="py-2 pr-4 text-right">Total</th>
+              {COLUMNS.map((c) => {
+                const active = sortOk && sort === c.key
+                const arrow = active ? (dir === 'asc' ? ' ↑' : ' ↓') : ''
+                return (
+                  <th key={c.key} className={`py-2 pr-4${c.align === 'right' ? ' text-right' : ''}`}>
+                    <a
+                      href={sortHref(c.key)}
+                      className={`hover:text-neutral-800 hover:underline ${active ? 'text-neutral-800 font-medium' : ''}`}
+                    >
+                      {c.label}{arrow}
+                    </a>
+                  </th>
+                )
+              })}
               <th className="py-2 pr-4">Scan</th>
               <th className="py-2 pr-4">Note</th>
+              <th className="py-2 pr-4"></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-neutral-400">
+                <td colSpan={8} className="py-6 text-center text-neutral-400">
                   No purchase orders {monthOk ? 'this month' : 'yet'}.
                 </td>
               </tr>
             )}
             {rows.map((r, i) => {
-              const url = urls.get(r.scan_path)
               const showHeader = grouped && (i === 0 || monthKey(r) !== monthKey(rows[i - 1]))
               return (
                 <Fragment key={r.id}>
                   {showHeader && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="pt-5 pb-1 text-sm font-semibold text-neutral-700 border-b border-neutral-200"
                       >
                         {monthLabel(monthKey(r))}
                       </td>
                     </tr>
                   )}
-                  <tr className="border-b border-neutral-100">
-                    <td className="py-2 pr-4 font-medium">{r.supplier ?? '—'}</td>
-                    <td className="py-2 pr-4">{r.doc_number ?? '—'}</td>
-                    <td className="py-2 pr-4">{fmtD(r.order_date)}</td>
-                    <td className="py-2 pr-4">{fmtD(r.received_date)}</td>
-                    <td className="py-2 pr-4 text-right">{fmtAmount(r.amount_total)}</td>
-                    <td className="py-2 pr-4">
-                      {url ? (
-                        <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                          open ↗
-                        </a>
-                      ) : (
-                        <span className="text-neutral-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <NoteCell scanId={r.id} initial={r.note} />
-                    </td>
-                  </tr>
+                  <PoRow row={r} scanUrl={urls.get(r.scan_path)} />
                 </Fragment>
               )
             })}
