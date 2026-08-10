@@ -19,7 +19,6 @@ const SORTS: Record<string, (r: PoScan) => string | number | null> = {
   supplier: (r) => r.supplier?.toLowerCase() ?? null,
   doc_number: (r) => r.doc_number ?? null,
   order_date: (r) => r.order_date ?? null,
-  received_date: (r) => r.received_date ?? null,
   amount_total: (r) => r.amount_total,
 }
 
@@ -27,7 +26,6 @@ const COLUMNS: { key: string; label: string; align?: 'right' }[] = [
   { key: 'supplier', label: 'Supplier' },
   { key: 'doc_number', label: '№' },
   { key: 'order_date', label: 'Order date' },
-  { key: 'received_date', label: 'Received' },
   { key: 'amount_total', label: 'Total', align: 'right' },
 ]
 
@@ -132,7 +130,10 @@ export default async function PurchaseOrdersPage({
   }
 
   return (
-    <div className="p-6 space-y-4">
+    // This route has no module layout, so it must provide its own vertical
+    // scroll: the AppShell content column is `h-screen overflow-hidden`, and a
+    // plain padded div would clip the list instead of scrolling it.
+    <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Purchase Orders</h1>
         <p className="text-sm text-neutral-500">
@@ -196,7 +197,7 @@ export default async function PurchaseOrdersPage({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-6 text-center text-neutral-400">
+                <td colSpan={7} className="py-6 text-center text-neutral-400">
                   No purchase orders {monthOk ? 'this month' : 'yet'}.
                 </td>
               </tr>
@@ -208,7 +209,7 @@ export default async function PurchaseOrdersPage({
                   {showHeader && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={7}
                         className="pt-5 pb-1 text-sm font-semibold text-neutral-700 border-b border-neutral-200"
                       >
                         {monthLabel(monthKey(r))}

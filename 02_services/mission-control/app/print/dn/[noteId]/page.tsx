@@ -26,7 +26,8 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
     .eq('note_id', noteId)
     .order('id')
 
-  const rows = (lines ?? []) as any[]
+  const rows = ((lines ?? []) as any[]).sort((a, b) =>
+    (a.sku?.name ?? '').localeCompare(b.sku?.name ?? '', undefined, { sensitivity: 'base' }))
   const totalQty = rows.reduce((s, l) => s + Number(l.qty || 0), 0)
   const subtotal = rows.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unit_price || 0), 0)
   const withVat  = (note as any).with_vat !== false

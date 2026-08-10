@@ -103,6 +103,17 @@ export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial 
   const vat   = addVat ? subtotal * VAT_RATE : 0
   const total = subtotal + vat
 
+  // Display order: alphabetical by wine name (A→Z). Blank/unpicked lines stay
+  // at the bottom so a freshly added row doesn't jump to the top. Editing is
+  // wired by `key`, so re-ordering the view never touches the wrong line.
+  const shownLines = [...lines].sort((a, b) => {
+    const an = a.sku_name ?? '', bn = b.sku_name ?? ''
+    if (!an && !bn) return a.key - b.key
+    if (!an) return 1
+    if (!bn) return -1
+    return an.localeCompare(bn, undefined, { sensitivity: 'base' })
+  })
+
   return (
     <form onSubmit={e => { e.preventDefault(); save() }} className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
@@ -139,7 +150,7 @@ export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial 
               </tr>
             </thead>
             <tbody>
-              {lines.map(l => {
+              {shownLines.map(l => {
                 const lineTotal = Number(l.qty || 0) * Number(l.unit_price || 0)
                 return (
                   <tr key={l.key} className="border-b border-pale-stone/40 last:border-0 align-top">

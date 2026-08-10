@@ -83,7 +83,6 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
         <td className="py-2 pr-4 font-medium">{row.supplier ?? '—'}</td>
         <td className="py-2 pr-4">{row.doc_number ?? '—'}</td>
         <td className="py-2 pr-4">{fmtD(row.order_date)}</td>
-        <td className="py-2 pr-4">{fmtD(row.received_date)}</td>
         <td className="py-2 pr-4 text-right">{fmtAmount(row.amount_total)}</td>
         <td className="py-2 pr-4">{scanCell}</td>
         <td className="py-2 pr-4"><NoteCell scanId={row.id} initial={row.note} /></td>
@@ -110,9 +109,6 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
       </td>
       <td className="py-2 pr-4">
         <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} disabled={saving} className={input} />
-      </td>
-      <td className="py-2 pr-4">
-        <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} disabled={saving} className={input} />
       </td>
       <td className="py-2 pr-4 text-right">
         <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={saving} className={`w-24 text-right ${input}`} />
