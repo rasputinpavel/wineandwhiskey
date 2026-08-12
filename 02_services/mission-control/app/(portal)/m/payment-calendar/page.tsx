@@ -1,11 +1,14 @@
 import Link from 'next/link'
-import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice } from '@/lib/supabase'
+import { sbInventory, sbPublic, type PurchaseOrder, type Supplier, type FlowInvoice, type FixedCost, type MandatoryActual, type RollingBigPayment } from '@/lib/supabase'
 import { MonthStrip } from '@/components/modules/payment-calendar/MonthStrip'
 import { Timeline, type CalRow, type Dir, type Status } from '@/components/modules/payment-calendar/Timeline'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { fmtDate } from '@/lib/fmt'
 import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
+import { buildFixedRows, buildBigRows, type CalMode } from '@/lib/payment-calendar-out'
+import { getReceiptHistory } from '@/lib/receipts-cache'
+import { daysInMonth } from '@/lib/mandatory'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +87,48 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
   const supType  = (n: string | null): Supplier['type'] => supByName.get((n ?? '').trim().toLowerCase())?.type ?? 'regular'
   const supTerms = (n: string | null): number          => supByName.get((n ?? '').trim().toLowerCase())?.terms ?? 0
 
+  // ── OUT: постоянные расходы (fixed_cost) + Big-разовые ──────────────────
+  const curYM = today.slice(0, 7)
+  const nextYM = (() => { const [y, m] = curYM.split('-').map(Number); const d = new Date(Date.UTC(y, m, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}` })()
+  const ovPeriods = month ? [month] : [curYM, nextYM]
+
+  const [fcRes, ovRes, bigRes] = await Promise.all([
+    sbInventory.from('fixed_cost').select('*'),
+    sbInventory.from('mandatory_actual').select('*').in('period', ovPeriods),
+    sbInventory.from('rolling_big_payment').select('*'),   // tolerate absence (migration 026)
+  ])
+  if (fcRes.error) return <div className="p-6"><SchemaError error={fcRes.error.message} /></div>
+  if (ovRes.error) return <div className="p-6"><SchemaError error={ovRes.error.message} /></div>
+  const fixedCosts = (fcRes.data ?? []) as FixedCost[]
+  const overrides = (ovRes.data ?? []) as MandatoryActual[]
+  const bigPayments = (bigRes.data ?? []) as RollingBigPayment[]
+
+  // Revenue for %-obligations (Taxes 3.5%, Bonuses 1%): actual for closed months,
+  // trailing-7d retail run-rate × month length for current/future — same as Rolling.
+  let avgRetailPerDay = 0
+  const monthlyActual = new Map<string, number>()
+  try {
+    const receipts = await getReceiptHistory()
+    const start = (() => { const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 6); return d.toISOString().slice(0, 10) })()
+    let sum = 0
+    for (const r of receipts) {
+      const signed = (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total)
+      const d = r.receipt_date.slice(0, 10)
+      if (!r.is_b2b && d >= start && d <= today) sum += signed
+      const ym = r.receipt_date.slice(0, 7)
+      monthlyActual.set(ym, (monthlyActual.get(ym) ?? 0) + signed)
+    }
+    avgRetailPerDay = Math.max(0, sum / 7)
+  } catch { avgRetailPerDay = 0 }
+  const curMonth = today.slice(0, 7)
+  const revenueOf = (period: string) => period < curMonth
+    ? (monthlyActual.get(period) ?? 0)
+    : avgRetailPerDay * daysInMonth(period)
+
+  const calMode: CalMode = month ? { view: 'month', month, today } : { view: 'open', today }
+  const outFixed = buildFixedRows(fixedCosts, overrides, revenueOf, calMode)
+  const outBig = buildBigRows(bigPayments, calMode)
+
   // Что попадает в OUT-таймлайн:
   //   • force-exclude (cashflow_override) — никогда;
   //   • консигнация (Harvest/Cigar Empire) — settlement-PO = реальный платёж, но
@@ -156,10 +201,12 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
     rows = [
       ...outOpen.filter(r => inMonth(r.date)),
       ...outPaid,                                  // уже отфильтрованы по paid_at месяца
+      ...outFixed,
+      ...outBig,
       ...inOpen.filter(r => inMonth(r.date)),
     ]
   } else {
-    rows = [...outOpen, ...inOpen]
+    rows = [...outOpen, ...outFixed, ...outBig, ...inOpen]
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || (a.dir === b.dir ? 0 : a.dir === 'out' ? -1 : 1))
   let net = 0
