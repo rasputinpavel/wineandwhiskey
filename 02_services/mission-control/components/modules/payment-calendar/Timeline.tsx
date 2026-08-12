@@ -22,6 +22,7 @@ export type CalRow = {
   net: number             // бегущий нетто, проставляется после сортировки
   po?: PurchaseOrder      // OUT: для инлайн-ячеек paid_at / docs
   inv?: { status: string; detailUrl: string | null }  // IN: для статуса/ссылки
+  big?: { id: string; paid: boolean }  // OUT: big one-off payment (rolling.big_payments)
 }
 
 // Единый нетто-таймлайн. Клиентский, чтобы управлять анимацией строки при оплате.
