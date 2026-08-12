@@ -93,7 +93,7 @@ export function Timeline({ rows, today, isOpenView }: {
                       ? <a href={r.href} target="_blank" rel="noreferrer" className="hover:underline">{r.label}</a>
                       : r.label}
                   </td>
-                  <td className="py-2 px-4 whitespace-nowrap">{r.who}</td>
+                  <td className="py-2 px-4 whitespace-nowrap">{r.who}<TypeBadge r={r} /></td>
                   <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap text-wine-red">
                     {r.dir === 'out' ? `฿${fmt(r.amount)}` : ''}
                   </td>
@@ -141,6 +141,15 @@ function InvoiceStatus({ status, overdue, detailUrl }: { status: string; overdue
       {detailUrl && <a href={detailUrl} target="_blank" rel="noreferrer" className="text-[11px] text-graphite hover:text-wine-red">↗</a>}
     </span>
   )
+}
+
+function TypeBadge({ r }: { r: CalRow }) {
+  const meta = r.dir === 'in' ? null
+    : r.fixed ? { t: 'Постоянное', cls: 'bg-amber-gold/10 text-deep-black border-amber-gold/40' }
+    : r.big   ? { t: 'Разовое',    cls: 'bg-wine-red/10 text-wine-red border-wine-red/40' }
+    :           { t: 'Поставщик',  cls: 'bg-graphite/10 text-graphite border-graphite/30' }
+  if (!meta) return null
+  return <span className={`ml-2 inline-block px-1.5 py-0.5 text-[10px] rounded-sm border ${meta.cls}`}>{meta.t}</span>
 }
 
 function fmt(n: number): string {
