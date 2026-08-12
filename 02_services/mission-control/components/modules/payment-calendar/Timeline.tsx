@@ -23,6 +23,7 @@ export type CalRow = {
   po?: PurchaseOrder      // OUT: для инлайн-ячеек paid_at / docs
   inv?: { status: string; detailUrl: string | null }  // IN: для статуса/ссылки
   big?: { id: string; paid: boolean }  // OUT: big one-off payment (rolling.big_payments)
+  fixed?: { fixedCostId: string; period: string; paid: boolean }  // OUT: recurring mandatory obligation (fixed_cost)
 }
 
 // Единый нетто-таймлайн. Клиентский, чтобы управлять анимацией строки при оплате.
