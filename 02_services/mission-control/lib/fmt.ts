@@ -19,3 +19,8 @@ export function fmtDateTime(iso: string | null | undefined): string {
   const mi = String(d.getUTCMinutes()).padStart(2, '0')
   return `${date} ${hh}:${mi}`
 }
+
+export function bangkokToday(): string {
+  const d = new Date(Date.now() + 7 * 3600_000)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}

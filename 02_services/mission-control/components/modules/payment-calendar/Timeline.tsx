@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import type { PurchaseOrder } from '@/lib/supabase'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
-import { fmtDate } from '@/lib/fmt'
+import { MarkPaidCell } from './MarkPaidCell'
+import { fmtDate, bangkokToday } from '@/lib/fmt'
 import { daysBetween } from '@/lib/kpi'
 
 export type Dir = 'out' | 'in'
@@ -105,11 +106,22 @@ export function Timeline({ rows, today, isOpenView }: {
                   </td>
                   <td className="py-2 px-4 whitespace-nowrap">
                     {r.dir === 'out'
-                      ? <div className="flex items-center gap-2">
-                          <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at}
-                                      onSaved={v => handlePaid(r.key, v)} />
-                          <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
-                        </div>
+                      ? r.fixed
+                        ? <MarkPaidCell
+                            paid={r.fixed.paid} endpoint="/api/m/mandatory-actual" method="PUT"
+                            payloadPaid={{ fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: true, paid_at: bangkokToday(), amount_thb: Math.round(r.amount) }}
+                            payloadUnpaid={{ fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: false, paid_at: null }}
+                            onSaved={v => handlePaid(r.key, v)} />
+                        : r.big
+                        ? <MarkPaidCell
+                            paid={r.big.paid} endpoint="/api/m/rolling/payment" method="PATCH"
+                            payloadPaid={{ id: r.big.id, status: 'paid' }}
+                            payloadUnpaid={{ id: r.big.id, status: 'planned' }}
+                            onSaved={v => handlePaid(r.key, v)} />
+                        : <div className="flex items-center gap-2">
+                            <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at} onSaved={v => handlePaid(r.key, v)} />
+                            <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
+                          </div>
                       : <InvoiceStatus status={r.inv!.status} overdue={r.status === 'overdue'} detailUrl={r.inv!.detailUrl} />}
                   </td>
                 </tr>
