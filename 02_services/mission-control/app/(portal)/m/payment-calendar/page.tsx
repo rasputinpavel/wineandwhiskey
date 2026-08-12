@@ -257,7 +257,7 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
           return <>
             <KPI label="К оплате (OUT)" sum={sumOut(unpaidOut)} n={unpaidOut.length} tone="out" />
             <KPI label="К получению (IN)" sum={sumIn(inRows)} n={inRows.length} tone="in" />
-            <KPI label="Оплачено (PO)" sum={sumOut(paidOut)} n={paidOut.length} tone="paid" />
+            <KPI label="Оплачено" sum={sumOut(paidOut)} n={paidOut.length} tone="paid" />
             <KPI label="NET" sum={m} n={rows.length} tone="net" />
           </>
         })() : (() => {
