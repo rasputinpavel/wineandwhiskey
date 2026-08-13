@@ -103,6 +103,39 @@ export function buildFixedRows(
       }
     }
   }
+  return collapsePayGroups(out)
+}
+
+// Categories billed together on one invoice — collapsed into a single timeline row
+// when they land on the same date. Lowercased fixed_cost categories.
+const FIXED_PAY_GROUPS: string[][] = [
+  ['taxes', 'accounting'],
+]
+const groupOf = (category: string): number =>
+  FIXED_PAY_GROUPS.findIndex(g => g.includes(category.trim().toLowerCase()))
+
+// Merge same-group rows that share a date into one row (summed, labels joined).
+// Members in different states (one paid → rolled forward, one unpaid) land on
+// different dates and stay separate.
+function collapsePayGroups(rows: CalRow[]): CalRow[] {
+  const merged = new Map<string, CalRow>()   // `${group}::${date}` → accumulator
+  const out: CalRow[] = []
+  for (const r of rows) {
+    const g = r.fixed ? groupOf(r.who) : -1
+    if (g < 0) { out.push(r); continue }
+    const key = `${g}::${r.date}`
+    const acc = merged.get(key)
+    if (!acc) {
+      merged.set(key, r)
+      out.push(r)
+    } else {
+      acc.amount += r.amount
+      acc.who = `${acc.who} + ${r.who}`
+      acc.label = acc.who
+      acc.key = `fixed-group-${g}-${r.date}`
+      acc.fixed!.alsoIds = [...(acc.fixed!.alsoIds ?? []), { fixedCostId: r.fixed!.fixedCostId, period: r.fixed!.period }]
+    }
+  }
   return out
 }
 

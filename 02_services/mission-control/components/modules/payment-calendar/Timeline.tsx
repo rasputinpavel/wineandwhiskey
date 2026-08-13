@@ -24,7 +24,10 @@ export type CalRow = {
   po?: PurchaseOrder      // OUT: для инлайн-ячеек paid_at / docs
   inv?: { status: string; detailUrl: string | null }  // IN: для статуса/ссылки
   big?: { id: string; paid: boolean }  // OUT: big one-off payment (rolling.big_payments)
-  fixed?: { fixedCostId: string; period: string; paid: boolean }  // OUT: recurring mandatory obligation (fixed_cost)
+  // OUT: recurring mandatory obligation (fixed_cost). `alsoIds` holds extra
+  // obligations collapsed into this one row (paid together on one invoice) — the
+  // mark-paid control toggles them all.
+  fixed?: { fixedCostId: string; period: string; paid: boolean; alsoIds?: { fixedCostId: string; period: string }[] }
 }
 
 // Единый нетто-таймлайн. Клиентский, чтобы управлять анимацией строки при оплате.
@@ -109,8 +112,17 @@ export function Timeline({ rows, today, isOpenView }: {
                       ? r.fixed
                         ? <MarkPaidCell
                             paid={r.fixed.paid} endpoint="/api/m/mandatory-actual" method="PUT"
-                            payloadPaid={{ fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: true, paid_at: bangkokToday(), amount_thb: Math.round(r.amount) }}
+                            // Merged rows carry a combined amount, so let each member
+                            // default to its plan amount instead of stamping the sum.
+                            payloadPaid={r.fixed.alsoIds?.length
+                              ? { fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: true, paid_at: bangkokToday() }
+                              : { fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: true, paid_at: bangkokToday(), amount_thb: Math.round(r.amount) }}
                             payloadUnpaid={{ fixed_cost_id: r.fixed.fixedCostId, period: r.fixed.period, paid: false, paid_at: null }}
+                            alsoRequests={r.fixed.alsoIds?.map(m => ({
+                              endpoint: '/api/m/mandatory-actual', method: 'PUT' as const,
+                              payloadPaid: { fixed_cost_id: m.fixedCostId, period: m.period, paid: true, paid_at: bangkokToday() },
+                              payloadUnpaid: { fixed_cost_id: m.fixedCostId, period: m.period, paid: false, paid_at: null },
+                            }))}
                             onSaved={v => handlePaid(r.key, v)} />
                         : r.big
                         ? <MarkPaidCell

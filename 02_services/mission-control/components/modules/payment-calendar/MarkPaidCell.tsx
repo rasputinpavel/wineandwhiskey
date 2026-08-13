@@ -7,12 +7,15 @@ import { useRouter } from 'next/navigation'
 // (mandatory obligations, big one-offs). Parameterised by endpoint + payloads so the two
 // kinds share one component. On success calls onSaved('paid'|null) so the Timeline runs
 // its existing flash-and-exit (Open) or refresh (month) behaviour.
-export function MarkPaidCell({ paid, endpoint, method, payloadPaid, payloadUnpaid, onSaved }: {
+export function MarkPaidCell({ paid, endpoint, method, payloadPaid, payloadUnpaid, alsoRequests, onSaved }: {
   paid: boolean
   endpoint: string
   method: 'PUT' | 'PATCH'
   payloadPaid: Record<string, unknown>
   payloadUnpaid: Record<string, unknown>
+  // Extra obligations toggled together (collapsed pay-group members). All must
+  // succeed for the row to flip.
+  alsoRequests?: { endpoint: string; method: 'PUT' | 'PATCH'; payloadPaid: Record<string, unknown>; payloadUnpaid: Record<string, unknown> }[]
   onSaved?: (value: string | null) => void
 }) {
   const router = useRouter()
@@ -22,12 +25,13 @@ export function MarkPaidCell({ paid, endpoint, method, payloadPaid, payloadUnpai
   async function toggle(next: boolean) {
     setSaving(true)
     try {
-      const res = await fetch(endpoint, {
-        method,
+      const reqs = [{ endpoint, method, payloadPaid, payloadUnpaid }, ...(alsoRequests ?? [])]
+      const results = await Promise.all(reqs.map(rq => fetch(rq.endpoint, {
+        method: rq.method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next ? payloadPaid : payloadUnpaid),
-      })
-      if (res.ok) {
+        body: JSON.stringify(next ? rq.payloadPaid : rq.payloadUnpaid),
+      })))
+      if (results.every(res => res.ok)) {
         setPaid(next)
         if (onSaved) onSaved(next ? 'paid' : null)
         else router.refresh()

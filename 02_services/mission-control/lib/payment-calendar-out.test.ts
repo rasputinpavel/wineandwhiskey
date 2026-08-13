@@ -123,6 +123,28 @@ describe('buildFixedRows', () => {
     expect(rows[0].fixed!.period).toBe('2026-09')
   })
 
+  it('open view: same-date pay-group members collapse into one row', () => {
+    const rows = buildFixedRows(
+      [fc({ id: 'tax', category: 'Taxes', amount_thb: 9914, due_day: 11 }),
+       fc({ id: 'acc', category: 'Accounting', amount_thb: 8000, due_day: 11 })],
+      [], revenueOf, { view: 'open', today: '2026-08-13' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].amount).toBe(17914)
+    expect(rows[0].who).toBe('Taxes + Accounting')
+    expect(rows[0].date).toBe('2026-08-13')
+    expect(rows[0].fixed!.fixedCostId).toBe('tax')
+    expect(rows[0].fixed!.alsoIds).toEqual([{ fixedCostId: 'acc', period: '2026-08' }])
+  })
+
+  it('does not collapse pay-group members that land on different dates', () => {
+    // Taxes matched in the sheet → rolls to next month; Accounting stays overdue-today.
+    const rows = buildFixedRows(
+      [fc({ id: 'tax', category: 'Taxes', amount_thb: 9914, due_day: 11 }),
+       fc({ id: 'acc', category: 'Accounting', amount_thb: 8000, due_day: 11 })],
+      [], revenueOf, { view: 'open', today: '2026-08-13' }, ['Уплата налога'])
+    expect(rows).toHaveLength(2)
+  })
+
   it('open view: obligations with no due_day are skipped', () => {
     const rows = buildFixedRows([fc({ id: 'x', due_day: null })], [], revenueOf,
       { view: 'open', today: '2026-08-11' })
