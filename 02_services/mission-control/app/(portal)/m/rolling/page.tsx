@@ -2,7 +2,7 @@ import { sbInventory, sbPublic, type MoneyWallet, type MoneyMovement, type Fixed
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk, computeDueDate } from '@/lib/kpi'
 import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type WalletExpense } from '@/lib/income'
-import { generateObligations, bucketOf, daysInMonth } from '@/lib/mandatory'
+import { generateObligations, bucketOf, daysInMonth, reconcileMonthObligations } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
 import { DataFreshness } from '@/components/shell/DataFreshness'
@@ -171,11 +171,19 @@ export default async function RollingPage() {
   const mandatoryExpensesActual: DatedAmount[] = []
   const operationalExpensesActual: DatedAmount[] = []
   const payablesExpensesActual: DatedAmount[] = []
+  const curMonth = today.slice(0, 7)
+  // Descriptions of THIS month's paid mandatory rows — used to match & drop the
+  // corresponding plan obligations from the forecast (avoids double-counting an
+  // obligation already paid, e.g. rent paid on the 12th vs planned on the 15th).
+  const curMonthMandatoryDescriptions: string[] = []
   for (const e of expenses) {
     if (!isBusiness(e.wallet)) continue  // owner-paid (Personal) expenses don't draw down business liquidity
     const d = { date: e.date, amount: e.amount }
     const b = bucketOf(e.category)
-    if (b === 'mandatory') mandatoryExpensesActual.push(d)
+    if (b === 'mandatory') {
+      mandatoryExpensesActual.push(d)
+      if (e.date.slice(0, 7) === curMonth) curMonthMandatoryDescriptions.push(e.description)
+    }
     else if (b === 'payables') payablesExpensesActual.push(d)
     else operationalExpensesActual.push(d)
   }
@@ -187,7 +195,6 @@ export default async function RollingPage() {
     const ym = r.receipt_date.slice(0, 7)
     monthlyActual.set(ym, (monthlyActual.get(ym) ?? 0) + (r.receipt_type === 'REFUND' ? -1 : 1) * Number(r.total))
   }
-  const curMonth = today.slice(0, 7)
   const revenueOfMonth = (ym: string) => ym < curMonth ? (monthlyActual.get(ym) ?? 0) : avgRetailPerDay * daysInMonth(ym)
 
   const addMonthYm = (ym: string, delta: number) => {
@@ -201,7 +208,15 @@ export default async function RollingPage() {
     let ym = openingDate.slice(0, 7)
     let guard = 0
     while (ym <= endYm && guard++ < 60) {
-      for (const o of generateObligations(ym, fixedRows, revenueOfMonth)) mandatory.push({ date: o.date, amount: o.planned })
+      const obs = generateObligations(ym, fixedRows, revenueOfMonth)
+      if (ym === curMonth) {
+        // Current month: drop obligations already paid (matched by category to a
+        // sheet row) and pull unpaid overdue ones to today. Other months have no
+        // actuals yet, so their obligations project as-is.
+        for (const r of reconcileMonthObligations(obs, curMonthMandatoryDescriptions, today)) mandatory.push(r)
+      } else {
+        for (const o of obs) mandatory.push({ date: o.date, amount: o.planned })
+      }
       ym = addMonthYm(ym, 1)
     }
   }

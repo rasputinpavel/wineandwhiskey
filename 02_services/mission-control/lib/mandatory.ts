@@ -108,3 +108,51 @@ export function applyOverrides(obs: Obligation[], overrides: MandatoryActual[], 
     }
   })
 }
+
+// ─── Category ↔ sheet-description matching ───────────────────────────────────
+// The Expenses sheet has no per-obligation link, but its free-text description
+// almost always names the category (RU or EN). We match a plan line to an actual
+// payment by keyword so a paid obligation drops out of the forecast — no manual
+// tick needed. Keep the lists tight: a keyword must not bleed across categories
+// (e.g. "аванс" for Salary Advance must not fire on a plain "зарплата" row).
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  'rent':           ['rent', 'аренд', 'ренд'],
+  'utilities':      ['utilit', 'коммунал', 'комунал'],
+  'salary advance': ['advance', 'аванс'],
+  // Bonuses are paid inside the regular salary run, so any salary payment covers
+  // them too (hence the salary keywords here alongside the bonus-specific ones).
+  'salary bonuses': ['bonus', 'бонус', 'преми', 'salary', 'зарплат', 'оклад'],
+  'salary':         ['salary', 'зарплат', 'оклад'],
+  'taxes':          ['tax', 'налог', 'ндс', 'vat'],
+  'accounting':     ['account', 'бухгалт', 'бухучёт', 'бухучет'],
+}
+
+// True when `description` names the plan `category` (case-insensitive keyword hit).
+export function descriptionMatchesCategory(description: string, category: string): boolean {
+  const keys = CATEGORY_KEYWORDS[category.trim().toLowerCase()]
+  if (!keys) return false
+  const d = description.toLowerCase()
+  return keys.some(k => d.includes(k))
+}
+
+// Reconcile ONE month's mandatory plan against that month's actual "Обязательные"
+// sheet rows (their descriptions). Returns the forecast-side dated amounts:
+//   • obligations matched to an actual (already paid) are dropped — the payment
+//     is already counted on the actual side, so keeping the plan line would
+//     double-count it;
+//   • unpaid obligations survive, and an unpaid one whose due date has passed is
+//     pulled to `today` (like AP/big) so overdue mandatory never silently vanishes.
+export function reconcileMonthObligations(
+  obligations: Obligation[],
+  actualDescriptions: string[],
+  today: string,
+): { date: string; amount: number }[] {
+  const out: { date: string; amount: number }[] = []
+  for (const o of obligations) {
+    const paid = actualDescriptions.some(d => descriptionMatchesCategory(d, o.category))
+    if (paid) continue
+    // overdue (date < today) → today, so unpaid past obligations don't vanish.
+    out.push({ date: o.date < today ? today : o.date, amount: o.planned })
+  }
+  return out
+}

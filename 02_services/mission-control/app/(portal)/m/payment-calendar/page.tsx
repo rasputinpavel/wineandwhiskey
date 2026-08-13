@@ -8,7 +8,8 @@ import { fmtDate } from '@/lib/fmt'
 import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
 import { buildFixedRows, buildBigRows, type CalMode } from '@/lib/payment-calendar-out'
 import { getReceiptHistory } from '@/lib/receipts-cache'
-import { daysInMonth } from '@/lib/mandatory'
+import { daysInMonth, bucketOf } from '@/lib/mandatory'
+import { fetchExpenses } from '@/lib/income'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,8 +126,22 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
     ? (monthlyActual.get(period) ?? 0)
     : avgRetailPerDay * daysInMonth(period)
 
+  // Current-month paid "Обязательные" descriptions from the Expenses sheet — lets
+  // buildFixedRows drop obligations already settled (matched by category) and keep
+  // only genuinely-unpaid ones, same reconciliation as Rolling. Sheet read is
+  // best-effort: on failure we fall back to plan-only (no reconciliation).
+  const paidMandatoryDescriptions: string[] = []
+  try {
+    const expenses = await fetchExpenses()
+    for (const e of expenses) {
+      if (e.date.slice(0, 7) === curMonth && bucketOf(e.category) === 'mandatory') {
+        paidMandatoryDescriptions.push(e.description)
+      }
+    }
+  } catch { /* sheet unavailable → plan-only */ }
+
   const calMode: CalMode = month ? { view: 'month', month, today } : { view: 'open', today }
-  const outFixed = buildFixedRows(fixedCosts, overrides, revenueOf, calMode)
+  const outFixed = buildFixedRows(fixedCosts, overrides, revenueOf, calMode, paidMandatoryDescriptions)
   const outBig = buildBigRows(bigPayments, calMode)
 
   // Что попадает в OUT-таймлайн:

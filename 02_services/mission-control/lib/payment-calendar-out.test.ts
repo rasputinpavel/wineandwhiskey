@@ -95,10 +95,20 @@ describe('buildFixedRows', () => {
     expect(rows[0].date).toBe('2026-08-15')
   })
 
-  it('open view: due_day already passed → rolls to next month', () => {
-    const rows = buildFixedRows([fc({ id: 'sal', category: 'Salary', due_day: 3 })], [], revenueOf,
-      { view: 'open', today: '2026-08-11' })
-    expect(rows[0].date).toBe('2026-09-03')
+  it('open view: due_day passed & unpaid → pulled to today (not rolled forward)', () => {
+    const rows = buildFixedRows([fc({ id: 'tax', category: 'Taxes', amount_thb: 8000, due_day: 11 })], [], revenueOf,
+      { view: 'open', today: '2026-08-13' })
+    expect(rows[0].date).toBe('2026-08-13')
+    expect(rows[0].status).toBe('today')   // pulled to today, like an overdue PO/big
+    expect(rows[0].fixed!.period).toBe('2026-08')
+  })
+
+  it('open view: due_day passed but paid in the sheet (matched by category) → next month occurrence', () => {
+    const rows = buildFixedRows([fc({ id: 'rent', category: 'Rent', due_day: 15 })], [], revenueOf,
+      { view: 'open', today: '2026-08-16' }, ['Аренда + Коммуналка'])
+    expect(rows[0].date).toBe('2026-09-15')
+    expect(rows[0].status).toBe('future')
+    expect(rows[0].fixed!.period).toBe('2026-09')
   })
 
   it('open view: current month marked paid → shows next month occurrence', () => {

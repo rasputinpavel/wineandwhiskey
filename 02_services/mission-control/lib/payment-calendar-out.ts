@@ -1,6 +1,6 @@
 import type { RollingBigPayment, FixedCost, MandatoryActual } from './supabase'
 import type { CalRow, Status } from '@/components/modules/payment-calendar/Timeline'
-import { daysInMonth } from './mandatory'
+import { daysInMonth, descriptionMatchesCategory } from './mandatory'
 
 // ── Date helpers ('YYYY-MM' / 'YYYY-MM-DD', UTC-anchored) ────────────────────
 function addMonth(period: string, delta: number): string {
@@ -72,6 +72,11 @@ export function buildFixedRows(
   overrides: MandatoryActual[],
   revenueOf: (period: string) => number,
   mode: CalMode,
+  // Descriptions of the CURRENT month's paid "Обязательные" sheet rows. A plan
+  // line whose category matches one of these is treated as settled — same
+  // reconciliation as Rolling — so paid obligations roll to next month and only
+  // genuinely-unpaid ones stay in the current window.
+  paidMandatoryDescriptions: string[] = [],
 ): CalRow[] {
   const active = fixedCosts.filter(f => f.active && f.due_day != null)
   const ovByKey = new Map(overrides.map(o => [`${o.fixed_cost_id}::${o.period}`, o]))
@@ -81,15 +86,21 @@ export function buildFixedRows(
     const day = fc.due_day as number
     if (mode.view === 'month') {
       const period = mode.month
-      out.push(fixedRow(fc, period, day, ovByKey.get(`${fc.id}::${period}`), revenueOf, mode.today))
+      out.push(fixedRow(fc, period, day, ovByKey.get(`${fc.id}::${period}`), revenueOf, mode.today, false))
     } else {
       const cur = mode.today.slice(0, 7)
-      const curDate = clampDay(cur, day)
       const curOv = ovByKey.get(`${fc.id}::${cur}`)
-      // Current month occurrence still upcoming AND not paid → use it; else roll to next month.
-      const useCurrent = curDate >= mode.today && !curOv?.paid
-      const period = useCurrent ? cur : addMonth(cur, 1)
-      out.push(fixedRow(fc, period, day, ovByKey.get(`${fc.id}::${period}`), revenueOf, mode.today))
+      const paidThisMonth = !!curOv?.paid ||
+        paidMandatoryDescriptions.some(d => descriptionMatchesCategory(d, fc.category))
+      if (paidThisMonth) {
+        // Settled this month → surface the NEXT month's occurrence.
+        const period = addMonth(cur, 1)
+        out.push(fixedRow(fc, period, day, ovByKey.get(`${fc.id}::${period}`), revenueOf, mode.today, false))
+      } else {
+        // Unpaid: keep this month's occurrence; if its due day already passed,
+        // pull it to today as overdue instead of hiding it in next month.
+        out.push(fixedRow(fc, cur, day, curOv, revenueOf, mode.today, true))
+      }
     }
   }
   return out
@@ -99,12 +110,15 @@ function fixedRow(
   fc: FixedCost, period: string, day: number,
   ov: MandatoryActual | undefined,
   revenueOf: (p: string) => number, today: string,
+  pullOverdue: boolean,
 ): CalRow {
   const planned = plannedAmount(fc, period, revenueOf)
   const amount = ov && ov.amount_thb != null ? Number(ov.amount_thb) : planned
   const paid = !!ov?.paid
   // Paid rows sit on paid_at; if an override marks paid but omits paid_at, fall back to the due date.
-  const date = paid && ov?.paid_at ? ov.paid_at.slice(0, 10) : clampDay(period, day)
+  let date = paid && ov?.paid_at ? ov.paid_at.slice(0, 10) : clampDay(period, day)
+  // Unpaid & overdue in the open view → pull to today so it shows as due now.
+  if (!paid && pullOverdue && date < today) date = today
   const status: Status = paid ? 'paid' : outStatus(date, today)
   return {
     key: `fixed-${fc.id}-${period}`, date, dir: 'out', who: fc.category, label: fc.category,
