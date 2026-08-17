@@ -40,10 +40,10 @@ function monthBounds(ym: string): { from: string; to: string } {
   }
 }
 
-const RU_MONTHS = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
+const EN_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
-  return `${RU_MONTHS[m - 1]} ${y}`
+  return `${EN_MONTHS[m - 1]} ${y}`
 }
 
 function statusFor(date: string, today: string): Exclude<Status, 'paid'> {
@@ -253,11 +253,11 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
         <DataFreshness sources={['purchase_orders', 'flowaccount_invoices']} />
       </div>
       <p className="text-graphite text-sm mb-4 max-w-3xl">
-        Платежи в обе стороны по дате. <span className="text-wine-red">OUT</span> — поставщикам
-        (PO + отсрочка), <span className="text-emerald-700">IN</span> — ожидаемые поступления от
-        B2B-инвойсов (issued + отсрочка клиента). Консигнация-PO и force-exclude скрыты; оплаченные
-        инвойсы уходят из календаря. <span className="text-deep-black">Open</span> — всё открытое по
-        дате с бегущим нетто.
+        Payments both ways, by date. <span className="text-wine-red">Out</span> — to suppliers
+        (POs + terms), <span className="text-[#4C6B54]">In</span> — expected receipts from B2B
+        invoices (issued + customer terms). Force-excluded POs are hidden; paid invoices drop off.
+        <span className="text-deep-black"> Open</span> shows everything outstanding by date with a
+        running balance.
       </p>
 
       {/* Month strip */}
@@ -275,9 +275,9 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
           const inRows    = rows.filter(r => r.dir === 'in')
           const m = sumIn(rows) - sumOut(rows)   // нетто месяца, как финал бегущего NET (вкл. оплаченные)
           return <>
-            <KPI label="К оплате (OUT)" sum={sumOut(unpaidOut)} n={unpaidOut.length} tone="out" />
-            <KPI label="К получению (IN)" sum={sumIn(inRows)} n={inRows.length} tone="in" />
-            <KPI label="Оплачено" sum={sumOut(paidOut)} n={paidOut.length} tone="paid" />
+            <KPI label="Payable (Out)" sum={sumOut(unpaidOut)} n={unpaidOut.length} tone="out" />
+            <KPI label="Receivable (In)" sum={sumIn(inRows)} n={inRows.length} tone="in" />
+            <KPI label="Paid" sum={sumOut(paidOut)} n={paidOut.length} tone="paid" />
             <KPI label="NET" sum={m} n={rows.length} tone="net" />
           </>
         })() : (() => {
@@ -285,12 +285,12 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
           const overdueOut = rows.filter(r => r.dir === 'out' && r.status === 'overdue')
           const overdueIn  = rows.filter(r => r.dir === 'in'  && r.status === 'overdue')
           return <>
-            <KPI label="К оплате (OUT)" sum={o} n={rows.filter(r => r.dir === 'out').length} tone="out"
-              note={overdueOut.length ? `просрочено ฿${fmt(sumOut(overdueOut))}` : undefined} />
-            <KPI label="К получению (IN)" sum={i} n={rows.filter(r => r.dir === 'in').length} tone="in"
-              note={overdueIn.length ? `просрочено ฿${fmt(sumIn(overdueIn))}` : undefined} />
+            <KPI label="Payable (Out)" sum={o} n={rows.filter(r => r.dir === 'out').length} tone="out"
+              note={overdueOut.length ? `overdue ฿${fmt(sumOut(overdueOut))}` : undefined} />
+            <KPI label="Receivable (In)" sum={i} n={rows.filter(r => r.dir === 'in').length} tone="in"
+              note={overdueIn.length ? `overdue ฿${fmt(sumIn(overdueIn))}` : undefined} />
             <KPI label="NET" sum={i - o} n={rows.length} tone="net" />
-            <KPI label="Без даты (IN)" sum={inNoDate.reduce((s, x) => s + Number(x.total ?? 0), 0)}
+            <KPI label="No date (In)" sum={inNoDate.reduce((s, x) => s + Number(x.total ?? 0), 0)}
               n={inNoDate.length} tone="muted" />
           </>
         })()}
@@ -311,7 +311,7 @@ function NoDateList({ invoices }: { invoices: FlowInvoice[] }) {
   return (
     <section className="mt-5 bg-warm-white border border-pale-stone rounded-md overflow-hidden">
       <div className="px-4 py-2 border-b border-pale-stone bg-cream/40 flex items-baseline justify-between">
-        <h3 className="font-heading text-sm text-deep-black">IN без даты оплаты — нужно задать отсрочку клиента</h3>
+        <h3 className="font-heading text-sm text-deep-black">In with no payment date — set the customer&rsquo;s terms</h3>
         <span className="text-[11px] text-graphite tabular-nums">฿{fmt(total)} · {invoices.length}</span>
       </div>
       <div className="overflow-x-auto">
@@ -342,7 +342,7 @@ function NoDateList({ invoices }: { invoices: FlowInvoice[] }) {
 function Empty() {
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md py-10 text-center text-graphite text-sm">
-      Нет платежей с датой в этом периоде.
+      No dated payments in this period.
     </div>
   )
 }
@@ -368,7 +368,7 @@ function KPI({ label, sum, n, tone, note }: {
       <div className={`text-lg font-medium tabular-nums ${n ? valueCls : 'text-graphite/50'}`}>
         {n ? money : '—'}
       </div>
-      <div className="text-[11px] text-graphite/70">{note ?? `${n} шт`}</div>
+      <div className="text-[11px] text-graphite/70">{note ?? `${n} items`}</div>
     </div>
   )
 }
