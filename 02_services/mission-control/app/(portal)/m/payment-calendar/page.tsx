@@ -146,6 +146,10 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
 
   // Что попадает в OUT-таймлайн:
   //   • force-exclude (cashflow_override) — никогда;
+  //   • force-include (cashflow_override) — всегда, даже если PO ещё pending. Это
+  //     нужно для точечной консигнации у обычного поставщика: товар заводят через
+  //     stock adjustment, а счёт к оплате — pending-PO (не Receive, чтобы сток не
+  //     задвоился). Флаг ставится на самом PO, тип поставщика остаётся regular;
   //   • консигнация (Harvest/Cigar Empire) — settlement-PO = реальный платёж, но
   //     живёт в статусе pending (tax invoice, не Receive) → статус не проверяем,
   //     только cutoff по владельцу;
@@ -153,6 +157,7 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
   function poEligible(p: PurchaseOrder): boolean {
     if (p.cashflow_override === 'exclude') return false
     if (!p.order_date) return false
+    if (p.cashflow_override === 'include') return true
     if (supType(p.supplier) === 'consignment') return p.order_date >= CONSIGN_CUTOFF
     return (p.status ?? '').toLowerCase() === 'closed'
   }

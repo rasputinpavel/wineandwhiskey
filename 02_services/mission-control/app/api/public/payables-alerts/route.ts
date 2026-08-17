@@ -47,11 +47,15 @@ export async function GET(req: Request) {
   const supTerms = (n: string | null): number          => supByName.get((n ?? '').trim().toLowerCase())?.terms ?? 0
 
   // Консигнация + force-exclude PO платятся не обычным инвойсом — наружу.
+  // force-include (напр. точечная консигнация у обычного поставщика: pending-PO
+  // как счёт к оплате) — внутрь, даже если PO ещё не closed. Симметрично
+  // Payment Calendar, чтобы бот и календарь не разошлись.
   function poEligible(p: PurchaseOrder): boolean {
-    if ((p.status ?? '').toLowerCase() !== 'closed') return false
-    if (supType(p.supplier) === 'consignment') return false
     if (p.cashflow_override === 'exclude') return false
-    return !!p.order_date
+    if (!p.order_date) return false
+    if (p.cashflow_override === 'include') return true
+    if (supType(p.supplier) === 'consignment') return false
+    return (p.status ?? '').toLowerCase() === 'closed'
   }
 
   const payables: AlertItem[] = []
