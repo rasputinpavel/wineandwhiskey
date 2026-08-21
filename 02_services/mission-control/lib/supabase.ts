@@ -83,6 +83,8 @@ export type PoScan = {
   amount_total: number | null
   scan_path: string               // object path in the `po-scans` bucket
   note: string | null
+  status: import('./po/status').PoStatus  // review workflow (migration 038)
+  loyverse_po: string | null      // link/№ of the PO created in Loyverse
   uploaded_by: string | null
   created_at: string
 }
