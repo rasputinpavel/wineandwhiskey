@@ -140,3 +140,46 @@ export function buildCandidatesKeyboard(candidates: Candidate[], qty: number): I
   kb.text("✖ Отмена", "wo_cancel");
   return kb;
 }
+
+// ─── Reminder formatting ───────────────────────────────────────────────────
+
+// Whole-day difference between two YYYY-MM-DD dates (parsed at noon UTC so a
+// timezone shift never moves the day). Returns a human age label in Russian.
+function daysBetween(from: string, to: string): number {
+  const a = new Date(from + "T12:00:00Z").getTime();
+  const b = new Date(to + "T12:00:00Z").getTime();
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
+}
+
+// Russian plural for "день/дня/дней".
+function pluralDays(n: number): string {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} день`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} дня`;
+  return `${n} дней`;
+}
+
+export function ageLabel(takenDate: string, today: string): string {
+  const d = daysBetween(takenDate, today);
+  if (d <= 0) return "сегодня";
+  if (d === 1) return "со вчера";
+  return pluralDays(d);
+}
+
+// The briefing block listing every open write-off, oldest first. Empty string
+// when nothing is pending (caller then omits the block).
+export function formatPendingReminder(rows: PendingRow[], today: string): string {
+  const pending = rows
+    .filter((r) => r.status === "pending")
+    .sort((a, b) => a.taken_date.localeCompare(b.taken_date));
+  if (pending.length === 0) return "";
+
+  const lines = pending.map(
+    (r) => `• ${r.qty}× ${r.item_name} — ${ageLabel(r.taken_date, today)}`,
+  );
+  return [
+    `🍷 <b>Не списано (${pending.length}):</b>`,
+    ...lines,
+    `Закрой через /writeoffs, когда сделаешь Stock Adjustment в Loyverse.`,
+  ].join("\n");
+}

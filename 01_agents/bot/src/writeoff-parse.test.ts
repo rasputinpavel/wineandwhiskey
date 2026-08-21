@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident,
   buildWriteoffMessage, parseWriteoffFromMessage, buildWriteoffKeyboard, buildCandidatesKeyboard,
+  ageLabel, formatPendingReminder,
 } from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
@@ -132,5 +133,34 @@ describe("keyboards", () => {
     const flat = kb.inline_keyboard.flat();
     expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v1")).toBe(true);
     expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v4")).toBe(true);
+  });
+});
+
+describe("ageLabel", () => {
+  it("labels today / yesterday / N days", () => {
+    expect(ageLabel("2026-08-21", "2026-08-21")).toBe("сегодня");
+    expect(ageLabel("2026-08-20", "2026-08-21")).toBe("со вчера");
+    expect(ageLabel("2026-08-16", "2026-08-21")).toBe("5 дней");
+  });
+});
+
+describe("formatPendingReminder", () => {
+  const rows = [
+    { id: "a", item_name: "Prosecco Miravento DOC", qty: 2, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" },
+    { id: "b", item_name: "Whispering Angel Rosé", qty: 1, taken_date: "2026-08-18", taken_by: "Som", status: "pending" },
+  ];
+  it("lists all pending, oldest first, with age labels", () => {
+    const out = formatPendingReminder(rows, "2026-08-21");
+    expect(out).toContain("🍷");
+    expect(out).toContain("2× Prosecco Miravento DOC");
+    expect(out).toContain("со вчера");
+    expect(out).toContain("1× Whispering Angel Rosé");
+    expect(out).toContain("3 дня");
+    // oldest (18th) listed before newer (20th)
+    expect(out.indexOf("Whispering")).toBeLessThan(out.indexOf("Prosecco"));
+    expect(out).toContain("/writeoffs");
+  });
+  it("returns empty string when nothing is pending", () => {
+    expect(formatPendingReminder([], "2026-08-21")).toBe("");
   });
 });
