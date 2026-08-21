@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident } from "./writeoff-parse.js";
+import {
+  hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident,
+  buildWriteoffMessage, parseWriteoffFromMessage, buildWriteoffKeyboard, buildCandidatesKeyboard,
+} from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
   it("matches write-off phrases anywhere, case-insensitive", () => {
@@ -87,5 +90,40 @@ describe("isConfident", () => {
       { variant_id: "v1", item_name: "X", in_stock: 1, score: 5 },
       { variant_id: "v2", item_name: "Y", in_stock: 1, score: 5 },
     ])).toBe(false);
+  });
+});
+
+// Telegram delivers message.text without HTML bold tags — simulate that.
+const asDelivered = (html: string) => html.replace(/<\/?b>/g, "");
+
+describe("write-off card round-trip", () => {
+  it("parses back the fields it renders", () => {
+    const card = { itemName: "Prosecco Miravento DOC", qty: 2, date: "21.08.2026" };
+    const text = asDelivered(buildWriteoffMessage(card));
+    expect(parseWriteoffFromMessage(text)).toEqual(card);
+  });
+  it("returns null for a non-card message", () => {
+    expect(parseWriteoffFromMessage("сколько виски?")).toBeNull();
+  });
+});
+
+describe("keyboards", () => {
+  it("confirm keyboard carries the variant_id in callback data", () => {
+    const kb = buildWriteoffKeyboard("v1");
+    const flat = kb.inline_keyboard.flat();
+    expect(flat.some((b: any) => b.callback_data === "wo_confirm:v1")).toBe(true);
+    expect(flat.some((b: any) => b.callback_data === "wo_cancel")).toBe(true);
+  });
+  it("candidate keyboard carries qty + variant_id per row", () => {
+    const kb = buildCandidatesKeyboard(
+      [
+        { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12, score: 5 },
+        { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3, score: 4 },
+      ],
+      2,
+    );
+    const flat = kb.inline_keyboard.flat();
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v1")).toBe(true);
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v4")).toBe(true);
   });
 });

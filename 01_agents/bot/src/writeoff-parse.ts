@@ -88,3 +88,48 @@ export function isConfident(candidates: Candidate[]): boolean {
   if (candidates.length === 1) return true;
   return candidates[0].score >= candidates[1].score + 3;
 }
+
+// ─── UI builders ─────────────────────────────────────────────────────────
+
+// State is NOT held in memory: the card fields are reconstructed from the card
+// text (see the callback handler), and the variant_id rides in callback data —
+// so confirming survives a bot restart (Railway redeploy) mid-flow.
+export function buildWriteoffMessage(c: WriteoffCard): string {
+  return [
+    `🍷 <b>Списание «себе» — проверь:</b>`,
+    ``,
+    `📦 <b>Товар:</b> ${c.itemName}`,
+    `🔢 <b>Кол-во:</b> ${c.qty}`,
+    `📅 <b>Дата:</b> ${c.date}`,
+  ].join("\n");
+}
+
+// Reconstruct the card from the confirmation message text (delivered without the
+// HTML bold tags). Returns null when the text is not a write-off card.
+export function parseWriteoffFromMessage(text: string): WriteoffCard | null {
+  if (!/Списание «себе»/.test(text) || !/Товар:/.test(text)) return null;
+  const grab = (re: RegExp) => text.match(re)?.[1]?.trim() ?? "";
+  const itemName = grab(/Товар:\s*(.+)/);
+  const qty = Number(grab(/Кол-во:\s*(\d+)/));
+  const date = grab(/Дата:\s*([\d.]+)/);
+  if (!itemName || !Number.isFinite(qty) || qty <= 0) return null;
+  return { itemName, qty, date };
+}
+
+export function buildWriteoffKeyboard(variantId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("✅ Записать", `wo_confirm:${variantId}`)
+    .text("✖ Отмена", "wo_cancel");
+}
+
+// One button per candidate; qty rides alongside the variant_id so the picked
+// card can be rebuilt without any in-memory state.
+export function buildCandidatesKeyboard(candidates: Candidate[], qty: number): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const c of candidates) {
+    const label = `${c.item_name} (${c.in_stock} шт)`.slice(0, 60);
+    kb.text(label, `wo_pick:${qty}:${c.variant_id}`).row();
+  }
+  kb.text("✖ Отмена", "wo_cancel");
+  return kb;
+}
