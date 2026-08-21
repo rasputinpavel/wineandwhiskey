@@ -3,7 +3,7 @@ import { sbPublic, type PoScan } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { signScanUrls } from '@/lib/po/scans'
 import { PoRow } from '@/components/modules/po/PoRow'
-import { isPoStatus } from '@/lib/po/status'
+import { isPoStatus, PO_STATUSES, PO_STATUS_LABELS } from '@/lib/po/status'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ const MONTHS = [
 // Sortable columns → the value each row sorts by. When a sort is active the
 // month grouping is switched off (a cross-month ordering has no month buckets).
 const SORTS: Record<string, (r: PoScan) => string | number | null> = {
-  status: (r) => r.status,
+  status: (r) => PO_STATUSES.indexOf(r.status),
   supplier: (r) => r.supplier?.toLowerCase() ?? null,
   doc_number: (r) => r.doc_number ?? null,
   order_date: (r) => r.order_date ?? null,
@@ -177,9 +177,9 @@ export default async function PurchaseOrdersPage({
             className="mt-1 rounded border border-neutral-300 px-2 py-1 text-sm"
           >
             <option value="">All</option>
-            <option value="draft">Draft</option>
-            <option value="needs_corrections">Need corrections</option>
-            <option value="approved">Approved</option>
+            {PO_STATUSES.map((s) => (
+              <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
+            ))}
           </select>
         </label>
         <button type="submit" className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white">
