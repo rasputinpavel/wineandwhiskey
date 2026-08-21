@@ -66,12 +66,13 @@ export function scoreCandidates(query: string, catalog: CatalogItem[]): Candidat
     .map((item): Candidate => {
       const name = item.item_name.toLowerCase();
       const nameTokens = tokenize(item.item_name);
+      const nameJoined = nameTokens.join(" ");
       let score = 0;
       for (const qt of qTokens) {
         if (nameTokens.some((nt) => nt === qt)) score += 2;        // exact token
         else if (name.includes(qt)) score += 1;                    // substring
       }
-      if (name.includes(qJoined)) score += 3;                      // whole-query bonus
+      if (nameJoined.includes(qJoined)) score += 3;                // whole-query bonus
       return { ...item, score };
     })
     .filter((c) => c.score > 0)

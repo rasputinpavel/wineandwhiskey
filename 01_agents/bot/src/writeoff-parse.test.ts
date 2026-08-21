@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates } from "./writeoff-parse.js";
+import { hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident } from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
   it("matches write-off phrases anywhere, case-insensitive", () => {
@@ -66,5 +66,26 @@ describe("scoreCandidates", () => {
   });
   it("is case- and spacing-insensitive", () => {
     expect(scoreCandidates("  WHISPERING   angel ", CATALOG)[0].variant_id).toBe("v2");
+  });
+});
+
+describe("isConfident", () => {
+  it("is false for an empty list", () => {
+    expect(isConfident([])).toBe(false);
+  });
+  it("is true for a single candidate", () => {
+    expect(isConfident([{ variant_id: "v1", item_name: "X", in_stock: 1, score: 2 }])).toBe(true);
+  });
+  it("is true when the top score clears the runner-up by >=3", () => {
+    expect(isConfident([
+      { variant_id: "v1", item_name: "X", in_stock: 1, score: 6 },
+      { variant_id: "v2", item_name: "Y", in_stock: 1, score: 2 },
+    ])).toBe(true);
+  });
+  it("is false when the top two are close", () => {
+    expect(isConfident([
+      { variant_id: "v1", item_name: "X", in_stock: 1, score: 5 },
+      { variant_id: "v2", item_name: "Y", in_stock: 1, score: 5 },
+    ])).toBe(false);
   });
 });
