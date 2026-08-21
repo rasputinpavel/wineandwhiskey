@@ -2,13 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PO_STATUSES, type PoStatus } from '@/lib/po/status'
-
-const LABELS: Record<PoStatus, string> = {
-  draft: 'Draft',
-  needs_corrections: 'Need corrections',
-  approved: 'Approved',
-}
+import { PO_STATUSES, PO_STATUS_LABELS, type PoStatus } from '@/lib/po/status'
 
 const BADGE: Record<PoStatus, string> = {
   draft: 'bg-neutral-100 text-neutral-600',
@@ -50,7 +44,7 @@ export function StatusCell({ scanId, initial }: { scanId: string; initial: PoSta
   return (
     <span className="inline-flex items-center gap-1">
       <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${BADGE[value]}`}>
-        {LABELS[value]}
+        {PO_STATUS_LABELS[value]}
       </span>
       <select
         value={value}
@@ -60,7 +54,7 @@ export function StatusCell({ scanId, initial }: { scanId: string; initial: PoSta
         className="rounded border border-neutral-300 bg-white px-1 py-0.5 text-xs focus:border-blue-500 focus:outline-none disabled:opacity-50"
       >
         {PO_STATUSES.map((s) => (
-          <option key={s} value={s}>{LABELS[s]}</option>
+          <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
         ))}
       </select>
       {err && <span className="ml-1 text-xs text-red-600">{err}</span>}
