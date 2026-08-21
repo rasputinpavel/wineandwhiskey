@@ -3,10 +3,11 @@ import { sbPublic, type PoScan } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { signScanUrls } from '@/lib/po/scans'
 import { PoRow } from '@/components/modules/po/PoRow'
+import { isPoStatus } from '@/lib/po/status'
 
 export const dynamic = 'force-dynamic'
 
-type SearchParams = { q?: string; month?: string; sort?: string; dir?: string }
+type SearchParams = { q?: string; month?: string; sort?: string; dir?: string; status?: string }
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -16,6 +17,7 @@ const MONTHS = [
 // Sortable columns → the value each row sorts by. When a sort is active the
 // month grouping is switched off (a cross-month ordering has no month buckets).
 const SORTS: Record<string, (r: PoScan) => string | number | null> = {
+  status: (r) => r.status,
   supplier: (r) => r.supplier?.toLowerCase() ?? null,
   doc_number: (r) => r.doc_number ?? null,
   order_date: (r) => r.order_date ?? null,
@@ -23,6 +25,7 @@ const SORTS: Record<string, (r: PoScan) => string | number | null> = {
 }
 
 const COLUMNS: { key: string; label: string; align?: 'right' }[] = [
+  { key: 'status', label: 'Status' },
   { key: 'supplier', label: 'Supplier' },
   { key: 'doc_number', label: '№' },
   { key: 'order_date', label: 'Order date' },
@@ -65,6 +68,8 @@ export default async function PurchaseOrdersPage({
   const sort = (sp.sort ?? '').trim()
   const dir = sp.dir === 'asc' ? 'asc' : 'desc'
   const sortOk = sort in SORTS
+  const statusRaw = (sp.status ?? '').trim()
+  const statusOk = isPoStatus(statusRaw)
 
   let query = sbPublic
     .from('po_scans')
@@ -85,6 +90,8 @@ export default async function PurchaseOrdersPage({
     const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
     query = query.gte('order_date', start).lt('order_date', next)
   }
+
+  if (statusOk) query = query.eq('status', statusRaw)
 
   const { data, error } = await query
   if (error) {
@@ -124,6 +131,7 @@ export default async function PurchaseOrdersPage({
     const p = new URLSearchParams()
     if (q) p.set('q', q)
     if (monthOk) p.set('month', month)
+    if (statusOk) p.set('status', statusRaw)
     p.set('sort', col)
     p.set('dir', sortOk && sort === col && dir === 'asc' ? 'desc' : 'asc')
     return `/m/purchase-orders?${p.toString()}`
@@ -161,10 +169,29 @@ export default async function PurchaseOrdersPage({
             className="mt-1 rounded border border-neutral-300 px-2 py-1 text-sm"
           />
         </label>
+        <label className="flex flex-col text-xs text-neutral-500">
+          Status
+          <select
+            name="status"
+            defaultValue={statusOk ? statusRaw : ''}
+            className="mt-1 rounded border border-neutral-300 px-2 py-1 text-sm"
+          >
+            <option value="">All</option>
+            <option value="draft">Draft</option>
+            <option value="needs_corrections">Need corrections</option>
+            <option value="approved">Approved</option>
+          </select>
+        </label>
         <button type="submit" className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white">
           Apply
         </button>
-        {(q || monthOk || sortOk) && (
+        <a
+          href="/m/purchase-orders?status=draft"
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:border-blue-500"
+        >
+          Drafts
+        </a>
+        {(q || monthOk || sortOk || statusOk) && (
           <a href="/m/purchase-orders" className="px-2 py-1.5 text-sm text-neutral-500 underline">
             Reset
           </a>
@@ -191,13 +218,14 @@ export default async function PurchaseOrdersPage({
               })}
               <th className="py-2 pr-4">Scan</th>
               <th className="py-2 pr-4">Note</th>
+              <th className="py-2 pr-4">Loyverse PO</th>
               <th className="py-2 pr-4"></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-neutral-400">
+                <td colSpan={9} className="py-6 text-center text-neutral-400">
                   No purchase orders {monthOk ? 'this month' : 'yet'}.
                 </td>
               </tr>
@@ -209,7 +237,7 @@ export default async function PurchaseOrdersPage({
                   {showHeader && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={9}
                         className="pt-5 pb-1 text-sm font-semibold text-neutral-700 border-b border-neutral-200"
                       >
                         {monthLabel(monthKey(r))}
