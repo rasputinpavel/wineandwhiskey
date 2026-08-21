@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: "../.env.local" });
 
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
@@ -22,6 +22,15 @@ import {
   classifyAndExtractPO, isDuplicateDocNumber,
   uploadScan, deleteScan, downloadScan, commitPO,
 } from "./po.js";
+import {
+  hasWriteoffTrigger, buildWriteoffMessage, parseWriteoffFromMessage,
+  buildWriteoffKeyboard, buildCandidatesKeyboard, isConfident, ageLabel,
+  type Candidate,
+} from "./writeoff-parse.js";
+import {
+  parseWriteoffText, parseWriteoffPhoto, matchCatalog, findVariant,
+  insertWriteoff, listPending, closeWriteoff,
+} from "./writeoff.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -106,6 +115,35 @@ async function startExpenseFlow(
   await bot.api.sendMessage(chatId, buildExpenseMessage(expense), {
     parse_mode:   "HTML",
     reply_markup: buildExpenseKeyboard(expense.wallet, expense.hasDocs, expense.category),
+  });
+}
+
+// Show the write-off card (confident single match) or a candidate picker.
+// No in-memory state — variant_id + qty travel in callback data, the card
+// fields are read back from the message text on confirm.
+async function startWriteoffFlow(
+  chatId: number,
+  extracted: { query: string; qty: number },
+): Promise<void> {
+  const candidates: Candidate[] = await matchCatalog(extracted.query);
+  if (candidates.length === 0) {
+    await bot.api.sendMessage(
+      chatId,
+      `🤔 Не нашёл «${extracted.query}» в каталоге. Напиши точнее название из Loyverse.`,
+    );
+    return;
+  }
+  if (isConfident(candidates)) {
+    const c = candidates[0];
+    await bot.api.sendMessage(
+      chatId,
+      buildWriteoffMessage({ itemName: c.item_name, qty: extracted.qty, date: bangkokDate() }),
+      { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(c.variant_id) },
+    );
+    return;
+  }
+  await bot.api.sendMessage(chatId, `🍷 Что списываем (${extracted.qty} шт)? Выбери:`, {
+    reply_markup: buildCandidatesKeyboard(candidates, extracted.qty),
   });
 }
 
@@ -359,6 +397,23 @@ bot.command("sales", async (ctx) => {
   }
 });
 
+bot.command("writeoffs", async (ctx) => {
+  const pending = await listPending();
+  if (pending.length === 0) {
+    await ctx.reply("Всё списано, чисто 👍");
+    return;
+  }
+  const today = todayInThailand();
+  await ctx.reply(`🍷 Незакрытые списания (${pending.length}):`);
+  for (const r of pending) {
+    await ctx.reply(
+      `📦 ${r.qty}× ${r.item_name}\n📅 ${r.taken_date} · ${ageLabel(r.taken_date, today)}` +
+        (r.taken_by ? ` · ${r.taken_by}` : ""),
+      { reply_markup: new InlineKeyboard().text("✅ Списано", `wo_close:${r.id}`) },
+    );
+  }
+});
+
 const CHIP_TRIGGERS = ["чип", "chip", "dale", "дейл"];
 
 function isAddressedToChipDale(text: string, botUsername: string): boolean {
@@ -385,6 +440,18 @@ bot.on("message:photo", async (ctx) => {
     // + caption = расход). A supplier PO scan arrives as a plain photo, so we only
     // run the (costly) PO classification when there is NO caption.
     if (caption) {
+      // A write-off trigger in the caption ("спиши 2", "себе") routes to the
+      // write-off flow; otherwise the long-standing convention holds: a
+      // captioned photo is an expense entry.
+      if (hasWriteoffTrigger(caption)) {
+        const extracted = await parseWriteoffPhoto(
+          photo.base64, photo.mimeType as "image/jpeg" | "image/png", caption,
+        );
+        await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+        if (extracted) await startWriteoffFlow(chatId, extracted);
+        else await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
+        return;
+      }
       const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
       if (extracted) {
@@ -467,6 +534,23 @@ bot.on("message:text", async (ctx) => {
     } catch (e) {
       console.error(e);
       await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при обработке фото.");
+    }
+    return;
+  }
+
+  // Write-off shortcut — works in groups without addressing the bot, same as
+  // expenses. Checked before looksLikeExpense so "спиши ..." never lands as an
+  // expense.
+  if (hasWriteoffTrigger(text)) {
+    const msg = await ctx.reply("Распознаю списание...");
+    try {
+      const extracted = await parseWriteoffText(text);
+      await ctx.api.deleteMessage(chatId, msg.message_id);
+      if (extracted) await startWriteoffFlow(chatId, extracted);
+      else await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
+    } catch (e) {
+      console.error(e);
+      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при распознавании списания.");
     }
     return;
   }
@@ -592,12 +676,93 @@ async function handlePOCallback(ctx: any, chatId: number, data: string): Promise
   await ctx.answerCallbackQuery();
 }
 
+async function handleWriteoffCallback(ctx: any, chatId: number, data: string): Promise<void> {
+  // wo_cancel | wo_pick:<qty>:<variant_id> | wo_confirm:<variant_id> | wo_close:<id>
+  if (data === "wo_cancel") {
+    await ctx.answerCallbackQuery("Отменено");
+    await ctx.editMessageText("✖ Списание отменено.");
+    return;
+  }
+
+  if (data.startsWith("wo_pick:")) {
+    const [, qtyStr, variantId] = data.split(":");
+    const qty = Number(qtyStr) || 1;
+    const item = await findVariant(variantId);
+    if (!item) {
+      await ctx.answerCallbackQuery("Товар не найден — заведи заново.");
+      return;
+    }
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(
+      buildWriteoffMessage({ itemName: item.item_name, qty, date: bangkokDate() }),
+      { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(item.variant_id) },
+    );
+    return;
+  }
+
+  if (data.startsWith("wo_confirm:")) {
+    const variantId = data.slice("wo_confirm:".length);
+    const card = parseWriteoffFromMessage(ctx.callbackQuery?.message?.text ?? "");
+    if (!card) {
+      await ctx.answerCallbackQuery("Не смог прочитать карточку — заведи заново.");
+      return;
+    }
+    await ctx.answerCallbackQuery("Записываю...");
+    const takenBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+    try {
+      await insertWriteoff({
+        variantId,
+        itemName: card.itemName,
+        qty: card.qty,
+        takenDate: toISODateFromDDMMYYYY(card.date),
+        takenBy,
+      });
+    } catch (e) {
+      console.error("insertWriteoff failed:", e);
+      try { await ctx.editMessageText("❌ Ошибка записи списания. Заведи заново."); } catch {}
+      return;
+    }
+    try {
+      await ctx.editMessageText(
+        `✅ Записано в список на списание.\n\n📦 ${card.qty}× ${card.itemName}\n📅 ${card.date}\n\n` +
+          `Когда сделаешь Stock Adjustment в Loyverse — жми «Списано» в /writeoffs.`,
+      );
+    } catch (e) { console.error("confirm edit failed:", e); }
+    return;
+  }
+
+  if (data.startsWith("wo_close:")) {
+    const id = data.slice("wo_close:".length);
+    await ctx.answerCallbackQuery("Отмечаю...");
+    const closedBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+    try {
+      await closeWriteoff(id, closedBy);
+    } catch (e) {
+      console.error("closeWriteoff failed:", e);
+      try { await ctx.editMessageText("❌ Не смог отметить. Попробуй ещё раз."); } catch {}
+      return;
+    }
+    const base = (ctx.callbackQuery?.message?.text ?? "").split("\n")[0];
+    try { await ctx.editMessageText(`✅ Списано: ${base.replace(/^📦\s*/, "")}`); } catch {}
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+}
+
+// DD.MM.YYYY -> YYYY-MM-DD (card date is always well-formed; fall back to today).
+function toISODateFromDDMMYYYY(d: string): string {
+  const m = d.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : todayInThailand();
+}
+
 bot.on("callback_query:data", async (ctx) => {
   const chatId = ctx.chat?.id;
   if (!chatId) { await ctx.answerCallbackQuery(); return; }
 
   const data = ctx.callbackQuery.data;
 
+  if (data.startsWith("wo_")) { await handleWriteoffCallback(ctx, chatId, data); return; }
   if (data.startsWith("po_")) { await handlePOCallback(ctx, chatId, data); return; }
   if (!data.startsWith("exp_")) { await ctx.answerCallbackQuery(); return; }
 
