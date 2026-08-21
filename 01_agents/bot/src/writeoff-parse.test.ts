@@ -93,8 +93,10 @@ describe("isConfident", () => {
   });
 });
 
-// Telegram delivers message.text without HTML bold tags — simulate that.
-const asDelivered = (html: string) => html.replace(/<\/?b>/g, "");
+// Telegram delivers message.text without HTML bold tags, and with entities decoded
+// back to plain characters — simulate both.
+const asDelivered = (html: string) =>
+  html.replace(/<\/?b>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
 describe("write-off card round-trip", () => {
   it("parses back the fields it renders", () => {
@@ -104,6 +106,11 @@ describe("write-off card round-trip", () => {
   });
   it("returns null for a non-card message", () => {
     expect(parseWriteoffFromMessage("сколько виски?")).toBeNull();
+  });
+  it("round-trips an item name containing an ampersand", () => {
+    const card = { itemName: "Moët & Chandon Impérial", qty: 1, date: "21.08.2026" };
+    const text = asDelivered(buildWriteoffMessage(card));
+    expect(parseWriteoffFromMessage(text)).toEqual(card);
   });
 });
 

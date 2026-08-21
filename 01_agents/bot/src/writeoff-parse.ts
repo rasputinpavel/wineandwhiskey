@@ -91,6 +91,13 @@ export function isConfident(candidates: Candidate[]): boolean {
 
 // ─── UI builders ─────────────────────────────────────────────────────────
 
+// Escape the three characters Telegram's HTML parse_mode treats as markup, so an
+// item name like "Moët & Chandon" doesn't break sendMessage with "can't parse
+// entities". Only user/catalog-derived text needs this; our own labels are safe.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // State is NOT held in memory: the card fields are reconstructed from the card
 // text (see the callback handler), and the variant_id rides in callback data —
 // so confirming survives a bot restart (Railway redeploy) mid-flow.
@@ -98,7 +105,7 @@ export function buildWriteoffMessage(c: WriteoffCard): string {
   return [
     `🍷 <b>Списание «себе» — проверь:</b>`,
     ``,
-    `📦 <b>Товар:</b> ${c.itemName}`,
+    `📦 <b>Товар:</b> ${escapeHtml(c.itemName)}`,
     `🔢 <b>Кол-во:</b> ${c.qty}`,
     `📅 <b>Дата:</b> ${c.date}`,
   ].join("\n");
