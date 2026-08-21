@@ -12,6 +12,15 @@ describe("hasWriteoffTrigger", () => {
     expect(hasWriteoffTrigger("856 интернет")).toBe(false);
     expect(hasWriteoffTrigger("сколько виски на складе?")).toBe(false);
   });
+  it("does not fire on words that merely contain a trigger as a substring", () => {
+    expect(hasWriteoffTrigger("расписание смен на неделю")).toBe(false);
+    expect(hasWriteoffTrigger("какая себестоимость у этого вина?")).toBe(false);
+    expect(hasWriteoffTrigger("дай список вин")).toBe(false);
+  });
+  it("matches whole-word себе and common списать inflections", () => {
+    expect(hasWriteoffTrigger("взяли себе бутылку")).toBe(true);
+    expect(hasWriteoffTrigger("спишите 3 просекко")).toBe(true);
+  });
 });
 
 describe("parseWriteoffJSON", () => {
@@ -28,5 +37,8 @@ describe("parseWriteoffJSON", () => {
   it("returns null on empty query or invalid JSON", () => {
     expect(parseWriteoffJSON('{"query":"","qty":3}')).toBeNull();
     expect(parseWriteoffJSON("not json")).toBeNull();
+  });
+  it("clamps a fractional qty up to at least 1", () => {
+    expect(parseWriteoffJSON('{"query":"Beluga","qty":0.4}')).toEqual({ query: "Beluga", qty: 1 });
   });
 });

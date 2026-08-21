@@ -13,14 +13,21 @@ export type PendingRow = {
 
 // ─── Trigger detection ─────────────────────────────────────────────────────
 
-// Words that route a message (text or photo caption) to the write-off flow
-// instead of the expense flow. Kept deliberately narrow so a normal expense
-// ("856 интернет") never collides. Matched case-insensitively, anywhere.
-const TRIGGERS = ["спиши", "списать", "списание", "списал", "взяли себе", "себе"];
+// Whole-word triggers that route a message (text or photo caption) to the
+// write-off flow instead of the expense flow. Matched as whole words (Unicode
+// boundaries) so common Russian words never collide: "списание" must not fire
+// on "расписание" (schedule), and "себе" must not fire on "себестоимость"
+// (cost price). Explicit inflection list beats stemming, which trips on
+// "список"/"расписание". A form we miss just makes the user retype.
+const TRIGGERS = [
+  "спиши", "спишите", "списать", "списал", "списала", "списание", "списываю", "себе",
+];
 
+// True when any trigger appears as a whole word (not embedded in a longer word).
 export function hasWriteoffTrigger(text: string): boolean {
-  const lower = text.toLowerCase();
-  return TRIGGERS.some((t) => lower.includes(t));
+  return TRIGGERS.some((t) =>
+    new RegExp(`(?<![\\p{L}\\p{N}])${t}(?![\\p{L}\\p{N}])`, "iu").test(text),
+  );
 }
 
 // ─── Parsing ─────────────────────────────────────────────────────────────
@@ -34,7 +41,7 @@ export function parseWriteoffJSON(raw: string): WriteoffExtraction | null {
     const query = j?.query ? String(j.query).trim() : "";
     if (!query) return null;
     const qtyNum = Number(j?.qty);
-    const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? Math.round(qtyNum) : 1;
+    const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? Math.max(1, Math.round(qtyNum)) : 1;
     return { query, qty };
   } catch {
     return null;
