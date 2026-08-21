@@ -81,6 +81,29 @@ export async function getStoreContext(): Promise<string> {
   return context;
 }
 
+// Structured catalog for write-off matching — same data as getStoreContext but
+// returned as rows instead of a formatted string. Not cached here (the caller
+// fetches at most once per write-off); reuses the same paginated fetch.
+export async function getCatalogItems(): Promise<
+  { variant_id: string; item_name: string; in_stock: number }[]
+> {
+  const [items, inventory] = await Promise.all([
+    loyverseFetch<Item>("/items", "items"),
+    loyverseFetch<InventoryLevel>("/inventory", "inventory_levels"),
+  ]);
+  const inventoryMap = new Map(inventory.map((i) => [i.variant_id, i.in_stock]));
+  return items
+    .filter((item) => !item.deleted_at && item.variants.length > 0)
+    .map((item) => {
+      const v = item.variants[0];
+      return {
+        variant_id: v.variant_id,
+        item_name: item.item_name,
+        in_stock: inventoryMap.get(v.variant_id) ?? 0,
+      };
+    });
+}
+
 export async function getRecentSales(days = 7): Promise<string> {
   const token = process.env.LOYVERSE_API_TOKEN!;
   const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
