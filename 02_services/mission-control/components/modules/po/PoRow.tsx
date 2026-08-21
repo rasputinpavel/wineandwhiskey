@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { PoScan } from '@/lib/supabase'
 import { NoteCell } from './NoteCell'
+import { StatusCell } from './StatusCell'
+import { LoyversePoCell } from './LoyversePoCell'
 
 // Render a 'YYYY-MM-DD' date as DD.MM.YYYY; pass through anything else.
 function fmtD(d: string | null): string {
@@ -80,12 +82,14 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
   if (!editing) {
     return (
       <tr className="border-b border-neutral-100">
+        <td className="py-2 pr-4"><StatusCell scanId={row.id} initial={row.status} /></td>
         <td className="py-2 pr-4 font-medium">{row.supplier ?? '—'}</td>
         <td className="py-2 pr-4">{row.doc_number ?? '—'}</td>
         <td className="py-2 pr-4">{fmtD(row.order_date)}</td>
         <td className="py-2 pr-4 text-right">{fmtAmount(row.amount_total)}</td>
         <td className="py-2 pr-4">{scanCell}</td>
         <td className="py-2 pr-4"><NoteCell scanId={row.id} initial={row.note} /></td>
+        <td className="py-2 pr-4"><LoyversePoCell scanId={row.id} initial={row.loyverse_po} /></td>
         <td className="py-2 pr-4">
           <button
             onClick={() => setEditing(true)}
@@ -101,6 +105,7 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
 
   return (
     <tr className="border-b border-neutral-100 bg-amber-50/40">
+      <td className="py-2 pr-4"><StatusCell scanId={row.id} initial={row.status} /></td>
       <td className="py-2 pr-4">
         <input value={supplier} onChange={(e) => setSupplier(e.target.value)} disabled={saving} className={`w-40 ${input}`} />
       </td>
@@ -115,6 +120,7 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
       </td>
       <td className="py-2 pr-4">{scanCell}</td>
       <td className="py-2 pr-4"><NoteCell scanId={row.id} initial={row.note} /></td>
+      <td className="py-2 pr-4"><LoyversePoCell scanId={row.id} initial={row.loyverse_po} /></td>
       <td className="py-2 pr-4">
         <span className="inline-flex items-center gap-1">
           <button onClick={save} disabled={saving} className="rounded bg-neutral-900 px-1.5 py-0.5 text-xs text-white disabled:opacity-50">
