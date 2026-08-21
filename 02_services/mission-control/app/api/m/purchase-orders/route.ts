@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sbPublic } from '@/lib/supabase'
-import { isPoStatus } from '@/lib/po/status'
+import { isPoStatus, PO_STATUSES } from '@/lib/po/status'
 
 // Edit a PO scan row from the portal. The bot captures these fields at upload
 // time from the scan; managers correct them here (OCR slips, Buddhist-Era dates
@@ -51,7 +51,7 @@ export async function PATCH(req: Request) {
 
   if ('status' in body) {
     if (!isPoStatus(body.status)) {
-      return NextResponse.json({ error: 'status must be draft, needs_corrections, or approved' }, { status: 400 })
+      return NextResponse.json({ error: `status must be one of: ${PO_STATUSES.join(', ')}` }, { status: 400 })
     }
     patch.status = body.status
   }
