@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { sbPublic } from '@/lib/supabase'
+import { isPoStatus } from '@/lib/po/status'
 
 // Edit a PO scan row from the portal. The bot captures these fields at upload
 // time from the scan; managers correct them here (OCR slips, Buddhist-Era dates
 // the bot missed, a wrong total). Send { id, ...fields } — only whitelisted
 // fields are applied. `note` alone is the common case (inline NoteCell).
-const TEXT_FIELDS = ['supplier', 'doc_number', 'note'] as const
+const TEXT_FIELDS = ['supplier', 'doc_number', 'note', 'loyverse_po'] as const
 const DATE_FIELDS = ['order_date', 'received_date'] as const
 
 export async function PATCH(req: Request) {
@@ -46,6 +47,13 @@ export async function PATCH(req: Request) {
       }
       patch.amount_total = n
     }
+  }
+
+  if ('status' in body) {
+    if (!isPoStatus(body.status)) {
+      return NextResponse.json({ error: 'status must be draft, needs_corrections, or approved' }, { status: 400 })
+    }
+    patch.status = body.status
   }
 
   if (Object.keys(patch).length === 0) {
