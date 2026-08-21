@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasWriteoffTrigger, parseWriteoffJSON } from "./writeoff-parse.js";
+import { hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates } from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
   it("matches write-off phrases anywhere, case-insensitive", () => {
@@ -40,5 +40,31 @@ describe("parseWriteoffJSON", () => {
   });
   it("clamps a fractional qty up to at least 1", () => {
     expect(parseWriteoffJSON('{"query":"Beluga","qty":0.4}')).toEqual({ query: "Beluga", qty: 1 });
+  });
+});
+
+const CATALOG = [
+  { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12 },
+  { variant_id: "v2", item_name: "Whispering Angel Rosé", in_stock: 4 },
+  { variant_id: "v3", item_name: "Beluga Noble Vodka", in_stock: 7 },
+  { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3 },
+];
+
+describe("scoreCandidates", () => {
+  it("ranks the closest name first", () => {
+    const res = scoreCandidates("miravento", CATALOG);
+    expect(res[0].variant_id).toBe("v1");
+  });
+  it("returns multiple candidates when the query is ambiguous (token match)", () => {
+    const res = scoreCandidates("prosecco", CATALOG);
+    const ids = res.map((c) => c.variant_id);
+    expect(ids).toContain("v1");
+    expect(ids).toContain("v4");
+  });
+  it("returns empty when nothing matches any token", () => {
+    expect(scoreCandidates("tequila", CATALOG)).toEqual([]);
+  });
+  it("is case- and spacing-insensitive", () => {
+    expect(scoreCandidates("  WHISPERING   angel ", CATALOG)[0].variant_id).toBe("v2");
   });
 });

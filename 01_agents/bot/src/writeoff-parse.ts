@@ -47,3 +47,43 @@ export function parseWriteoffJSON(raw: string): WriteoffExtraction | null {
     return null;
   }
 }
+
+// ─── Catalog matching ──────────────────────────────────────────────────────
+
+function tokenize(s: string): string[] {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+}
+
+// Cheap local fuzzy scoring: how many query tokens appear (as substrings) in the
+// item name, with a bonus for the whole query being a substring of the name.
+// Items with zero matching tokens are dropped. Sorted best-first, max 5.
+export function scoreCandidates(query: string, catalog: CatalogItem[]): Candidate[] {
+  const qTokens = tokenize(query);
+  if (qTokens.length === 0) return [];
+  const qJoined = qTokens.join(" ");
+
+  const scored = catalog
+    .map((item): Candidate => {
+      const name = item.item_name.toLowerCase();
+      const nameTokens = tokenize(item.item_name);
+      let score = 0;
+      for (const qt of qTokens) {
+        if (nameTokens.some((nt) => nt === qt)) score += 2;        // exact token
+        else if (name.includes(qt)) score += 1;                    // substring
+      }
+      if (name.includes(qJoined)) score += 3;                      // whole-query bonus
+      return { ...item, score };
+    })
+    .filter((c) => c.score > 0)
+    .sort((a, b) => b.score - a.score || a.item_name.localeCompare(b.item_name));
+
+  return scored.slice(0, 5);
+}
+
+// A match is "confident" (skip the picker) when there is exactly one candidate,
+// or the top candidate's score is clearly ahead of the second.
+export function isConfident(candidates: Candidate[]): boolean {
+  if (candidates.length === 0) return false;
+  if (candidates.length === 1) return true;
+  return candidates[0].score >= candidates[1].score + 3;
+}
