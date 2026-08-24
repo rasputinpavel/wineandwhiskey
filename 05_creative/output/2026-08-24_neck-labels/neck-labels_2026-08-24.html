@@ -4,18 +4,26 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Inter',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 
-.tag{position:relative;width:85mm;height:80mm;border-radius:3mm;
+.tag{position:relative;width:85mm;height:88mm;border-radius:3mm;
 overflow:hidden;background:var(--bg);color:var(--fg);}
 
 /* neck hole cut guide */
-.hole{position:absolute;top:5mm;left:50%;transform:translateX(-50%);
-width:34mm;height:34mm;border-radius:50%;
+.hole{position:absolute;top:4mm;left:50%;transform:translateX(-50%);
+width:38mm;height:38mm;border-radius:50%;
 border:0.35mm dashed var(--die);}
 .slit{position:absolute;top:0;left:50%;transform:translateX(-50%);
-width:0;height:5mm;border-left:0.35mm dashed var(--die);}
+width:2mm;height:5mm;border-left:0.35mm dashed var(--die);
+border-right:0.35mm dashed var(--die);}
 
-/* content below the hole */
-.body{position:absolute;left:0;right:0;top:39mm;bottom:9mm;
+/* score line: fold the panel forward here */
+.fold{position:absolute;left:0;right:0;top:47mm;height:0;
+border-top:0.35mm dashed var(--die);}
+.fold::before,.fold::after{content:"";position:absolute;top:-0.35mm;
+width:4mm;height:0.6mm;background:var(--die);}
+.fold::before{left:0;} .fold::after{right:0;}
+
+/* content below the fold */
+.body{position:absolute;left:0;right:0;top:47mm;bottom:9mm;
 display:flex;flex-direction:column;align-items:center;justify-content:center;
 padding:0 4mm;text-align:center;}
 .flair{font-size:3.4mm;letter-spacing:1.1mm;color:var(--accent);
@@ -28,7 +36,7 @@ color:var(--fg);white-space:nowrap;}
 font-weight:500;color:var(--fg);opacity:.78;margin-top:1.8mm;line-height:1.25;}
 
 /* inset keyline frame */
-.keyline{position:absolute;top:2.4mm;left:2.4mm;right:2.4mm;bottom:11.4mm;
+.keyline{position:absolute;top:49.4mm;left:2.4mm;right:2.4mm;bottom:11.4mm;
 border:0.3mm solid var(--fg);opacity:.28;border-radius:1.4mm;pointer-events:none;}
 
 /* bottom wordmark bar */
@@ -40,7 +48,7 @@ line-height:1;padding-top:0.5mm;}
 /* ---- special offer price panel ---- */
 .so-head{font-family:'Bebas';font-size:7mm;letter-spacing:1.3mm;
 line-height:1;color:var(--fg);margin:0 0 2mm;}
-.panel{width:71mm;height:22.5mm;display:flex;gap:2.4mm;align-items:stretch;}
+.panel{width:71mm;height:22mm;display:flex;gap:2.4mm;align-items:stretch;}
 .cell{flex:1;border-radius:1.6mm;padding:1.4mm 1.6mm 1.6mm;
 display:flex;flex-direction:column;align-items:stretch;}
 .cell.was{background:#E7E0D7;}
@@ -61,7 +69,7 @@ background:#B0342F;transform:rotate(-9deg);opacity:.8;border-radius:0.3mm;}
 body{background:#CFCAC3;padding:12mm;display:flex;flex-wrap:wrap;gap:10mm;
 justify-content:center;align-items:flex-start;width:299mm;}
 .tag{box-shadow:0 1.5mm 5mm rgba(0,0,0,.3);}
-</style></head><body><div class="tag" style="--bg:#C9A84C;--fg:#1A1A1A;--accent:#8C1C1C;--barbg:#1A1A1A;--barfg:#C9A84C;--die:rgba(26,26,26,.45)"><div class="slit"></div><div class="hole"></div><div class="keyline"></div><div class="body"><div class="flair">&#9733;&#9733;&#9733;&#9733;&#9733;</div><div class="head" style="font-size:15.5mm">BESTSELLER</div><div class="sub" style="font-size:2.35mm">OUR CUSTOMERS&rsquo; FAVOURITE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#1A1A1A;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#F5F0EB;--barfg:#1A1A1A;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="keyline"></div><div class="body"><div class="head" style="font-size:24mm">NEW</div><div class="sub" style="font-size:2.35mm">JUST ARRIVED IN STORE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#8C1C1C;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#F5F0EB;--barfg:#8C1C1C;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="body">
+</style></head><body><div class="tag" style="--bg:#C9A84C;--fg:#1A1A1A;--accent:#8C1C1C;--barbg:#1A1A1A;--barfg:#C9A84C;--die:rgba(26,26,26,.45)"><div class="slit"></div><div class="hole"></div><div class="fold"></div><div class="keyline"></div><div class="body"><div class="flair">&#9733;&#9733;&#9733;&#9733;&#9733;</div><div class="head" style="font-size:15.5mm">BESTSELLER</div><div class="sub" style="font-size:2.35mm">OUR CUSTOMERS&rsquo; FAVOURITE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#1A1A1A;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#F5F0EB;--barfg:#1A1A1A;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="fold"></div><div class="keyline"></div><div class="body"><div class="head" style="font-size:24mm">NEW</div><div class="sub" style="font-size:2.35mm">JUST ARRIVED IN STORE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#8C1C1C;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#F5F0EB;--barfg:#8C1C1C;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="fold"></div><div class="body">
       <div class="so-head">SPECIAL OFFER</div>
       <div class="panel">
         <div class="cell was"><div class="lab">Was</div>
@@ -70,4 +78,4 @@ justify-content:center;align-items:flex-start;width:299mm;}
         <div class="cell now"><div class="lab">Now</div>
           <div class="zone"><span class="baht">&#3647;</span></div>
         </div>
-      </div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#3D3D3D;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#C9A84C;--barfg:#1A1A1A;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="keyline"></div><div class="body"><div class="head" style="font-size:13mm">LAST<br>BOTTLES</div><div class="sub" style="font-size:2.1mm">WHEN THEY&rsquo;RE GONE, THEY&rsquo;RE GONE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#EDE0D0;--fg:#1A1A1A;--accent:#8C1C1C;--barbg:#8C1C1C;--barfg:#F5F0EB;--die:rgba(26,26,26,.45)"><div class="slit"></div><div class="hole"></div><div class="keyline"></div><div class="body"><div class="rule"></div><div class="head" style="font-size:12mm">SOMMELIER&rsquo;S<br>CHOICE</div><div class="sub" style="font-size:2.35mm">PICKED BY OUR SOMMELIER</div></div><div class="bar">WINE &amp; WHISKEY</div></div></body></html>
+      </div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#3D3D3D;--fg:#F5F0EB;--accent:#C9A84C;--barbg:#C9A84C;--barfg:#1A1A1A;--die:rgba(245,240,235,.45)"><div class="slit"></div><div class="hole"></div><div class="fold"></div><div class="keyline"></div><div class="body"><div class="head" style="font-size:13mm">LAST<br>BOTTLES</div><div class="sub" style="font-size:2.1mm">WHEN THEY&rsquo;RE GONE, THEY&rsquo;RE GONE</div></div><div class="bar">WINE &amp; WHISKEY</div></div><div class="tag" style="--bg:#EDE0D0;--fg:#1A1A1A;--accent:#8C1C1C;--barbg:#8C1C1C;--barfg:#F5F0EB;--die:rgba(26,26,26,.45)"><div class="slit"></div><div class="hole"></div><div class="fold"></div><div class="keyline"></div><div class="body"><div class="rule"></div><div class="head" style="font-size:12mm">SOMMELIER&rsquo;S<br>CHOICE</div><div class="sub" style="font-size:2.35mm">PICKED BY OUR SOMMELIER</div></div><div class="bar">WINE &amp; WHISKEY</div></div></body></html>
