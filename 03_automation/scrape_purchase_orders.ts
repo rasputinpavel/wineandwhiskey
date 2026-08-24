@@ -20,8 +20,10 @@
  * po_number not yet in Supabase. This is the only way new POs enter the system.
  *
  * Env flags:
- *   SCRAPER_HEADFUL=1   open a visible browser (for selector debugging)
- *   SCRAPER_DEBUG=1     save screenshots on errors
+ *   SCRAPER_HEADFUL=1     open a visible browser (for selector debugging)
+ *   SCRAPER_DEBUG=1       save screenshots on errors
+ *   SCRAPER_FORCE_LOGIN=1 ignore the stored session and log in with the password,
+ *                         to rehearse what happens once the session expires
  */
 
 import dotenv from "dotenv";
@@ -123,10 +125,32 @@ async function nukeCookieConsent(page: Page): Promise<void> {
 // ─── Phase 1: Auth ────────────────────────────────────────────────────────────
 
 const IS_CI = !!process.env.CI || !!process.env.GITHUB_ACTIONS;
+// Force the password login path even when the stored session still works.
+// Used to verify in CI that automated re-login survives Loyverse's captcha.
+const FORCE_LOGIN = !!process.env.SCRAPER_FORCE_LOGIN;
+const HAS_CREDS = !!LOYVERSE_EMAIL && !!LOYVERSE_PASSWORD;
+
+// Loyverse's "remember me" cookie (ownercub-lls) carries a hard 30-day expiry
+// counted from the login — it is NOT extended when the session is used, so a
+// stored session dies exactly 30 days after it was minted. Report how much
+// runway is left so an expiry is visible before it takes the sync down.
+function sessionDaysLeft(): number | null {
+  try {
+    const state = JSON.parse(fs.readFileSync(AUTH_STATE_PATH, "utf8"));
+    const lls = state.cookies?.find((c: any) => c.name === "ownercub-lls");
+    if (!lls?.expires || lls.expires <= 0) return null;
+    return (lls.expires * 1000 - Date.now()) / 86_400_000;
+  } catch { return null; }
+}
 
 async function ensureLoggedIn(context: BrowserContext, page: Page) {
   // Try saved session
-  if (fs.existsSync(AUTH_STATE_PATH)) {
+  if (fs.existsSync(AUTH_STATE_PATH) && !FORCE_LOGIN) {
+    const daysLeft = sessionDaysLeft();
+    if (daysLeft != null) {
+      console.log(`  Session valid for ${daysLeft.toFixed(1)} more day(s).`);
+      if (daysLeft < 3) console.log("  ⚠ Session expires soon — a re-login will be attempted when it does.");
+    }
     await page.goto("https://r.loyverse.com/dashboard/#/inventory/orders", { waitUntil: "domcontentloaded" });
     await delay(3000);
     const url = page.url();
@@ -136,15 +160,29 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
     }
     console.log("  Session expired.");
     fs.unlinkSync(AUTH_STATE_PATH);
-    if (IS_CI) {
-      // Loyverse triggers hCaptcha on automated headless logins, so CI cannot
-      // re-authenticate by itself. Operator must refresh the secret manually
-      // (see workflow file for the procedure).
+    if (IS_CI && !HAS_CREDS) {
       throw new Error(
-        "Loyverse session expired. Refresh LOYVERSE_SESSION_B64 secret: " +
-        "run scraper locally with SCRAPER_HEADFUL=1, solve captcha, then " +
-        "`base64 -i .loyverse-session.json | pbcopy` and update the GitHub secret."
+        "Loyverse session expired and LOYVERSE_EMAIL / LOYVERSE_PASSWORD are not " +
+        "set in CI. Refresh LOYVERSE_SESSION_B64 secret: run scraper locally with " +
+        "SCRAPER_HEADFUL=1, then `base64 -i .loyverse-session.json | pbcopy` and " +
+        "update the GitHub secret."
       );
+    }
+    // Otherwise fall through to a password login. We deliberately keep the same
+    // browser context: it still holds the `skipCaptcha` cookie restored from the
+    // stored session, which is what lets an automated login through Loyverse's
+    // hCaptcha. Recreating the context here would lose it.
+    if (IS_CI) console.log("  Re-authenticating with LOYVERSE_EMAIL / LOYVERSE_PASSWORD...");
+  } else if (FORCE_LOGIN) {
+    console.log("  SCRAPER_FORCE_LOGIN set — dropping the auth cookie and logging in with password.");
+    if (!HAS_CREDS) throw new Error("SCRAPER_FORCE_LOGIN set but LOYVERSE_EMAIL / LOYVERSE_PASSWORD are missing.");
+    // Drop every cookie that carries auth, exactly as expiry would: the short
+    // JSESSIONID (2h), the 30-day ownercub-lls "remember me" token and the ALB
+    // stickiness pair. The rest of the jar — notably `skipCaptcha` — has to
+    // survive, or this rehearses a different scenario than the one we want to
+    // prove.
+    for (const name of ["ownercub-lls", "JSESSIONID", "AWSALB", "AWSALBCORS"]) {
+      await context.clearCookies({ name });
     }
   } else if (IS_CI) {
     throw new Error(
@@ -207,7 +245,12 @@ async function ensureLoggedIn(context: BrowserContext, page: Page) {
   }
 
   await context.storageState({ path: AUTH_STATE_PATH });
-  console.log("  ✓ Logged in, session saved.");
+  const daysLeft = sessionDaysLeft();
+  console.log(`  ✓ Logged in, session saved${daysLeft != null ? ` (valid ${daysLeft.toFixed(1)} day(s))` : ""}.`);
+  // A session minted here lives only on the runner's disk — the workflow spots
+  // the changed file and writes it back into LOYVERSE_SESSION_B64, or the next
+  // run would restore the old, expired one and log in all over again.
+  if (IS_CI) console.log("::notice::SESSION_REFRESHED");
 }
 
 // ─── Phase 2: ID Discovery ────────────────────────────────────────────────────

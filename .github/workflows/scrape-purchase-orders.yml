@@ -11,6 +11,11 @@ on:
         description: "Extra args (e.g. '--all', '--no-discover', '--discover-pages 10', '--po PO2890')"
         required: false
         default: ""
+      force_login:
+        description: "Ignore the stored session and re-login with email/password (verifies captcha-free CI login)"
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   scrape:
@@ -62,12 +67,44 @@ jobs:
             exit 1
           fi
 
+      # Loyverse's session cookie carries a hard 30-day expiry that is NOT
+      # extended by use, so a stored session always dies a month after it was
+      # minted. The scraper therefore re-logins with email/password when it
+      # finds the session dead — and we hash the session file around the run so
+      # the next step knows whether a new one needs persisting.
       - name: Scrape purchase orders
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LOYVERSE_EMAIL:       ${{ secrets.LOYVERSE_EMAIL }}
+          LOYVERSE_PASSWORD:    ${{ secrets.LOYVERSE_PASSWORD }}
+          SCRAPER_FORCE_LOGIN:  ${{ github.event.inputs.force_login == 'true' && '1' || '' }}
           SCRAPER_DEBUG:        "1"
-        run: npm run orders -- ${{ github.event.inputs.mode || '' }}
+        run: |
+          before=$(md5sum .loyverse-session.json 2>/dev/null | cut -d' ' -f1)
+          npm run orders -- ${{ github.event.inputs.mode || '' }}
+          after=$(md5sum .loyverse-session.json 2>/dev/null | cut -d' ' -f1)
+          if [ -n "$after" ] && [ "$before" != "$after" ]; then
+            echo "SESSION_CHANGED=1" >> "$GITHUB_ENV"
+            echo "Session was refreshed during this run — it will be written back to the secret."
+          fi
+
+      # A session minted on the runner lives only on its disk. Without this the
+      # next run would restore the old, expired one from the secret and log in
+      # again — every 8 hours, forever. Needs a PAT with Secrets: read/write
+      # (SESSION_REFRESH_PAT); without it we just warn and keep the manual path.
+      - name: Persist refreshed session into LOYVERSE_SESSION_B64
+        if: env.SESSION_CHANGED == '1'
+        env:
+          GH_TOKEN: ${{ secrets.SESSION_REFRESH_PAT }}
+          GH_REPO:  ${{ github.repository }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Session was refreshed but SESSION_REFRESH_PAT is not set — the secret still holds the old session. Add the PAT or refresh the secret by hand."
+            exit 0
+          fi
+          base64 -w0 .loyverse-session.json | gh secret set LOYVERSE_SESSION_B64
+          echo "::notice::LOYVERSE_SESSION_B64 updated with the freshly minted session."
 
       - name: Upload debug screenshots
         if: failure()
