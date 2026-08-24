@@ -16,7 +16,7 @@ import {
 } from "./expenses.js";
 import {
   POCard,
-  buildPOMessage, buildPOKeyboard, parsePOFromMessage,
+  buildPOMessage, buildPOKeyboard, parsePOFromMessage, toISODate,
 } from "./po-parse.js";
 import {
   classifyAndExtractPO, isDuplicateDocNumber,
@@ -445,7 +445,7 @@ bot.on("message:photo", async (ctx) => {
       // captioned photo is an expense entry.
       if (hasWriteoffTrigger(caption)) {
         const extracted = await parseWriteoffPhoto(
-          photo.base64, photo.mimeType as "image/jpeg" | "image/png", caption,
+          photo.base64, photo.mimeType, caption,
         );
         await ctx.api.deleteMessage(chatId, waitMsg.message_id);
         if (extracted) await startWriteoffFlow(chatId, extracted);
@@ -714,7 +714,7 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
         variantId,
         itemName: card.itemName,
         qty: card.qty,
-        takenDate: toISODateFromDDMMYYYY(card.date),
+        takenDate: toISODate(card.date) ?? todayInThailand(),
         takenBy,
       });
     } catch (e) {
@@ -748,12 +748,6 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
   }
 
   await ctx.answerCallbackQuery();
-}
-
-// DD.MM.YYYY -> YYYY-MM-DD (card date is always well-formed; fall back to today).
-function toISODateFromDDMMYYYY(d: string): string {
-  const m = d.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : todayInThailand();
 }
 
 bot.on("callback_query:data", async (ctx) => {
