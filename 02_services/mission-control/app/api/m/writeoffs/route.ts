@@ -4,6 +4,9 @@ import { sbPublic } from '@/lib/supabase'
 // GET /api/m/writeoffs?status=pending|all — list write-offs.
 export async function GET(req: Request) {
   const status = new URL(req.url).searchParams.get('status') ?? 'pending'
+  if (!['pending', 'done', 'all'].includes(status)) {
+    return NextResponse.json({ error: "status must be 'pending', 'done', or 'all'" }, { status: 400 })
+  }
   let q = sbPublic
     .from('stock_writeoffs')
     .select('id, variant_id, item_name, qty, taken_date, taken_by, status, closed_at, closed_by')
