@@ -148,6 +148,15 @@ export const SECTIONS: Section[] = [
         route: m('purchase-orders'),
         embed: { kind: 'native' },
       },
+      {
+        // Bottles taken "себе", pending a Loyverse Stock Adjustment. Filled by
+        // the Chip & Dale bot (migration 039_stock_writeoffs); closed here or in
+        // the bot once the adjustment is done. Bot never writes to Loyverse.
+        slug: 'writeoffs', name: 'Write-offs', icon: '🍷', status: 'building',
+        description: 'Списания «себе»: бутылки, ждущие Stock Adjustment в Loyverse. Заводит бот Chip & Dale, закрываем кнопкой когда сделали корректировку.',
+        route: m('writeoffs'),
+        embed: { kind: 'native' },
+      },
       // Scraped Purchase Orders живут под Suppliers (вкладка), не отдельным пунктом сайдбара.
       // Tax Invoices — под Customers (вкладка).
       // Payment Calendar вынесен в раздел Payments (первым после Pulse).
