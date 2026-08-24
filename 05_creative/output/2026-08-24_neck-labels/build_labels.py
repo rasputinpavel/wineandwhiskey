@@ -14,10 +14,11 @@ BEBAS = b64(ROOT/"04_brand/logo/fonts/BebasNeue.woff2", "font/woff2")
 INTER = b64(ROOT/"04_brand/logo/fonts/Inter500.woff2", "font/woff2")
 
 # ---------- geometry (mm) ----------
-W, H      = 85, 80        # trim
-HOLE_D    = 34            # neck hole diameter
-HOLE_TOP  = 5             # from trim top
+W, H      = 85, 88        # trim
+HOLE_D    = 38            # neck hole diameter
+HOLE_TOP  = 4             # from trim top
 BAR_H     = 9             # bottom wordmark bar
+FOLD      = 47            # score line: collar above, visible panel below
 RADIUS    = 3             # corner radius
 A4_W, A4_H = 210, 297
 COLS, ROWS = 2, 3
@@ -61,10 +62,18 @@ overflow:hidden;background:var(--bg);color:var(--fg);}}
 width:{HOLE_D}mm;height:{HOLE_D}mm;border-radius:50%;
 border:0.35mm dashed var(--die);}}
 .slit{{position:absolute;top:0;left:50%;transform:translateX(-50%);
-width:0;height:{HOLE_TOP}mm;border-left:0.35mm dashed var(--die);}}
+width:2mm;height:{HOLE_TOP+1}mm;border-left:0.35mm dashed var(--die);
+border-right:0.35mm dashed var(--die);}}
 
-/* content below the hole */
-.body{{position:absolute;left:0;right:0;top:{HOLE_TOP+HOLE_D}mm;bottom:{BAR_H}mm;
+/* score line: fold the panel forward here */
+.fold{{position:absolute;left:0;right:0;top:{FOLD}mm;height:0;
+border-top:0.35mm dashed var(--die);}}
+.fold::before,.fold::after{{content:"";position:absolute;top:-0.35mm;
+width:4mm;height:0.6mm;background:var(--die);}}
+.fold::before{{left:0;}} .fold::after{{right:0;}}
+
+/* content below the fold */
+.body{{position:absolute;left:0;right:0;top:{FOLD}mm;bottom:{BAR_H}mm;
 display:flex;flex-direction:column;align-items:center;justify-content:center;
 padding:0 4mm;text-align:center;}}
 .flair{{font-size:3.4mm;letter-spacing:1.1mm;color:var(--accent);
@@ -77,7 +86,7 @@ color:var(--fg);white-space:nowrap;}}
 font-weight:500;color:var(--fg);opacity:.78;margin-top:1.8mm;line-height:1.25;}}
 
 /* inset keyline frame */
-.keyline{{position:absolute;top:2.4mm;left:2.4mm;right:2.4mm;bottom:{BAR_H+2.4}mm;
+.keyline{{position:absolute;top:{FOLD+2.4}mm;left:2.4mm;right:2.4mm;bottom:{BAR_H+2.4}mm;
 border:0.3mm solid var(--fg);opacity:.28;border-radius:1.4mm;pointer-events:none;}}
 
 /* bottom wordmark bar */
@@ -89,7 +98,7 @@ line-height:1;padding-top:0.5mm;}}
 /* ---- special offer price panel ---- */
 .so-head{{font-family:'Bebas';font-size:7mm;letter-spacing:1.3mm;
 line-height:1;color:var(--fg);margin:0 0 2mm;}}
-.panel{{width:71mm;height:22.5mm;display:flex;gap:2.4mm;align-items:stretch;}}
+.panel{{width:71mm;height:22mm;display:flex;gap:2.4mm;align-items:stretch;}}
 .cell{{flex:1;border-radius:1.6mm;padding:1.4mm 1.6mm 1.6mm;
 display:flex;flex-direction:column;align-items:stretch;}}
 .cell.was{{background:#E7E0D7;}}
@@ -112,6 +121,8 @@ def tag_html(L, die=True):
     style = (f"--bg:{L['bg']};--fg:{L['fg']};--accent:{L['accent']};"
              f"--barbg:{L['bar_bg']};--barfg:{L['bar_fg']};--die:{L['die']}")
     cut = f'<div class="slit"></div><div class="hole"></div>' if die else ''
+    if die:
+        cut += '<div class="fold"></div>'
     if L['slug'] != 'special-offer':
         cut += '<div class="keyline"></div>'
     bar = ('<div class="bar">WINE &amp; WHISKEY</div>')
@@ -178,7 +189,7 @@ grid-template-rows:repeat({ROWS},{H}mm);}}
 font-size:2.6mm;letter-spacing:0.4mm;color:#666;text-transform:uppercase;
 display:flex;justify-content:space-between;}}
 /* guide page */
-.gwrap{{position:absolute;inset:16mm 18mm;color:#1A1A1A;}}
+.gwrap{{position:absolute;inset:14mm 10mm;color:#1A1A1A;}}
 .gt{{font-family:'Bebas';font-size:10mm;letter-spacing:0.6mm;line-height:1;}}
 .gs{{font-size:3.1mm;letter-spacing:0.4mm;color:#555;margin-top:1.5mm;
 text-transform:uppercase;}}
@@ -187,7 +198,7 @@ text-transform:uppercase;}}
 table{{border-collapse:collapse;margin-top:5mm;font-size:3.1mm;width:100%;}}
 td,th{{border:0.2mm solid #CFC7BC;padding:1.6mm 2mm;text-align:left;}}
 th{{background:#F2ECE4;font-weight:500;}}
-.gauge{{display:flex;gap:8mm;margin-top:8mm;align-items:flex-end;}}
+.gauge{{display:flex;gap:5mm;margin-top:6mm;align-items:flex-end;justify-content:space-between;}}
 .ring{{text-align:center;}}
 .ring .c{{border:0.5mm solid #E5007E;border-radius:50%;}}
 .ring .n{{font-family:'Bebas';font-size:5mm;margin-top:2mm;letter-spacing:0.4mm;}}
@@ -196,7 +207,12 @@ border:0.4mm solid #E5007E;}}
 .dieline .dh{{position:absolute;top:{HOLE_TOP}mm;left:50%;transform:translateX(-50%);
 width:{HOLE_D}mm;height:{HOLE_D}mm;border:0.4mm solid #E5007E;border-radius:50%;}}
 .dieline .ds{{position:absolute;top:0;left:50%;transform:translateX(-50%);
-width:0;height:{HOLE_TOP}mm;border-left:0.4mm dashed #E5007E;}}
+width:2mm;height:{HOLE_TOP+1}mm;border-left:0.4mm dashed #E5007E;
+border-right:0.4mm dashed #E5007E;}}
+.dieline .df{{position:absolute;left:0;right:0;top:{FOLD}mm;height:0;
+border-top:0.4mm dashed #00A0B0;}}
+.dieline .dfl{{position:absolute;right:1.5mm;top:{FOLD+1}mm;font-size:2.4mm;
+color:#00A0B0;letter-spacing:0.3mm;}}
 .dieline .cap{{position:absolute;left:0;right:0;bottom:3mm;text-align:center;
 font-size:2.6mm;color:#E5007E;letter-spacing:0.4mm;}}
 """
@@ -210,9 +226,11 @@ for L in LABELS:
   <span>{W}&times;{H} mm &middot; hole &#216;{HOLE_D} mm &middot; {DATE}</span></div>
 </div>""")
 
-rings = "".join(
-    f'<div class="ring"><div class="c" style="width:{d}mm;height:{d}mm"></div>'
-    f'<div class="n">&#216;{d}</div></div>' for d in (32,34,36,38))
+def ring_row(ds):
+    return ('<div class="gauge">' + "".join(
+      f'<div class="ring"><div class="c" style="width:{d}mm;height:{d}mm"></div>'
+      f'<div class="n">&#216;{d}</div></div>' for d in ds) + '</div>')
+rings = ring_row((32,36,40,44)) + ring_row((34,38,42,46))
 
 guide = f"""<div class="sheet">
  <div class="gwrap">
@@ -221,10 +239,14 @@ guide = f"""<div class="sheet">
   <div class="gp">
    <b>1 &middot; Specification</b>
    <table>
-    <tr><th>Trim size</th><td>{W} &times; {H} mm (landscape)</td></tr>
+    <tr><th>Trim size</th><td>{W} mm wide &times; {H} mm tall</td></tr>
     <tr><th>Neck hole</th><td>&#216; {HOLE_D} mm, top-centred, {HOLE_TOP} mm from trim top</td></tr>
     <tr><th>Slit</th><td>Straight cut from top edge to hole &mdash; <em>optional</em>, lets the
         label slip onto a bottle already on the shelf</td></tr>
+    <tr><th>Fold</th><td><b>creased / scored across the full width, {FOLD} mm from the trim top</b>
+        &mdash; must be a proper score, not just a bend line, or 300 gsm card will crack</td></tr>
+    <tr><th>Collar / panel</th><td>above the score = {FOLD} mm collar that sits on the neck;
+        below = {H-FOLD} mm panel that folds forward and faces the shopper</td></tr>
     <tr><th>Corners</th><td>square cut. Optional: round to R{RADIUS} mm with a corner punch &mdash;
         the sheets are butted, so the guillotine cut is square</td></tr>
     <tr><th>Layout</th><td>{COLS} &times; {ROWS} = {COLS*ROWS} labels per A4 sheet, butted (no gutter)</td></tr>
@@ -238,27 +260,42 @@ guide = f"""<div class="sheet">
         &mdash; it changes the hole diameter</td></tr>
    </table>
   </div>
+ </div>
+</div>
+<div class="sheet">
+ <div class="gwrap">
+  <div class="gt">FIT GAUGE &mdash; TEST BEFORE THE FULL RUN</div>
+  <div class="gs">Print this page at 100 % &middot; reference only, not part of the run</div>
   <div class="gp">
-   <b>2 &middot; Fit gauge &mdash; test before the full run</b><br>
-   Cut these rings out and slide them over your actual bottles. The previous batch used
-   &#216;27 mm and had to be trimmed by hand; these ship at &#216;34 mm, which clears a standard
-   still-wine capsule. If sparkling bottles need more, tell us the winning diameter and
-   we re-issue the file.
+   Cut these rings out and try them on your actual bottles. What the hole has to clear:
+   still-wine lip &#216;29&ndash;31, sparkling with the muselet &#216;34&ndash;35,
+   whisky screw cap &#216;33&ndash;38, whisky stopper &#216;40&ndash;48 mm.
+   These labels ship at <b>&#216;38</b> plus a 2 mm slit &mdash; the slit does the real work:
+   the label snaps on sideways, so the hole only has to match the neck it rests on, not the
+   widest cap. Tell us the ring that wins and we re-issue the file.
   </div>
-  <div class="gauge">{rings}</div>
+  {rings}
  </div>
 </div>
 <div class="sheet">
  <div class="gwrap">
   <div class="gt">DIE-LINE &mdash; ACTUAL SIZE</div>
-  <div class="gs">{W} &times; {H} mm &middot; hole &#216;{HOLE_D} mm &middot; magenta = cut, does not print</div>
-  <div class="dieline"><div class="ds"></div><div class="dh"></div>
+  <div class="gs">{W} &times; {H} mm &middot; hole &#216;{HOLE_D} mm &middot; magenta = cut, cyan = score &mdash; neither prints</div>
+  <div class="dieline"><div class="ds"></div><div class="dh"></div><div class="df"></div><div class="dfl">FOLD / SCORE</div>
     <div class="cap">{W} &times; {H} mm &middot; hole &#216;{HOLE_D} mm &middot; square cut</div></div>
   <div class="gp" style="margin-top:8mm">
    Solid magenta = trim &amp; hole (die-cut or punch).<br>
+   Cyan dashed = <b>crease / score line</b>, {FOLD} mm from the trim top, full width.<br>
    Corners are square; round them to R{RADIUS} mm with a corner punch if you want a softer look.<br>
    Dashed magenta = optional slit from top edge to hole.<br>
    Hole centre sits {HOLE_TOP + HOLE_D/2} mm from the trim top, on the vertical centreline.
+  </div>
+  <div class="gp" style="margin-top:7mm">
+   <b>How it goes on the bottle</b><br>
+   1 &middot; Slip the collar over the neck through the hole (or snap it on sideways through the slit).<br>
+   2 &middot; Fold the panel forward on the score, roughly 100&ndash;120&deg;.<br>
+   3 &middot; Let the panel rest on the shoulder of the bottle &mdash; it now faces up and out,
+   readable head-on from the shelf instead of curling flat around the glass.
   </div>
  </div>
 </div>"""
