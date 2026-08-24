@@ -41,19 +41,82 @@ export type WalletExpense = {
 
 // ─── Google Sheets read ──────────────────────────────────────────────────────
 
-async function googleToken(): Promise<string> {
+// Google answers a perfectly healthy request with 503 UNAVAILABLE now and then.
+// One blip must not silently zero the expense side: every page below computes
+// balances as opening + sales − outflows, so an empty expense list doesn't look
+// like an error, it looks like a wallet several hundred thousand baht richer
+// than it is. Retry the transient statuses, fail fast on everything else (403 /
+// 404 / 401 are our bug, not Google's, and retrying only delays the message).
+export type SheetFetchOpts = { attempts?: number; baseDelayMs?: number }
+const SHEET_ATTEMPTS = 4
+const SHEET_BASE_DELAY_MS = 300   // 300ms, 600ms, 1200ms + jitter — ≤ ~2s worst case on a page render
+
+function isTransient(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  label: string,
+  opts: SheetFetchOpts = {},
+): Promise<Response> {
+  const attempts = opts.attempts ?? SHEET_ATTEMPTS
+  const base = opts.baseDelayMs ?? SHEET_BASE_DELAY_MS
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let r: Response | null = null
+    try {
+      r = await fetch(url, init)
+      if (r.ok || !isTransient(r.status)) return r
+      lastErr = new Error(`${r.status}`)
+    } catch (e) {
+      lastErr = e   // network / DNS / socket reset — always worth another go
+    }
+    if (attempt === attempts) return r ?? Promise.reject(lastErr)
+    const delay = base * Math.pow(2, attempt - 1) * (0.75 + Math.random() * 0.5)
+    console.warn(`[income] ${label} retry ${attempt}/${attempts - 1} after ${Math.round(delay)}ms (${describeErr(lastErr)})`)
+    await new Promise(res => setTimeout(res, delay))
+  }
+  throw lastErr
+}
+
+function describeErr(e: unknown): string {
+  return e instanceof Error ? e.message.slice(0, 100) : String(e).slice(0, 100)
+}
+
+// Google's error bodies are a JSON envelope; pull the human part out so the
+// banner reads "503 The service is currently unavailable." and not a wall of JSON.
+async function upstreamMessage(r: Response): Promise<string> {
+  const body = await r.text()
+  try {
+    const msg = JSON.parse(body)?.error?.message
+    if (msg) return `${r.status} ${msg}`
+  } catch { /* not JSON — fall through */ }
+  return `${r.status} ${body.slice(0, 200)}`
+}
+
+// The banner hint that goes with a failure: only a credentials problem is
+// actionable by the reader; a Google outage just needs another minute.
+export function expensesErrorHint(message: string): string {
+  return /credentials missing/i.test(message)
+    ? 'Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN.'
+    : 'Google Sheets was temporarily unavailable — reload the page in a minute.'
+}
+
+async function googleToken(opts: SheetFetchOpts = {}): Promise<string> {
   const client_id = process.env.GOOGLE_CLIENT_ID
   const client_secret = process.env.GOOGLE_CLIENT_SECRET
   const refresh_token = process.env.GOOGLE_REFRESH_TOKEN
   if (!client_id || !client_secret || !refresh_token) {
     throw new Error('Google Sheets credentials missing — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN')
   }
-  const r = await fetch('https://oauth2.googleapis.com/token', {
+  const r = await fetchWithRetry('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id, client_secret, refresh_token, grant_type: 'refresh_token' }),
-  })
-  if (!r.ok) throw new Error(`Google OAuth: ${await r.text()}`)
+  }, 'oauth', opts)
+  if (!r.ok) throw new Error(`Google OAuth: ${await upstreamMessage(r)}`)
   return (await r.json()).access_token as string
 }
 
@@ -84,13 +147,14 @@ function parseAmount(s: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-export async function fetchExpenses(): Promise<WalletExpense[]> {
-  const token = await googleToken()
-  const r = await fetch(
+export async function fetchExpenses(opts: SheetFetchOpts = {}): Promise<WalletExpense[]> {
+  const token = await googleToken(opts)
+  const r = await fetchWithRetry(
     `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(EXPENSES_RANGE)}`,
     { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+    'expenses', opts,
   )
-  if (!r.ok) throw new Error(`Expenses read: ${await r.text()}`)
+  if (!r.ok) throw new Error(`Expenses read: ${await upstreamMessage(r)}`)
   const rows: string[][] = (await r.json()).values ?? []
   const out: WalletExpense[] = []
   for (const row of rows) {

@@ -1,7 +1,7 @@
 import { sbInventory, sbPublic, type MoneyWallet, type MoneyMovement, type FixedCost, type Supplier, type PurchaseOrder, type FlowInvoice, type RollingBigPayment } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, fmtThbCompact, todayBkk, computeDueDate } from '@/lib/kpi'
-import { computeBalances, fetchExpenses, autoInflows, type IncomeReceipt, type WalletExpense } from '@/lib/income'
+import { computeBalances, fetchExpenses, expensesErrorHint, autoInflows, type IncomeReceipt, type WalletExpense } from '@/lib/income'
 import { generateObligations, bucketOf, daysInMonth, reconcileMonthObligations } from '@/lib/mandatory'
 import { buildRolling, type DatedAmount } from '@/lib/rolling'
 import { WeeklyTable, BigPaymentsPanel } from '@/components/modules/rolling/RollingClient'
@@ -244,7 +244,7 @@ export default async function RollingPage() {
         <Stat label="First negative week" value={forecast.firstNegative ?? '— none —'} tone={forecast.firstNegative ? 'neg' : undefined} />
       </div>
 
-      {expensesError && <Banner tone="red">Expenses not loaded ({expensesError}). Liquidity excludes expense outflows. Set GOOGLE_* env.</Banner>}
+      {expensesError && <Banner tone="red">Expenses not loaded ({expensesError}). Liquidity excludes expense outflows and is therefore too high. {expensesErrorHint(expensesError)}</Banner>}
       {bigError && <Banner tone="amber">Big payments not loaded ({bigError}). Apply migration 026.</Banner>}
 
       <WeeklyTable weeks={forecast.weeks} />

@@ -1,7 +1,7 @@
 import { sbInventory, type MoneyWallet, type MoneyMovement, type WalletId } from '@/lib/supabase'
 import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { fmtThb, todayBkk, isoNDaysAgo } from '@/lib/kpi'
-import { computeBalances, dailyBreakdown, fetchExpenses, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
+import { computeBalances, dailyBreakdown, fetchExpenses, expensesErrorHint, autoInflows, WALLET_LABELS, type WalletExpense, type WalletBalance, type IncomeReceipt } from '@/lib/income'
 import { MovementForm, WalletOpeningCell } from '@/components/modules/income/IncomeControls'
 import { LedgerTable, DailyTable, type LedgerRowData } from '@/components/modules/income/IncomeTables'
 import { DataFreshness } from '@/components/shell/DataFreshness'
@@ -124,7 +124,7 @@ export default async function IncomePage() {
 
       {expensesError && (
         <div className="text-xs text-wine-red bg-wine-red/5 border border-wine-red/30 rounded-sm px-3 py-2">
-          Expenses not loaded ({expensesError}). Balances exclude expense outflows. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN.
+          Expenses not loaded ({expensesError}). Balances above exclude expense outflows and are therefore too high. {expensesErrorHint(expensesError)}
         </div>
       )}
       {salesError && (

@@ -7,7 +7,7 @@ import {
 import { StatusCell } from '@/components/modules/fixed/ObligationCells'
 import { fmtThb, todayBkk } from '@/lib/kpi'
 import { generateObligations, applyOverrides, sumBucket } from '@/lib/mandatory'
-import { fetchExpenses, type WalletExpense } from '@/lib/income'
+import { fetchExpenses, expensesErrorHint, type WalletExpense } from '@/lib/income'
 import { type DashReceipt, monthlyTotals, MONTH_ABBR } from '@/lib/dashboard'
 
 export const dynamic = 'force-dynamic'
@@ -176,7 +176,7 @@ async function MonthView({ rows, month }: { rows: FixedCost[]; month: string }) 
 
       {expensesError && (
         <p className="text-[12px] text-wine-red bg-wine-red/[0.06] border border-wine-red/30 rounded-sm px-3 py-2 mb-3">
-          Expenses sheet not loaded ({expensesError}). Actual bucket total unavailable. Set GOOGLE_* env.
+          Expenses sheet not loaded ({expensesError}). Actual bucket total unavailable. {expensesErrorHint(expensesError)}
         </p>
       )}
 
