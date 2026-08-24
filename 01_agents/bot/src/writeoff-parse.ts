@@ -175,7 +175,7 @@ export function formatPendingReminder(rows: PendingRow[], today: string): string
   if (pending.length === 0) return "";
 
   const lines = pending.map(
-    (r) => `• ${r.qty}× ${r.item_name} — ${ageLabel(r.taken_date, today)}`,
+    (r) => `• ${r.qty}× ${escapeHtml(r.item_name)} — ${ageLabel(r.taken_date, today)}`,
   );
   return [
     `🍷 <b>Не списано (${pending.length}):</b>`,

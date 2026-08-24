@@ -163,4 +163,12 @@ describe("formatPendingReminder", () => {
   it("returns empty string when nothing is pending", () => {
     expect(formatPendingReminder([], "2026-08-21")).toBe("");
   });
+  it("HTML-escapes an ampersand in the item name (briefing is sent as HTML)", () => {
+    const out = formatPendingReminder(
+      [{ id: "c", item_name: "Moët & Chandon", qty: 1, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" }],
+      "2026-08-21",
+    );
+    expect(out).toContain("Moët &amp; Chandon");
+    expect(out).not.toContain("Moët & Chandon");
+  });
 });
