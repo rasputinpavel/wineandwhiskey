@@ -522,6 +522,21 @@ bot.on("message:text", async (ctx) => {
   const pendingPhoto = pendingPhotos.get(chatId);
   if (pendingPhoto) {
     pendingPhotos.delete(chatId);
+    // A write-off trigger as the follow-up text means: write off the photographed
+    // bottle, not log an expense for it (user sent a bare bottle photo, then «спиши»).
+    if (hasWriteoffTrigger(text)) {
+      const wmsg = await ctx.reply("Распознаю списание...");
+      try {
+        const extracted = await parseWriteoffPhoto(pendingPhoto.base64, pendingPhoto.mimeType, text);
+        await ctx.api.deleteMessage(chatId, wmsg.message_id);
+        if (extracted) await startWriteoffFlow(chatId, extracted);
+        else await ctx.reply("Не понял, что списать. Пришли фото ещё раз с подписью «спиши 2».");
+      } catch (e) {
+        console.error(e);
+        await ctx.api.editMessageText(chatId, wmsg.message_id, "Ошибка при распознавании списания.");
+      }
+      return;
+    }
     const msg = await ctx.reply("Читаю чек...");
     try {
       const extracted = await extractExpenseFromPhoto(pendingPhoto.base64, pendingPhoto.mimeType, text);
@@ -687,16 +702,21 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
   if (data.startsWith("wo_pick:")) {
     const [, qtyStr, variantId] = data.split(":");
     const qty = Number(qtyStr) || 1;
-    const item = await findVariant(variantId);
-    if (!item) {
-      await ctx.answerCallbackQuery("Товар не найден — заведи заново.");
-      return;
+    await ctx.answerCallbackQuery("Загружаю…"); // ack immediately, before the catalog fetch
+    try {
+      const item = await findVariant(variantId);
+      if (!item) {
+        await ctx.editMessageText("Товар не найден в каталоге — заведи списание заново.");
+        return;
+      }
+      await ctx.editMessageText(
+        buildWriteoffMessage({ itemName: item.item_name, qty, date: bangkokDate() }),
+        { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(item.variant_id) },
+      );
+    } catch (e) {
+      console.error("wo_pick failed:", e);
+      try { await ctx.editMessageText("❌ Ошибка при выборе товара. Заведи списание заново."); } catch {}
     }
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(
-      buildWriteoffMessage({ itemName: item.item_name, qty, date: bangkokDate() }),
-      { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(item.variant_id) },
-    );
     return;
   }
 

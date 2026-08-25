@@ -82,17 +82,23 @@ export async function getStoreContext(): Promise<string> {
 }
 
 // Structured catalog for write-off matching — same data as getStoreContext but
-// returned as rows instead of a formatted string. Not cached here (the caller
-// fetches at most once per write-off); reuses the same paginated fetch.
-export async function getCatalogItems(): Promise<
-  { variant_id: string; item_name: string; in_stock: number }[]
-> {
+// returned as rows instead of a formatted string. Cached briefly so the two
+// calls in one write-off (matchCatalog to show the picker, then findVariant when
+// the user taps a candidate) reuse a single fetch instead of hitting Loyverse
+// twice within seconds.
+type CatalogRow = { variant_id: string; item_name: string; in_stock: number };
+let catalogCache: { rows: CatalogRow[]; ts: number } | null = null;
+const CATALOG_TTL = 60 * 1000;
+
+export async function getCatalogItems(): Promise<CatalogRow[]> {
+  if (catalogCache && Date.now() - catalogCache.ts < CATALOG_TTL) return catalogCache.rows;
+
   const [items, inventory] = await Promise.all([
     loyverseFetch<Item>("/items", "items"),
     loyverseFetch<InventoryLevel>("/inventory", "inventory_levels"),
   ]);
   const inventoryMap = new Map(inventory.map((i) => [i.variant_id, i.in_stock]));
-  return items
+  const rows = items
     .filter((item) => !item.deleted_at && item.variants.length > 0)
     .map((item) => {
       const v = item.variants[0];
@@ -102,6 +108,8 @@ export async function getCatalogItems(): Promise<
         in_stock: inventoryMap.get(v.variant_id) ?? 0,
       };
     });
+  catalogCache = { rows, ts: Date.now() };
+  return rows;
 }
 
 export async function getRecentSales(days = 7): Promise<string> {
