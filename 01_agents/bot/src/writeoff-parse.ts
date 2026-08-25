@@ -16,11 +16,16 @@ export type PendingRow = {
 // Whole-word triggers that route a message (text or photo caption) to the
 // write-off flow instead of the expense flow. Matched as whole words (Unicode
 // boundaries) so common Russian words never collide: "списание" must not fire
-// on "расписание" (schedule), and "себе" must not fire on "себестоимость"
-// (cost price). Explicit inflection list beats stemming, which trips on
-// "список"/"расписание". A form we miss just makes the user retype.
+// on "расписание" (schedule). Bare "себе" is deliberately excluded — it's an
+// ordinary word ("купил себе обед") and would false-positive on plain expense
+// messages; only the owner's actual take-phrases ("взяли/берём/беру себе")
+// trigger, covering both ё and е spellings. The whole-word matcher treats the
+// space inside a multi-word entry as a literal character, so these still only
+// match as exact phrases. Explicit inflection list beats stemming, which trips
+// on "список"/"расписание". A form we miss just makes the user retype.
 const TRIGGERS = [
-  "спиши", "спишите", "списать", "списал", "списала", "списание", "списываю", "себе",
+  "спиши", "спишите", "списать", "списал", "списала", "списание", "списываю",
+  "взяли себе", "взял себе", "берём себе", "берем себе", "беру себе",
 ];
 
 // True when any trigger appears as a whole word (not embedded in a longer word).
@@ -175,7 +180,7 @@ export function formatPendingReminder(rows: PendingRow[], today: string): string
   if (pending.length === 0) return "";
 
   const lines = pending.map(
-    (r) => `• ${r.qty}× ${r.item_name} — ${ageLabel(r.taken_date, today)}`,
+    (r) => `• ${r.qty}× ${escapeHtml(r.item_name)} — ${ageLabel(r.taken_date, today)}`,
   );
   return [
     `🍷 <b>Не списано (${pending.length}):</b>`,

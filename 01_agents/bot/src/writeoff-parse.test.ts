@@ -21,9 +21,17 @@ describe("hasWriteoffTrigger", () => {
     expect(hasWriteoffTrigger("какая себестоимость у этого вина?")).toBe(false);
     expect(hasWriteoffTrigger("дай список вин")).toBe(false);
   });
-  it("matches whole-word себе and common списать inflections", () => {
+  it("matches the 'взяли себе' take-phrase and common списать inflections", () => {
     expect(hasWriteoffTrigger("взяли себе бутылку")).toBe(true);
     expect(hasWriteoffTrigger("спишите 3 просекко")).toBe(true);
+  });
+  it("does not fire on a bare 'себе' in an expense message", () => {
+    expect(hasWriteoffTrigger("купил себе обед 200")).toBe(false);
+    expect(hasWriteoffTrigger("такси до дома себе 150")).toBe(false);
+  });
+  it("fires on 'берём себе' / 'берем себе' phrasing", () => {
+    expect(hasWriteoffTrigger("берём себе 2 просекко")).toBe(true);
+    expect(hasWriteoffTrigger("берем себе бутылку")).toBe(true);
   });
 });
 
@@ -162,5 +170,13 @@ describe("formatPendingReminder", () => {
   });
   it("returns empty string when nothing is pending", () => {
     expect(formatPendingReminder([], "2026-08-21")).toBe("");
+  });
+  it("HTML-escapes an ampersand in the item name (briefing is sent as HTML)", () => {
+    const out = formatPendingReminder(
+      [{ id: "c", item_name: "Moët & Chandon", qty: 1, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" }],
+      "2026-08-21",
+    );
+    expect(out).toContain("Moët &amp; Chandon");
+    expect(out).not.toContain("Moët & Chandon");
   });
 });

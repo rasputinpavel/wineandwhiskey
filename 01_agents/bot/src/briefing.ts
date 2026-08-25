@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSales, getInventorySummary } from "./tools.js";
 import { getPaymentAlerts, formatPaymentAlerts } from "./sheets.js";
+import { listPending } from "./writeoff.js";
+import { formatPendingReminder } from "./writeoff-parse.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -31,13 +33,14 @@ export async function generateMorningBriefing(): Promise<string> {
   const todayLabel = labelFor(today);
   const yesterdayLabel = labelFor(yesterday);
 
-  const [salesYesterday, salesLastWeek, salesTwoWeeksAgo, salesMonth, inventory, paymentAlerts] = await Promise.all([
+  const [salesYesterday, salesLastWeek, salesTwoWeeksAgo, salesMonth, inventory, paymentAlerts, pendingWriteoffs] = await Promise.all([
     getSales(yesterday, yesterday),
     getSales(sameWeekdayLastWeek, sameWeekdayLastWeek),
     getSales(sameWeekdayTwoWeeksAgo, sameWeekdayTwoWeeksAgo),
     getSales(monthStart, yesterday),
     getInventorySummary(),
     getPaymentAlerts(3),
+    listPending(),
   ]);
 
   const prompt = `Ты — дружелюбный помощник команды винного магазина Wine & Whiskey в Таиланде.
@@ -110,5 +113,7 @@ ${inventory}
   const briefing = text?.text ?? "Доброе утро! Не удалось загрузить данные.";
 
   const paymentBlock = formatPaymentAlerts(paymentAlerts);
-  return paymentBlock ? `${briefing}\n\n${paymentBlock}` : briefing;
+  const writeoffBlock = formatPendingReminder(pendingWriteoffs, today);
+  const blocks = [briefing, paymentBlock, writeoffBlock].filter((b) => b && b.length > 0);
+  return blocks.join("\n\n");
 }
