@@ -24,7 +24,7 @@ export default async function CustomerDetail({
 
   const { data: cust, error: custErr } = await sbInventory
     .from('b2b_customer')
-    .select('id, flowaccount_name, payment_terms_days, credit_limit, is_consignment, notes, loyverse_customer_id')
+    .select('id, flowaccount_name, brand_name, payment_terms_days, credit_limit, is_consignment, notes, loyverse_customer_id')
     .eq('id', id).maybeSingle()
   if (custErr) return <div className="p-6"><SchemaError error={custErr.message} /></div>
   if (!cust)   return <div className="p-6"><div className="text-graphite">Customer not found.</div></div>
@@ -63,6 +63,7 @@ export default async function CustomerDetail({
           <Link href="/m/customers" className="text-xs text-graphite hover:text-wine-red">← Back to customers</Link>
           <h2 className="font-heading text-2xl text-deep-black mt-3">{c.flowaccount_name}</h2>
           <div className="text-xs text-graphite mt-1 mb-1">
+            {c.brand_name && <>{c.brand_name} · </>}
             {c.is_consignment ? 'Consignment' : 'Regular'} · Terms {c.payment_terms_days} days
           </div>
           <div className="mb-5">

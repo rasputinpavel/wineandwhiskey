@@ -109,7 +109,8 @@ export type Supplier = {
 
 export type B2bCustomer = {
   id: string
-  flowaccount_name: string
+  flowaccount_name: string     // legal entity — canonical name, matched against FlowAccount
+  brand_name: string | null    // trading brand when it differs (FlyO → Four Sea Oasis Co., Ltd.); display-only
   loyverse_customer_id: string | null
   payment_terms_days: number
   credit_limit: number | null

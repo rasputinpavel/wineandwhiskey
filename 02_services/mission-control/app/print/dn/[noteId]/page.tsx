@@ -13,7 +13,7 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
 
   const { data: note } = await sbInventory
     .from('delivery_note')
-    .select('id, number, issued_at, status, with_vat, location_id, consignment_location(name, customer_id, b2b_customer(flowaccount_name))')
+    .select('id, number, issued_at, status, with_vat, location_id, consignment_location(name, customer_id, b2b_customer(flowaccount_name, brand_name))')
     .eq('id', noteId).maybeSingle()
 
   if (!note) {
@@ -38,6 +38,9 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
   const customerName = (note as any).consignment_location?.b2b_customer?.flowaccount_name
                     ?? (note as any).consignment_location?.name
                     ?? 'Customer'
+  // Legal entity is the counterparty on the document; the trading brand goes
+  // under it in small print (FlyO ↔ Four Sea Oasis Co., Ltd.).
+  const customerBrand = (note as any).consignment_location?.b2b_customer?.brand_name as string | null | undefined
   const backHref = customerId ? `/m/customers/${customerId}?tab=deliveries` : '/m/customers'
 
   return (
@@ -77,6 +80,9 @@ export default async function PrintDeliveryNote({ params }: { params: Promise<{ 
           <div>
             <div className="overline text-graphite mb-1">To · consignment</div>
             <div className="font-heading text-[15px]">{customerName}</div>
+            {customerBrand && (
+              <div className="text-[11px] text-graphite mt-0.5">{customerBrand}</div>
+            )}
           </div>
         </section>
 
