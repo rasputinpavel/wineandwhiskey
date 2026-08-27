@@ -21,7 +21,7 @@
 | Охват | Оба типа (весовые + сыры-пакеты) |
 | Источник веса | С этикетки на фото (vision); не распознан / ввод текстом — бот спросит |
 | Единицы | **Граммы** (в то-ду человеку дублируем кг для Loyverse) |
-| Куда | Прямо в `main` (авто-деплой), миграция `040` вручную |
+| Куда | Прямо в `main` (авто-деплой), миграция `041` вручную |
 
 ## Как это работает
 
@@ -70,7 +70,7 @@
 - `/writeoffs`: строка показывает «250 г» для весовых, иначе «N×».
 
 ### 5. `02_services/mission-control` (портал)
-- Миграция `040_writeoff_weight.sql`: `alter table public.stock_writeoffs add column weight_grams integer;`
+- Миграция `041_writeoff_weight.sql`: `alter table public.stock_writeoffs add column weight_grams integer;`
 - `app/api/m/writeoffs/route.ts` GET select += `weight_grams`.
 - `app/(portal)/m/writeoffs/page.tsx`: колонка Qty показывает «250 г» когда `weight_grams` задан, иначе число штук.
 
