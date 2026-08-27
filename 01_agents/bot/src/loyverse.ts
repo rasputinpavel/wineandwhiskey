@@ -13,6 +13,7 @@ interface Item {
   category_id: string;
   deleted_at: string | null;
   variants: Variant[];
+  sold_by_weight: boolean;
 }
 
 interface Category {
@@ -86,7 +87,7 @@ export async function getStoreContext(): Promise<string> {
 // calls in one write-off (matchCatalog to show the picker, then findVariant when
 // the user taps a candidate) reuse a single fetch instead of hitting Loyverse
 // twice within seconds.
-type CatalogRow = { variant_id: string; item_name: string; in_stock: number };
+type CatalogRow = { variant_id: string; item_name: string; in_stock: number; sold_by_weight: boolean };
 let catalogCache: { rows: CatalogRow[]; ts: number } | null = null;
 const CATALOG_TTL = 60 * 1000;
 
@@ -106,6 +107,7 @@ export async function getCatalogItems(): Promise<CatalogRow[]> {
         variant_id: v.variant_id,
         item_name: item.item_name,
         in_stock: inventoryMap.get(v.variant_id) ?? 0,
+        sold_by_weight: item.sold_by_weight === true,
       };
     });
   catalogCache = { rows, ts: Date.now() };
