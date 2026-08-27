@@ -34,6 +34,7 @@ export default function WriteoffsPage() {
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
   const [loading, setLoading] = useState(true)
   const [closingId, setClosingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   async function load() {
@@ -74,6 +75,24 @@ export default function WriteoffsPage() {
       setErr(e?.message ?? 'save failed')
     } finally {
       setClosingId(null)
+    }
+  }
+
+  async function remove(r: Row) {
+    if (!window.confirm(`Удалить списание «${r.qty}× ${r.item_name}»? Строка исчезнет из портала и напоминаний бота.`)) return
+    setDeletingId(r.id)
+    setErr(null)
+    try {
+      const res = await fetch(`/api/m/writeoffs?id=${encodeURIComponent(r.id)}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      await load()
+    } catch (e: any) {
+      setErr(e?.message ?? 'delete failed')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -144,15 +163,25 @@ export default function WriteoffsPage() {
                     : <span className="text-neutral-500">✅ done</span>}
                 </td>
                 <td className="py-2 pr-4">
-                  {r.status === 'pending' && (
+                  <div className="flex items-center gap-2">
+                    {r.status === 'pending' && (
+                      <button
+                        onClick={() => close(r.id)}
+                        disabled={closingId === r.id}
+                        className="rounded bg-neutral-900 px-2 py-1 text-xs text-white disabled:opacity-50"
+                      >
+                        {closingId === r.id ? '…' : '✅ Списано'}
+                      </button>
+                    )}
                     <button
-                      onClick={() => close(r.id)}
-                      disabled={closingId === r.id}
-                      className="rounded bg-neutral-900 px-2 py-1 text-xs text-white disabled:opacity-50"
+                      onClick={() => remove(r)}
+                      disabled={deletingId === r.id}
+                      title="Удалить списание (завели по ошибке)"
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-red-500 hover:text-red-600 disabled:opacity-50"
                     >
-                      {closingId === r.id ? '…' : '✅ Списано'}
+                      {deletingId === r.id ? '…' : '🗑'}
                     </button>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -33,3 +33,14 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+// DELETE /api/m/writeoffs?id=<id> — remove a write-off entered by mistake
+// (e.g. bottles that turned out to be sold, not taken «себе»). Hard delete: the
+// row is a to-do the bot created, not an accounting record.
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const { error } = await sbPublic.from('stock_writeoffs').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
