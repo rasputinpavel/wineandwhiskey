@@ -75,6 +75,10 @@ const SYSTEM_PROMPT = `Ты — умный помощник для управл�
 const pendingPhotos   = new Map<number, PendingPhoto>();
 const pendingExpenses = new Map<number, PendingExpense>();
 
+// Weight items (sold_by_weight): after the item is chosen we ask "how many grams?"
+// and complete the card from the next numeric reply. In-memory like pendingPhotos.
+const pendingWeight = new Map<number, { variantId: string; itemName: string }>();
+
 // PO confirmation holds NO in-memory state: the scan is uploaded now, its path
 // travels in the callback data, and the fields are read back from the card text
 // on confirm — so a bot restart (Railway redeploy) mid-flow doesn't lose it.
@@ -118,14 +122,45 @@ async function startExpenseFlow(
   });
 }
 
+async function sendWriteoffCard(
+  chatId: number,
+  card: { itemName: string; qty: number; weightGrams: number | null; date: string },
+  variantId: string,
+): Promise<void> {
+  await bot.api.sendMessage(chatId, buildWriteoffMessage(card), {
+    parse_mode: "HTML",
+    reply_markup: buildWriteoffKeyboard(variantId),
+  });
+}
+
+// Present a chosen catalog item: weight item + known weight → card; weight item
+// + no weight → ask for grams; piece item → card with qty.
+async function presentChosenItem(
+  chatId: number,
+  item: { variant_id: string; item_name: string; sold_by_weight: boolean },
+  qty: number,
+  weightGrams: number | null,
+): Promise<void> {
+  if (item.sold_by_weight) {
+    if (weightGrams != null) {
+      await sendWriteoffCard(chatId, { itemName: item.item_name, qty: 1, weightGrams, date: bangkokDate() }, item.variant_id);
+    } else {
+      pendingWeight.set(chatId, { variantId: item.variant_id, itemName: item.item_name });
+      await bot.api.sendMessage(chatId, `⚖️ Сколько грамм для ${item.item_name}? Напиши число.`);
+    }
+  } else {
+    await sendWriteoffCard(chatId, { itemName: item.item_name, qty, weightGrams: null, date: bangkokDate() }, item.variant_id);
+  }
+}
+
 // Show the write-off card (confident single match) or a candidate picker.
 // No in-memory state — variant_id + qty travel in callback data, the card
 // fields are read back from the message text on confirm.
 async function startWriteoffFlow(
   chatId: number,
-  extracted: { query: string; qty: number },
+  extracted: { query: string; qty: number; weightGrams: number | null },
 ): Promise<void> {
-  const candidates: Candidate[] = await matchCatalog(extracted.query);
+  const candidates: Candidate[] = await matchCatalog(extracted.query, extracted.weightGrams);
   if (candidates.length === 0) {
     await bot.api.sendMessage(
       chatId,
@@ -134,16 +169,11 @@ async function startWriteoffFlow(
     return;
   }
   if (isConfident(candidates)) {
-    const c = candidates[0];
-    await bot.api.sendMessage(
-      chatId,
-      buildWriteoffMessage({ itemName: c.item_name, qty: extracted.qty, date: bangkokDate() }),
-      { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(c.variant_id) },
-    );
+    await presentChosenItem(chatId, candidates[0], extracted.qty, extracted.weightGrams);
     return;
   }
-  await bot.api.sendMessage(chatId, `🍷 Что списываем (${extracted.qty} шт)? Выбери:`, {
-    reply_markup: buildCandidatesKeyboard(candidates, extracted.qty),
+  await bot.api.sendMessage(chatId, `🍷 Что списываем? Выбери:`, {
+    reply_markup: buildCandidatesKeyboard(candidates, extracted.qty, extracted.weightGrams),
   });
 }
 
@@ -406,8 +436,9 @@ bot.command("writeoffs", async (ctx) => {
   const today = todayInThailand();
   await ctx.reply(`🍷 Незакрытые списания (${pending.length}):`);
   for (const r of pending) {
+    const amount = r.weight_grams != null ? `${r.weight_grams} г` : `${r.qty}×`;
     await ctx.reply(
-      `📦 ${r.qty}× ${r.item_name}\n📅 ${r.taken_date} · ${ageLabel(r.taken_date, today)}` +
+      `📦 ${amount} ${r.item_name}\n📅 ${r.taken_date} · ${ageLabel(r.taken_date, today)}` +
         (r.taken_by ? ` · ${r.taken_by}` : ""),
       { reply_markup: new InlineKeyboard().text("✅ Списано", `wo_close:${r.id}`) },
     );
@@ -516,6 +547,19 @@ bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text   = ctx.message.text;
   if (text.startsWith("/")) return;
+
+  const pw = pendingWeight.get(chatId);
+  if (pw) {
+    const m = text.match(/(\d+)/);
+    const grams = m ? Number(m[1]) : 0;
+    if (!grams || grams <= 0) {
+      await ctx.reply("Нужно число грамм, например 250.");
+      return;
+    }
+    pendingWeight.delete(chatId);
+    await sendWriteoffCard(chatId, { itemName: pw.itemName, qty: 1, weightGrams: grams, date: bangkokDate() }, pw.variantId);
+    return;
+  }
 
   // If there's a pending photo, treat this text as its caption — even in group chats
   // where the user didn't explicitly address the bot. The bot already asked for a reply.
@@ -700,8 +744,9 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
   }
 
   if (data.startsWith("wo_pick:")) {
-    const [, qtyStr, variantId] = data.split(":");
+    const [, qtyStr, gStr, variantId] = data.split(":");
     const qty = Number(qtyStr) || 1;
+    const weightGrams = gStr === "-" ? null : (Number(gStr) || null);
     await ctx.answerCallbackQuery("Загружаю…"); // ack immediately, before the catalog fetch
     try {
       const item = await findVariant(variantId);
@@ -709,10 +754,21 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
         await ctx.editMessageText("Товар не найден в каталоге — заведи списание заново.");
         return;
       }
-      await ctx.editMessageText(
-        buildWriteoffMessage({ itemName: item.item_name, qty, date: bangkokDate() }),
-        { parse_mode: "HTML", reply_markup: buildWriteoffKeyboard(item.variant_id) },
-      );
+      if (item.sold_by_weight && weightGrams == null) {
+        pendingWeight.set(chatId, { variantId: item.variant_id, itemName: item.item_name });
+        await ctx.editMessageText(`⚖️ Сколько грамм для ${item.item_name}? Напиши число.`);
+        return;
+      }
+      const card = {
+        itemName: item.item_name,
+        qty: item.sold_by_weight ? 1 : qty,
+        weightGrams: item.sold_by_weight ? weightGrams : null,
+        date: bangkokDate(),
+      };
+      await ctx.editMessageText(buildWriteoffMessage(card), {
+        parse_mode: "HTML",
+        reply_markup: buildWriteoffKeyboard(item.variant_id),
+      });
     } catch (e) {
       console.error("wo_pick failed:", e);
       try { await ctx.editMessageText("❌ Ошибка при выборе товара. Заведи списание заново."); } catch {}
@@ -734,6 +790,7 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
         variantId,
         itemName: card.itemName,
         qty: card.qty,
+        weightGrams: card.weightGrams,
         takenDate: toISODate(card.date) ?? todayInThailand(),
         takenBy,
       });
@@ -743,8 +800,9 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
       return;
     }
     try {
+      const amount = card.weightGrams != null ? `${card.weightGrams} г` : `${card.qty}×`;
       await ctx.editMessageText(
-        `✅ Записано в список на списание.\n\n📦 ${card.qty}× ${card.itemName}\n📅 ${card.date}\n\n` +
+        `✅ Записано в список на списание.\n\n📦 ${amount} ${card.itemName}\n📅 ${card.date}\n\n` +
           `Когда сделаешь Stock Adjustment в Loyverse — жми «Списано» в /writeoffs.`,
       );
     } catch (e) { console.error("confirm edit failed:", e); }
