@@ -80,7 +80,8 @@ export default function WriteoffsPage() {
   }
 
   async function remove(r: Row) {
-    if (!window.confirm(`Удалить списание «${r.qty}× ${r.item_name}»? Строка исчезнет из портала и напоминаний бота.`)) return
+    const amt = r.weight_grams != null ? `${r.weight_grams} г` : `${r.qty}×`
+    if (!window.confirm(`Удалить списание «${amt} ${r.item_name}»? Строка исчезнет из портала и напоминаний бота.`)) return
     setDeletingId(r.id)
     setErr(null)
     try {
