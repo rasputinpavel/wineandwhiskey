@@ -6,6 +6,7 @@ type Row = {
   id: string
   item_name: string
   qty: number
+  weight_grams: number | null
   taken_date: string
   taken_by: string | null
   status: string
@@ -153,7 +154,7 @@ export default function WriteoffsPage() {
             {!loading && rows.map((r) => (
               <tr key={r.id} className="border-b border-neutral-100">
                 <td className="py-2 pr-4 font-medium">{r.item_name}</td>
-                <td className="py-2 pr-4 text-right">{r.qty}</td>
+                <td className="py-2 pr-4 text-right">{r.weight_grams != null ? `${r.weight_grams} г` : r.qty}</td>
                 <td className="py-2 pr-4">{fmtD(r.taken_date)}</td>
                 <td className="py-2 pr-4">{r.status === 'pending' ? `${ageDays(r.taken_date)}d` : '—'}</td>
                 <td className="py-2 pr-4">{r.taken_by ?? '—'}</td>

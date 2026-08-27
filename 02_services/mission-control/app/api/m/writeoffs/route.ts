@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   }
   let q = sbPublic
     .from('stock_writeoffs')
-    .select('id, variant_id, item_name, qty, taken_date, taken_by, status, closed_at, closed_by')
+    .select('id, variant_id, item_name, qty, weight_grams, taken_date, taken_by, status, closed_at, closed_by')
     .order('taken_date', { ascending: true })
   if (status !== 'all') q = q.eq('status', status)
   const { data, error } = await q
