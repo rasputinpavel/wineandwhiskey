@@ -154,10 +154,27 @@ describe("keyboards", () => {
         { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3, sold_by_weight: false, score: 4 },
       ],
       2,
+      null,
     );
     const flat = kb.inline_keyboard.flat();
-    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v1")).toBe(true);
-    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:v4")).toBe(true);
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:-:v1")).toBe(true);
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:-:v4")).toBe(true);
+  });
+  it("candidate keyboard carries qty + grams + variant_id", () => {
+    const kb = buildCandidatesKeyboard(
+      [{ variant_id: "v1", item_name: "146g Gruyere", in_stock: 1, sold_by_weight: false, score: 5 }],
+      1, 146,
+    );
+    const flat = kb.inline_keyboard.flat();
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:1:146:v1")).toBe(true);
+  });
+  it("candidate keyboard uses '-' when no weight", () => {
+    const kb = buildCandidatesKeyboard(
+      [{ variant_id: "v1", item_name: "Prosecco", in_stock: 4, sold_by_weight: false, score: 5 }],
+      2, null,
+    );
+    const flat = kb.inline_keyboard.flat();
+    expect(flat.some((b: any) => b.callback_data === "wo_pick:2:-:v1")).toBe(true);
   });
 });
 
@@ -195,5 +212,13 @@ describe("formatPendingReminder", () => {
     );
     expect(out).toContain("Moët &amp; Chandon");
     expect(out).not.toContain("Moët & Chandon");
+  });
+  it("shows grams for a weight-based pending row", () => {
+    const out = formatPendingReminder(
+      [{ id: "w", item_name: "Merguez Sausage", qty: 1, weight_grams: 250, taken_date: "2026-08-26", taken_by: "Grace", status: "pending" }],
+      "2026-08-27",
+    );
+    expect(out).toContain("250 г Merguez Sausage");
+    expect(out).not.toContain("1× Merguez");
   });
 });

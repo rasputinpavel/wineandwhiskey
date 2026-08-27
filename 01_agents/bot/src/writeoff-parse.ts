@@ -145,13 +145,16 @@ export function buildWriteoffKeyboard(variantId: string): InlineKeyboard {
     .text("✖ Отмена", "wo_cancel");
 }
 
-// One button per candidate; qty rides alongside the variant_id so the picked
-// card can be rebuilt without any in-memory state.
-export function buildCandidatesKeyboard(candidates: Candidate[], qty: number): InlineKeyboard {
+// One button per candidate; qty + weightGrams ride alongside the variant_id so
+// the picked card can be rebuilt without any in-memory state.
+export function buildCandidatesKeyboard(
+  candidates: Candidate[], qty: number, weightGrams: number | null,
+): InlineKeyboard {
+  const g = weightGrams != null ? String(weightGrams) : "-";
   const kb = new InlineKeyboard();
   for (const c of candidates) {
     const label = `${c.item_name} (${c.in_stock} шт)`.slice(0, 60);
-    kb.text(label, `wo_pick:${qty}:${c.variant_id}`).row();
+    kb.text(label, `wo_pick:${qty}:${g}:${c.variant_id}`).row();
   }
   kb.text("✖ Отмена", "wo_cancel");
   return kb;
@@ -190,8 +193,9 @@ export function formatPendingReminder(rows: PendingRow[], today: string): string
     .sort((a, b) => a.taken_date.localeCompare(b.taken_date));
   if (pending.length === 0) return "";
 
+  const amount = (r: PendingRow) => (r.weight_grams != null ? `${r.weight_grams} г` : `${r.qty}×`);
   const lines = pending.map(
-    (r) => `• ${r.qty}× ${escapeHtml(r.item_name)} — ${ageLabel(r.taken_date, today)}`,
+    (r) => `• ${amount(r)} ${escapeHtml(r.item_name)} — ${ageLabel(r.taken_date, today)}`,
   );
   return [
     `🍷 <b>Не списано (${pending.length}):</b>`,
