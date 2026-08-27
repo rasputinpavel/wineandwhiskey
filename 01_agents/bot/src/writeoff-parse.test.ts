@@ -38,12 +38,12 @@ describe("hasWriteoffTrigger", () => {
 describe("parseWriteoffJSON", () => {
   it("parses query + qty", () => {
     expect(parseWriteoffJSON('{"query":"Prosecco Miravento","qty":2}')).toEqual({
-      query: "Prosecco Miravento", qty: 2,
+      query: "Prosecco Miravento", qty: 2, weightGrams: null,
     });
   });
   it("defaults qty to 1 and strips markdown fences", () => {
     expect(parseWriteoffJSON('```json\n{"query":"Beluga"}\n```')).toEqual({
-      query: "Beluga", qty: 1,
+      query: "Beluga", qty: 1, weightGrams: null,
     });
   });
   it("returns null on empty query or invalid JSON", () => {
@@ -51,15 +51,27 @@ describe("parseWriteoffJSON", () => {
     expect(parseWriteoffJSON("not json")).toBeNull();
   });
   it("clamps a fractional qty up to at least 1", () => {
-    expect(parseWriteoffJSON('{"query":"Beluga","qty":0.4}')).toEqual({ query: "Beluga", qty: 1 });
+    expect(parseWriteoffJSON('{"query":"Beluga","qty":0.4}')).toEqual({
+      query: "Beluga", qty: 1, weightGrams: null,
+    });
+  });
+  it("reads weight_grams when present", () => {
+    expect(parseWriteoffJSON('{"query":"Merguez","qty":1,"weight_grams":250}')).toEqual({
+      query: "Merguez", qty: 1, weightGrams: 250,
+    });
+  });
+  it("null weight_grams when absent or non-positive", () => {
+    expect(parseWriteoffJSON('{"query":"Merguez","weight_grams":0}')).toEqual({
+      query: "Merguez", qty: 1, weightGrams: null,
+    });
   });
 });
 
 const CATALOG = [
-  { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12 },
-  { variant_id: "v2", item_name: "Whispering Angel Rosé", in_stock: 4 },
-  { variant_id: "v3", item_name: "Beluga Noble Vodka", in_stock: 7 },
-  { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3 },
+  { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12, sold_by_weight: false },
+  { variant_id: "v2", item_name: "Whispering Angel Rosé", in_stock: 4, sold_by_weight: false },
+  { variant_id: "v3", item_name: "Beluga Noble Vodka", in_stock: 7, sold_by_weight: false },
+  { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3, sold_by_weight: false },
 ];
 
 describe("scoreCandidates", () => {
@@ -86,18 +98,18 @@ describe("isConfident", () => {
     expect(isConfident([])).toBe(false);
   });
   it("is true for a single candidate", () => {
-    expect(isConfident([{ variant_id: "v1", item_name: "X", in_stock: 1, score: 2 }])).toBe(true);
+    expect(isConfident([{ variant_id: "v1", item_name: "X", in_stock: 1, sold_by_weight: false, score: 2 }])).toBe(true);
   });
   it("is true when the top score clears the runner-up by >=3", () => {
     expect(isConfident([
-      { variant_id: "v1", item_name: "X", in_stock: 1, score: 6 },
-      { variant_id: "v2", item_name: "Y", in_stock: 1, score: 2 },
+      { variant_id: "v1", item_name: "X", in_stock: 1, sold_by_weight: false, score: 6 },
+      { variant_id: "v2", item_name: "Y", in_stock: 1, sold_by_weight: false, score: 2 },
     ])).toBe(true);
   });
   it("is false when the top two are close", () => {
     expect(isConfident([
-      { variant_id: "v1", item_name: "X", in_stock: 1, score: 5 },
-      { variant_id: "v2", item_name: "Y", in_stock: 1, score: 5 },
+      { variant_id: "v1", item_name: "X", in_stock: 1, sold_by_weight: false, score: 5 },
+      { variant_id: "v2", item_name: "Y", in_stock: 1, sold_by_weight: false, score: 5 },
     ])).toBe(false);
   });
 });
@@ -133,8 +145,8 @@ describe("keyboards", () => {
   it("candidate keyboard carries qty + variant_id per row", () => {
     const kb = buildCandidatesKeyboard(
       [
-        { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12, score: 5 },
-        { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3, score: 4 },
+        { variant_id: "v1", item_name: "Prosecco Miravento DOC", in_stock: 12, sold_by_weight: false, score: 5 },
+        { variant_id: "v4", item_name: "Prosecco Valdobbiadene Superiore", in_stock: 3, sold_by_weight: false, score: 4 },
       ],
       2,
     );
@@ -154,8 +166,8 @@ describe("ageLabel", () => {
 
 describe("formatPendingReminder", () => {
   const rows = [
-    { id: "a", item_name: "Prosecco Miravento DOC", qty: 2, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" },
-    { id: "b", item_name: "Whispering Angel Rosé", qty: 1, taken_date: "2026-08-18", taken_by: "Som", status: "pending" },
+    { id: "a", item_name: "Prosecco Miravento DOC", qty: 2, weight_grams: null, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" },
+    { id: "b", item_name: "Whispering Angel Rosé", qty: 1, weight_grams: null, taken_date: "2026-08-18", taken_by: "Som", status: "pending" },
   ];
   it("lists all pending, oldest first, with age labels", () => {
     const out = formatPendingReminder(rows, "2026-08-21");
@@ -173,7 +185,7 @@ describe("formatPendingReminder", () => {
   });
   it("HTML-escapes an ampersand in the item name (briefing is sent as HTML)", () => {
     const out = formatPendingReminder(
-      [{ id: "c", item_name: "Moët & Chandon", qty: 1, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" }],
+      [{ id: "c", item_name: "Moët & Chandon", qty: 1, weight_grams: null, taken_date: "2026-08-20", taken_by: "Grace", status: "pending" }],
       "2026-08-21",
     );
     expect(out).toContain("Moët &amp; Chandon");

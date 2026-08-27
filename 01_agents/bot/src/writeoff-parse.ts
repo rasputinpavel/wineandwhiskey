@@ -2,12 +2,13 @@ import { InlineKeyboard } from "grammy";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
-export type WriteoffExtraction = { query: string; qty: number };
-export type CatalogItem = { variant_id: string; item_name: string; in_stock: number };
+export type WriteoffExtraction = { query: string; qty: number; weightGrams: number | null };
+export type CatalogItem = { variant_id: string; item_name: string; in_stock: number; sold_by_weight: boolean };
 export type Candidate = CatalogItem & { score: number };
-export type WriteoffCard = { itemName: string; qty: number; date: string }; // date = DD.MM.YYYY
+export type WriteoffCard = { itemName: string; qty: number; weightGrams: number | null; date: string }; // date = DD.MM.YYYY
 export type PendingRow = {
-  id: string; item_name: string; qty: number; taken_date: string; // YYYY-MM-DD
+  id: string; item_name: string; qty: number; weight_grams: number | null;
+  taken_date: string; // YYYY-MM-DD
   taken_by: string | null; status: string;
 };
 
@@ -47,7 +48,9 @@ export function parseWriteoffJSON(raw: string): WriteoffExtraction | null {
     if (!query) return null;
     const qtyNum = Number(j?.qty);
     const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? Math.max(1, Math.round(qtyNum)) : 1;
-    return { query, qty };
+    const wNum = Number(j?.weight_grams);
+    const weightGrams = Number.isFinite(wNum) && wNum > 0 ? Math.round(wNum) : null;
+    return { query, qty, weightGrams };
   } catch {
     return null;
   }
