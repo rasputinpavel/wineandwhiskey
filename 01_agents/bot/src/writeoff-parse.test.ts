@@ -121,7 +121,7 @@ const asDelivered = (html: string) =>
 
 describe("write-off card round-trip", () => {
   it("parses back the fields it renders", () => {
-    const card = { itemName: "Prosecco Miravento DOC", qty: 2, date: "21.08.2026" };
+    const card = { itemName: "Prosecco Miravento DOC", qty: 2, weightGrams: null, date: "21.08.2026" };
     const text = asDelivered(buildWriteoffMessage(card));
     expect(parseWriteoffFromMessage(text)).toEqual(card);
   });
@@ -129,7 +129,12 @@ describe("write-off card round-trip", () => {
     expect(parseWriteoffFromMessage("сколько виски?")).toBeNull();
   });
   it("round-trips an item name containing an ampersand", () => {
-    const card = { itemName: "Moët & Chandon Impérial", qty: 1, date: "21.08.2026" };
+    const card = { itemName: "Moët & Chandon Impérial", qty: 1, weightGrams: null, date: "21.08.2026" };
+    const text = asDelivered(buildWriteoffMessage(card));
+    expect(parseWriteoffFromMessage(text)).toEqual(card);
+  });
+  it("round-trips a weight card (grams instead of qty)", () => {
+    const card = { itemName: "Merguez Sausage", qty: 1, weightGrams: 250, date: "27.08.2026" };
     const text = asDelivered(buildWriteoffMessage(card));
     expect(parseWriteoffFromMessage(text)).toEqual(card);
   });

@@ -110,11 +110,15 @@ function escapeHtml(s: string): string {
 // text (see the callback handler), and the variant_id rides in callback data —
 // so confirming survives a bot restart (Railway redeploy) mid-flow.
 export function buildWriteoffMessage(c: WriteoffCard): string {
+  const amountLine =
+    c.weightGrams != null
+      ? `⚖️ <b>Вес:</b> ${c.weightGrams} г`
+      : `🔢 <b>Кол-во:</b> ${c.qty}`;
   return [
     `🍷 <b>Списание «себе» — проверь:</b>`,
     ``,
     `📦 <b>Товар:</b> ${escapeHtml(c.itemName)}`,
-    `🔢 <b>Кол-во:</b> ${c.qty}`,
+    amountLine,
     `📅 <b>Дата:</b> ${c.date}`,
   ].join("\n");
 }
@@ -125,10 +129,14 @@ export function parseWriteoffFromMessage(text: string): WriteoffCard | null {
   if (!/Списание «себе»/.test(text) || !/Товар:/.test(text)) return null;
   const grab = (re: RegExp) => text.match(re)?.[1]?.trim() ?? "";
   const itemName = grab(/Товар:\s*(.+)/);
-  const qty = Number(grab(/Кол-во:\s*(\d+)/));
   const date = grab(/Дата:\s*([\d.]+)/);
-  if (!itemName || !Number.isFinite(qty) || qty <= 0) return null;
-  return { itemName, qty, date };
+  const weightM = text.match(/Вес:\s*(\d+)\s*г/);
+  const weightGrams = weightM ? Number(weightM[1]) : null;
+  const qtyM = text.match(/Кол-во:\s*(\d+)/);
+  const qty = qtyM ? Number(qtyM[1]) : 1;
+  if (!itemName) return null;
+  if (weightGrams == null && (!Number.isFinite(qty) || qty <= 0)) return null;
+  return { itemName, qty, weightGrams, date };
 }
 
 export function buildWriteoffKeyboard(variantId: string): InlineKeyboard {
