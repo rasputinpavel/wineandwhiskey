@@ -25,10 +25,11 @@ import {
 import {
   hasWriteoffTrigger, buildWriteoffMessage, parseWriteoffFromMessage,
   buildWriteoffKeyboard, buildCandidatesKeyboard, isConfident, ageLabel,
-  type Candidate,
+  buildGroupMessage, buildGroupKeyboard,
+  type Candidate, type GroupItem,
 } from "./writeoff-parse.js";
 import {
-  parseWriteoffText, parseWriteoffPhoto, matchCatalog, findVariant,
+  parseWriteoffText, parseWriteoffPhoto, parseWriteoffPhotoMulti, matchCatalog, findVariant,
   insertWriteoff, listPending, closeWriteoff,
 } from "./writeoff.js";
 
@@ -78,6 +79,10 @@ const pendingExpenses = new Map<number, PendingExpense>();
 // Weight items (sold_by_weight): after the item is chosen we ask "how many grams?"
 // and complete the card from the next numeric reply. In-memory like pendingPhotos.
 const pendingWeight = new Map<number, { variantId: string; itemName: string }>();
+
+// A group-photo write-off in progress: the confirmed items, held in memory
+// because N variant_ids don't fit in callback data. Restart loses it (rare).
+const pendingGroup = new Map<number, GroupItem[]>();
 
 // PO confirmation holds NO in-memory state: the scan is uploaded now, its path
 // travels in the callback data, and the fields are read back from the card text
@@ -174,6 +179,37 @@ async function startWriteoffFlow(
   }
   await bot.api.sendMessage(chatId, `🍷 Что списываем? Выбери:`, {
     reply_markup: buildCandidatesKeyboard(candidates, extracted.qty, extracted.weightGrams),
+  });
+}
+
+// Match each recognized bottle; confident piece matches go into the summary,
+// everything else (ambiguous / not found / weight item) is listed to enter by hand.
+async function startGroupWriteoffFlow(
+  chatId: number,
+  extractions: { query: string; qty: number; weightGrams: number | null }[],
+): Promise<void> {
+  const byVariant = new Map<string, GroupItem>();
+  const unresolved: string[] = [];
+  for (const ex of extractions) {
+    const cands = await matchCatalog(ex.query, ex.weightGrams);
+    if (cands.length > 0 && isConfident(cands) && !cands[0].sold_by_weight) {
+      const c = cands[0];
+      const g = byVariant.get(c.variant_id);
+      if (g) g.qty += ex.qty;
+      else byVariant.set(c.variant_id, { variantId: c.variant_id, itemName: c.item_name, qty: ex.qty });
+    } else {
+      unresolved.push(ex.query);
+    }
+  }
+  const items = [...byVariant.values()];
+  if (items.length === 0) {
+    await bot.api.sendMessage(chatId, `🤔 Не распознал уверенно ни одной позиции. Заведи по одной: ${unresolved.join(", ")}`);
+    return;
+  }
+  pendingGroup.set(chatId, items);
+  await bot.api.sendMessage(chatId, buildGroupMessage(items, unresolved), {
+    parse_mode: "HTML",
+    reply_markup: buildGroupKeyboard(),
   });
 }
 
@@ -475,12 +511,11 @@ bot.on("message:photo", async (ctx) => {
       // write-off flow; otherwise the long-standing convention holds: a
       // captioned photo is an expense entry.
       if (hasWriteoffTrigger(caption)) {
-        const extracted = await parseWriteoffPhoto(
-          photo.base64, photo.mimeType, caption,
-        );
+        const items = await parseWriteoffPhotoMulti(photo.base64, photo.mimeType as "image/jpeg" | "image/png", caption);
         await ctx.api.deleteMessage(chatId, waitMsg.message_id);
-        if (extracted) await startWriteoffFlow(chatId, extracted);
-        else await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
+        if (items.length === 0) await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
+        else if (items.length === 1) await startWriteoffFlow(chatId, items[0]);
+        else await startGroupWriteoffFlow(chatId, items);
         return;
       }
       const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
@@ -571,10 +606,11 @@ bot.on("message:text", async (ctx) => {
     if (hasWriteoffTrigger(text)) {
       const wmsg = await ctx.reply("Распознаю списание...");
       try {
-        const extracted = await parseWriteoffPhoto(pendingPhoto.base64, pendingPhoto.mimeType, text);
+        const items = await parseWriteoffPhotoMulti(pendingPhoto.base64, pendingPhoto.mimeType, text);
         await ctx.api.deleteMessage(chatId, wmsg.message_id);
-        if (extracted) await startWriteoffFlow(chatId, extracted);
-        else await ctx.reply("Не понял, что списать. Пришли фото ещё раз с подписью «спиши 2».");
+        if (items.length === 0) await ctx.reply("Не понял, что списать. Пришли фото ещё раз с подписью «спиши 2».");
+        else if (items.length === 1) await startWriteoffFlow(chatId, items[0]);
+        else await startGroupWriteoffFlow(chatId, items);
       } catch (e) {
         console.error(e);
         await ctx.api.editMessageText(chatId, wmsg.message_id, "Ошибка при распознавании списания.");
@@ -740,6 +776,40 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
   if (data === "wo_cancel") {
     await ctx.answerCallbackQuery("Отменено");
     await ctx.editMessageText("✖ Списание отменено.");
+    return;
+  }
+
+  if (data === "wo_group_cancel") {
+    pendingGroup.delete(chatId);
+    await ctx.answerCallbackQuery("Отменено");
+    await ctx.editMessageText("✖ Групповое списание отменено.");
+    return;
+  }
+  if (data === "wo_group_confirm") {
+    const items = pendingGroup.get(chatId);
+    if (!items || items.length === 0) {
+      await ctx.answerCallbackQuery("Группа устарела — отправь фото снова.");
+      return;
+    }
+    await ctx.answerCallbackQuery("Записываю…");
+    const takenBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
+    const takenDate = todayInThailand();
+    try {
+      for (const it of items) {
+        await insertWriteoff({ variantId: it.variantId, itemName: it.itemName, qty: it.qty, weightGrams: null, takenDate, takenBy });
+      }
+    } catch (e) {
+      console.error("group confirm failed:", e);
+      try { await ctx.editMessageText("❌ Ошибка записи группы. Попробуй снова."); } catch {}
+      return;
+    }
+    pendingGroup.delete(chatId);
+    try {
+      await ctx.editMessageText(
+        `✅ Записано: ${items.length} ${items.length === 1 ? "позиция" : "позиций"}.\n\n` +
+          `Когда сделаешь Stock Adjustment в Loyverse — жми «Списано» в /writeoffs.`,
+      );
+    } catch {}
     return;
   }
 
