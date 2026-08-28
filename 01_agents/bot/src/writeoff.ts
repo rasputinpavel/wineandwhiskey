@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { supabase } from "./db.js";
 import { getCatalogItems } from "./loyverse.js";
 import {
-  parseWriteoffJSON, scoreCandidates,
+  parseWriteoffJSON, parseWriteoffJSONArray, scoreCandidates,
   type WriteoffExtraction, type Candidate, type PendingRow,
 } from "./writeoff-parse.js";
 
@@ -57,6 +57,38 @@ export async function parseWriteoffPhoto(
   });
   const raw = response.content.find((b) => b.type === "text")?.text ?? "";
   return parseWriteoffJSON(raw);
+}
+
+const PHOTO_MULTI_PROMPT =
+  `На фото — одна или НЕСКОЛЬКО бутылок/этикеток алкоголя, которые сотрудник забрал себе и хочет списать. ` +
+  `Распознай КАЖДУЮ отдельную позицию и верни JSON-МАССИВ, по одному объекту на каждый распознанный товар. ` +
+  `Каждый объект: query — краткое название для поиска по каталогу; qty — сколько ОДИНАКОВЫХ бутылок этого товара видно (иначе 1); ` +
+  `weight_grams — вес в граммах с ценника, если напечатан, иначе не указывай. ` +
+  `Если на фото одна бутылка — массив из одного объекта. ` +
+  `Ответь ТОЛЬКО валидным JSON-массивом без markdown. ` +
+  `Пример: [{"query":"Prosecco Miravento","qty":1},{"query":"Rioja Reserva","qty":2}].`;
+
+// Vision parse for a (possibly multi-bottle) photo → array of items. One element
+// → single write-off flow; several → group flow.
+export async function parseWriteoffPhotoMulti(
+  base64: string,
+  mime: "image/jpeg" | "image/png",
+  caption: string,
+): Promise<WriteoffExtraction[]> {
+  const source = { type: "base64" as const, media_type: mime, data: base64 };
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 600,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source },
+        { type: "text", text: `${PHOTO_MULTI_PROMPT}\n\nПодпись пользователя: ${caption || "(нет)"}` },
+      ],
+    }],
+  });
+  const raw = response.content.find((b) => b.type === "text")?.text ?? "";
+  return parseWriteoffJSONArray(raw);
 }
 
 // Fetch the catalog and return the scored candidates for a query.
