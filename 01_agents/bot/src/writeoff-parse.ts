@@ -223,3 +223,48 @@ export function formatPendingReminder(rows: PendingRow[], today: string): string
     `Закрой через /writeoffs, когда сделаешь Stock Adjustment в Loyverse.`,
   ].join("\n");
 }
+
+// ─── Group photo write-off ─────────────────────────────────────────────────
+
+export type GroupItem = { variantId: string; itemName: string; qty: number };
+
+// Parse a JSON ARRAY of write-off items (group photo). Each element goes through
+// the same field logic as parseWriteoffJSON; empty-query elements are dropped.
+export function parseWriteoffJSONArray(raw: string): WriteoffExtraction[] {
+  try {
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const arr = JSON.parse(clean);
+    if (!Array.isArray(arr)) return [];
+    const out: WriteoffExtraction[] = [];
+    for (const j of arr) {
+      const query = j?.query ? String(j.query).trim() : "";
+      if (!query) continue;
+      const qtyNum = Number(j?.qty);
+      const qty = Number.isFinite(qtyNum) && qtyNum > 0 ? Math.max(1, Math.round(qtyNum)) : 1;
+      const wNum = Number(j?.weight_grams);
+      const weightGrams = Number.isFinite(wNum) && wNum > 0 ? Math.round(wNum) : null;
+      out.push({ query, qty, weightGrams });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Summary card for a group write-off. No round-trip: the item list lives in the
+// bot's in-memory pendingGroup (variant_ids don't fit in callback data), so this
+// is display-only; confirm reads pendingGroup, not this text.
+export function buildGroupMessage(items: GroupItem[], unresolved: string[]): string {
+  const lines = items.map((i) => `• ${i.qty}× ${escapeHtml(i.itemName)}`);
+  const parts = [`🍷 <b>Списание группой — проверь:</b>`, ``, ...lines];
+  if (unresolved.length) {
+    parts.push(``, `⚠️ не распознал уверенно: ${unresolved.map(escapeHtml).join(", ")} — заведи по одному`);
+  }
+  return parts.join("\n");
+}
+
+export function buildGroupKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("✅ Записать всё", "wo_group_confirm")
+    .text("✖ Отмена", "wo_group_cancel");
+}

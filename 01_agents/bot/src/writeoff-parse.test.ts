@@ -3,6 +3,7 @@ import {
   hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident,
   buildWriteoffMessage, parseWriteoffFromMessage, buildWriteoffKeyboard, buildCandidatesKeyboard,
   ageLabel, formatPendingReminder, groupPending,
+  parseWriteoffJSONArray, buildGroupMessage, buildGroupKeyboard, type GroupItem,
 } from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
@@ -260,5 +261,44 @@ describe("formatPendingReminder grouping", () => {
     expect(out).toContain("3× Prosecco");
     expect(out).toContain("Не списано (1)");
     expect((out.match(/Prosecco/g) || []).length).toBe(1);
+  });
+});
+
+describe("parseWriteoffJSONArray", () => {
+  it("parses an array of items", () => {
+    expect(parseWriteoffJSONArray('[{"query":"Prosecco","qty":1},{"query":"Rioja","qty":2}]')).toEqual([
+      { query: "Prosecco", qty: 1, weightGrams: null },
+      { query: "Rioja", qty: 2, weightGrams: null },
+    ]);
+  });
+  it("skips empty-query items and strips fences", () => {
+    expect(parseWriteoffJSONArray('```json\n[{"query":""},{"query":"Beluga"}]\n```')).toEqual([
+      { query: "Beluga", qty: 1, weightGrams: null },
+    ]);
+  });
+  it("returns [] for non-array or garbage", () => {
+    expect(parseWriteoffJSONArray('{"query":"x"}')).toEqual([]);
+    expect(parseWriteoffJSONArray("nope")).toEqual([]);
+  });
+});
+
+describe("buildGroupMessage / buildGroupKeyboard", () => {
+  const items: GroupItem[] = [
+    { variantId: "v1", itemName: "Prosecco Miravento", qty: 1 },
+    { variantId: "v2", itemName: "Rioja Reserva", qty: 2 },
+  ];
+  it("lists items and unresolved", () => {
+    const msg = buildGroupMessage(items, ["Chateau X"]);
+    expect(msg).toContain("1× Prosecco Miravento");
+    expect(msg).toContain("2× Rioja Reserva");
+    expect(msg).toContain("не распознал уверенно: Chateau X");
+  });
+  it("omits the unresolved line when none", () => {
+    expect(buildGroupMessage(items, [])).not.toContain("не распознал");
+  });
+  it("keyboard carries confirm/cancel", () => {
+    const flat = buildGroupKeyboard().inline_keyboard.flat();
+    expect(flat.some((b: any) => b.callback_data === "wo_group_confirm")).toBe(true);
+    expect(flat.some((b: any) => b.callback_data === "wo_group_cancel")).toBe(true);
   });
 });
