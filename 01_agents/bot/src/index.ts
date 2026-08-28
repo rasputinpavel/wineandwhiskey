@@ -511,7 +511,7 @@ bot.on("message:photo", async (ctx) => {
       // write-off flow; otherwise the long-standing convention holds: a
       // captioned photo is an expense entry.
       if (hasWriteoffTrigger(caption)) {
-        const items = await parseWriteoffPhotoMulti(photo.base64, photo.mimeType as "image/jpeg" | "image/png", caption);
+        const items = await parseWriteoffPhotoMulti(photo.base64, photo.mimeType, caption);
         await ctx.api.deleteMessage(chatId, waitMsg.message_id);
         if (items.length === 0) await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
         else if (items.length === 1) await startWriteoffFlow(chatId, items[0]);
@@ -794,19 +794,25 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
     await ctx.answerCallbackQuery("Записываю…");
     const takenBy = ctx.from?.first_name ?? ctx.from?.username ?? "—";
     const takenDate = todayInThailand();
+    const total = items.length;
+    let done = 0;
     try {
       for (const it of items) {
         await insertWriteoff({ variantId: it.variantId, itemName: it.itemName, qty: it.qty, weightGrams: null, takenDate, takenBy });
+        done++;
       }
     } catch (e) {
       console.error("group confirm failed:", e);
-      try { await ctx.editMessageText("❌ Ошибка записи группы. Попробуй снова."); } catch {}
+      // Keep only the not-yet-inserted items so a retry (button stays live) does
+      // not duplicate the rows already written.
+      pendingGroup.set(chatId, items.slice(done));
+      try { await ctx.editMessageText(`⚠️ Записал ${done} из ${total}. Нажми «Записать всё» ещё раз для остатка.`); } catch {}
       return;
     }
     pendingGroup.delete(chatId);
     try {
       await ctx.editMessageText(
-        `✅ Записано: ${items.length} ${items.length === 1 ? "позиция" : "позиций"}.\n\n` +
+        `✅ Записано: ${total} ${total === 1 ? "позиция" : "позиций"}.\n\n` +
           `Когда сделаешь Stock Adjustment в Loyverse — жми «Списано» в /writeoffs.`,
       );
     } catch {}
