@@ -185,20 +185,40 @@ export function ageLabel(takenDate: string, today: string): string {
   return pluralDays(d);
 }
 
-// The briefing block listing every open write-off, oldest first. Empty string
+// Collapse pending rows with identical item names into one entry: qty (or
+// weight_grams) summed, oldest taken_date kept. Sorted oldest-first so the
+// reminder still surfaces the longest-open item first.
+export function groupPending(
+  rows: PendingRow[],
+): { item_name: string; qty: number; weight_grams: number | null; oldest: string }[] {
+  const map = new Map<string, { item_name: string; qty: number; weight_grams: number | null; oldest: string }>();
+  for (const r of rows.filter((x) => x.status === "pending")) {
+    const g = map.get(r.item_name);
+    if (!g) {
+      map.set(r.item_name, { item_name: r.item_name, qty: r.qty, weight_grams: r.weight_grams, oldest: r.taken_date });
+    } else {
+      g.qty += r.qty;
+      if (r.weight_grams != null) g.weight_grams = (g.weight_grams ?? 0) + r.weight_grams;
+      if (r.taken_date < g.oldest) g.oldest = r.taken_date;
+    }
+  }
+  return [...map.values()].sort((a, b) => a.oldest.localeCompare(b.oldest));
+}
+
+// The briefing block listing every open write-off, oldest first, one line per
+// distinct item name (identical names are grouped and summed). Empty string
 // when nothing is pending (caller then omits the block).
 export function formatPendingReminder(rows: PendingRow[], today: string): string {
-  const pending = rows
-    .filter((r) => r.status === "pending")
-    .sort((a, b) => a.taken_date.localeCompare(b.taken_date));
-  if (pending.length === 0) return "";
+  const groups = groupPending(rows);
+  if (groups.length === 0) return "";
 
-  const amount = (r: PendingRow) => (r.weight_grams != null ? `${r.weight_grams} г` : `${r.qty}×`);
-  const lines = pending.map(
-    (r) => `• ${amount(r)} ${escapeHtml(r.item_name)} — ${ageLabel(r.taken_date, today)}`,
+  const amount = (g: { qty: number; weight_grams: number | null }) =>
+    g.weight_grams != null ? `${g.weight_grams} г` : `${g.qty}×`;
+  const lines = groups.map(
+    (g) => `• ${amount(g)} ${escapeHtml(g.item_name)} — ${ageLabel(g.oldest, today)}`,
   );
   return [
-    `🍷 <b>Не списано (${pending.length}):</b>`,
+    `🍷 <b>Не списано (${groups.length}):</b>`,
     ...lines,
     `Закрой через /writeoffs, когда сделаешь Stock Adjustment в Loyverse.`,
   ].join("\n");

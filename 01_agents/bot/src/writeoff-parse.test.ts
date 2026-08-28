@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   hasWriteoffTrigger, parseWriteoffJSON, scoreCandidates, isConfident,
   buildWriteoffMessage, parseWriteoffFromMessage, buildWriteoffKeyboard, buildCandidatesKeyboard,
-  ageLabel, formatPendingReminder,
+  ageLabel, formatPendingReminder, groupPending,
 } from "./writeoff-parse.js";
 
 describe("hasWriteoffTrigger", () => {
@@ -220,5 +220,45 @@ describe("formatPendingReminder", () => {
     );
     expect(out).toContain("250 г Merguez Sausage");
     expect(out).not.toContain("1× Merguez");
+  });
+});
+
+describe("groupPending", () => {
+  it("sums qty for identical piece item names, oldest first", () => {
+    const rows = [
+      { id: "a", item_name: "Prosecco", qty: 2, weight_grams: null, taken_date: "2026-08-20", taken_by: "G", status: "pending" },
+      { id: "b", item_name: "Prosecco", qty: 1, weight_grams: null, taken_date: "2026-08-18", taken_by: "S", status: "pending" },
+      { id: "c", item_name: "Beluga",   qty: 1, weight_grams: null, taken_date: "2026-08-19", taken_by: "G", status: "pending" },
+    ];
+    const g = groupPending(rows);
+    expect(g.map((x) => x.item_name)).toEqual(["Prosecco", "Beluga"]);
+    expect(g[0]).toMatchObject({ item_name: "Prosecco", qty: 3, weight_grams: null, oldest: "2026-08-18" });
+  });
+  it("sums grams for identical weight item names", () => {
+    const rows = [
+      { id: "a", item_name: "Merguez", qty: 1, weight_grams: 250, taken_date: "2026-08-20", taken_by: "G", status: "pending" },
+      { id: "b", item_name: "Merguez", qty: 1, weight_grams: 300, taken_date: "2026-08-21", taken_by: "G", status: "pending" },
+    ];
+    const g = groupPending(rows);
+    expect(g[0]).toMatchObject({ item_name: "Merguez", weight_grams: 550, oldest: "2026-08-20" });
+  });
+  it("ignores non-pending rows", () => {
+    const rows = [
+      { id: "a", item_name: "X", qty: 1, weight_grams: null, taken_date: "2026-08-20", taken_by: null, status: "done" },
+    ];
+    expect(groupPending(rows)).toEqual([]);
+  });
+});
+
+describe("formatPendingReminder grouping", () => {
+  it("collapses duplicates into one line", () => {
+    const rows = [
+      { id: "a", item_name: "Prosecco", qty: 2, weight_grams: null, taken_date: "2026-08-20", taken_by: "G", status: "pending" },
+      { id: "b", item_name: "Prosecco", qty: 1, weight_grams: null, taken_date: "2026-08-18", taken_by: "S", status: "pending" },
+    ];
+    const out = formatPendingReminder(rows, "2026-08-27");
+    expect(out).toContain("3× Prosecco");
+    expect(out).toContain("Не списано (1)");
+    expect((out.match(/Prosecco/g) || []).length).toBe(1);
   });
 });
