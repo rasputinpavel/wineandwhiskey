@@ -82,6 +82,25 @@ export function CustomersTableClient({
     } finally { setBusy(false) }
   }
 
+  // Добавить выбранных в УЖЕ существующую группу (createGroup всегда делает новую).
+  async function addToGroup(groupId: string) {
+    if (!groupId || allSelectedIds.length === 0) return
+    setBusy(true)
+    try {
+      const results = await Promise.all(allSelectedIds.map(id =>
+        fetch('/api/m/customers', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, group_id: groupId }),
+        })
+      ))
+      const failed = results.filter(r => !r.ok).length
+      if (failed) alert(`${failed} of ${results.length} failed`)
+      setSelected(new Set())
+      router.refresh()
+    } finally { setBusy(false) }
+  }
+
   async function ungroupSelected() {
     if (allSelectedIds.length === 0) return
     setBusy(true)
@@ -180,6 +199,19 @@ export function CustomersTableClient({
               >
                 Group selected
               </button>
+              {groups.length > 0 && (
+                <select
+                  value=""
+                  disabled={busy}
+                  onChange={e => { const v = e.target.value; e.target.value = ''; addToGroup(v) }}
+                  className="px-2 py-1 bg-warm-white/10 border border-warm-white/40 rounded-sm text-warm-white disabled:opacity-50 focus:outline-none focus:border-warm-white"
+                >
+                  <option value="" className="text-deep-black">Add to group…</option>
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id} className="text-deep-black">{g.name}</option>
+                  ))}
+                </select>
+              )}
               {someInGroup && (
                 <button
                   onClick={ungroupSelected}
