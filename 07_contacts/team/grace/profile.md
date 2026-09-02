@@ -23,5 +23,6 @@
 
 ## Документы
 
+- Условия оплаты, удержания, заём: [compensation.md](compensation.md)
 - Payslip'ы: [07_contacts/salary/](../../salary/)
 - Графики смен / комиссия: [08_config/manager_schedules/](../../../08_config/manager_schedules/)
