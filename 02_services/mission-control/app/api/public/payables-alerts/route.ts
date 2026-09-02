@@ -48,14 +48,16 @@ export async function GET(req: Request) {
 
   // Консигнация + force-exclude PO платятся не обычным инвойсом — наружу.
   // force-include (напр. точечная консигнация у обычного поставщика: pending-PO
-  // как счёт к оплате) — внутрь, даже если PO ещё не closed. Симметрично
-  // Payment Calendar, чтобы бот и календарь не разошлись.
+  // как счёт к оплате) — внутрь. Обычные PO берём в любом статусе, включая
+  // pending: статус — состояние приёмки склада, а не признак платежа; лишнее
+  // снимается вручную force-exclude. Симметрично Payment Calendar, чтобы бот и
+  // календарь не разошлись.
   function poEligible(p: PurchaseOrder): boolean {
     if (p.cashflow_override === 'exclude') return false
     if (!p.order_date) return false
     if (p.cashflow_override === 'include') return true
     if (supType(p.supplier) === 'consignment') return false
-    return (p.status ?? '').toLowerCase() === 'closed'
+    return true
   }
 
   const payables: AlertItem[] = []

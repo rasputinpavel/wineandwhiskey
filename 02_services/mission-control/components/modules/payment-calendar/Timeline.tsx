@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { PurchaseOrder } from '@/lib/supabase'
 import { PaidAtCell } from '@/components/modules/purchases/PaidAtCell'
 import { DocsUrlCell } from '@/components/modules/purchases/DocsUrlCell'
+import { CashflowOverrideCell } from '@/components/modules/purchases/POExcludeCell'
 import { MarkPaidCell } from './MarkPaidCell'
 import { fmtDate, bangkokToday } from '@/lib/fmt'
 import { daysBetween } from '@/lib/kpi'
@@ -51,7 +52,10 @@ function categoryOf(r: CalRow): string {
   if (r.dir === 'in') return CATEGORY.receivable
   if (r.fixed) return CATEGORY.fixed
   if (r.big) return CATEGORY.big
-  return CATEGORY.supplier
+  // PO, ещё не принятый на склад: обязательство показываем, но помечаем — это
+  // те строки, которые имеет смысл проверить и при необходимости исключить.
+  const pending = !!r.po && (r.po.status ?? '').toLowerCase() !== 'closed'
+  return pending ? `${CATEGORY.supplier} · pending` : CATEGORY.supplier
 }
 
 export function Timeline({ rows, today, isOpenView }: {
@@ -180,6 +184,9 @@ export function Timeline({ rows, today, isOpenView }: {
                           : <div className="flex items-center gap-2">
                               <PaidAtCell poId={r.po!.id} initial={r.po!.paid_at} onSaved={v => handlePaid(r.key, v)} />
                               <DocsUrlCell poId={r.po!.id} initial={r.po!.docs_url} />
+                              {/* Ручное исключение прямо из календаря: заказ, который
+                                  не станет счётом, снимается здесь же. */}
+                              <CashflowOverrideCell poId={r.po!.id} initial={r.po!.cashflow_override} />
                             </div>
                         : <InvoiceStatus status={r.inv!.status} overdue={r.status === 'overdue'} detailUrl={r.inv!.detailUrl} />}
                     </td>

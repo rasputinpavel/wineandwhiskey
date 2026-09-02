@@ -145,21 +145,24 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
   const outBig = buildBigRows(bigPayments, calMode)
 
   // Что попадает в OUT-таймлайн:
-  //   • force-exclude (cashflow_override) — никогда;
-  //   • force-include (cashflow_override) — всегда, даже если PO ещё pending. Это
-  //     нужно для точечной консигнации у обычного поставщика: товар заводят через
-  //     stock adjustment, а счёт к оплате — pending-PO (не Receive, чтобы сток не
-  //     задвоился). Флаг ставится на самом PO, тип поставщика остаётся regular;
-  //   • консигнация (Harvest/Cigar Empire) — settlement-PO = реальный платёж, но
-  //     живёт в статусе pending (tax invoice, не Receive) → статус не проверяем,
-  //     только cutoff по владельцу;
-  //   • обычные PO — только закрытые (closed).
+  //   • force-exclude (cashflow_override) — никогда. Это единственный способ
+  //     убрать PO из календаря: заказ, который не превратится в счёт, гасим
+  //     руками (кнопка force exclude прямо в строке);
+  //   • force-include (cashflow_override) — всегда. Нужен там, где авто-правило
+  //     молчит: точечная консигнация у обычного поставщика (товар заводят через
+  //     stock adjustment, счёт к оплате — pending-PO, не Receive) или PO
+  //     консигнационного поставщика до cutoff;
+  //   • консигнация (Harvest/Cigar Empire) — settlement-PO = реальный платёж,
+  //     фильтруем только cutoff'ом по владельцу;
+  //   • обычные PO — ЛЮБОЙ статус, включая pending: заказ размещён → деньги
+  //     всё равно уйдут, и лучше увидеть обязательство заранее, чем пропустить.
+  //     Статус PO — состояние приёмки склада, а не признак платежа.
   function poEligible(p: PurchaseOrder): boolean {
     if (p.cashflow_override === 'exclude') return false
     if (!p.order_date) return false
     if (p.cashflow_override === 'include') return true
     if (supType(p.supplier) === 'consignment') return p.order_date >= CONSIGN_CUTOFF
-    return (p.status ?? '').toLowerCase() === 'closed'
+    return true
   }
 
   const outOpen: CalRow[] = []
@@ -255,7 +258,9 @@ export default async function PaymentCalendarPage({ searchParams }: { searchPara
       <p className="text-graphite text-sm mb-4 max-w-3xl">
         Payments both ways, by date. <span className="text-wine-red">Out</span> — to suppliers
         (POs + terms), <span className="text-[#4C6B54]">In</span> — expected receipts from B2B
-        invoices (issued + customer terms). Force-excluded POs are hidden; paid invoices drop off.
+        invoices (issued + customer terms). Every PO counts, pending ones included &mdash; mark a
+        PO <em>force exclude</em> in its row to drop an order that will not turn into a bill.
+        Paid invoices drop off.
         <span className="text-deep-black"> Open</span> shows everything outstanding by date with a
         running balance.
       </p>
