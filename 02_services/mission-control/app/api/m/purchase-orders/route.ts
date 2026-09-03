@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sbPublic } from '@/lib/supabase'
 import { isPoStatus, PO_STATUSES } from '@/lib/po/status'
+import { deleteScanObject } from '@/lib/po/scans'
 
 // Edit a PO scan row from the portal. The bot captures these fields at upload
 // time from the scan; managers correct them here (OCR slips, Buddhist-Era dates
@@ -66,5 +67,40 @@ export async function PATCH(req: Request) {
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// DELETE /api/m/purchase-orders?id=<id> — drop a scan archived by mistake: the
+// same invoice photographed twice (OCR reads the № differently, so the bot's
+// doc_number dedupe misses it), or a photo of the wrong document. Hard delete —
+// this table is the store's own copy of the paper PO, not an accounting record;
+// the original still goes to bookkeeping.
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const { data: row, error: readErr } = await sbPublic
+    .from('po_scans')
+    .select('scan_path')
+    .eq('id', id)
+    .maybeSingle()
+  if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  const { error } = await sbPublic.from('po_scans').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Take the scan file with the row — but only if no other row points at it.
+  // The bot's overwrite path re-points every row with the same doc_number at
+  // one object, so a shared path is real, not theoretical.
+  if (row.scan_path) {
+    const { data: others } = await sbPublic
+      .from('po_scans')
+      .select('id')
+      .eq('scan_path', row.scan_path)
+      .limit(1)
+    if (!others?.length) await deleteScanObject(row.scan_path)
+  }
+
   return NextResponse.json({ ok: true })
 }

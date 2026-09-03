@@ -21,3 +21,15 @@ export async function signScanUrls(paths: string[]): Promise<Map<string, string>
   })
   return out
 }
+
+// Best-effort removal of a scan object, for a row deleted on the portal. Never
+// throws: an orphaned file in the bucket is harmless, failing the row delete
+// over a storage hiccup is not.
+export async function deleteScanObject(path: string): Promise<void> {
+  if (!path) return
+  try {
+    await sbPublic.storage.from(BUCKET).remove([path])
+  } catch {
+    // orphan left behind — harmless
+  }
+}

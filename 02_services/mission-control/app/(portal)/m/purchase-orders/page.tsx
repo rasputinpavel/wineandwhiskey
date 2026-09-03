@@ -145,7 +145,7 @@ export default async function PurchaseOrdersPage({
       <div>
         <h1 className="text-xl font-semibold">Purchase Orders</h1>
         <p className="text-sm text-neutral-500">
-          Scanned supplier POs. Search by supplier or document number; click a column to sort, ✎ to correct a row, open a scan to retrieve the copy.
+          Scanned supplier POs. Search by supplier or document number; click a column to sort, ✎ to correct a row, 🗑 to remove a duplicate, open a scan to retrieve the copy.
         </p>
       </div>
 

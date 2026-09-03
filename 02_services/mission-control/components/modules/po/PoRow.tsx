@@ -26,6 +26,8 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const [supplier, setSupplier] = useState(row.supplier ?? '')
@@ -71,6 +73,26 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
     }
   }
 
+  // Hard delete — for a scan archived twice or a photo of the wrong document.
+  // Two-click confirm: 🗑 arms it, "Yes" fires. The scan file goes with the row.
+  async function remove() {
+    setDeleting(true); setErr(null)
+    try {
+      const res = await fetch(`/api/m/purchase-orders?id=${encodeURIComponent(row.id)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      router.refresh()
+    } catch (e: any) {
+      setErr(e?.message ?? 'delete failed')
+      setDeleting(false)
+      setConfirmDel(false)
+    }
+  }
+
   const input = 'rounded border border-neutral-300 px-1.5 py-0.5 text-sm focus:border-blue-500 focus:outline-none'
 
   const scanCell = scanUrl ? (
@@ -90,14 +112,44 @@ export function PoRow({ row, scanUrl }: { row: PoScan; scanUrl?: string }) {
         <td className="py-2 pr-4">{scanCell}</td>
         <td className="py-2 pr-4"><NoteCell scanId={row.id} initial={row.note} /></td>
         <td className="py-2 pr-4"><LoyversePoCell scanId={row.id} initial={row.loyverse_po} /></td>
-        <td className="py-2 pr-4">
-          <button
-            onClick={() => setEditing(true)}
-            title="Edit row"
-            className="text-neutral-400 hover:text-blue-600"
-          >
-            ✎
-          </button>
+        <td className="py-2 pr-4 whitespace-nowrap">
+          {confirmDel ? (
+            <span className="inline-flex items-center gap-1 text-xs">
+              <span className="text-neutral-500">Delete?</span>
+              <button
+                onClick={remove}
+                disabled={deleting}
+                className="rounded bg-red-600 px-1.5 py-0.5 text-white disabled:opacity-50"
+              >
+                {deleting ? '…' : 'Yes'}
+              </button>
+              <button
+                onClick={() => setConfirmDel(false)}
+                disabled={deleting}
+                className="text-neutral-500 hover:text-neutral-800"
+              >
+                ✕
+              </button>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              <button
+                onClick={() => setEditing(true)}
+                title="Edit row"
+                className="text-neutral-400 hover:text-blue-600"
+              >
+                ✎
+              </button>
+              <button
+                onClick={() => { setConfirmDel(true); setErr(null) }}
+                title="Delete scan"
+                className="text-neutral-400 hover:text-red-600"
+              >
+                🗑
+              </button>
+            </span>
+          )}
+          {err && <span className="ml-1 text-xs text-red-600">{err}</span>}
         </td>
       </tr>
     )
