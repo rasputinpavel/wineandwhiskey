@@ -6,6 +6,24 @@
       "month": "2026-06",
       "supplier": "Harvest Creation",
       "reason": "Harvest consignment. PO kept Pending (received 0 of 39) so units don't re-enter stock; total_thb is the actual amount paid in June. Net 21,225 + VAT 1,485.75 = 22,710.75."
+    },
+    {
+      "po_number": "PO3016",
+      "month": "2026-08",
+      "supplier": "Harvest Creation",
+      "reason": "Harvest consignment settlement for the cycle closed in August. PO kept Pending on purpose so units don't re-enter Loyverse stock; total_thb is the amount actually paid on 2026-08-08."
+    },
+    {
+      "po_number": "PO3041",
+      "month": "2026-08",
+      "supplier": "Vinum Lector Co.Ltd",
+      "reason": "Regular supplier, tax invoice dated 2026-08-28 in hand, payment falls in September. PO still Pending in Loyverse (goods not received yet), so the status=Closed filter misses it."
+    },
+    {
+      "po_number": "PO3043",
+      "month": "2026-08",
+      "supplier": "Harvest Creation",
+      "reason": "Harvest consignment tax invoice dated 2026-08-28 — invoice in hand, payment falls in September. Expense belongs to August (invoice date); PO stays Pending by design."
     }
   ]
 }
