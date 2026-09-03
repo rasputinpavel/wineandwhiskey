@@ -13,7 +13,7 @@ type SortDir = 'asc' | 'desc'
 
 type SearchParams = {
   paid?: 'all' | 'yes' | 'no'
-  status?: 'all' | 'closed' | 'draft'
+  status?: 'all' | 'closed' | 'pending'
   sort?: SortKey
   dir?: SortDir
 }
@@ -38,7 +38,9 @@ export default async function SupplierDetail({
   const { id } = await params
   const sp = await searchParams
   const paidFilter   = sp.paid   ?? 'all'
-  const statusFilter = sp.status ?? 'closed'
+  // Показываем все PO по умолчанию, включая pending: заказ размещён — обязательство
+  // уже есть. Фильтр по статусу остаётся, но как выбор, а не как скрытая отсечка.
+  const statusFilter = sp.status ?? 'all'
   const sortKey: SortKey = SORT_KEYS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : 'order_date'
   const sortDir: SortDir = sp.dir === 'asc' || sp.dir === 'desc' ? sp.dir : defaultDir(sortKey)
 
@@ -63,8 +65,8 @@ export default async function SupplierDetail({
 
   let pos = (poRows ?? []) as PurchaseOrder[]
   if (statusFilter !== 'all') {
-    const want = statusFilter === 'closed' ? 'closed' : 'draft'
-    pos = pos.filter(p => (p.status ?? '').toLowerCase() === want)
+    // В Loyverse встречаются только Closed и Pending (в обоих регистрах).
+    pos = pos.filter(p => (p.status ?? '').toLowerCase() === statusFilter)
   }
   if (paidFilter !== 'all') {
     pos = pos.filter(p => paidFilter === 'yes' ? p.paid_at != null : p.paid_at == null)
@@ -161,7 +163,7 @@ export default async function SupplierDetail({
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4 flex-wrap text-xs">
         <FilterPills label="Status" current={statusFilter}
-          options={['all', 'closed', 'draft']} keep={{ paid: paidFilter, sort: sortKey, dir: sortDir }} paramKey="status" supId={id} />
+          options={['all', 'closed', 'pending']} keep={{ paid: paidFilter, sort: sortKey, dir: sortDir }} paramKey="status" supId={id} />
         <FilterPills label="Paid" current={paidFilter}
           options={['all', 'yes', 'no']} keep={{ status: statusFilter, sort: sortKey, dir: sortDir }} paramKey="paid" supId={id} />
       </div>
