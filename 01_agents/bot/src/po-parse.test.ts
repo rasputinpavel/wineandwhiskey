@@ -47,8 +47,12 @@ describe("normalizeBuddhistDate", () => {
   it("converts a Buddhist-Era year to Gregorian", () => {
     expect(normalizeBuddhistDate("03.08.2569")).toBe("03.08.2026");
   });
+  it("converts a short Buddhist-Era year padded to 20YY (Mag Mag)", () => {
+    expect(normalizeBuddhistDate("27.08.2069")).toBe("27.08.2026");
+  });
   it("leaves a Gregorian date untouched", () => {
     expect(normalizeBuddhistDate("05.08.2026")).toBe("05.08.2026");
+    expect(normalizeBuddhistDate("31.12.2030")).toBe("31.12.2030");
   });
   it("passes through empty or malformed input unchanged", () => {
     expect(normalizeBuddhistDate("")).toBe("");

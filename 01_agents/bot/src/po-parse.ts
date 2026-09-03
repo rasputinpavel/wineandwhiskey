@@ -27,15 +27,23 @@ export type POCard = {
 // Thai suppliers (e.g. HJ Winery) print the document date in the Buddhist Era
 // calendar: BE = CE + 543, so "03.08.2569" means 03.08.2026. The vision model
 // extracts the year exactly as printed, which lands a phantom "August 2569" in
-// the register. Fold any implausibly-large year back to Gregorian. The 2200
-// threshold sits far above any real order year (~2020s) and far below any BE
-// year we'd see (~2560s), so a genuine Gregorian date is never touched.
+// the register. Two shapes show up:
+//
+//   full BE year   "03.08.2569" → subtract 543          → 03.08.2026
+//   short BE year  "27.08.69"   → the model pads it to "2069", which is 43 too
+//                                 high (BE 2500+YY − 543 = 1957+YY = 20YY − 43)
+//
+// Both are folded back here. The thresholds sit far above any real order year
+// (~2020s) and far below the BE years we'd see (~2560s), so a genuine Gregorian
+// date is never touched — the low one is 2043, the first year for which the
+// −43 fold still lands in the 2000s.
 export function normalizeBuddhistDate(ddmmyyyy: string): string {
   const m = ddmmyyyy.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!m) return ddmmyyyy;
   const year = Number(m[3]);
-  if (year < 2200) return ddmmyyyy;
-  return `${m[1]}.${m[2]}.${year - 543}`;
+  if (year >= 2200) return `${m[1]}.${m[2]}.${year - 543}`;
+  if (year >= 2043) return `${m[1]}.${m[2]}.${year - 43}`;
+  return ddmmyyyy;
 }
 
 // Parse the vision model's JSON. Returns null when the image is NOT a supplier
