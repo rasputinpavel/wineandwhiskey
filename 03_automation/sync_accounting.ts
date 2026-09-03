@@ -9,8 +9,12 @@
  *                     Я загружаю строки руками; скрипт ищет приход
  *                     (B2B bank-transfer) по сумме и проставляет статус
  *                     «Оплачено / Не оплачено» + дату прихода + receipt #.
- *   3. Expenses    — все purchase order со статусом Closed за месяц
+ *   3. Expenses    — все purchase order за месяц, любого статуса
  *                     (из Supabase, наполняется scrape_purchase_orders.ts).
+ *                     Pending — обычно консигнация: счёт к оплате есть, а PO
+ *                     держат незакрытым, чтобы сток не задвоился. Лишнее
+ *                     снимается вручную: 08_config/po_exclude.json или
+ *                     cashflow_override='exclude' в портале.
  *
  * Usage:
  *   npm run accounting -- --month 2026-04
@@ -249,10 +253,11 @@ interface DayBucket { b2cRev: number; b2cChecks: number; b2bRev: number; b2bChec
 interface SalesPayload {
   byDay: Map<string, DayBucket>;
   totals: DayBucket;
-  // All B2B receipts (management classifier: bank transfer OR B2B_PATTERNS name).
-  // Used for per-receipt matching against FlowAccount receipts in reconciliation —
-  // but only the bank-transfer subset (isBankTransfer=true) is expected to match
-  // a Flow receipt. Card/cash-paid B2B-named sales are management-only.
+  // All B2B receipts (management classifier: bank transfer OR B2B_PATTERNS name),
+  // sales positive and refunds negative. Used for per-receipt matching against
+  // FlowAccount receipts in reconciliation; every B2B sale is expected to have a
+  // Flow receipt regardless of payment method (the bookkeeper receipts QR-paid
+  // B2B sales too — confirmed Aug 2026).
   b2bReceipts: Array<{ date: string; receiptNumber: string; total: number; customerName: string; isBankTransfer: boolean }>;
 }
 
@@ -347,8 +352,18 @@ async function buildSalesPayload(): Promise<SalesPayload> {
     const bucket = byDay.get(day)!;
     const cls = classify(r);
     const total = Number(r.total_money ?? 0);
-    if (cls.isB2B) { bucket.b2bRev -= total; totals.b2bRev -= total; }
-    else            { bucket.b2cRev -= total; totals.b2cRev -= total; }
+    if (cls.isB2B) {
+      bucket.b2bRev -= total; totals.b2bRev -= total;
+      // Negative entry so the reconciliation can net a voided-and-re-rung sale
+      // against its refund instead of reporting both as phantom mismatches.
+      b2bReceipts.push({
+        date: day,
+        receiptNumber: String(r.receipt_number ?? ""),
+        total: -total,
+        customerName: cls.customerName,
+        isBankTransfer: (r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID),
+      });
+    } else { bucket.b2cRev -= total; totals.b2cRev -= total; }
   }
 
   return { byDay, totals, b2bReceipts };
@@ -422,14 +437,43 @@ function clientKey(s: string): string {
   return s.toLowerCase().replace(/[^a-zа-я0-9]/gi, "");
 }
 
-// Match invoices ↔ Flow receipts by (client + amount±tolerance). Sets
-// linkedReceipts on each invoice; returns the receipts that didn't match
-// anything (the "stray" list — likely paying prior-month invoices).
+// Match invoices ↔ Flow receipts. Sets linkedReceipts on each invoice; returns
+// the receipts that didn't match anything (the "stray" list — receipts paying
+// prior-month invoices).
+//
+// Two passes, and the order matters. FlowAccount prints the invoice number a
+// receipt settles right in the receipts list row, and `appliedInvoices` carries
+// it — that reference is authoritative, so it wins over any heuristic. Only
+// receipts with no reference at all fall through to the client+amount guess.
+//
+// Why: a client can hold two open invoices for the identical amount (Milimon,
+// Aug 2026: INV202607130001 from 13 Jul and INV202608020001 from 2 Aug, both
+// 4,173.00 ฿). The August payment settled the July invoice, but client+amount
+// matching linked it to the August one and reported it Paid a fortnight before
+// the money was actually due.
 function matchInvoicesAndReceipts(invoices: FlowInvoice[], receipts: FlowReceipt[]): FlowReceipt[] {
   const remaining = receipts.slice();
+  const byNumber = new Map(invoices.map(inv => [inv.number, inv]));
+
+  // Pass 1 — the receipt says which invoice it settles. A receipt referencing an
+  // invoice outside this month's list stays reserved (it pays a prior month), so
+  // pass 2 can't grab it for a same-amount invoice of the current month.
+  const referenced = new Set<FlowReceipt>();
+  for (const r of remaining) {
+    if (!r.appliedInvoices.length) continue;
+    referenced.add(r);
+    for (const invNum of r.appliedInvoices) {
+      const inv = byNumber.get(invNum);
+      if (inv) inv.linkedReceipts.push({ number: r.number, date: r.date, amount: r.amount });
+    }
+  }
+  for (const r of referenced) remaining.splice(remaining.indexOf(r), 1);
+
+  // Pass 2 — no reference scraped: fall back to client+amount±tolerance,
+  // preferring the earliest receipt dated on or after the invoice.
   for (const inv of invoices) {
+    if (inv.linkedReceipts.length) continue;
     const ic = clientKey(inv.client);
-    // Match by client+amount; prefer earliest receipt with date >= invoice date.
     const candidates = remaining.filter(r =>
       clientKey(r.client) === ic &&
       Math.abs(r.amount - inv.amount) <= AMOUNT_TOLERANCE
@@ -438,11 +482,14 @@ function matchInvoicesAndReceipts(invoices: FlowInvoice[], receipts: FlowReceipt
     const pick = candidates.find(r => r.date >= inv.issueDate) ?? candidates[0];
     if (pick) {
       inv.linkedReceipts.push({ number: pick.number, date: pick.date, amount: pick.amount });
-      const idx = remaining.indexOf(pick);
-      remaining.splice(idx, 1);
+      remaining.splice(remaining.indexOf(pick), 1);
     }
   }
-  return remaining;
+
+  // Receipts that referenced an invoice from an earlier month are stray too —
+  // they are real money in this month, just against a prior invoice.
+  const stray = [...remaining, ...[...referenced].filter(r => !r.appliedInvoices.some(n => byNumber.has(n)))];
+  return stray;
 }
 
 async function clearConditionalFormats(sid: string, sheetId: number) {
@@ -477,8 +524,12 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
   }
 
   // Drop phantom FlowAccount receipts (debt-reminder closures with no actual
-  // money movement). Listed in 08_config/b2b_overrides.json.
+  // money movement) and tax invoices raised to non-B2B parties (private
+  // individuals the bookkeeper invoiced by mistake). Both listed in
+  // 08_config/b2b_overrides.json. Excluding an invoice also drops the receipt
+  // that settled it, so the reconciliation stays balanced.
   const excludeFlow = new Set<string>();
+  const excludeInvoices = new Set<string>();
   try {
     const cfgPath = nodePath.join(process.cwd(), "08_config", "b2b_overrides.json");
     if (fs.existsSync(cfgPath)) {
@@ -486,8 +537,19 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
       for (const ent of cfg.exclude_flow_receipts ?? []) {
         if (ent?.receipt_number) excludeFlow.add(String(ent.receipt_number));
       }
+      for (const ent of cfg.exclude_flow_invoices ?? []) {
+        if (ent?.invoice_number) excludeInvoices.add(String(ent.invoice_number));
+        if (ent?.receipt_number) excludeFlow.add(String(ent.receipt_number));
+      }
     }
   } catch {}
+  if (excludeInvoices.size) {
+    const before = invoices.length;
+    invoices = invoices.filter(i => !excludeInvoices.has(i.number));
+    if (before !== invoices.length) {
+      console.log(`  [Invoices] Excluded ${before - invoices.length} non-B2B tax invoices (per b2b_overrides.json)`);
+    }
+  }
   if (excludeFlow.size) {
     const before = receipts.length;
     receipts = receipts.filter(r => !excludeFlow.has(r.number));
@@ -521,7 +583,7 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
       if (inv.status === "Unpaid") note = "FlowAccount status disagrees — receipt found by amount/client match";
     } else {
       status = inv.status || "Unpaid";
-      if (inv.status === "Paid") note = "FlowAccount marks Paid but no April receipt matched — may be receipted next month";
+      if (inv.status === "Paid") note = `FlowAccount marks Paid but no ${monthArg} receipt matched — may be receipted next month`;
     }
     rows.push([inv.number, inv.issueDate, inv.client, Number(inv.amount.toFixed(2)), status, payDate, receiptNum, note]);
   }
@@ -550,45 +612,56 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
   rows.push(["", "", "TOTAL", Number(strayTotal.toFixed(2)), ""]);
   const strayTotalRow = rows.length - 1;
 
-  // ─── Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts ─
-  // Sales tab uses the management B2B rule (broad), but only bank-transfer
-  // B2B sales get a FlowAccount receipt issued — card/cash-paid B2B-named
-  // clients (walk-in corporate buyers) are management B2B only and won't
-  // appear in Flow. So this reconciliation compares the **bank-transfer subset**
-  // of Loyverse B2B against Flow receipts.
-  const loyB2BBankTransferList = salesPayload.b2bReceipts.filter(r => r.isBankTransfer);
-  const loyverseB2BBankTransfer = loyB2BBankTransferList.reduce((s, r) => s + r.total, 0);
+  // ─── Reconciliation: Loyverse B2B vs FlowAccount receipts ────────────────
+  // Every B2B sale gets a FlowAccount receipt regardless of how it was paid —
+  // the bookkeeper receipts QR/card-paid B2B sales too (confirmed Aug 2026:
+  // 7 Cup Session paid by QR twice and both got Flow receipts). So the
+  // comparison is the whole B2B revenue line from the Sales tab — net of
+  // refunds, all payment methods — not just the bank-transfer subset.
+  const loyverseB2B = salesPayload.totals.b2bRev;
+  const bankSubset = salesPayload.b2bReceipts.filter(r => r.isBankTransfer).reduce((s, r) => s + r.total, 0);
+  const cardSubset = loyverseB2B - bankSubset;
   const flowReceiptsTotal = receipts.reduce((s, r) => s + r.amount, 0);
-  const diff = Math.round((loyverseB2BBankTransfer - flowReceiptsTotal) * 100) / 100;
+  const diff = Math.round((loyverseB2B - flowReceiptsTotal) * 100) / 100;
 
   // Per-receipt mismatches are surfaced only in the console log (management
   // diagnostic) — the bookkeeper sees totals and the diff line only.
+  // A sale that was voided and re-rung appears as a SALE plus a REFUND of the
+  // same amount; pair those off first so neither shows up as a phantom mismatch.
+  const b2bSales   = salesPayload.b2bReceipts.filter(r => r.total > 0);
+  const b2bRefunds = salesPayload.b2bReceipts.filter(r => r.total < 0);
+  const refunded = new Set<string>();
+  for (const rf of b2bRefunds) {
+    const orig = b2bSales.find(sale => !refunded.has(sale.receiptNumber) && Math.abs(sale.total + rf.total) <= 0.01);
+    if (orig) refunded.add(orig.receiptNumber);
+  }
+  const loyList = b2bSales.filter(r => !refunded.has(r.receiptNumber));
   const flowMatched = new Set<string>();
-  const loyOnly: typeof loyB2BBankTransferList = [];
-  for (const lr of loyB2BBankTransferList) {
+  const loyOnly: typeof loyList = [];
+  for (const lr of loyList) {
     const fr = receipts.find(f => !flowMatched.has(f.number) && Math.abs(f.amount - lr.total) <= 1);
     if (fr) flowMatched.add(fr.number);
     else loyOnly.push(lr);
   }
   const flowOnly = receipts.filter(f => !flowMatched.has(f.number));
+  if (refunded.size) console.log(`     [Reco] Netted ${refunded.size} voided-and-re-rung B2B sale(s) against their refunds`);
   if (loyOnly.length || flowOnly.length) {
     console.log(`     [Reco] Per-receipt mismatches (not written to sheet):`);
     for (const r of loyOnly)  console.log(`       Loyverse only: ${r.date} ${r.receiptNumber} ${r.total.toFixed(2)} ฿ — ${r.customerName}`);
     for (const r of flowOnly) console.log(`       FlowAccount only: ${r.date} ${r.number} ${r.amount.toFixed(2)} ฿ — ${r.client}`);
   }
 
-  const mgmtOnlyB2B = salesPayload.totals.b2bRev - loyverseB2BBankTransfer;
-
   rows.push([]);
-  rows.push([`Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts (${monthArg})`]);
+  rows.push([`Reconciliation: Loyverse B2B revenue vs FlowAccount receipts (${monthArg})`]);
   const recoTitleRow = rows.length - 1;
   rows.push(["Source", "Amount ฿", "", "", "Note"]);
   const recoHeaderRow = rows.length - 1;
-  rows.push(["Loyverse B2B (bank transfer only)", Math.round(loyverseB2BBankTransfer * 100) / 100, "", "", "subset of B2B revenue paid via bank transfer"]);
+  rows.push(["Loyverse B2B revenue (net of refunds)", Math.round(loyverseB2B * 100) / 100, "", "", "all B2B sales, any payment method — same figure as the Sales tab"]);
   rows.push(["FlowAccount receipts", Math.round(flowReceiptsTotal * 100) / 100, "", "", `${receipts.length} receipts in ${monthArg}`]);
   rows.push(["Difference", diff, "", "", Math.abs(diff) < 1 ? "OK" : "Investigate"]);
   const recoDiffRow = rows.length - 1;
-  rows.push(["Loyverse B2B (card/cash, management only)", Math.round(mgmtOnlyB2B * 100) / 100, "", "", "walk-in B2B clients without Flow tax invoice — informational"]);
+  rows.push(["— of which paid by bank transfer", Math.round(bankSubset * 100) / 100, "", "", "informational"]);
+  rows.push(["— of which paid by card / QR", Math.round(cardSubset * 100) / 100, "", "", "informational"]);
   const recoMgmtRow = rows.length - 1;
 
   await writeRows(sid, sheetId, rows);
@@ -670,7 +743,7 @@ async function writeInvoicesTab(sid: string, salesPayload: SalesPayload) {
     ],
   });
   console.log(`  ✓ "${TAB_INVOICES}" written: ${invoices.length} invoices, ${stray.length} stray receipts`);
-  console.log(`     Reconciliation: Loyverse B2B (bank transfer) = ${Math.round(loyverseB2BBankTransfer).toLocaleString("ru-RU")} ฿, FlowAccount receipts = ${Math.round(flowReceiptsTotal).toLocaleString("ru-RU")} ฿, diff = ${diff.toFixed(2)} ฿${Math.abs(diff) < 1 ? " ✓" : " ⚠ investigate"} · management-only B2B (card/cash) = ${Math.round(mgmtOnlyB2B).toLocaleString("ru-RU")} ฿`);
+  console.log(`     Reconciliation: Loyverse B2B (net of refunds) = ${Math.round(loyverseB2B).toLocaleString("ru-RU")} ฿, FlowAccount receipts = ${Math.round(flowReceiptsTotal).toLocaleString("ru-RU")} ฿, diff = ${diff.toFixed(2)} ฿${Math.abs(diff) < 1 ? " ✓" : " ⚠ investigate"} · bank ${Math.round(bankSubset).toLocaleString("ru-RU")} / card-QR ${Math.round(cardSubset).toLocaleString("ru-RU")} ฿`);
 }
 
 
@@ -720,12 +793,17 @@ async function writeExpensesTab(sid: string) {
     console.log(`  heal: ${po.po_number} → status=Closed, total=${Math.round(sumLine).toLocaleString("ru-RU")} ฿`);
   }
 
+  // ВСЕ PO месяца, любого статуса. Pending — это, как правило, консигнация:
+  // товар заводят через stock adjustment, а счёт к оплате остаётся PO в статусе
+  // Pending (Receive задвоил бы сток). Такой PO — реальный расход с VAT, и раньше
+  // фильтр status=Closed молча его терял. Расход признаём по дате счёта, а не по
+  // дате оплаты. Лишнее снимается вручную — po_exclude.json или кнопка force
+  // exclude в портале (cashflow_override='exclude').
   const { data, error } = await supabase
     .from("purchase_orders")
-    .select("po_number, order_date, supplier, status, subtotal_thb, vat_thb, total_thb")
+    .select("po_number, order_date, supplier, status, subtotal_thb, vat_thb, total_thb, cashflow_override")
     .gte("order_date", fromIso)
     .lte("order_date", toIso)
-    .ilike("status", "closed")
     .order("order_date", { ascending: true });
   if (error) throw new Error(`Supabase: ${error.message}`);
   let pos = data ?? [];
@@ -745,10 +823,18 @@ async function writeExpensesTab(sid: string) {
   pos = pos.filter(p => !excludedPOs.has(String(p.po_number)));
   if (before !== pos.length) console.log(`  excluded ${before - pos.length} PO(s) per 08_config/po_exclude.json`);
 
-  // Force-include consignment POs (Harvest, Cigar Empire) that are kept in
-  // Pending on purpose (so units don't re-enter Loyverse stock) but still
-  // represent a real payment. They're missed by the status=Closed filter.
-  // 08_config/po_include.json pins them to the accounting month they belong to.
+  // Кнопка «force exclude» в портале пишет тот же смысл в БД — уважаем и её,
+  // чтобы одно исключение не приходилось заводить в двух местах.
+  const beforeOverride = pos.length;
+  pos = pos.filter(p => (p as any).cashflow_override !== "exclude");
+  if (beforeOverride !== pos.length) {
+    console.log(`  excluded ${beforeOverride - pos.length} PO(s) marked cashflow_override='exclude' in the portal`);
+  }
+
+  // Pull in POs that belong to this accounting month but were ordered in another
+  // one — e.g. a consignment tax invoice issued in the next month. Same-month POs
+  // are already in `pos` (we no longer filter by status), so this only matters
+  // when po_include.json pins a PO to a month other than its order_date month.
   try {
     const incPath = nodePath.join(process.cwd(), "08_config", "po_include.json");
     if (fs.existsSync(incPath)) {
@@ -771,7 +857,8 @@ async function writeExpensesTab(sid: string) {
     }
   } catch (e) { console.warn("[Expenses] failed to load po_include.json:", e); }
 
-  console.log(`[Expenses] ${pos.length} POs in ${monthArg} (Closed + force-included consignment)`);
+  const pendingCount = pos.filter(p => String(p.status ?? "").toLowerCase() !== "closed").length;
+  console.log(`[Expenses] ${pos.length} POs in ${monthArg} (${pos.length - pendingCount} closed + ${pendingCount} pending/consignment)`);
 
   // Net / VAT / Total come straight from the XHR-derived columns:
   //   subtotal_thb = orderData.amount/100   (after PO-level discount, no VAT)
@@ -805,15 +892,23 @@ async function writeExpensesTab(sid: string) {
   //   gross = total_thb (unchanged, what we actually paid)
   //   vat   = gross × 7/107
   //   net   = gross − vat
+  // A VAT figure under 1 ฿ on a multi-thousand-baht order is satang dust from a
+  // mistyped VAT line, not a real VAT amount (PO3033, Aug 2026: 0.08 ฿ keyed in
+  // where the supplier invoice said 419.44). Treat it as "not broken out" and let
+  // the inclusive fallback recompute VAT from the total — which reproduces the
+  // invoice exactly, since the total itself was entered correctly.
+  const VAT_DUST_LIMIT = 1;
   let totalNet = 0, totalVat = 0, totalGross = 0;
   let inclusiveCount = 0;
+  const dustPOs: string[] = [];
   pos.forEach((po, i) => {
     const rawTotal = Number(po.total_thb ?? 0);
     const rawVat = Number(po.vat_thb ?? 0);
     let net: number;
     let vat: number;
     let gross: number;
-    if (rawVat > 0) {
+    if (rawVat > 0 && rawVat < VAT_DUST_LIMIT) dustPOs.push(`${po.po_number} (${rawVat.toFixed(2)} ฿)`);
+    if (rawVat >= VAT_DUST_LIMIT) {
       vat = rawVat;
       net = po.subtotal_thb != null ? Number(po.subtotal_thb) : (fallbackSubtotal.get(po.po_number) ?? rawTotal - vat);
       // Enforce the invariant Total = Net + VAT. When total_thb excludes the VAT
@@ -844,6 +939,7 @@ async function writeExpensesTab(sid: string) {
     ]);
   });
   if (inclusiveCount) console.log(`  ${inclusiveCount} PO(s) had VAT not broken out — treated as VAT-inclusive (7% backed out)`);
+  if (dustPOs.length) console.warn(`  ⚠ VAT under ${VAT_DUST_LIMIT} ฿ (mistyped VAT line) — recomputed from total: ${dustPOs.join(", ")}`);
   const dataEnd = rows.length;
   rows.push([
     "", "", "", "TOTAL",

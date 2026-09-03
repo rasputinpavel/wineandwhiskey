@@ -29,25 +29,35 @@
 - **Реализация:** `lib/flow.ts` (Playwright). Двухстадийный логин (flowaccount → tenant OIDC → SelectCompany), сессия кешируется в `.flow-session.json`.
 - **Колонки A–H:** Tax Invoice # · Issue date · Client · Amount ฿ · Status (Paid/Unpaid/Overdue/Cancelled) · Payment date · Receipt # · Note.
 - **Conditional formatting:** строки со статусом `Unpaid` или `Overdue` подсвечиваются светло-оранжевым.
-- **Логика мэтчинга invoice ↔ receipt:** ищем FlowAccount receipt с тем же `client + amount` (±1 ฿). Если найден — `Paid` + receipt #/date.
+- **Логика мэтчинга invoice ↔ receipt (два прохода, порядок важен):**
+  1. **По ссылке.** FlowAccount печатает номер оплачиваемого счёта прямо в строке receipt'а — скрейпер кладёт его в `appliedInvoices`. Эта ссылка авторитетна. Receipt, ссылающийся на счёт не из текущего месяца, резервируется как stray и в первый проход к текущим счетам не допускается.
+  2. **По `client + amount` (±1 ฿)** — только для receipt'ов, у которых ссылку выскрести не удалось.
+  Почему так: у клиента может висеть два открытых счёта на одинаковую сумму (Milimon, август-2026: `INV202607130001` от 13.07 и `INV202608020001` от 02.08, обе 4,173.00 ฿). Августовская оплата закрывала июльский счёт, а матч по сумме привязал её к августовскому и объявил его оплаченным за две недели до срока.
 - **Section «Receipts received this month for prior invoices»** — apr-receipts которые не сматчились с apr-invoices (= оплаты по предыдущим месяцам). В Note подставляется referenced INV из popover'а на list-странице (без click-through).
-- **Section «Reconciliation»:** Loyverse B2B **bank-transfer subset** vs FlowAccount receipts. Сходиться должна именно подмножество — Flow receipt выписывается только под bank-transfer оплаты (card/cash-оплата от B2B-named клиента — management-only, в Flow её нет). Дополнительная информационная строка «Loyverse B2B (card/cash, management only)» показывает сумму card/cash B2B сделок отдельно.
+- **Section «Reconciliation»:** вся Loyverse B2B-выручка (net of refunds, любой способ оплаты) vs FlowAccount receipts. Сходиться должно **в ноль**: бухгалтер выписывает Flow receipt под каждую B2B-продажу, включая оплаченные QR/картой (подтверждено на августе-2026 — 7 Cup Session дважды платил QR, receipts выписаны). Две информационные строки под diff показывают разбивку базы на bank transfer и card/QR.
+  - Возвраты вычитаются: если продажу отменили и перебили заново, SALE и REFUND схлопываются друг с другом и в mismatch-лог не попадают (иначе отменённый чек считался бы дважды).
 - Phantom Flow receipts — `08_config/b2b_overrides.json` секция `exclude_flow_receipts`. Используется когда бухгалтер выписал в Flow receipt-«напоминалку» по старому долгу, но реальных денег не пришло. Такие receipts исключаются из reconciliation, чтобы не давать ложного расхождения.
+- Счета не-B2B контрагентам — `08_config/b2b_overrides.json` секция `exclude_flow_invoices` (`invoice_number` + `receipt_number`). Используется когда бухгалтер выписал tax invoice физлицу (розничная продажа). Такой invoice убирается из листа, а его receipt — из сверки. Первый кейс: август-2026, Sirotinina Elena (10,000) и Vitaliy Den (2,980).
 
 **Требования:** `FLOW_EMAIL` / `FLOW_PASSWORD` в `.env.local`. Playwright уже в зависимостях. 2FA в FlowAccount отключена.
 
 ### 3. `Expenses`
-Все purchase orders со статусом `Closed` за месяц — Net / VAT / Total.
+Все purchase orders за месяц (любого статуса) — Net / VAT / Total.
 
 - Источник: Supabase `purchase_orders` + `purchase_order_items`. Наполняется `npm run orders` (см. `scrape_purchase_orders.ts`).
 - **Net / VAT / Total** берутся из XHR detail каждого PO (`orderData.amount` + `landedCosts`):
   - Net = subtotal после PO-level скидки (orderData.amount + сумма отрицательных landedCosts ÷ 100)
   - VAT = сумма положительных landedCosts ÷ 100
   - Total = Net + VAT (= ยอดรวมสุทธิ на list-странице Loyverse)
-- **VAT-inclusive fallback:** если `vat_thb` ≤ 0 (поставщик не вынес VAT отдельной строкой, а написал «VAT included» в Notes), считаем total VAT-инклюзивным: `vat = total × 7/107`, `net = total − vat`. Без VAT PO существовать не может — поставщик-неплательщик у нас не работает.
+- **VAT-inclusive fallback:** если `vat_thb` < 1 ฿ (поставщик не вынес VAT отдельной строкой, а написал «VAT included» в Notes — либо оператор ошибся при вводе), считаем total VAT-инклюзивным: `vat = total × 7/107`, `net = total − vat`. Без VAT PO существовать не может — поставщик-неплательщик у нас не работает.
+  - **Порог 1 ฿ (а не 0):** VAT в копейках на заказе в тысячи бат — это опечатка в строке VAT, а не реальная сумма. Август-2026: PO3033 (P-Hops) — оператор вбил 0.08 ฿ вместо 419.44, PO3036 (BB&B) — 0.03 ฿. Total при этом введён верно, поэтому пересчёт из total воспроизводит счёт поставщика точь-в-точь. Такие PO печатаются в консоль отдельным warning'ом — их стоит поправить и в Loyverse.
 - Поля `subtotal_thb` / `vat_thb` / `total_thb` хранятся в `purchase_orders` (миграция: `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS subtotal_thb numeric, ADD COLUMN IF NOT EXISTS vat_thb numeric;`).
 - Self-heal: для PO со старого scrape (когда колонки в DB сдвинуты из-за бага парсера list-страницы) скрипт восстанавливает `status='Closed'` из items, если `received='Closed'` и `total_thb` null.
-- **PO exclusions:** `08_config/po_exclude.json` — список PO, которые не должны попадать в Expenses (например, искусственный PO, созданный в Loyverse для коррекции остатков). Каждая запись: `po_number` + `reason`.
+- **Pending PO тоже расход.** Раньше лист брал только `status='Closed'` и молча терял консигнацию: товар заводят через stock adjustment, а счёт к оплате остаётся PO в статусе Pending (Receive задвоил бы сток). Так выпали Harvest в июле и августе, точечная консигнация Vinum Lector и Cigar Empire. Правило теперь обратное — берём всё, лишнее снимаем вручную. Расход признаём по дате счёта, а не по дате оплаты.
+- **PO exclusions:** два способа, оба уважаются:
+  - `08_config/po_exclude.json` — список PO, которые не должны попадать в Expenses (например, искусственный PO, созданный в Loyverse для коррекции остатков). Каждая запись: `po_number` + `reason`.
+  - `cashflow_override='exclude'` — кнопка «force exclude» в портале (карточка поставщика, платёжный календарь). Тот же смысл, но ставится на месте, без правки файла.
+- **Перенос в другой месяц:** `08_config/po_include.json` (`po_number` + `month` + `reason`) — когда счёт выписан не в том месяце, к которому относится расход. Для «вытащить pending» больше не нужен: pending и так входит.
 - Колонки: # · PO · Order date · Supplier · Net ฿ · VAT ฿ · Total ฿. Внизу — TOTAL.
 
 ### 4. `Bonuses`
@@ -97,16 +107,17 @@ npm run accounting -- --month YYYY-MM
 
 ## Reconciliation: что делать при расхождении Sales vs Tax Invoices
 
-В конце вкладки `Tax Invoices` есть блок **«Reconciliation: Loyverse B2B (bank transfer) vs FlowAccount receipts»**. Сравнивается **подмножество** B2B-чеков, оплаченных через банк (только под них выписывают Flow receipt):
+В конце вкладки `Tax Invoices` есть блок **«Reconciliation: Loyverse B2B revenue vs FlowAccount receipts»**. Сравнивается вся B2B-выручка за вычетом возвратов — та же цифра, что в итоге листа `Sales`:
 
 | Source | Amount ฿ | Note |
 |---|---|---|
-| Loyverse B2B (bank transfer only) | ... | subset of B2B revenue paid via bank transfer |
+| Loyverse B2B revenue (net of refunds) | ... | all B2B sales, any payment method — same figure as the Sales tab |
 | FlowAccount receipts | ... | N receipts in YYYY-MM |
 | **Difference** | **0.00 ฿ ✓ OK** *(зелёный)* / **X.XX ฿ ⚠ Investigate** *(оранжевый)* |
-| Loyverse B2B (card/cash, management only) | ... | walk-in B2B clients without Flow tax invoice — informational |
+| — of which paid by bank transfer | ... | informational |
+| — of which paid by card / QR | ... | informational |
 
-Каждый Loyverse bank-transfer SALE = один FlowAccount receipt. Card/cash-оплаченные B2B-чеки (management-only) показываются отдельной информационной строкой и в reconciliation не участвуют. Если bank-transfer-subset не сошёлся — выясняем что не так.
+Каждая B2B-продажа = один FlowAccount receipt, независимо от способа оплаты. Отменённые-и-перебитые продажи схлопываются со своими REFUND. Если не сошлось — выясняем что не так.
 
 **Что делает скрипт:** при `diff != 0` в console (НЕ в листе — для бухгалтерии не показывается) печатается список конкретных несовпадений:
 - `Loyverse only: <date> <receipt#> <amount> — <client>` → bank-transfer SALE в Loyverse есть, FlowAccount receipt отсутствует

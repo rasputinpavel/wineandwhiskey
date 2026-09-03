@@ -12,6 +12,11 @@ import { computeDueDate, todayBkk, daysBetween } from '@/lib/kpi'
 
 export const dynamic = 'force-dynamic'
 
+// Консигнация под нынешним владельцем начинается с этой даты; более ранние
+// settlement-PO — обязательство прежнего владельца. То же значение живёт в
+// app/(portal)/m/payment-calendar/page.tsx.
+const CONSIGN_CUTOFF = '2026-05-01'
+
 type AlertItem = { name: string; date: string; amount: number; daysUntil: number }
 
 const PO_COLS = 'id,po_number,order_date,supplier,total_thb,status,cashflow_override,paid_at'
@@ -46,17 +51,16 @@ export async function GET(req: Request) {
   const supType  = (n: string | null): Supplier['type'] => supByName.get((n ?? '').trim().toLowerCase())?.type ?? 'regular'
   const supTerms = (n: string | null): number          => supByName.get((n ?? '').trim().toLowerCase())?.terms ?? 0
 
-  // Консигнация + force-exclude PO платятся не обычным инвойсом — наружу.
-  // force-include (напр. точечная консигнация у обычного поставщика: pending-PO
-  // как счёт к оплате) — внутрь. Обычные PO берём в любом статусе, включая
-  // pending: статус — состояние приёмки склада, а не признак платежа; лишнее
-  // снимается вручную force-exclude. Симметрично Payment Calendar, чтобы бот и
-  // календарь не разошлись.
+  // Зеркало Payment Calendar (см. app/(portal)/m/payment-calendar/page.tsx):
+  // force-exclude — наружу, force-include — внутрь, консигнация — внутрь после
+  // cutoff (settlement-PO = реальный платёж, живёт в Pending намеренно), обычные
+  // PO — любого статуса. Pending почти всегда означает консигнацию, поэтому берём
+  // всё и полагаемся на ручной force-exclude, а не на статус.
   function poEligible(p: PurchaseOrder): boolean {
     if (p.cashflow_override === 'exclude') return false
     if (!p.order_date) return false
     if (p.cashflow_override === 'include') return true
-    if (supType(p.supplier) === 'consignment') return false
+    if (supType(p.supplier) === 'consignment') return p.order_date >= CONSIGN_CUTOFF
     return true
   }
 

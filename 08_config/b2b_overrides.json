@@ -4,7 +4,7 @@
     {
       "receipt_number": "5-8402",
       "date": "2026-04-10",
-      "amount": 2482.40,
+      "amount": 2482.4,
       "client": "Jetradar (Thailand) Co., Ltd.",
       "reason": "Walk-in purchase, paid in person — Loyverse recorded as Bank Transfer but no FlowAccount tax invoice was issued. Booked as B2C for accounting; remains B2B for management/CRM purposes."
     }
@@ -16,6 +16,24 @@
       "amount": 1706.65,
       "client": "Tbilisi Co.,Ltd",
       "reason": "Phantom FlowAccount receipt issued to close stale INV202603230004 (a debt-reminder invoice); no actual money moved. The real April Tbilisi payment was 4,782.90 ฿ via Loyverse 5-8429 → FlowAccount RE202604290001."
+    }
+  ],
+  "exclude_flow_invoices": [
+    {
+      "invoice_number": "INV202608130002",
+      "receipt_number": "RE202608130001",
+      "date": "2026-08-13",
+      "amount": 10000.0,
+      "client": "Sirotinina Elena",
+      "reason": "Private individual, not a B2B client — tax invoice issued in FlowAccount but this is a retail sale. Excluded from the Tax Invoices tab and from reconciliation."
+    },
+    {
+      "invoice_number": "INV202608200002",
+      "receipt_number": "RE202608200001",
+      "date": "2026-08-20",
+      "amount": 2980.0,
+      "client": "Vitaliy Den",
+      "reason": "Private individual, not a B2B client (Loyverse 5-9116 DENISENKO VITALIY, paid card/QR, already booked B2C). Excluded from the Tax Invoices tab and from reconciliation."
     }
   ]
 }
