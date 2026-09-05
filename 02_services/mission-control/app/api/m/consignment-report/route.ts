@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import { sbInventory } from '@/lib/supabase'
 
 // Upsert a single editable cell (opening_stock, closing_stock, tastings,
-// notes) for one (supplier, sku, period) tuple.
+// own_writeoff, notes) for one (supplier, sku, period) tuple.
 //
 //   PATCH  { supplier_id, sku_id, period, field, value }
-//          field ∈ { opening_stock, closing_stock, tastings, notes }
+//          field ∈ { opening_stock, closing_stock, tastings, own_writeoff, notes }
 //          value: number | null for stocks/tastings; string | null for notes
 
-const FIELDS = new Set(['opening_stock', 'closing_stock', 'tastings', 'b2c_override', 'b2b_override', 'notes'])
+const FIELDS = new Set(['opening_stock', 'closing_stock', 'tastings', 'own_writeoff', 'b2c_override', 'b2b_override', 'notes'])
 
 export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -29,7 +29,8 @@ export async function PATCH(req: Request) {
       if (!Number.isFinite(n) || n < 0) return NextResponse.json({ error: `${field} must be non-negative integer` }, { status: 400 })
       normalized = Math.round(n)
     }
-    if (field === 'tastings' && normalized === null) normalized = 0
+    // Counters are NOT NULL with a 0 default — clearing the cell means zero.
+    if ((field === 'tastings' || field === 'own_writeoff') && normalized === null) normalized = 0
   }
 
   const row: Record<string, unknown> = { supplier_id, sku_id, period, [field]: normalized, updated_at: new Date().toISOString() }

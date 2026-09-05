@@ -13,11 +13,11 @@ export type ReportRow = {
   hc: number | null; amount: number | null
   onHand: number | null
   // Buyout columns (migration 042); all zero for suppliers with no buyouts.
-  boughtOut: number; ownSold: number; billable: number; ownRemaining: number
+  boughtOut: number; ownSold: number; billable: number; ownWriteoff: number; ownRemaining: number
   expectedOnHand: number | null
 }
 
-type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'ownSold' | 'billable' | 'tastings' | 'boughtOut' | 'closing' | 'ownRemaining' | 'onHand' | 'hc' | 'amount'
+type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'ownSold' | 'billable' | 'tastings' | 'ownWriteoff' | 'boughtOut' | 'closing' | 'ownRemaining' | 'onHand' | 'hc' | 'amount'
 
 const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right'; buyoutOnly?: boolean; title?: string }> = [
   { key: 'sku_name', label: 'SKU', align: 'left' },
@@ -28,6 +28,7 @@ const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right'; buyout
   { key: 'ownSold', label: 'From own', align: 'right', buyoutOnly: true, title: 'Units of these sales that came out of our bought-out stock — already paid for, so not billed again' },
   { key: 'billable', label: 'TOTAL', align: 'right', title: 'Billable units = sold minus anything sold from our own bought-out stock' },
   { key: 'tastings', label: 'Tastings', align: 'right' },
+  { key: 'ownWriteoff', label: 'Own w/off', align: 'right', buyoutOnly: true, title: 'Our own bought-out bottles that left without a sale — nobody is billed; the supplier’s stock is untouched' },
   { key: 'boughtOut', label: 'Bought out', align: 'right', buyoutOnly: true, title: 'Units bought out of consignment this period — they leave the supplier’s closing stock' },
   { key: 'closing', label: 'Closing', align: 'right' },
   { key: 'ownRemaining', label: 'Own left', align: 'right', buyoutOnly: true, title: 'Our bought-out units still unsold — inside Loyverse ON HAND but outside the supplier’s closing stock' },
@@ -50,8 +51,8 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
   // 'HC' is Harvest jargon (wholesale cost/unit). For retail_minus it's the
   // discounted list price per unit, so label it plainly.
   const unitLabel = mode === 'retail_minus' ? 'Cost/u ฿' : 'HC ฿'
-  // The three buyout columns only appear for suppliers we have actually bought
-  // stock out from — otherwise they would be three empty columns forever.
+  // The buyout columns only appear for suppliers we have actually bought stock
+  // out from — otherwise they would be four empty columns forever.
   const cols = COLS
     .filter(c => !c.buyoutOnly || hasBuyouts)
     .map(c => (c.key === 'hc' ? { ...c, label: unitLabel } : c))
@@ -89,9 +90,9 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
     acc.opening += r.opening ?? 0; acc.delivered += r.delivered
     acc.b2c += r.b2c; acc.b2b += r.b2b; acc.billable += r.billable; acc.tastings += r.tastings
     acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0; acc.onHand += r.onHand ?? 0
-    acc.ownSold += r.ownSold; acc.boughtOut += r.boughtOut; acc.ownRemaining += r.ownRemaining
+    acc.ownSold += r.ownSold; acc.boughtOut += r.boughtOut; acc.ownWriteoff += r.ownWriteoff; acc.ownRemaining += r.ownRemaining
     return acc
-  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, billable: 0, tastings: 0, closing: 0, amount: 0, onHand: 0, ownSold: 0, boughtOut: 0, ownRemaining: 0 })
+  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, billable: 0, tastings: 0, closing: 0, amount: 0, onHand: 0, ownSold: 0, boughtOut: 0, ownWriteoff: 0, ownRemaining: 0 })
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
@@ -146,6 +147,11 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
                 <NumCell supplierId={supplierId} skuId={r.sku_id} period={period} field="tastings" initial={r.tastings || null} />
               </td>
               {hasBuyouts && (
+                <td className="py-2 px-3 text-right">
+                  <NumCell supplierId={supplierId} skuId={r.sku_id} period={period} field="own_writeoff" initial={r.ownWriteoff || null} />
+                </td>
+              )}
+              {hasBuyouts && (
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.boughtOut ? <span className="text-amber-gold font-medium" title="Bought out of consignment this period">{r.boughtOut}</span> : <span className="text-graphite/40">—</span>}
                 </td>
@@ -181,6 +187,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
               {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.ownSold}</td>}
               <td className="py-2 px-3 text-right tabular-nums">{totals.billable}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.tastings}</td>
+              {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.ownWriteoff}</td>}
               {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.boughtOut}</td>}
               <td className="py-2 px-3 text-right tabular-nums">{totals.closing}</td>
               {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.ownRemaining}</td>}

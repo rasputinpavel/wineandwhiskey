@@ -164,7 +164,7 @@ export function ClosingCell({ supplierId, skuId, period, auto, override }: {
 
 export function NumCell({ supplierId, skuId, period, field, initial }: {
   supplierId: string; skuId: string; period: string
-  field: 'opening_stock' | 'closing_stock' | 'tastings'
+  field: 'opening_stock' | 'closing_stock' | 'tastings' | 'own_writeoff'
   initial: number | null
 }) {
   const router = useRouter()

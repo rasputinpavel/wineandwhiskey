@@ -15,7 +15,7 @@
 import { sbInventory } from '@/lib/supabase'
 import { cyclePeriodRange } from '@/lib/billing-cycle'
 import { consignmentLineCost } from '@/lib/consignment-math'
-import { runOwnedPool, allocateOwnedPlacement, type BuyoutLot, type SaleEvent } from '@/lib/consignment-buyout-math'
+import { runOwnedPool, allocateOwnedPlacement, type BuyoutLot, type SaleEvent, type WriteoffEvent } from '@/lib/consignment-buyout-math'
 
 export const CONSIGNMENT_VAT_RATE = 0.07
 
@@ -49,6 +49,7 @@ export type SettlementRow = {
   boughtOut: number       // units bought out of consignment DURING this cycle
   ownSold: number         // of this cycle's sales, units that came from OUR pool → not billable
   billable: number        // sold − ownSold; this is what the supplier is paid for
+  ownWriteoff: number     // our own units written off this cycle (no sale, nobody billed)
   ownRemaining: number    // our unsold units at cycle end (in ON HAND, not in Closing)
   expectedOnHand: number | null   // closing + ownRemaining — what Loyverse should show
 }
@@ -57,7 +58,8 @@ export type SettlementRow = {
 export type BuyoutLine = {
   sku_id: string; sku_name: string; sku_code: string
   qty: number; unitPrice: number | null; value: number | null
-  soldOut: number         // units already sold through the till (bought − remaining)
+  soldOut: number         // units already sold through the till
+  writtenOff: number      // units of ours written off without a sale
   inTransit: number       // invoiced to a B2B client, not paid yet
   atPartners: number      // out at a partner on our own consignment
   inStore: number         // still on our shelf
@@ -70,7 +72,7 @@ export type BuyoutInvoice = {
   invoiceNo: string | null
   boughtAt: string
   lines: BuyoutLine[]
-  qty: number; soldOut: number; inTransit: number; atPartners: number; inStore: number
+  qty: number; soldOut: number; writtenOff: number; inTransit: number; atPartners: number; inStore: number
   subtotal: number; vat: number; total: number
   soldValue: number       // pre-VAT value of the units already sold through the till
   inTransitValue: number  // pre-VAT value of units invoiced to a client but not paid yet
@@ -83,7 +85,7 @@ export type ConsignmentSettlement = {
   period: string; prevPeriod: string; label: string
   startDate: string; endExclDate: string
   rows: SettlementRow[]
-  totals: { opening: number; delivered: number; b2c: number; b2b: number; tastings: number; sold: number; closing: number; amount: number; boughtOut: number; ownSold: number; billable: number; ownRemaining: number }
+  totals: { opening: number; delivered: number; b2c: number; b2b: number; tastings: number; sold: number; closing: number; amount: number; boughtOut: number; ownSold: number; billable: number; ownWriteoff: number; ownRemaining: number }
   subtotal: number; vat: number; grandTotal: number
   unpricedSold: number
   excluded: string[]; exclTableMissing: boolean; delTableMissing: boolean
@@ -146,6 +148,25 @@ export async function computeConsignmentSettlement(
     else buyoutRows = (data ?? []) as BuyoutRow[]
   }
   const buyoutSkuIds = new Set(buyoutRows.map(b => b.sku_id))
+
+  // Own-stock write-offs (migration 043) across EVERY period, not just this one:
+  // the own pool is cumulative, so a bottle written off in an earlier cycle must
+  // stay gone. Each period's cells are applied at that cycle's end — they say
+  // "over this period N of ours went without a sale", not on which day.
+  const writeoffsBySku = new Map<string, WriteoffEvent[]>()
+  const writeoffThisPeriod = new Map<string, number>()   // raw cell value, for the inline editor
+  if (buyoutSkuIds.size) {
+    // Errors are swallowed on purpose: before migration 043 the column does not
+    // exist, and a missing write-off must not take the whole report down.
+    const { data } = await sbInventory
+      .from('consignment_report_cell').select('sku_id, period, own_writeoff')
+      .eq('supplier_id', supplierId).gt('own_writeoff', 0)
+    for (const w of (data ?? []) as Array<{ sku_id: string; period: string; own_writeoff: number }>) {
+      const cycleEnd = new Date(Date.parse(cyclePeriodRange(w.period, cycleStartDay).endExclIso) - 1).toISOString()
+      writeoffsBySku.set(w.sku_id, [...(writeoffsBySku.get(w.sku_id) ?? []), { atIso: cycleEnd, qty: Number(w.own_writeoff) }])
+      if (w.period === period) writeoffThisPeriod.set(w.sku_id, Number(w.own_writeoff))
+    }
+  }
 
   // SKUs that have report cells or a buyout but aren't priced yet — still show
   // them with HC = n/a so opening/closing reconcile; prices get added later.
@@ -296,12 +317,13 @@ export async function computeConsignmentSettlement(
 
       // Own pool: units bought out of consignment are already paid for, so the
       // sales they cover are NOT billed again (owner's rule — own stock first).
-      const pool = runOwnedPool(lotsBySku.get(rs.sku_id) ?? [], saleEventsBySku.get(rs.sku_id) ?? [], startIso, endExclIso)
+      const pool = runOwnedPool(lotsBySku.get(rs.sku_id) ?? [], saleEventsBySku.get(rs.sku_id) ?? [], startIso, endExclIso, writeoffsBySku.get(rs.sku_id) ?? [])
       const boughtOut = pool.boughtOutInWindow
       // Clamp against `sold`: that figure may carry a manual override, and we
       // must never shield more units than the report says were sold.
       const ownSold = Math.max(0, Math.min(pool.ownedConsumedInWindow, sold))
       const billable = sold - ownSold
+      const ownWriteoff = writeoffThisPeriod.get(rs.sku_id) ?? 0
       const ownRemaining = pool.ownedRemaining
 
       // Consignment stock loses the bought-out units and only the billable sales;
@@ -319,16 +341,17 @@ export async function computeConsignmentSettlement(
       // Loyverse holds both pools, so this — not Closing alone — is what ON HAND
       // must equal at period end.
       const expectedOnHand = closing == null ? null : closing + ownRemaining
-      return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount, onHand, boughtOut, ownSold, billable, ownRemaining, expectedOnHand }
+      return { sku_id: rs.sku_id, sku_name: sku.name, sku_code: code, opening, delivered, closing, closingAuto, closingManual, b2c, b2cAuto, b2cOverride, b2b, b2bAuto, b2bOverride, tastings, sold, hc, amount, onHand, boughtOut, ownSold, billable, ownWriteoff, ownRemaining, expectedOnHand }
     })
     .sort((a, b) => (b.sold + b.tastings + b.delivered) - (a.sold + a.tastings + a.delivered) || a.sku_name.localeCompare(b.sku_name))
 
   const totals = rows.reduce((acc, r) => {
     acc.b2c += r.b2c; acc.b2b += r.b2b; acc.tastings += r.tastings; acc.sold += r.sold; acc.delivered += r.delivered
     acc.opening += r.opening ?? 0; acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0
-    acc.boughtOut += r.boughtOut; acc.ownSold += r.ownSold; acc.billable += r.billable; acc.ownRemaining += r.ownRemaining
+    acc.boughtOut += r.boughtOut; acc.ownSold += r.ownSold; acc.billable += r.billable
+    acc.ownWriteoff += r.ownWriteoff; acc.ownRemaining += r.ownRemaining
     return acc
-  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, tastings: 0, sold: 0, closing: 0, amount: 0, boughtOut: 0, ownSold: 0, billable: 0, ownRemaining: 0 })
+  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, tastings: 0, sold: 0, closing: 0, amount: 0, boughtOut: 0, ownSold: 0, billable: 0, ownWriteoff: 0, ownRemaining: 0 })
 
   const unpricedSold = rows.filter(r => r.hc == null && r.billable > 0).length
 
@@ -362,7 +385,7 @@ export async function computeConsignmentSettlement(
     if (!inv) {
       inv = {
         invoiceNo: b.invoice_no, boughtAt: b.bought_at, lines: [],
-        qty: 0, soldOut: 0, inTransit: 0, atPartners: 0, inStore: 0,
+        qty: 0, soldOut: 0, writtenOff: 0, inTransit: 0, atPartners: 0, inStore: 0,
         subtotal: 0, vat: 0, total: 0, soldValue: 0, inTransitValue: 0, remainingValue: 0,
       }
       invoiceMap.set(key, inv)
@@ -373,15 +396,18 @@ export async function computeConsignmentSettlement(
     // the only shape we have — the line simply carries that SKU's pool.
     const remaining = Math.min(qty, r.ownRemaining)
     const placement = allocateOwnedPlacement(remaining, transitBySku.get(b.sku_id) ?? 0, atPartnerBySku.get(b.sku_id) ?? 0)
-    const soldOut = qty - remaining
+    // Write-offs across every period, not just this one — a bottle written off
+    // in an earlier cycle is gone for good and must not read as "sold".
+    const writtenOff = Math.min(qty - remaining, (writeoffsBySku.get(b.sku_id) ?? []).reduce((a, w) => a + w.qty, 0))
+    const soldOut = qty - remaining - writtenOff
     const line: BuyoutLine = {
       sku_id: b.sku_id, sku_name: r.sku_name, sku_code: r.sku_code,
       qty, unitPrice, value: unitPrice == null ? null : qty * unitPrice,
-      soldOut, ...placement, remaining,
+      soldOut, writtenOff, ...placement, remaining,
       remainingValue: unitPrice == null ? null : remaining * unitPrice,
     }
     inv.lines.push(line)
-    inv.qty += qty; inv.soldOut += soldOut
+    inv.qty += qty; inv.soldOut += soldOut; inv.writtenOff += writtenOff
     inv.inTransit += placement.inTransit; inv.atPartners += placement.atPartners; inv.inStore += placement.inStore
     inv.subtotal += line.value ?? 0
     inv.soldValue += unitPrice == null ? 0 : soldOut * unitPrice

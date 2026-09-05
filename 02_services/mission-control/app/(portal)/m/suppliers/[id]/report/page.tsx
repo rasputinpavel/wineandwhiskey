@@ -71,7 +71,7 @@ export default async function SupplierMonthlyReportPage({
               sku: r.sku_name, opening: r.opening, delivered: r.delivered, b2c: r.b2c, b2b: r.b2b,
               ...(hasBuyouts ? { from_own: r.ownSold } : {}),
               total: r.billable, tastings: r.tastings,
-              ...(hasBuyouts ? { bought_out: r.boughtOut } : {}),
+              ...(hasBuyouts ? { own_writeoff: r.ownWriteoff, bought_out: r.boughtOut } : {}),
               closing: r.closing,
               ...(hasBuyouts ? { own_left: r.ownRemaining } : {}),
               on_hand: r.onHand, hc: r.hc == null ? 'n/a' : r.hc, amount: r.amount == null ? 'n/a' : Math.round(r.amount),
@@ -113,7 +113,7 @@ export default async function SupplierMonthlyReportPage({
             they sell. <strong>Sold</strong> = already through the till. <strong>Invoiced</strong> = billed
             to a B2B client who has not paid yet — gone from the shelf but still in Loyverse ON HAND.
             <strong> At partner</strong> = standing at a partner on our own consignment. <strong>In store</strong> =
-            still here.
+            still here. <strong>Written off</strong> = ours, gone without a sale — that money is simply spent.
           </p>
 
           <div className="space-y-4">
@@ -136,6 +136,7 @@ export default async function SupplierMonthlyReportPage({
                       <th className="py-2 px-3 text-right font-normal">Bought</th>
                       <th className="py-2 px-3 text-right font-normal">฿ / unit</th>
                       <th className="py-2 px-3 text-right font-normal">Sold</th>
+                      <th className="py-2 px-3 text-right font-normal" title="Ours, gone without a sale — poured, broken, taken">Written off</th>
                       <th className="py-2 px-3 text-right font-normal">Invoiced</th>
                       <th className="py-2 px-3 text-right font-normal">At partner</th>
                       <th className="py-2 px-3 text-right font-normal">In store</th>
@@ -152,6 +153,7 @@ export default async function SupplierMonthlyReportPage({
                         <td className="py-2 px-3 text-right tabular-nums">{l.qty}</td>
                         <td className="py-2 px-3 text-right tabular-nums text-graphite">{l.unitPrice == null ? <span className="text-amber-gold">n/a</span> : money(l.unitPrice)}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{l.soldOut || <span className="text-graphite/40">—</span>}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{l.writtenOff || <span className="text-graphite/40">—</span>}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{l.inTransit || <span className="text-graphite/40">—</span>}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{l.atPartners || <span className="text-graphite/40">—</span>}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{l.inStore || <span className="text-graphite/40">—</span>}</td>
@@ -163,6 +165,7 @@ export default async function SupplierMonthlyReportPage({
                       <td className="py-2 px-3 text-right tabular-nums">{inv.qty}</td>
                       <td className="py-2 px-3"></td>
                       <td className="py-2 px-3 text-right tabular-nums">{inv.soldOut}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{inv.writtenOff}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{inv.inTransit}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{inv.atPartners}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{inv.inStore}</td>

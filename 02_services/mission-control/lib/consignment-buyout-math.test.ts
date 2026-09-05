@@ -9,7 +9,7 @@ const BUY28 = '2026-08-27T17:00:00.000Z'   // 28 Aug 00:00 Bangkok
 describe('runOwnedPool', () => {
   it('no buyout at all → nothing owned, nothing shielded', () => {
     const r = runOwnedPool([], [{ atIso: '2026-08-20T05:00:00Z', qty: 3 }], START, END)
-    expect(r).toEqual({ ownedRemaining: 0, ownedConsumedInWindow: 0, boughtOutInWindow: 0 })
+    expect(r).toEqual({ ownedRemaining: 0, ownedConsumedInWindow: 0, boughtOutInWindow: 0, ownWrittenOffInWindow: 0 })
   })
 
   it('buyout with no sales after it stays whole and leaves consignment stock', () => {
@@ -94,9 +94,32 @@ describe('runOwnedPool', () => {
     expect(r.ownedConsumedInWindow).toBe(0)
   })
 
+  it('a write-off of our own bottle drains our pool without billing anyone', () => {
+    // Aug 2026: Duo Blanc — 6 bought out, 1 written off by hand during the period.
+    const r = runOwnedPool([{ atIso: BUY28, qty: 6 }], [], START, END, [{ atIso: '2026-09-04T16:59:59.999Z', qty: 1 }])
+    expect(r.ownWrittenOffInWindow).toBe(1)
+    expect(r.ownedConsumedInWindow).toBe(0)   // not a sale — nothing shielded from billing
+    expect(r.ownedRemaining).toBe(5)
+  })
+
+  it('a write-off never spills into the supplier’s pool — it clamps at what we own', () => {
+    const r = runOwnedPool([{ atIso: BUY28, qty: 2 }], [], START, END, [{ atIso: '2026-09-04T16:59:59.999Z', qty: 5 }])
+    expect(r.ownWrittenOffInWindow).toBe(2)
+    expect(r.ownedRemaining).toBe(0)
+  })
+
+  it('a write-off from an earlier cycle is already gone from the pool', () => {
+    const r = runOwnedPool(
+      [{ atIso: '2026-07-10T17:00:00.000Z', qty: 5 }], [], START, END,
+      [{ atIso: '2026-08-04T16:59:59.999Z', qty: 2 }],
+    )
+    expect(r.ownWrittenOffInWindow).toBe(0)   // not this cycle's event
+    expect(r.ownedRemaining).toBe(3)
+  })
+
   it('a buyout dated after the window has not happened yet', () => {
     const r = runOwnedPool([{ atIso: '2026-09-20T17:00:00.000Z', qty: 4 }], [], START, END)
-    expect(r).toEqual({ ownedRemaining: 0, ownedConsumedInWindow: 0, boughtOutInWindow: 0 })
+    expect(r).toEqual({ ownedRemaining: 0, ownedConsumedInWindow: 0, boughtOutInWindow: 0, ownWrittenOffInWindow: 0 })
   })
 })
 

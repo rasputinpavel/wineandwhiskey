@@ -28,6 +28,12 @@ export type SaleEvent = {
   qty: number
 }
 
+export type WriteoffEvent = {
+  /** Instant the units left — a period's cells are applied at its cycle end. */
+  atIso: string
+  qty: number
+}
+
 export type OwnedPoolResult = {
   /** Units still ours and unsold at the end of the window. */
   ownedRemaining: number
@@ -35,6 +41,8 @@ export type OwnedPoolResult = {
   ownedConsumedInWindow: number
   /** Units bought out INSIDE the window → they leave consignment closing stock. */
   boughtOutInWindow: number
+  /** Units of ours written off (no sale) INSIDE the window. */
+  ownWrittenOffInWindow: number
 }
 
 /**
@@ -50,6 +58,7 @@ export function runOwnedPool(
   sales: SaleEvent[],
   startIso: string,
   endExclIso: string,
+  writeoffs: WriteoffEvent[] = [],
 ): OwnedPoolResult {
   // Compare instants numerically, never as text: PostgREST hands back
   // "…+00:00" while our cycle bounds are "…Z", and the two do not sort
@@ -57,10 +66,11 @@ export function runOwnedPool(
   const t = (iso: string) => Date.parse(iso)
   const start = t(startIso), endExcl = t(endExclIso)
 
-  type Ev = { at: number; kind: 'buy' | 'sale'; qty: number }
+  type Ev = { at: number; kind: 'buy' | 'sale' | 'writeoff'; qty: number }
   const events: Ev[] = [
     ...lots.map(l => ({ at: t(l.atIso), kind: 'buy' as const, qty: l.qty })),
     ...sales.map(s => ({ at: t(s.atIso), kind: 'sale' as const, qty: s.qty })),
+    ...writeoffs.map(w => ({ at: t(w.atIso), kind: 'writeoff' as const, qty: w.qty })),
   ].filter(e => Number.isFinite(e.at) && e.at < endExcl)
   // A buyout dated the same day as a sale takes effect first (start of day),
   // so same-day sales draw from the pool we just paid for.
@@ -69,6 +79,7 @@ export function runOwnedPool(
   let owned = 0
   let ownedConsumedInWindow = 0
   let boughtOutInWindow = 0
+  let ownWrittenOffInWindow = 0
 
   for (const e of events) {
     const inWindow = e.at >= start
@@ -78,12 +89,17 @@ export function runOwnedPool(
       continue
     }
     if (e.qty <= 0) continue                  // refund → consignment pool, not ours
-    const fromOwn = Math.min(e.qty, owned)
-    owned -= fromOwn
-    if (inWindow) ownedConsumedInWindow += fromOwn
+    // A write-off is declared to be OUR bottle, so it never spills over into the
+    // supplier's pool: claiming more than we own is a data error, and clamping
+    // leaves the ON HAND check failing, which is where it should show up.
+    const taken = Math.min(e.qty, owned)
+    owned -= taken
+    if (!inWindow) continue
+    if (e.kind === 'sale') ownedConsumedInWindow += taken
+    else ownWrittenOffInWindow += taken
   }
 
-  return { ownedRemaining: owned, ownedConsumedInWindow, boughtOutInWindow }
+  return { ownedRemaining: owned, ownedConsumedInWindow, boughtOutInWindow, ownWrittenOffInWindow }
 }
 
 export type OwnedPlacement = {
