@@ -170,14 +170,33 @@ async function syncInvoices(invoices: FlowInvoice[], skus: IndexedSku[]) {
       // `lineItems === undefined` means we deliberately skipped enrich (already
       // Paid + already in DB) — keep existing lines untouched.
       if (inv.lineItems !== undefined) {
+        // Hand-made mappings have to survive the wipe. /m/inventory/admin/
+        // unmapped is where a human places lines the matcher can't ("GUINNES
+        // Beer" → Guinness Stout 440ML); replacing lines blind reverted every
+        // one of those on the next run. Carry the ruling over by description —
+        // a person decides what a text means, not which row it landed on, so
+        // one ruling covers the repeats of that text on this invoice.
+        const { data: prior } = await supabase
+          .from("flowaccount_invoice_line")
+          .select("raw_text, sku_id")
+          .eq("invoice_id", invoice_id)
+          .eq("sku_id_manual", true);
+        const manualByText = new Map(
+          (prior ?? []).map(p => [p.raw_text as string, p.sku_id as string | null]),
+        );
+
         await supabase.from("flowaccount_invoice_line").delete().eq("invoice_id", invoice_id);
-        const lines = inv.lineItems.map(li => ({
-          invoice_id,
-          sku_id: matchSku(li.name, skus).sku?.id ?? null,
-          raw_text: li.name,
-          qty: li.quantity,
-          amount: li.amount,
-        }));
+        const lines = inv.lineItems.map(li => {
+          const isManual = manualByText.has(li.name);
+          return {
+            invoice_id,
+            sku_id: isManual ? manualByText.get(li.name)! : matchSku(li.name, skus).sku?.id ?? null,
+            sku_id_manual: isManual,
+            raw_text: li.name,
+            qty: li.quantity,
+            amount: li.amount,
+          };
+        });
         if (lines.length) {
           const { error: lineErr } = await supabase.from("flowaccount_invoice_line").insert(lines);
           if (lineErr) throw new Error(`lines ${inv.number}: ${lineErr.message}`);
