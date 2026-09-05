@@ -95,12 +95,21 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
   }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, billable: 0, tastings: 0, closing: 0, amount: 0, onHand: 0, ownSold: 0, boughtOut: 0, ownWriteoff: 0, ownRemaining: 0 })
 
   return (
-    <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
-      <table className="w-full text-[13px]">
-        <thead className="text-graphite border-b border-pale-stone bg-cream/40">
+    // The buyout columns push this past a laptop's width, so the table scrolls
+    // inside its own box. That box also owns the vertical scroll — sticky only
+    // resolves against the nearest scrollport, so the header can stay put while
+    // 60+ SKUs go by only if both axes live here.
+    <div className="bg-warm-white border border-pale-stone rounded-md overflow-auto max-h-[calc(100vh-18rem)] min-h-[20rem]">
+      <table className="w-full min-w-[72rem] text-[13px]">
+        <thead className="text-graphite bg-cream sticky top-0 z-10">
           <tr>
             {cols.map(col => (
-              <th key={col.key} className={`py-2 px-3 font-normal ${col.align === 'left' ? 'text-left' : 'text-right'}`}>
+              <th
+                key={col.key}
+                className={`py-2 px-3 font-normal border-b border-pale-stone bg-cream ${
+                  col.align === 'left' ? 'text-left' : 'text-right'
+                } ${col.key === 'sku_name' ? 'sticky left-0 z-20 min-w-[16rem] border-r border-pale-stone/40' : ''}`}
+              >
                 <button
                   onClick={() => onSort(col.key)}
                   className={`inline-flex items-center gap-1 hover:text-wine-red ${sortKey === col.key ? 'text-wine-red' : ''} ${col.align === 'right' ? 'flex-row-reverse' : ''}`}
@@ -118,8 +127,11 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
             <tr><td colSpan={cols.length} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
           )}
           {sorted.map(r => (
-            <tr key={r.sku_id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
-              <td className="py-2 px-3 truncate max-w-[22rem]" title={r.sku_name}>
+            <tr key={r.sku_id} className="group border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
+              <td
+                className="py-2 px-3 truncate max-w-[22rem] sticky left-0 z-[5] bg-warm-white group-hover:bg-[#F2EAE0] border-r border-pale-stone/40"
+                title={r.sku_name}
+              >
                 {r.sku_name}
                 {r.sku_code && <span className="ml-2 text-[10px] text-graphite/70 font-mono">{r.sku_code}</span>}
               </td>
@@ -179,7 +191,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
           ))}
           {sorted.length > 0 && (
             <tr className="bg-cream/60 font-medium">
-              <td className="py-2 px-3 text-graphite text-xs uppercase tracking-overline">Total</td>
+              <td className="py-2 px-3 text-graphite text-xs uppercase tracking-overline sticky left-0 z-[5] bg-[#F0E6DB] border-r border-pale-stone/40">Total</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.opening}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.delivered}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.b2c}</td>
