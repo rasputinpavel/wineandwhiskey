@@ -725,7 +725,11 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
     for (const it of items) {
       const name = String(it.name ?? it.productName ?? it.productDescription ?? "").trim();
       const qty  = Number(it.productQty ?? it.quantity ?? it.productQuantity ?? 0);
-      const amount = Number(it.productTotal ?? it.value ?? it.amount ?? 0);
+      // FA calls the line total `total` — plain, VAT-exclusive. None of the
+      // guessed names below it ever existed in the payload, so every line we
+      // ever wrote had amount=0 (795 of them) until this was checked against a
+      // live response. The others stay as fallbacks in case FA renames again.
+      const amount = Number(it.total ?? it.productTotal ?? it.value ?? it.amount ?? 0);
       if (name && qty > 0) inv.lineItems.push({ name, quantity: qty, amount });
     }
     if (DEBUG) console.log(`[flow] ${inv.number}: ${inv.lineItems.length} line item(s) — ${inv.lineItems.slice(0, 3).map(l => `${l.quantity}× ${l.name}`).join(" | ")}`);

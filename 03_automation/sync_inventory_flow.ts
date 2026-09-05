@@ -14,7 +14,10 @@
  *
  * Window default: 30 days. Window only affects how the listing rows are
  * filtered — straggler refresh ignores it. Override with
- * FLOW_FROM=YYYY-MM-DD FLOW_TO=YYYY-MM-DD when you need a manual backfill.
+ * FLOW_FROM=YYYY-MM-DD FLOW_TO=YYYY-MM-DD when you need a manual backfill,
+ * plus FLOW_PAGES=<n> to walk deeper than the usual 3 listing pages and
+ * FLOW_REENRICH=1 to re-read detail pages we would otherwise skip as
+ * unchanged (needed whenever the detail-page PARSER changes, not the data).
  *
  * Matching:
  *   - Each invoice line item is matched to inventory.sku by the shared
@@ -58,7 +61,16 @@ function defaultWindow(): { from: string; to: string } {
 // First N pages of FA's grid. Sorted newest-first; 3 pages × ~20 rows = ~60
 // most recent invoices. Older outstanding stuff is picked up via DB
 // stragglers, so we don't need to walk the whole history.
-const LISTING_PAGES = 3;
+const LISTING_PAGES = Number(process.env.FLOW_PAGES || 3);
+
+// Backfill escape hatch. Phase 3 normally skips invoices that were Paid in the
+// DB and are still Paid on the grid — they don't change, so re-reading them is
+// pure cost. That skip also freezes any bug in how we PARSE the detail page:
+// when the line-amount field name was fixed, every historical Paid invoice
+// still carried amount=0 and no ordinary run would ever revisit it. Set
+// FLOW_REENRICH=1 (with FLOW_FROM/FLOW_TO + FLOW_PAGES) to re-read everything
+// in the window.
+const REENRICH = process.env.FLOW_REENRICH === "1";
 
 async function logStart(source: string) {
   const { data } = await supabase
@@ -294,6 +306,7 @@ async function main() {
     const dbStatusByNumber = new Map((existingRows ?? []).map(r => [r.number, r.status]));
 
     const toEnrich = invoices.filter(i => {
+      if (REENRICH)              return true;   // backfill run — re-read everything
       const dbStatus = dbStatusByNumber.get(i.number);
       if (!dbStatus)             return true;   // brand new
       if (dbStatus !== "Paid")   return true;   // was outstanding — re-check status + lines

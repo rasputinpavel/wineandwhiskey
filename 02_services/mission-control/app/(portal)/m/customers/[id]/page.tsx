@@ -402,7 +402,7 @@ async function BalancePanel({ customerId, sp }: { customerId: string; sp: Search
     <>
       <div className="text-xs text-graphite mb-3">
         {rows.length} SKU · <span className="text-deep-black tabular-nums font-medium">{totalQty}</span> bottles total ·
-        derived from delivery notes minus paid invoice lines
+        derived from delivery notes minus invoiced lines
       </div>
       <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
         <table className="w-full text-[13px]">
