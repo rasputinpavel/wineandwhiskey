@@ -12,19 +12,25 @@ export type ReportRow = {
   closing: number | null; closingAuto: number | null; closingManual: number | null
   hc: number | null; amount: number | null
   onHand: number | null
+  // Buyout columns (migration 042); all zero for suppliers with no buyouts.
+  boughtOut: number; ownSold: number; billable: number; ownRemaining: number
+  expectedOnHand: number | null
 }
 
-type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'sold' | 'tastings' | 'closing' | 'onHand' | 'hc' | 'amount'
+type SortKey = 'sku_name' | 'activity' | 'opening' | 'delivered' | 'b2c' | 'b2b' | 'ownSold' | 'billable' | 'tastings' | 'boughtOut' | 'closing' | 'ownRemaining' | 'onHand' | 'hc' | 'amount'
 
-const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right' }> = [
+const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right'; buyoutOnly?: boolean; title?: string }> = [
   { key: 'sku_name', label: 'SKU', align: 'left' },
   { key: 'opening', label: 'Opening', align: 'right' },
   { key: 'delivered', label: 'Delivered', align: 'right' },
   { key: 'b2c', label: 'Sold B2C', align: 'right' },
   { key: 'b2b', label: 'Sold B2B', align: 'right' },
-  { key: 'sold', label: 'TOTAL', align: 'right' },
+  { key: 'ownSold', label: 'From own', align: 'right', buyoutOnly: true, title: 'Units of these sales that came out of our bought-out stock — already paid for, so not billed again' },
+  { key: 'billable', label: 'TOTAL', align: 'right', title: 'Billable units = sold minus anything sold from our own bought-out stock' },
   { key: 'tastings', label: 'Tastings', align: 'right' },
+  { key: 'boughtOut', label: 'Bought out', align: 'right', buyoutOnly: true, title: 'Units bought out of consignment this period — they leave the supplier’s closing stock' },
   { key: 'closing', label: 'Closing', align: 'right' },
+  { key: 'ownRemaining', label: 'Own left', align: 'right', buyoutOnly: true, title: 'Our bought-out units still unsold — inside Loyverse ON HAND but outside the supplier’s closing stock' },
   { key: 'onHand', label: 'Loyverse', align: 'right' },
   { key: 'hc', label: 'HC ฿', align: 'right' },
   { key: 'amount', label: 'Amount ฿', align: 'right' },
@@ -33,18 +39,22 @@ const COLS: Array<{ key: SortKey; label: string; align: 'left' | 'right' }> = [
 function value(r: ReportRow, key: SortKey): number | string | null {
   switch (key) {
     case 'sku_name': return r.sku_name
-    case 'activity': return r.sold + r.tastings + r.delivered
+    case 'activity': return r.sold + r.tastings + r.delivered + r.boughtOut
     default: return r[key] as number | null
   }
 }
 
-export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_plus' }: {
-  supplierId: string; period: string; rows: ReportRow[]; mode?: 'cost_plus' | 'retail_minus'
+export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_plus', hasBuyouts = false }: {
+  supplierId: string; period: string; rows: ReportRow[]; mode?: 'cost_plus' | 'retail_minus'; hasBuyouts?: boolean
 }) {
   // 'HC' is Harvest jargon (wholesale cost/unit). For retail_minus it's the
   // discounted list price per unit, so label it plainly.
   const unitLabel = mode === 'retail_minus' ? 'Cost/u ฿' : 'HC ฿'
-  const cols = COLS.map(c => (c.key === 'hc' ? { ...c, label: unitLabel } : c))
+  // The three buyout columns only appear for suppliers we have actually bought
+  // stock out from — otherwise they would be three empty columns forever.
+  const cols = COLS
+    .filter(c => !c.buyoutOnly || hasBuyouts)
+    .map(c => (c.key === 'hc' ? { ...c, label: unitLabel } : c))
   // Default = activity desc (most-moved SKUs first), matching the old order.
   const [sortKey, setSortKey] = useState<SortKey>('activity')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
@@ -77,10 +87,11 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
 
   const totals = rows.reduce((acc, r) => {
     acc.opening += r.opening ?? 0; acc.delivered += r.delivered
-    acc.b2c += r.b2c; acc.b2b += r.b2b; acc.sold += r.sold; acc.tastings += r.tastings
+    acc.b2c += r.b2c; acc.b2b += r.b2b; acc.billable += r.billable; acc.tastings += r.tastings
     acc.closing += r.closing ?? 0; acc.amount += r.amount ?? 0; acc.onHand += r.onHand ?? 0
+    acc.ownSold += r.ownSold; acc.boughtOut += r.boughtOut; acc.ownRemaining += r.ownRemaining
     return acc
-  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, sold: 0, tastings: 0, closing: 0, amount: 0, onHand: 0 })
+  }, { opening: 0, delivered: 0, b2c: 0, b2b: 0, billable: 0, tastings: 0, closing: 0, amount: 0, onHand: 0, ownSold: 0, boughtOut: 0, ownRemaining: 0 })
 
   return (
     <div className="bg-warm-white border border-pale-stone rounded-md overflow-hidden">
@@ -92,7 +103,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
                 <button
                   onClick={() => onSort(col.key)}
                   className={`inline-flex items-center gap-1 hover:text-wine-red ${sortKey === col.key ? 'text-wine-red' : ''} ${col.align === 'right' ? 'flex-row-reverse' : ''}`}
-                  title="Sort"
+                  title={col.title ?? 'Sort'}
                 >
                   {col.label}
                   <span className="text-[9px] w-2">{sortKey === col.key ? (dir === 'asc' ? '▲' : '▼') : ''}</span>
@@ -103,7 +114,7 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
         </thead>
         <tbody>
           {sorted.length === 0 && (
-            <tr><td colSpan={11} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
+            <tr><td colSpan={cols.length} className="py-6 text-center text-graphite text-sm">No SKUs priced for this supplier. Add consignment prices first.</td></tr>
           )}
           {sorted.map(r => (
             <tr key={r.sku_id} className="border-b border-pale-stone/40 last:border-0 hover:bg-cream/40">
@@ -125,19 +136,34 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
                   auto={r.b2bAuto} override={r.b2bOverride}
                   salesHref={`/m/suppliers/${supplierId}/report/sales?period=${period}&sku_id=${r.sku_id}&channel=b2b`} />
               </td>
-              <td className="py-2 px-3 text-right tabular-nums font-medium">{r.sold || <span className="text-graphite/40">—</span>}</td>
+              {hasBuyouts && (
+                <td className="py-2 px-3 text-right tabular-nums text-graphite">
+                  {r.ownSold ? <span className="text-amber-gold font-medium" title="Sold from our own bought-out stock — not billed to the supplier">{r.ownSold}</span> : <span className="text-graphite/40">—</span>}
+                </td>
+              )}
+              <td className="py-2 px-3 text-right tabular-nums font-medium">{r.billable || <span className="text-graphite/40">—</span>}</td>
               <td className="py-2 px-3 text-right">
                 <NumCell supplierId={supplierId} skuId={r.sku_id} period={period} field="tastings" initial={r.tastings || null} />
               </td>
+              {hasBuyouts && (
+                <td className="py-2 px-3 text-right tabular-nums">
+                  {r.boughtOut ? <span className="text-amber-gold font-medium" title="Bought out of consignment this period">{r.boughtOut}</span> : <span className="text-graphite/40">—</span>}
+                </td>
+              )}
               <td className="py-2 px-3 text-right">
                 <ClosingCell supplierId={supplierId} skuId={r.sku_id} period={period} auto={r.closingAuto} override={r.closingManual} />
               </td>
+              {hasBuyouts && (
+                <td className="py-2 px-3 text-right tabular-nums text-graphite">
+                  {r.ownRemaining ? <span className="text-deep-black" title="Ours, bought out and still unsold">{r.ownRemaining}</span> : <span className="text-graphite/40">—</span>}
+                </td>
+              )}
               <td className="py-2 px-3 text-right tabular-nums">
                 {r.onHand == null
                   ? <span className="text-graphite/40">—</span>
-                  : (r.closing != null && r.closing !== r.onHand)
-                    ? <span className="text-wine-red font-medium" title={`Closing ${r.closing} ≠ Loyverse on-hand ${r.onHand} — reconcile before closing`}>
-                        {r.onHand}<span className="ml-1 text-[10px]">Δ{r.closing - r.onHand > 0 ? '+' : ''}{r.closing - r.onHand}</span>
+                  : (r.expectedOnHand != null && r.expectedOnHand !== r.onHand)
+                    ? <span className="text-wine-red font-medium" title={`Closing ${r.closing}${r.ownRemaining ? ` + own ${r.ownRemaining}` : ''} = ${r.expectedOnHand} ≠ Loyverse on-hand ${r.onHand} — reconcile before closing`}>
+                        {r.onHand}<span className="ml-1 text-[10px]">Δ{r.expectedOnHand - r.onHand > 0 ? '+' : ''}{r.expectedOnHand - r.onHand}</span>
                       </span>
                     : <span className="text-emerald-700">{r.onHand}</span>}
               </td>
@@ -152,9 +178,12 @@ export function ConsignmentReportTable({ supplierId, period, rows, mode = 'cost_
               <td className="py-2 px-3 text-right tabular-nums">{totals.delivered}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.b2c}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.b2b}</td>
-              <td className="py-2 px-3 text-right tabular-nums">{totals.sold}</td>
+              {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.ownSold}</td>}
+              <td className="py-2 px-3 text-right tabular-nums">{totals.billable}</td>
               <td className="py-2 px-3 text-right tabular-nums">{totals.tastings}</td>
+              {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.boughtOut}</td>}
               <td className="py-2 px-3 text-right tabular-nums">{totals.closing}</td>
+              {hasBuyouts && <td className="py-2 px-3 text-right tabular-nums">{totals.ownRemaining}</td>}
               <td className="py-2 px-3 text-right tabular-nums">{totals.onHand}</td>
               <td className="py-2 px-3"></td>
               <td className="py-2 px-3 text-right tabular-nums">฿{Math.round(totals.amount).toLocaleString('en-US')}</td>

@@ -137,6 +137,12 @@ export default async function SupplierDetail({
               Deliveries
             </Link>
             <Link
+              href={`/m/suppliers/${s.id}/buyouts`}
+              className="px-3 py-1.5 -mb-px border-b-2 border-transparent text-graphite hover:text-wine-red hover:border-pale-stone"
+            >
+              Buyouts
+            </Link>
+            <Link
               href={`/m/suppliers/${s.id}/report`}
               className="px-3 py-1.5 -mb-px border-b-2 border-transparent text-graphite hover:text-wine-red hover:border-pale-stone"
             >
