@@ -652,7 +652,13 @@ export async function enrichInvoicesWithReceipts(s: FlowSession, invoices: FlowI
 // We listen for that response to avoid fragile DOM parsing.
 export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvoice[]) {
   for (const inv of invoices) {
-    inv.lineItems = [];
+    // Stays undefined until we have actually READ a detail document. The
+    // caller replaces an invoice's stored lines whenever lineItems is set, and
+    // an empty array is a legitimate instruction to delete them all — so a
+    // failed navigation must not look like one. Pre-seeding `[]` here meant any
+    // flaky page load silently emptied that invoice: it cost INV202608100001
+    // all 17 of its lines before this was spotted.
+    inv.lineItems = undefined;
     if (!inv.detailUrl) {
       console.warn(`[flow] items: no detailUrl for ${inv.number}`);
       continue;
@@ -689,10 +695,14 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
     let items: any[] = [];
     let statusFromApi: string | null = null;
     let hasReceipt = false;
+    // Did we get a detail document at all? Only then do we know the invoice's
+    // real line set and may overwrite what's stored.
+    let sawDetailDoc = false;
     for (const { url, body } of captured) {
       if (!/api-core-canary.*tax-invoices\/\d+/.test(url)) continue;
       const list: any[] = body?.data?.list ?? [];
       for (const doc of list) {
+        sawDetailDoc = true;
         if (Array.isArray(doc?.productItems)) items.push(...doc.productItems);
         // A linked receipt is the most reliable "this is paid" signal — FA's
         // numeric status enum is unstable (status=9 used to mean "partial",
@@ -719,9 +729,19 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
     // wins regardless (a cancelled invoice may have an old receiptId from
     // before cancellation).
     if (hasReceipt && inv.status !== "Cancelled") inv.status = "Paid";
+    if (!sawDetailDoc) {
+      // The page loaded but FA's detail call never came back (SPA still
+      // rendering, request coalesced, session hiccup). We know nothing about
+      // this invoice's lines — leave lineItems undefined so the caller keeps
+      // what it already has. Warn unconditionally: silently skipping an
+      // invoice every run is how a stale line set goes unnoticed.
+      console.warn(`[flow] items: no detail response for ${inv.number}; keeping stored lines`);
+      continue;
+    }
     if (DEBUG && items.length === 0) {
       console.warn(`[flow] items: no productItems for ${inv.number}; captured ${captured.length} responses`);
     }
+    const parsed: NonNullable<FlowInvoice["lineItems"]> = [];
     for (const it of items) {
       const name = String(it.name ?? it.productName ?? it.productDescription ?? "").trim();
       const qty  = Number(it.productQty ?? it.quantity ?? it.productQuantity ?? 0);
@@ -730,9 +750,10 @@ export async function enrichInvoicesWithItems(s: FlowSession, invoices: FlowInvo
       // ever wrote had amount=0 (795 of them) until this was checked against a
       // live response. The others stay as fallbacks in case FA renames again.
       const amount = Number(it.total ?? it.productTotal ?? it.value ?? it.amount ?? 0);
-      if (name && qty > 0) inv.lineItems.push({ name, quantity: qty, amount });
+      if (name && qty > 0) parsed.push({ name, quantity: qty, amount });
     }
-    if (DEBUG) console.log(`[flow] ${inv.number}: ${inv.lineItems.length} line item(s) — ${inv.lineItems.slice(0, 3).map(l => `${l.quantity}× ${l.name}`).join(" | ")}`);
+    inv.lineItems = parsed;
+    if (DEBUG) console.log(`[flow] ${inv.number}: ${parsed.length} line item(s) — ${parsed.slice(0, 3).map(l => `${l.quantity}× ${l.name}`).join(" | ")}`);
   }
 }
 

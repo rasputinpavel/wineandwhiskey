@@ -178,12 +178,30 @@ async function syncInvoices(invoices: FlowInvoice[], skus: IndexedSku[]) {
         // one ruling covers the repeats of that text on this invoice.
         const { data: prior } = await supabase
           .from("flowaccount_invoice_line")
-          .select("raw_text, sku_id")
-          .eq("invoice_id", invoice_id)
-          .eq("sku_id_manual", true);
+          .select("raw_text, sku_id, sku_id_manual")
+          .eq("invoice_id", invoice_id);
         const manualByText = new Map(
-          (prior ?? []).map(p => [p.raw_text as string, p.sku_id as string | null]),
+          (prior ?? [])
+            .filter(p => p.sku_id_manual)
+            .map(p => [p.raw_text as string, p.sku_id as string | null]),
         );
+
+        // Never trade a line set for nothing. flow.ts now leaves lineItems
+        // undefined when it couldn't read the detail page, so an empty array
+        // should only mean FA really shows no products — which for an invoice
+        // that already has lines is far more likely to be a scrape that came
+        // back thin than a real edit (you cancel an invoice, you don't empty
+        // it). Keeping stale lines is cheap; losing them is not recoverable
+        // without a re-scrape, and it silently drops the SKU from every
+        // stock and B2B figure in the meantime.
+        if (inv.lineItems.length === 0 && (prior?.length ?? 0) > 0) {
+          console.warn(
+            `[inv-flow] ${inv.number}: detail page returned 0 line items but ` +
+            `${prior!.length} are stored — keeping them, not wiping`,
+          );
+          written++;
+          continue;
+        }
 
         await supabase.from("flowaccount_invoice_line").delete().eq("invoice_id", invoice_id);
         const lines = inv.lineItems.map(li => {
