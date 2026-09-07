@@ -24,9 +24,11 @@ export default async function UsersPage() {
   const users = await listUsers()
 
   return (
-    <div>
+    <>
       <PaneHeader item={item} />
-      <div className="p-6">
+      {/* AppShell's content column is `h-screen overflow-hidden`, so this page
+          has to own its vertical scroll — a plain padded div clips the list. */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="mb-4">
           <Link href="/m/users/new" className="inline-block rounded-md bg-deep-black px-4 py-2 text-sm text-warm-white">
             + New user
@@ -39,6 +41,6 @@ export default async function UsersPage() {
           }))}
         />
       </div>
-    </div>
+    </>
   )
 }
