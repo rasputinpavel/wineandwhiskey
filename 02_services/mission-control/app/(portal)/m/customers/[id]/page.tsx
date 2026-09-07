@@ -6,6 +6,8 @@ import { DataFreshness } from '@/components/shell/DataFreshness'
 import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
 import { CustomerLoyverseCell } from '@/components/modules/customers/CustomerLoyverseCell'
 import { DeliveryRowActions } from '@/components/modules/customers/DeliveryRowActions'
+import { AttachReceiptButton } from '@/components/modules/customers/AttachReceiptButton'
+import { DetachReceiptButton } from '@/components/modules/customers/DetachReceiptButton'
 import { fmtDate } from '@/lib/fmt'
 
 export const dynamic = 'force-dynamic'
@@ -90,7 +92,7 @@ export default async function CustomerDetail({
           </nav>
 
           {tab === 'invoices'   && <InvoicesPanel   customerId={id} termsDays={c.payment_terms_days ?? 0} sp={sp} />}
-          {tab === 'loyverse'   && <LoyverseSalesPanel loyverseId={c.loyverse_customer_id} sp={sp} />}
+          {tab === 'loyverse'   && <LoyverseSalesPanel loyverseId={c.loyverse_customer_id} customerId={c.id} customerName={c.flowaccount_name} sp={sp} />}
           {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} sp={sp} />}
           {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} sp={sp} />}
 
@@ -177,25 +179,42 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
 }
 
 // ─── Loyverse Sales panel ──────────────────────────────────────────────
-async function LoyverseSalesPanel({ loyverseId, sp }: { loyverseId: string | null; sp: SearchParams }) {
-  if (!loyverseId) {
-    return (
-      <div className="text-sm text-graphite">
-        Этот клиент не привязан к Loyverse. Жми <span className="text-deep-black">+ link Loyverse</span> в заголовке —
-        выбери, и список Loyverse-receipts появится здесь.
-      </div>
+async function LoyverseSalesPanel({ loyverseId, customerId, customerName, sp }: {
+  loyverseId: string | null; customerId: string; customerName: string; sp: SearchParams
+}) {
+  // Two ways a receipt belongs here: Loyverse itself linked it to the customer
+  // card, or someone attributed it by hand (migration 046) because the sale was
+  // rung up without picking the card. `.or()` can't express "column equals X"
+  // when X is null, so the two filters are built separately and merged.
+  const cols = 'id, receipt_number, receipt_date, receipt_type, total, cost_total, is_b2b, is_bank_transfer, b2b_manual'
+  const queries = [
+    sbInventory.from('loyverse_receipt').select(cols).eq('b2b_customer_id', customerId).order('receipt_date', { ascending: false }).limit(300),
+  ]
+  if (loyverseId) {
+    queries.push(
+      sbInventory.from('loyverse_receipt').select(cols).eq('customer_id', loyverseId).order('receipt_date', { ascending: false }).limit(300),
     )
   }
-  const { data, error } = await sbInventory
-    .from('loyverse_receipt')
-    .select('id, receipt_number, receipt_date, receipt_type, total, cost_total, is_b2b, is_bank_transfer')
-    .eq('customer_id', loyverseId)
-    .order('receipt_date', { ascending: false })
-    .limit(300)
-  if (error) return <SchemaError error={error.message} />
-  const rows = (data ?? []) as any[]
+  const results = await Promise.all(queries)
+  const failed = results.find(r => r.error)
+  if (failed?.error) return <SchemaError error={failed.error.message} />
+  const byId = new Map<string, any>()
+  for (const res of results) for (const r of (res.data ?? []) as any[]) byId.set(r.id, r)
+  const rows = [...byId.values()]
+
+  const attach = <AttachReceiptButton customerId={customerId} customerName={customerName} />
+
   if (rows.length === 0) {
-    return <div className="text-sm text-graphite">Loyverse receipts по этому клиенту нет. Прогони <code className="font-mono text-xs">npm run inv:receipts</code> (или подожди ежедневного крона).</div>
+    return (
+      <div className="text-sm text-graphite">
+        <div className="mb-3">
+          {loyverseId
+            ? <>Loyverse receipts по этому клиенту нет. Прогони <code className="font-mono text-xs">npm run inv:receipts</code> (или подожди ежедневного крона).</>
+            : <>Этот клиент не привязан к Loyverse. Жми <span className="text-deep-black">+ link Loyverse</span> в заголовке, чтобы чеки подтягивались сами — либо привяжи конкретный чек вручную.</>}
+        </div>
+        {attach}
+      </div>
+    )
   }
 
   const sort = parseSort(sp.sort, ['receipt_number','receipt_date','receipt_type','total','cost_total'] as const, 'receipt_date')
@@ -215,6 +234,7 @@ async function LoyverseSalesPanel({ loyverseId, sp }: { loyverseId: string | nul
 
   return (
     <>
+      <div className="flex justify-end mb-3">{attach}</div>
       <div className="grid grid-cols-4 gap-3 mb-4 text-xs">
         <KPI label="Sales"   value={`฿${fmt(sales)}`}   note={`${rows.filter(r => r.receipt_type === 'SALE').length} шт.`} highlight />
         <KPI label="Refunds" value={`−฿${fmt(refunds)}`} note={`${rows.filter(r => r.receipt_type === 'REFUND').length} шт.`} muted />
@@ -248,9 +268,14 @@ async function LoyverseSalesPanel({ loyverseId, sp }: { loyverseId: string | nul
                 <td className="py-2 px-4 text-right tabular-nums">{`฿${fmt(Number(r.total))}`}</td>
                 <td className="py-2 px-4 text-right tabular-nums text-graphite">{r.cost_total ? `฿${fmt(Number(r.cost_total))}` : '—'}</td>
                 <td className="py-2 px-4 text-[11px] text-graphite">
-                  {r.is_b2b
-                    ? (r.is_bank_transfer ? 'bank transfer' : 'name match')
-                    : '—'}
+                  {r.b2b_manual
+                    ? <span className="inline-flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded-sm border border-amber-gold/60 bg-amber-gold/20 text-deep-black text-[10px]">manual</span>
+                        <DetachReceiptButton receiptNumber={r.receipt_number} />
+                      </span>
+                    : r.is_b2b
+                      ? (r.is_bank_transfer ? 'bank transfer' : 'name match')
+                      : '—'}
                 </td>
               </tr>
             ))}

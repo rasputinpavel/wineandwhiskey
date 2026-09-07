@@ -223,6 +223,11 @@ export type LoyverseReceipt = {
   is_b2b: boolean
   is_bank_transfer: boolean
   payment_method: 'cash' | 'card' | 'qr' | 'transfer' | 'other' | null
+  // Manual B2B attribution (migration 046) — set by a person in the portal when
+  // a B2B sale was rung up without the customer card, so neither classifier
+  // signal fires. The sync carries these over instead of re-deriving is_b2b.
+  b2b_manual: boolean
+  b2b_customer_id: string | null
   scraped_at: string
 }
 

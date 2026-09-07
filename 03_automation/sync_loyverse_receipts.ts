@@ -17,6 +17,11 @@
  *   • payment_type = Bank Transfer → is_b2b=true
  *   • customer name matches B2B_PATTERNS → is_b2b=true
  *
+ * Исключение — чеки с b2b_manual=true (миграция 046): их is_b2b/customer_name/
+ * b2b_customer_id проставил человек в портале, потому что оба сигнала выше
+ * отсутствуют (B2B-продажу пробили без карточки клиента и оплатили QR/налом).
+ * Такие чеки НЕ переклассифицируются — иначе правка живёт до ближайшего прогона.
+ *
  * Usage:
  *   npm run inv:receipts                        # последние 30 дней
  *   LOYVERSE_FROM=2025-01-01 LOYVERSE_TO=2025-12-31 npm run inv:receipts   # backfill
@@ -189,11 +194,43 @@ async function syncReceipts(fromIso: string, toIso: string) {
       }
       if (batch.length === 0) continue;
 
+      // Receipts a human has ruled on (migration 046). is_b2b is derived from
+      // signals a till operator can forget to record — no customer card, paid by
+      // cash/card/QR — so a B2B sale can look exactly like a walk-in. When
+      // someone corrects that in the portal we must NOT re-derive it here, or
+      // the correction dies at the next run (three times a day). Carry over the
+      // stored decision instead; the portal's ✕ clears b2b_manual and hands the
+      // receipt back to the classifier.
+      const manualByNumber = new Map<string, { is_b2b: boolean; customer_name: string | null; b2b_customer_id: string | null }>();
+      let manualAvailable = true;
+      {
+        const { data: manual, error: mErr } = await sb
+          .from("loyverse_receipt")
+          .select("receipt_number, is_b2b, customer_name, b2b_customer_id")
+          .in("receipt_number", batch.map(r => r.receipt_number))
+          .eq("b2b_manual", true);
+        // Column missing = migration 046 not applied yet. No manual rows can
+        // exist in that case, so there is nothing to preserve — warn and carry
+        // on rather than stopping the whole receipt sync over deploy ordering.
+        if (mErr && (mErr as any).code !== "42703") throw new Error(`manual overrides: ${mErr.message}`);
+        if (mErr) { manualAvailable = false; console.warn(`[receipts]   b2b_manual not available yet (migration 046 pending) — skipping manual carry-over`); }
+        for (const m of manual ?? []) {
+          manualByNumber.set(m.receipt_number as string, {
+            is_b2b:          !!m.is_b2b,
+            customer_name:   (m.customer_name ?? null) as string | null,
+            b2b_customer_id: (m.b2b_customer_id ?? null) as string | null,
+          });
+        }
+      }
+
       const receiptRows = batch.map(r => {
         const cName = r.customer_id ? (nameById.get(r.customer_id) ?? "") : "";
         const isBankTransfer = (r.payments ?? []).some((p: any) => p.payment_type_id === BANK_TRANSFER_TYPE_ID);
-        const isB2B = isBankTransfer || (!!cName && isB2BCustomerName(cName));
         const costTotal = (r.line_items ?? []).reduce((s: number, l: any) => s + Number(l.cost_total ?? 0), 0);
+        // is_bank_transfer stays derived either way — it is a fact about the
+        // payments, not a judgement call. Only the classification is human-owned.
+        const manual = manualByNumber.get(r.receipt_number);
+        const isB2B = manual ? manual.is_b2b : isBankTransfer || (!!cName && isB2BCustomerName(cName));
         return {
           receipt_number:      r.receipt_number,
           loyverse_receipt_id: r.id ?? null,
@@ -201,11 +238,12 @@ async function syncReceipts(fromIso: string, toIso: string) {
           receipt_type:        r.receipt_type ?? "SALE",
           store:               r.store_id ?? null,
           customer_id:         r.customer_id ?? null,
-          customer_name:       cName || null,
+          customer_name:       manual ? manual.customer_name : (cName || null),
           total:               Number(r.total_money ?? 0),
           cost_total:          costTotal,
           is_b2b:              isB2B,
           is_bank_transfer:    isBankTransfer,
+          ...(manualAvailable ? { b2b_manual: !!manual, b2b_customer_id: manual?.b2b_customer_id ?? null } : {}),
           payment_method:      classifyPayment(r.payments),
           scraped_at:          new Date().toISOString(),
         };

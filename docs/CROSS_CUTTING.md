@@ -81,7 +81,8 @@ flowchart TB
 |---|---|
 | **Canonical home** | `03_automation/lib/b2b.ts` — exports `classifyReceipt`, `isB2BCustomerName`, `BANK_TRANSFER_TYPE_ID`, `B2B_PATTERNS`. Documented with provenance (patterns verified against the live Loyverse customer table). |
 | **Persisted result** | `03_automation/sync_loyverse_receipts.ts` computes `is_b2b` / `is_bank_transfer` **once at ingest** using `b2b.ts` and writes them onto `inventory.loyverse_receipt`. The portal's `lib/dashboard.ts` and `pulse/page.tsx` read that column — they do **not** re-derive. This is the correct pattern: classify once, read the persisted boolean everywhere. |
-| **Manual overrides** | `03_automation/lib/b2b_overrides.ts` (`receipt_number → canonical client`, plus `canonicalize()`) — reused by `sync_accounting`, `b2b_reserve`, `channels_diagnostic`. Keep as a single module. |
+| **Manual overrides (attribution only)** | `03_automation/lib/b2b_overrides.ts` (`receipt_number → canonical client`, plus `canonicalize()`) — reused by `sync_accounting`, `b2b_reserve`, `channels_diagnostic`. Reads the "B2B без customer" Google Sheet and only names an already-B2B receipt's client; it never changes `is_b2b`. Keep as a single module. |
+| **Manual overrides (classification + attribution)** | `inventory.loyverse_receipt.b2b_manual` + `b2b_customer_id` (migration 046). Both classifier signals are absent whenever a B2B sale is rung up without the customer card and paid by cash/card/QR, and Loyverse can't be corrected afterwards — so the ruling is stored on the row. **`sync_loyverse_receipts` must carry `is_b2b`/`customer_name`/`b2b_customer_id` over unchanged while `b2b_manual` is true**, or the correction dies at the next run. Set from the portal: `/m/customers/<id>?tab=loyverse` → "+ attach receipt"; the ✕ clears the flag and hands the receipt back to the classifier. |
 
 ### Duplicates to eliminate
 
