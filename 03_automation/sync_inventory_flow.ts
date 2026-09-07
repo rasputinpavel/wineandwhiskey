@@ -354,11 +354,20 @@ async function main() {
 
     await enrichInvoicesWithItems(session, toEnrich);
 
-    // ─── Phase 4: receipts (capped) ────────────────────────────────────
+    // ─── Phase 4: persist invoices ─────────────────────────────────────
+    // Before the receipts scrape, not after. Enrichment is the expensive part
+    // — one detail page per invoice, ~25 minutes for a full-history backfill —
+    // and holding it in memory across another network-bound phase means any
+    // hiccup there throws all of it away. A flapping wifi (ERR_NETWORK_CHANGED
+    // on /receipts) did exactly that once. It's also the more correct order:
+    // syncReceipts resolves invoice numbers against the DB, so the invoices
+    // should already be written when it runs.
+    await syncInvoices(invoices, skus);
+
+    // ─── Phase 5: receipts (capped) ────────────────────────────────────
     const receipts = await listReceipts(session, fromIso, toIso, LISTING_PAGES);
     console.log(`[inv-flow] ${receipts.length} receipts on first ${LISTING_PAGES} listing page(s)`);
 
-    await syncInvoices(invoices, skus);
     await syncReceipts(invoices, receipts);
     console.log(`[inv-flow] done — ${listed.length} listed + ${stragglers.length} stragglers, ${receipts.length} receipts`);
   } finally {
