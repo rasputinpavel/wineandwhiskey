@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
 """Spice House × Wine & Whiskey — the whole list on ONE A4 sheet.
 
-Same fourteen wines as build.py, one page instead of two:
+Same fourteen wines as build.py, one page instead of two, bottles lying down.
+Names, prices and grapes are read from build.py; this file holds the shortened
+copy the one-line rows need, and everything about the layout.
 
-  · the two by-the-glass DUO wines sit in their own block at the top — they are
-    also the cheapest bottles, so the list still reads low-to-high;
-  · bottles lie on their side, one row per wine, the way a magazine spread
-    stacks them (reference #1);
-  · no monogram, no "Wine & Whiskey Phuket" foot — only a thin
-    "selected by Wine & Whiskey" line under the title;
-  · --alt makes the bottle change sides section by section (glass left,
-    sparkling right, white left, orange right, red left), the way a magazine
-    spread alternates its photographs.
+What the sheet does:
 
-Fitting fourteen rows on 297 mm costs two lines per wine: the description is cut
-to one line, and grapes/producer share a line with the pairing (grapes left,
-pairing right). Names, prices and grapes come from build.py — this file only
-holds the shortened copy.
+  · By the Glass sits on top — the two DUO wines, also the two cheapest, so the
+    list climbs from 499 to 790 as the guest reads down;
+  · prices live in two columns, glass first and bottle second, so a wine poured
+    by the glass reads "200 | 499" and every bottle price lines up under one
+    edge;
+  · each group carries a colour — a tinted band at its head and a bar down the
+    left of every row — because five stacks of identical rows blur together;
+  · bottles are normalised to one thickness and one length, and the base
+    dissolves to the left so the eye starts at the label;
+  · two icons carry what used to be words: grapes before the variety, fork and
+    knife before the pairing.
+
+Themes: dark (on the table) and light (--theme light) — the print-friendly one,
+little ink and no fingerprints.
 
 Usage:
-    python3 build_a4.py                 # bottles always on the left
-    python3 build_a4.py --alt full      # alternate sides, price mirrors too
-    python3 build_a4.py --alt rail      # alternate sides, price stays right
-    python3 build_a4.py --html          # html only
+    python3 build_a4.py                  # dark
+    python3 build_a4.py --theme light
+    python3 build_a4.py --theme both
 """
 import argparse
 import os
@@ -34,8 +37,18 @@ from build import GLASS, PAGES
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATE = "2026-09-10"
-SLUG = f"spice-house-wine-menu-a4_{DATE}"  # --alt appends a suffix
+SLUG = f"spice-house-wine-menu-a4_{DATE}"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+# ── bottle normalisation ────────────────────────────────────────────────
+# Every bottle ends in the same box: same thickness, same length, base fading
+# out to the left. Real bottles differ by a centimetre here and there, and in a
+# stacked column that difference reads as sloppiness.
+LAY_H = 300      # diameter, px — every bottle ends up equally thick
+LAY_W = 1330     # length, px — every bottle spans exactly this, base to neck.
+                 # Wider than the longest bottle, so no label is ever cropped.
+FADE = 0.19      # the left of the canvas dissolves, so the bottle comes out of
+                 # the coloured bar at the edge of the row instead of floating
 
 # One-line descriptions — the two-page layout has room for three, this one does not.
 SHORT = {
@@ -78,14 +91,43 @@ GRAPES = {
 # Pairings that need to be shorter on one line than on the two-page sheet.
 PAIR = {
     "chateau-tamagne-nature-orange.png": "Phad Thai · Kharcho",
-    "chateau-tamagne-grape-dance-blanc.png": "Phad Thai · Chicken with cashew nuts",
+    "chateau-tamagne-grape-dance-blanc.png": "Phad Thai · Cashew chicken",
     "chateau-tamagne-signature-chardonnay.png": "White snapper · Salmon steak",
     "chateau-tamagne-duo-blanc.png": "Salmon bruschetta · Vareniki",
 }
 
+# Group colours. Dark and light need different values of the same hue: what
+# glows on black turns to mud on paper.
+ACCENT = {
+    "glass":     ("#D8B45C", "#9A7420"),
+    "sparkling": ("#E2C97A", "#A8842F"),
+    "white":     ("#CFC08A", "#8C7A3A"),
+    "orange":    ("#DE8C3A", "#B4611A"),
+    "red":       ("#C0453C", "#8C1C1C"),
+}
+
+ICON_GRAPES = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
+               "<circle cx='9' cy='13' r='2.6'/><circle cx='15' cy='13' r='2.6'/>"
+               "<circle cx='12' cy='17.6' r='2.6'/><circle cx='12' cy='8.6' r='2.6'/>"
+               "<path d='M12.8 6.2c0-2 .9-3.4 2.6-4.2l.7 1.4c-1.1.5-1.7 1.4-1.7 2.8z'/>"
+               "</svg>")
+ICON_FORK = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+             "stroke-width='2' stroke-linecap='round'>"
+             "<path d='M6 2v7a2.5 2.5 0 0 0 5 0V2M8.5 11.5V22'/>"
+             "<path d='M17.5 2c-1.7 1.4-2.5 3.3-2.5 5.6 0 1.9.8 3 2.5 3.4V22'/>"
+             "</svg>")
+ICON_GLASS = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+              "stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+              "<path d='M6 3h12l-1 6a5 5 0 0 1-10 0z'/><path d='M12 14v6M8.5 20h7'/>"
+              "</svg>")
+ICON_BOTTLE = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+               "stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+               "<path d='M10 2h4v4.5c0 1.2 2.5 2.6 2.5 5V21a1 1 0 0 1-1 1h-7a1 1 "
+               "0 0 1-1-1v-9.5c0-2.4 2.5-3.8 2.5-5z'/></svg>")
+
 
 def flatten():
-    """All wines from the two-page layout, keyed by their section label."""
+    """All wines from the two-page layout, tagged with their section."""
     out = []
     for page in PAGES:
         for sec in page["sections"]:
@@ -103,231 +145,254 @@ def sections():
         return [w for w in rest if w["label"] == label]
 
     return [
-        ("By the Glass · По бокалам", "glass", "left", by_glass),
-        ("Sparkling · Игристое", "", "right", of("Sparkling")),
-        ("White · Белое", "", "left", of("White")),
-        ("Orange · Оранжевое", "", "right", of("Orange")),
-        ("Red · Красное", "", "left", of("Red")),
+        ("By the Glass · По бокалам", "glass", by_glass),
+        ("Sparkling · Игристое", "sparkling", of("Sparkling")),
+        ("White · Белое", "white", of("White")),
+        ("Orange · Оранжевое", "orange", of("Orange")),
+        ("Red · Красное", "red", of("Red")),
     ]
 
 
-def lay_bottles_down():
-    """Rotate each bottle onto its side, both ways round.
+def body_start(im):
+    """First column where the bottle is at full diameter — past the heel."""
+    alpha = im.getchannel("A")
+    w, h = im.size
+    for x in range(w):
+        col = alpha.crop((x, 0, x + 1, h)).getbbox()
+        if col and (col[3] - col[1]) >= h * .96:
+            return x
+    return int(w * .05)
 
-    h_*  — neck to the right, for a bottle sitting left of its text.
-    hl_* — neck to the left, for a bottle sitting right of it. Rotated the
-    other way rather than mirrored: a flipped label reads backwards.
-    """
+
+def lay_bottles_down():
+    """Rotate, normalise and fade every bottle into one shared silhouette."""
     src = os.path.join(HERE, "assets")
-    made = []
+    made = 0
     for name in sorted(os.listdir(src)):
-        if not name.endswith(".png") or name.startswith(("h_", "hl_", "channel_")):
+        if not name.endswith(".png") or name.startswith(("lay_", "channel_")):
             continue
-        for prefix, angle in (("h_", -90), ("hl_", 90)):
-            out = os.path.join(src, f"{prefix}{name}")
-            if os.path.exists(out):
-                continue
-            im = Image.open(os.path.join(src, name)).convert("RGBA")
-            im = im.rotate(angle, expand=True)
-            box = im.getbbox()
-            if box:
-                im = im.crop(box)
-            im.save(out)
-            made.append(f"{prefix}{name}")
+        out = os.path.join(src, f"lay_{name}")
+        if os.path.exists(out):
+            continue
+
+        im = Image.open(os.path.join(src, name)).convert("RGBA")
+        im = im.rotate(-90, expand=True)          # neck to the right, into the text
+        box = im.getbbox()
+        if box:
+            im = im.crop(box)
+
+        # one thickness for every bottle on the sheet
+        im = im.resize((max(1, round(im.width * LAY_H / im.height)), LAY_H),
+                       Image.LANCZOS)
+
+        # every bottle spans the full width: the neck sits at the right edge,
+        # and the base reaches the left one. Long bottles give up part of a
+        # base nobody sees; short ones borrow a slice of their own cylinder —
+        # the body is a smooth tube, so a stretched slice of it is seamless,
+        # and the fade covers most of it anyway.
+        canvas = Image.new("RGBA", (LAY_W, LAY_H), (0, 0, 0, 0))
+        grow = 0
+        if im.width >= LAY_W:
+            canvas.paste(im.crop((im.width - LAY_W, 0, im.width, LAY_H)), (0, 0))
+        else:
+            grow = LAY_W - im.width
+            seam = body_start(im) + int(im.width * 0.03)
+            slice_ = im.crop((seam, 0, seam + 10, LAY_H)).resize((grow, LAY_H))
+            canvas.paste(slice_, (0, 0))
+            canvas.paste(im, (grow, 0))
+
+        # ...and dissolves into the bar it comes out of. The dissolve always
+        # swallows the borrowed slice, so nobody meets a stretched cylinder.
+        alpha = canvas.getchannel("A")
+        edge = max(int(LAY_W * FADE), grow + int(LAY_W * .05))
+        ramp = Image.new("L", (LAY_W, 1))
+        ramp.putdata([min(255, int(255 * (x / edge) ** 1.25)) if x < edge else 255
+                      for x in range(LAY_W)])
+        canvas.putalpha(Image.composite(alpha, Image.new("L", alpha.size, 0),
+                                        ramp.resize((LAY_W, LAY_H))))
+        canvas.save(out)
+        made += 1
     if made:
-        print(f"bottles laid down → {len(made)} files")
+        print(f"bottles laid down → {made} files")
 
 
 CSS = """
   *{box-sizing:border-box;margin:0;padding:0}
-  :root{
-    --ink:#0C0B0A; --panel:#141110; --card:#211C19;
-    --rust:#8E3F1E; --rust-deep:#5E2712;
-    --gold:#C9A84C; --white:#F7F3ED; --muted:#9C9288;
-    --line:rgba(201,168,76,.20);
+
+  /* ── dark: the on-table version ── */
+  .sheet.dark{
+    --ink:#0C0B0A; --card:#211C19; --band:rgba(255,255,255,.05);
+    --frame:#8E3F1E; --frame2:#5E2712;
+    --text:#F7F3ED; --note:#BDB4A9; --muted:#9C9288;
+    --price:#C9A84C; --rule:rgba(201,168,76,.20);
+    --edge:rgba(255,255,255,.06); --shadow:rgba(0,0,0,.45);
   }
+  /* ── light: the print version ── */
+  .sheet.light{
+    --ink:#FBF7EF; --card:#FFFFFF; --band:rgba(142,63,30,.08);
+    --frame:#A9552B; --frame2:#7E3A17;
+    --text:#231F1B; --note:#4E463D; --muted:#877C6E;
+    --price:#8C1C1C; --rule:rgba(142,63,30,.28);
+    --edge:rgba(35,31,27,.13); --shadow:rgba(90,60,35,.13);
+  }
+
   html,body{background:#2A2523}
   body{font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;
-       display:flex;justify-content:center;padding:26px}
+       display:flex;flex-direction:column;align-items:center;gap:26px;padding:26px}
 
   .sheet{width:210mm;height:297mm;position:relative;overflow:hidden;
-         background:var(--rust);padding:4mm;color:var(--white);
+         background:var(--frame);padding:4mm;color:var(--text);
          box-shadow:0 14px 50px rgba(0,0,0,.55)}
   .sheet::before{content:"";position:absolute;inset:0;
         background:radial-gradient(ellipse 120% 90% at 50% 0%,
                    rgba(214,120,60,.55) 0%,rgba(0,0,0,0) 62%),
-                   linear-gradient(160deg,var(--rust) 0%,var(--rust-deep) 100%)}
+                   linear-gradient(160deg,var(--frame) 0%,var(--frame2) 100%)}
 
   .panel{position:relative;height:100%;border-radius:4mm;overflow:hidden;
-         background:var(--ink);padding:7mm 9mm 5mm;
+         background:var(--ink);padding:7mm 8mm 5mm;
          display:flex;flex-direction:column}
-  .panel::before{content:"";position:absolute;inset:0;
+  .panel > *{position:relative;z-index:2}
+  .sheet.dark .panel::before{content:"";position:absolute;inset:0;
         background:radial-gradient(ellipse 90% 50% at 50% -10%,
                    rgba(201,168,76,.16) 0%,rgba(0,0,0,0) 60%),
                    radial-gradient(ellipse 70% 40% at 50% 110%,
                    rgba(142,63,30,.30) 0%,rgba(0,0,0,0) 65%)}
-  .panel::after{content:"";position:absolute;inset:0;opacity:.30;
+  .sheet.dark .panel::after{content:"";position:absolute;inset:0;opacity:.30;
         background-image:url("data:image/svg+xml;utf8,\
 <svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>\
 <filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/>\
 <feColorMatrix type='saturate' values='0'/></filter>\
 <rect width='180' height='180' filter='url(%23n)' opacity='.55'/></svg>");
         mix-blend-mode:overlay}
-  .panel > *{position:relative;z-index:2}
+  .sheet.light .panel::before{content:"";position:absolute;inset:0;
+        background:radial-gradient(ellipse 80% 40% at 50% -6%,
+                   rgba(169,85,43,.10) 0%,rgba(0,0,0,0) 62%)}
 
   /* ── header ── */
-  .head{text-align:center;padding-bottom:2.4mm;border-bottom:.4mm solid var(--line)}
+  .head{text-align:center;padding-bottom:2.2mm;border-bottom:.4mm solid var(--rule)}
   .head h1{font-family:'Bebas Neue',sans-serif;font-size:26pt;line-height:.9;
            letter-spacing:.14em}
-  .head .sel{margin-top:1.3mm;font-size:5.5pt;letter-spacing:.36em;
+  .head .sel{margin-top:1.2mm;font-size:5.5pt;letter-spacing:.36em;
              text-transform:uppercase;color:var(--muted)}
-  .head .sel b{color:var(--gold);font-weight:600}
+  .head .sel b{color:var(--price);font-weight:600}
 
   .stack{flex:1;display:flex;flex-direction:column;min-height:0}
 
-  /* ── section ── */
-  .sec{display:flex;flex-direction:column;margin-top:2mm}
-  .sec-head{display:flex;align-items:center;gap:3.5mm;margin-bottom:1.1mm}
-  .sec-head span{font-family:'Bebas Neue',sans-serif;font-size:10.5pt;
-                 letter-spacing:.22em;color:var(--gold);white-space:nowrap}
-  .sec-head i{flex:1;height:.3mm;background:linear-gradient(90deg,
-              var(--line),rgba(201,168,76,0))}
-  .rows{flex:1;display:flex;flex-direction:column;gap:1mm}
+  /* ── group ── */
+  .sec{display:flex;flex-direction:column;margin-top:1.8mm}
+  .sec:first-child{margin-top:1.4mm}
+  .sec-head{display:flex;align-items:center;gap:3mm;margin-bottom:.8mm;
+            padding:.6mm 3mm .6mm 2.4mm;border-radius:1.4mm;
+            background:var(--band);border-left:1.5mm solid var(--accent)}
+  .sec-head > span{font-family:'Bebas Neue',sans-serif;font-size:11pt;
+                   letter-spacing:.2em;color:var(--accent);white-space:nowrap}
+  .sec-head i.gap{flex:1}
+  .cols{display:flex;font-size:4.9pt;letter-spacing:.16em;
+        text-transform:uppercase;color:var(--muted)}
+  .cols u{text-decoration:none;display:flex;align-items:center;
+          justify-content:flex-end;gap:1mm}
+  .cols u.g{width:15mm}
+  .cols u.b{width:17mm}
+  .cols svg{width:2.1mm;height:2.1mm}
+
+  .rows{flex:1;display:flex;flex-direction:column;gap:.9mm}
 
   /* ── one wine ── */
-  .row{flex:1;position:relative;background:var(--card);border-radius:2mm;
-       border:.25mm solid rgba(255,255,255,.06);
-       padding:1.1mm 3mm 1.1mm 1.6mm;
-       display:grid;grid-template-columns:47mm 1fr auto;gap:3mm;
-       align-items:center;box-shadow:0 1mm 2.6mm rgba(0,0,0,.45)}
+  .row{flex:1;position:relative;background:var(--card);border-radius:1.8mm;
+       border:.25mm solid var(--edge);border-left:1.5mm solid var(--accent);
+       padding:.9mm 3mm .9mm 0;
+       display:grid;grid-template-columns:50mm 1fr auto;gap:2.5mm;
+       align-items:center;box-shadow:0 1mm 2.4mm var(--shadow)}
 
   .shot{position:relative;display:flex;align-items:center;justify-content:center}
-  .shot::before{content:"";position:absolute;width:42mm;height:9mm;
-        border-radius:50%;background:radial-gradient(ellipse at 50% 50%,
-        rgba(255,236,196,.20) 0%,rgba(255,236,196,0) 70%)}
-  .shot img{position:relative;height:11.5mm;width:auto;
-        filter:drop-shadow(0 .9mm 1.1mm rgba(0,0,0,.75))}
+  .shot img{position:relative;width:50mm;height:auto;display:block}
+  .sheet.dark .shot img{filter:drop-shadow(0 .9mm 1.1mm rgba(0,0,0,.75))}
+  .sheet.light .shot img{filter:drop-shadow(0 .7mm .9mm rgba(90,60,35,.30))}
 
   .body{min-width:0}
   .name{display:flex;align-items:baseline;gap:2.4mm;flex-wrap:wrap}
-  .en{font-size:7.6pt;font-weight:700;line-height:1.12;color:var(--white)}
-  .ru{font-size:6pt;color:var(--gold);line-height:1.2}
-  .note{margin-top:.8mm;font-size:6.2pt;line-height:1.3;color:#BDB4A9}
-  .line{margin-top:.8mm;display:flex;align-items:baseline;gap:3mm;
+  .en{font-size:7.6pt;font-weight:700;line-height:1.12;color:var(--text)}
+  .ru{font-size:6pt;color:var(--price);line-height:1.2}
+  .sheet.light .ru{color:#7A4A22}
+  .note{margin-top:.7mm;font-size:6.2pt;line-height:1.26;color:var(--note)}
+  .line{margin-top:.7mm;display:flex;align-items:center;gap:3mm;
         justify-content:space-between}
-  .meta{flex:1 1 auto;min-width:0;font-size:5.1pt;letter-spacing:.1em;text-transform:uppercase;
-        color:var(--muted);line-height:1.4}
-  .meta b{color:#CFC5B8;font-weight:600}
-  .pair{flex:0 0 auto;font-size:5.4pt;line-height:1.4;color:#CFC5B8;text-align:right;
-        white-space:nowrap}
-  .pair span{color:var(--gold);letter-spacing:.14em;text-transform:uppercase;
-             font-size:4.8pt;font-weight:600;margin-right:1.2mm}
+  .meta,.pair{display:flex;align-items:center;gap:1.1mm;line-height:1.32}
+  .meta{flex:1 1 auto;min-width:0;font-size:4.9pt;letter-spacing:.07em;
+        text-transform:uppercase;color:var(--muted)}
+  .meta b{color:var(--note);font-weight:600}
+  .pair{flex:0 0 auto;font-size:5.4pt;color:var(--note);white-space:nowrap}
+  .ic{flex:0 0 auto;width:2.5mm;height:2.5mm;color:var(--accent)}
+  .ic svg{width:100%;height:100%;display:block}
 
-  .price{text-align:right;white-space:nowrap}
-  .price .b{font-family:'Bebas Neue',sans-serif;font-size:14.5pt;line-height:.86;
-            color:var(--gold);letter-spacing:.02em}
-  .price .u{font-size:5pt;letter-spacing:.18em;text-transform:uppercase;
-            color:var(--muted);margin-top:.5mm}
+  /* ── prices: glass column, bottle column ── */
+  .price{display:flex;align-items:baseline}
+  .price u{text-decoration:none;display:block;text-align:right}
+  .price u.g{width:15mm}
+  .price u.b{width:17mm}
+  .price span{font-family:'Bebas Neue',sans-serif;font-size:15pt;
+              line-height:.9;color:var(--price);letter-spacing:.02em}
+  .price u.g span{font-size:13.5pt;opacity:.92}
 
-  /* ── mirrored row: bottle on the right ── */
-  .row.right{grid-template-columns:auto 1fr 47mm;padding:1.1mm 1.6mm 1.1mm 3mm}
-  .row.right .body{text-align:right}
-  .row.right .name{justify-content:flex-end}
-  .row.right .line{flex-direction:row-reverse}
-  .row.right .pair{text-align:left}
-  .row.right .price{text-align:left}
-  .row.right .glasspill{margin-left:0}
-
-  /* price keeps its rail on the right, only the bottle moves;
-     the copy stays left-aligned — mirroring it too squeezes the grape line */
-  .rail .row.right{grid-template-columns:1fr 47mm auto;
-                   padding:1.1mm 3mm 1.1mm 3mm}
-  .rail .row.right .body{text-align:left}
-  .rail .row.right .name{justify-content:flex-start}
-  .rail .row.right .line{flex-direction:row}
-  .rail .row.right .pair{text-align:right}
-  .rail .row.right .price{text-align:right}
-
-  /* ── by the glass ── */
   .sec.glass .row{background:linear-gradient(90deg,
-        rgba(201,168,76,.14) 0%,rgba(201,168,76,.05) 45%,var(--card) 100%);
-        border-color:rgba(201,168,76,.34)}
-  .sec.glass .price .b{font-size:16pt}
-  .glasspill{margin-top:.7mm;display:inline-block;border:.3mm solid var(--gold);
-        border-radius:6mm;padding:.4mm 1.6mm;font-size:5.1pt;font-weight:700;
-        letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+        color-mix(in srgb,var(--accent) 15%,var(--card)) 0%,var(--card) 62%)}
 
-  .foot{margin-top:3.2mm;padding-top:2.2mm;border-top:.4mm solid var(--line);
+  /* ── foot ── */
+  .foot{margin-top:2.8mm;padding-top:2mm;border-top:.4mm solid var(--rule);
         display:flex;justify-content:space-between;
         font-size:5.4pt;letter-spacing:.24em;text-transform:uppercase;
         color:var(--muted)}
 
   @page{size:210mm 297mm;margin:0}
-  @media print{html,body{background:#fff}body{padding:0}
-               .sheet{box-shadow:none}}
+  @media print{html,body{background:#fff}body{gap:0;padding:0}
+               .sheet{box-shadow:none;break-after:page}
+               .sheet:last-child{break-after:auto}}
 """
 
 
-def row_html(w, side="left", mode="none"):
-    pill = (f'<div class="glasspill">Glass · Бокал {w["glass"]}.-</div>'
-            if w["glass"] else "")
-    right = mode != "none" and side == "right"
-    shot = f"""<div class="shot">
-              <img src="assets/{'hl_' if right else 'h_'}{w['shot']}" alt="">
-            </div>"""
-    price = f"""<div class="price">
-              <div class="b">{w['price']}.-</div>
-              <div class="u">Bottle</div>
-              {pill}
-            </div>"""
-    body = f"""<div class="body">
+def row_html(w):
+    glass = (f'<u class="g"><span>{w["glass"]}</span></u>' if w["glass"]
+             else '<u class="g"></u>')
+    return f"""
+          <div class="row">
+            <div class="shot"><img src="assets/lay_{w['shot']}" alt=""></div>
+            <div class="body">
               <div class="name">
                 <span class="en">{w['en']}</span>
                 <span class="ru">{w['ru']}</span>
               </div>
               <div class="note">{SHORT[w['shot']]}</div>
               <div class="line">
-                <div class="meta"><b>{GRAPES.get(w['shot'], w['grapes'])}</b> &nbsp;·&nbsp; {w['maker'].split(' · ')[0]}</div>
-                <div class="pair"><span>Pairs</span>{PAIR.get(w['shot'], w['pairing'])}</div>
+                <div class="meta"><i class="ic">{ICON_GRAPES}</i>
+                  <span><b>{GRAPES.get(w['shot'], w['grapes'])}</b>
+                  &nbsp;·&nbsp; {w['maker'].split(' · ')[0]}</span></div>
+                <div class="pair"><i class="ic">{ICON_FORK}</i>
+                  <span>{PAIR.get(w['shot'], w['pairing'])}</span></div>
               </div>
-            </div>"""
-
-    if not right:                       # bottle · text · price
-        parts = (shot, body, price)
-    elif mode == "full":                # price · text · bottle — fully mirrored
-        parts = (price, body, shot)
-    else:                               # text · bottle · price — price keeps its rail
-        parts = (body, shot, price)
-
-    return f"""
-          <div class="row{' right' if right else ''}">
-            {parts[0]}
-            {parts[1]}
-            {parts[2]}
+            </div>
+            <div class="price">
+              {glass}
+              <u class="b"><span>{w['price']}</span></u>
+            </div>
           </div>"""
 
 
-def build_html(mode="none"):
+def sheet_html(theme):
     secs = []
-    for label, cls, side, wines in sections():
-        rows = "".join(row_html(w, side, mode) for w in wines)
+    for label, key, wines in sections():
+        accent = ACCENT[key][0 if theme == "dark" else 1]
+        cols = (f'<div class="cols"><u class="g">{ICON_GLASS}Glass</u>'
+                f'<u class="b">{ICON_BOTTLE}Bottle</u></div>' if key == "glass"
+                else f'<div class="cols"><u class="g"></u>'
+                     f'<u class="b">{ICON_BOTTLE}Bottle</u></div>')
+        rows = "".join(row_html(w) for w in wines)
         secs.append(f"""
-        <div class="sec {cls}" style="flex:{len(wines)} 1 auto">
-          <div class="sec-head"><span>{label}</span><i></i></div>
+        <div class="sec {key}" style="--accent:{accent};flex:{len(wines)} 1 auto">
+          <div class="sec-head"><span>{label}</span><i class="gap"></i>{cols}</div>
           <div class="rows">{rows}</div>
         </div>""")
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Spice House — Wine List (single A4)</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>{CSS}</style>
-</head>
-<body>
-  <div class="sheet{' rail' if mode == 'rail' else ''}">
+    return f"""
+  <div class="sheet {theme}">
     <div class="panel">
       <div class="head">
         <h1>Wine List</h1>
@@ -339,40 +404,51 @@ def build_html(mode="none"):
         <div>Ask your waiter for a recommendation</div>
       </div>
     </div>
-  </div>
+  </div>"""
+
+
+def build_html(themes):
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spice House — Wine List (single A4)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>{CSS}</style>
+</head>
+<body>{''.join(sheet_html(t) for t in themes)}
 </body>
 </html>"""
 
 
-SUFFIX = {"none": "", "full": "-alt", "rail": "-alt-rail"}
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--alt", choices=("none", "full", "rail"), default="none",
-                    help="alternate the bottle side section by section")
+    ap.add_argument("--theme", choices=("dark", "light", "both"), default="dark")
     ap.add_argument("--html", action="store_true")
     args = ap.parse_args()
 
     lay_bottles_down()
 
-    slug = f"{SLUG}{SUFFIX[args.alt]}"
-    html_path = os.path.join(HERE, f"{slug}.html")
-    with open(html_path, "w", encoding="utf-8") as fh:
-        fh.write(build_html(args.alt))
-    print("html →", html_path)
-    if args.html:
-        return
+    themes = ("dark", "light") if args.theme == "both" else (args.theme,)
+    for theme in themes:
+        slug = SLUG if theme == "dark" else f"{SLUG}-light"
+        html_path = os.path.join(HERE, f"{slug}.html")
+        with open(html_path, "w", encoding="utf-8") as fh:
+            fh.write(build_html([theme]))
+        print("html →", html_path)
+        if args.html:
+            continue
 
-    pdf_path = os.path.join(HERE, f"{slug}.pdf")
-    subprocess.run([CHROME, "--headless", "--disable-gpu", "--no-pdf-header-footer",
-                    f"--print-to-pdf={pdf_path}", f"file://{html_path}"],
-                   check=True, capture_output=True)
-    print("pdf  →", pdf_path)
-
-    subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf_path,
-                    os.path.join(HERE, f"{slug}_preview")], check=True)
-    print("png  →", os.path.join(HERE, f"{slug}_preview.png"))
+        pdf_path = os.path.join(HERE, f"{slug}.pdf")
+        subprocess.run([CHROME, "--headless", "--disable-gpu",
+                        "--no-pdf-header-footer", f"--print-to-pdf={pdf_path}",
+                        f"file://{html_path}"], check=True, capture_output=True)
+        print("pdf  →", pdf_path)
+        subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf_path,
+                        os.path.join(HERE, f"{slug}_preview")], check=True)
+        print("png  →", os.path.join(HERE, f"{slug}_preview.png"))
 
 
 if __name__ == "__main__":
