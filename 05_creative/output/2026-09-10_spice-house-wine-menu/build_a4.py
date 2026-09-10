@@ -104,6 +104,85 @@ RU = {
         "Violet Каберне Совиньон · красное сухое",
 }
 
+# Russian descriptions. Only the two-sided card shows them — the single sheet
+# has no room and stays English. Long ones go on the wide cards (the pours and
+# the orange), short ones on the tall tiles.
+NOTE_RU = {
+    "chateau-tamagne-sparkling-brut-white.png":
+        "Домашний аперитив. Зелёное яблоко и цитрус, тонкий стойкий перляж, "
+        "сухой чистый финиш.",
+    "abrau-durso-reserve-brut.png":
+        "Старейший игристый дом России, основан в 1870-м. Спелое яблоко и "
+        "белые цветы, сухое и элегантное.",
+    "abrau-durso-victor-dravigny-brut.png":
+        "Назван в честь француза, задавшего стиль дома в 1905-м. Долгая "
+        "выдержка на осадке — бриошь, фундук, тонкая пена.",
+    "chateau-tamagne-duo-blanc.png":
+        "Светло-соломенное, чистое и сухое. Зелёное яблоко, цитрус и свежий "
+        "финиш — самое лёгкое вино в карте.",
+    "chateau-tamagne-chardonnay.png":
+        "Брожение в стали, без дуба. Белые цветы, груша и лимонная цедра; "
+        "свежее и точное.",
+    "chateau-tamagne-grape-dance-blanc.png":
+        "Ароматный бленд из трёх сортов — персик, луговые травы и лёгкая "
+        "пряность. Не как все.",
+    "aristov-riesling.png":
+        "Рислинг с котом на этикетке: лайм, белый персик, кремнистая нотка. "
+        "Кислотность, которой не страшен чили.",
+    "chateau-tamagne-signature-chardonnay.png":
+        "Вершина линейки шардоне, выдержка на осадке в стали — фрукт спелее, "
+        "текстура сливочнее, долгий финиш.",
+    "chateau-tamagne-nature-orange.png":
+        "Белый виноград бродил на мезге: янтарный цвет, курага и цитрусовая "
+        "цедра, лёгкий танин. Белое, которое ведёт себя как красное.",
+    "chateau-tamagne-duo-red.png":
+        "Насыщенно-рубиновое, мягкое и гармоничное. Спелая тёмная ягода без "
+        "углов — красное на весь стол.",
+    "chateau-tamagne-cabernet.png":
+        "Чёрная смородина и болгарский перец, среднее тело, сухой финиш. "
+        "Классика, которая не спорит с едой.",
+    "chateau-tamagne-nude-saperavi.png":
+        "Без фильтрации и оклейки — тёмное, сочное, немного дикое. Вишня, "
+        "слива, солоноватый финиш.",
+    "chateau-tamagne-nature-violet.png":
+        "Из линейки Nature, минимальное вмешательство: фиалка и тёмная ягода, "
+        "мягкий танин, яркое.",
+    "chateau-tamagne-signature-saperavi.png":
+        "Серьёзное саперави: выдержка в дубе, плотный чёрный фрукт, какао и "
+        "сухие травы, уверенный финиш.",
+}
+
+SHORT_RU = {
+    "chateau-tamagne-sparkling-brut-white.png":
+        "Зелёное яблоко и цитрус, тонкий перляж, сухой чистый финиш.",
+    "abrau-durso-reserve-brut.png":
+        "Старейший игристый дом России, 1870. Спелое яблоко, сухое, элегантное.",
+    "abrau-durso-victor-dravigny-brut.png":
+        "Долгая выдержка на осадке — бриошь, фундук, тонкая пена.",
+    "chateau-tamagne-duo-blanc.png":
+        "Зелёное яблоко и цитрус, свежий финиш — самое лёгкое в карте.",
+    "chateau-tamagne-chardonnay.png":
+        "Брожение в стали, без дуба. Белые цветы, груша, лимонная цедра.",
+    "chateau-tamagne-grape-dance-blanc.png":
+        "Ароматный бленд трёх сортов — персик, травы, лёгкая пряность.",
+    "aristov-riesling.png":
+        "Лайм, белый персик, кремнистая нотка. Кислотность не боится чили.",
+    "chateau-tamagne-signature-chardonnay.png":
+        "Выдержка на осадке в стали — спелее фрукт, сливочная текстура.",
+    "chateau-tamagne-nature-orange.png":
+        "Брожение на мезге — курага, цитрусовая цедра, лёгкий танин.",
+    "chateau-tamagne-duo-red.png":
+        "Спелая тёмная ягода, мягкое и без углов — красное на весь стол.",
+    "chateau-tamagne-cabernet.png":
+        "Чёрная смородина и болгарский перец, среднее тело, сухой финиш.",
+    "chateau-tamagne-nude-saperavi.png":
+        "Без фильтрации и оклейки — вишня, слива, дикая нотка.",
+    "chateau-tamagne-nature-violet.png":
+        "Линейка Nature, минимальное вмешательство — фиалка и тёмная ягода.",
+    "chateau-tamagne-signature-saperavi.png":
+        "Выдержка в дубе, плотный чёрный фрукт, какао и сухие травы.",
+}
+
 # Grape lists that would wrap onto a second line at this row height.
 GRAPES = {
     "chateau-tamagne-duo-red.png": "Saperavi · Krasnostop · Zweigelt",

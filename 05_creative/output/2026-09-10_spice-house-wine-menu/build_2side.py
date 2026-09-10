@@ -28,8 +28,8 @@ import subprocess
 
 from build import PAGES
 from build_a4 import (ACCENT, GRAPES, ICON_BOTTLE, ICON_FORK, ICON_GLASS,
-                      ICON_GRAPES, NAME, PAIR, RU, SHORT, baht, flatten,
-                      ru_name)
+                      ICON_GRAPES, NAME, NOTE_RU, PAIR, RU, SHORT, SHORT_RU,
+                      baht, flatten, ru_name)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATE = "2026-09-10"
@@ -134,6 +134,8 @@ CSS = """
   .ru{color:var(--price);line-height:1.22}
   .sheet.light .ru{color:#7A4A22}
   .note{color:var(--note)}
+  .note.ru{color:var(--muted);margin-top:.9mm;padding-top:.9mm;
+           border-top:.2mm dotted var(--rule)}
   .meta,.pair{display:flex;align-items:center;gap:1.3mm;line-height:1.3}
   .meta{font-size:5.2pt;letter-spacing:.06em;text-transform:uppercase;
         color:var(--muted)}
@@ -196,7 +198,7 @@ CSS = """
   .tall .stand{flex:1;width:100%}
   .tall .en{font-size:7.6pt;margin-top:2.2mm}
   .tall .ru{font-size:6pt;margin-top:.7mm}
-  .tall .note{font-size:6pt;line-height:1.32;margin-top:1.4mm}
+  .tall .note{font-size:5.8pt;line-height:1.28;margin-top:1.2mm}
   .tall .meta,.tall .pair{justify-content:center;text-align:center}
   .tall .meta{margin-top:1.6mm;font-size:5pt}
   .tall .pair{margin-top:1mm;font-size:5.6pt}
@@ -208,10 +210,10 @@ CSS = """
   .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:3.4mm;flex:1}
   .row4.step .tall:nth-child(even){margin-top:7mm}
   .row4.step .tall:nth-child(odd){margin-bottom:7mm}
-  .row4 .stand{flex:0 0 auto;height:62mm}
-  .row4 .stand img{height:auto;max-height:60mm;max-width:100%}
-  .row3 .stand{flex:0 0 auto;height:72mm}
-  .row3 .stand img{height:auto;max-height:70mm;max-width:100%}
+  .row4 .stand{flex:0 0 auto;height:53mm}
+  .row4 .stand img{height:auto;max-height:51mm;max-width:100%}
+  .row3 .stand{flex:0 0 auto;height:64mm}
+  .row3 .stand img{height:auto;max-height:62mm;max-width:100%}
 
   /* ── foot ── */
   .foot{margin-top:3mm;padding-top:2mm;border-top:.4mm solid var(--rule);
@@ -244,9 +246,12 @@ def band_cols(with_glass):
 
 
 def facts(w, short=False):
+    """Description in both languages — this card has the room the sheet has not."""
     note = SHORT[w["shot"]] if short else w["note"]
+    note_ru = SHORT_RU[w["shot"]] if short else NOTE_RU[w["shot"]]
     return f"""
         <div class="note">{note}</div>
+        <div class="note ru">{note_ru}</div>
         <div class="meta"><i class="ic">{ICON_GRAPES}</i>
           <span><b>{GRAPES.get(w['shot'], w['grapes'])}</b>
           &nbsp;·&nbsp; {w['maker'].split(' · ')[0]}</span></div>
