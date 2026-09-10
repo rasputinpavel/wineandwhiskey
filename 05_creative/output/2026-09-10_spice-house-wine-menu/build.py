@@ -23,13 +23,13 @@ DATE = "2026-09-10"
 SLUG = f"spice-house-wine-menu_{DATE}"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-GLASS = 320  # by-the-glass price for the two DUO wines.
-             # A bottle pours five glasses, so the pour has to cost more
-             # than a fifth of the bottle or nobody would ever order the
-             # bottle: 1290 / 5 = 258 is break-even, 320 is a quarter of
-             # the bottle and makes five glasses 1600 — the bottle saves
-             # a guest 310, about a quarter, which is a visible reason to
-             # take it.
+GLASS = 250  # by-the-glass price for the two DUO wines. The owner's call:
+             # 320 (a quarter of the bottle) felt like too much for a pour.
+             # Worth knowing what 250 means: a bottle holds five glasses, so
+             # five pours come to 1250 against a 1290 bottle — buying by the
+             # glass is now the cheaper way to drink the same wine, and the
+             # bottle sells on convenience, not on price. Break-even is 258;
+             # anything from 270 up puts the bottle back in front.
 
 KUBAN = "Kuban-Vino · Taman"
 ABRAU = "Abrau-Durso · Novorossiysk"

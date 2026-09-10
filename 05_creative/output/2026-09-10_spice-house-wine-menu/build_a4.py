@@ -12,7 +12,7 @@ What the sheet does:
   · By the Glass sits on top — the two DUO wines, also the two cheapest, so the
     list climbs from 1290 to 2190 as the guest reads down;
   · prices live in two columns, glass first and bottle second, so a wine poured
-    by the glass reads "320 | 1 290" and every bottle price lines up under one
+    by the glass reads "250 | 1 290" and every bottle price lines up under one
     edge;
   · each group carries a colour — a solid band with the name centred in it, and
     a bar down the left of every row — because five stacks of identical rows
