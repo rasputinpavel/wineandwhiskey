@@ -141,14 +141,16 @@ ICON_FORK = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
              "<path d='M6 2v7a2.5 2.5 0 0 0 5 0V2M8.5 11.5V22'/>"
              "<path d='M17.5 2c-1.7 1.4-2.5 3.3-2.5 5.6 0 1.9.8 3 2.5 3.4V22'/>"
              "</svg>")
-ICON_GLASS = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
-              "stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
-              "<path d='M6 3h12l-1 6a5 5 0 0 1-10 0z'/><path d='M12 14v6M8.5 20h7'/>"
-              "</svg>")
-ICON_BOTTLE = ("<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' "
-               "stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
-               "<path d='M10 2h4v4.5c0 1.2 2.5 2.6 2.5 5V21a1 1 0 0 1-1 1h-7a1 1 "
-               "0 0 1-1-1v-9.5c0-2.4 2.5-3.8 2.5-5z'/></svg>")
+ICON_GLASS = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
+              "<path d='M6.4 2.6h11.2l-1.1 6.6a5 5 0 0 1-3.6 4.05V19h3.1a1 1 0 0 1 "
+              "0 2H8a1 1 0 0 1 0-2h3.1v-5.75a5 5 0 0 1-3.6-4.05z'/></svg>")
+# A Bordeaux bottle: long narrow neck, square shoulder, straight sides. The
+# earlier stubby silhouette read as a whisky flask at badge size.
+ICON_BOTTLE = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
+               "<rect x='10.7' y='1.1' width='2.6' height='1.5' rx='.3'/>"
+               "<path d='M11 2.6v7.2c0 .4-.15.6-.55.9-1.1.8-1.35 1.5-1.35 2.4V21.6"
+               "a.8.8 0 0 0 .8.8h4.2a.8.8 0 0 0 .8-.8V13.1c0-.9-.25-1.6-1.35-2.4"
+               "-.4-.3-.55-.5-.55-.9V2.6z'/></svg>")
 
 
 def flatten():

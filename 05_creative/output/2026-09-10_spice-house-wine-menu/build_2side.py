@@ -142,13 +142,18 @@ CSS = """
   .ic{flex:0 0 auto;width:2.6mm;height:2.6mm;color:var(--accent)}
   .ic svg{width:100%;height:100%;display:block}
 
-  .price{display:flex;align-items:baseline}
-  .price u{text-decoration:none;display:block;text-align:right}
-  .price u.g{width:13mm}
-  .price u.b{width:19mm}
-  .price span{font-family:'Bebas Neue',sans-serif;font-size:17pt;line-height:.9;
-              color:var(--price);letter-spacing:.02em}
-  .price u.g span{font-size:15pt;opacity:.92}
+  .price{display:flex;align-items:center;gap:2.4mm}
+  .pill{display:flex;align-items:center;gap:1.8mm;
+        padding:1.2mm 3mm 1.2mm 2.4mm;border-radius:8mm;
+        border:.3mm solid var(--rule);color:var(--price)}
+  .pill span{font-family:'Bebas Neue',sans-serif;font-size:16pt;line-height:.9;
+             letter-spacing:.02em}
+  .pill svg{width:5mm;height:5mm;display:block}
+  /* the pour is what this block sells, so it is the loud one */
+  .pill.pour{background:var(--accent);border-color:var(--accent);
+             color:var(--onaccent);padding:1.6mm 3.6mm 1.6mm 2.8mm}
+  .pill.pour span{font-size:20pt}
+  .pill.pour svg{width:5.4mm;height:5.4mm}
 
   /* a standing bottle, lit from behind and standing on its own shadow */
   .stand{position:relative;display:flex;align-items:flex-end;
@@ -195,16 +200,18 @@ CSS = """
   .tall .meta,.tall .pair{justify-content:center;text-align:center}
   .tall .meta{margin-top:1.6mm;font-size:5pt}
   .tall .pair{margin-top:1mm;font-size:5.6pt}
-  .tall .price{margin-top:1.8mm;justify-content:center}
+  .tall .price{margin-top:auto;padding-top:2mm;justify-content:center}
   .tall .price u.b{width:auto;text-align:center}
   .tall .price span{font-size:15pt}
 
   .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;flex:1}
   .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:3.4mm;flex:1}
-  .row4 .tall:nth-child(even){margin-top:7mm}
-  .row4 .tall:nth-child(odd){margin-bottom:7mm}
-  .row4 .stand img{height:60mm}
-  .row3 .stand img{height:70mm}
+  .row4.step .tall:nth-child(even){margin-top:7mm}
+  .row4.step .tall:nth-child(odd){margin-bottom:7mm}
+  .row4 .stand{flex:0 0 auto;height:62mm}
+  .row4 .stand img{height:auto;max-height:60mm;max-width:100%}
+  .row3 .stand{flex:0 0 auto;height:72mm}
+  .row3 .stand img{height:auto;max-height:70mm;max-width:100%}
 
   /* ── foot ── */
   .foot{margin-top:3mm;padding-top:2mm;border-top:.4mm solid var(--rule);
@@ -220,10 +227,20 @@ CSS = """
 
 
 def prices(w):
-    glass = (f'<u class="g"><span>{baht(w["glass"])}</span></u>' if w["glass"]
-             else "")
-    return (f'<div class="price">{glass}'
-            f'<u class="b"><span>{baht(w["price"])}</span></u></div>')
+    """A badge per price, each carrying the thing it buys.
+
+    Where a wine is poured by the glass the pour leads — it is what the block
+    is selling — and the bottle sits beside it as the quieter second option.
+    """
+    pour = (f'<div class="pill pour">{ICON_GLASS}<span>{baht(w["glass"])}</span></div>'
+            if w["glass"] else "")
+    bottle = f'<div class="pill">{ICON_BOTTLE}<span>{baht(w["price"])}</span></div>'
+    return f'<div class="price">{pour}{bottle}</div>'
+
+
+def band_cols(with_glass):
+    """Nothing: the badges on the cards already say glass and bottle."""
+    return ""
 
 
 def facts(w, short=False):
@@ -270,12 +287,8 @@ def tall_card(w):
 
 def band(label, key, theme, with_glass=False):
     accent = ACCENT[key][0 if theme == "dark" else 1]
-    cols = (f'<u class="g">{ICON_GLASS}Glass</u>' if with_glass
-            else '<u class="g"></u>')
     return (f'<div class="band" style="--accent:{accent}">'
-            f'<span>{label}</span>'
-            f'<div class="cols">{cols}'
-            f'<u class="b">{ICON_BOTTLE}Bottle</u></div></div>')
+            f'<span>{label}</span>{band_cols(with_glass)}</div>')
 
 
 def section(label, key, theme, body, grow, with_glass=False):
@@ -317,9 +330,10 @@ def front(theme, g):
   </div>"""
 
 
-def back(theme, g):
+def back(theme, g, step=True):
     white = "".join(tall_card(w) for w in g["white"])
     red = "".join(tall_card(w) for w in g["red"])
+    row = "row4 step" if step else "row4"
     return f"""
   <div class="sheet {theme}">
     <div class="panel">
@@ -329,10 +343,10 @@ def back(theme, g):
       </div>
       <div class="stack">
         {section("White · Белое", "white", theme,
-                 f'<div class="row4" style="margin-top:2.6mm">{white}</div>',
+                 f'<div class="{row}" style="margin-top:2.6mm">{white}</div>',
                  grow=1)}
         {section("Red · Красное", "red", theme,
-                 f'<div class="row4" style="margin-top:2.6mm">{red}</div>',
+                 f'<div class="{row}" style="margin-top:2.6mm">{red}</div>',
                  grow=1)}
       </div>
       <div class="foot">
@@ -343,7 +357,7 @@ def back(theme, g):
   </div>"""
 
 
-def build_html(theme):
+def build_html(theme, step=True):
     g = groups()
     return f"""<!doctype html>
 <html lang="en">
@@ -355,7 +369,7 @@ def build_html(theme):
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>{CSS}</style>
 </head>
-<body>{front(theme, g)}{back(theme, g)}
+<body>{front(theme, g)}{back(theme, g, step)}
 </body>
 </html>"""
 
@@ -363,15 +377,19 @@ def build_html(theme):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--theme", choices=("dark", "light", "both"), default="dark")
+    ap.add_argument("--back", choices=("step", "level"), default="step",
+                    help="staggered tiles on the back, or all of them level")
     ap.add_argument("--html", action="store_true")
     args = ap.parse_args()
 
+    step = args.back == "step"
+    base = SLUG if step else SLUG.replace("-2side_", "-2side-level_")
     themes = ("dark", "light") if args.theme == "both" else (args.theme,)
     for theme in themes:
-        slug = SLUG if theme == "dark" else f"{SLUG}-light"
+        slug = base if theme == "dark" else f"{base}-light"
         html_path = os.path.join(HERE, f"{slug}.html")
         with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(build_html(theme))
+            fh.write(build_html(theme, step))
         print("html →", html_path)
         if args.html:
             continue
