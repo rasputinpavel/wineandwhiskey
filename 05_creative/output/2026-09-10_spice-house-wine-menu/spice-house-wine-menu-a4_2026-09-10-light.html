@@ -90,8 +90,8 @@
 
   .shot{position:relative;display:flex;align-items:center;justify-content:center}
   .shot img{position:relative;width:50mm;height:auto;display:block}
-  .sheet.dark .shot img{filter:drop-shadow(0 .9mm 1.1mm rgba(0,0,0,.75))}
-  .sheet.light .shot img{filter:drop-shadow(0 .7mm .9mm rgba(90,60,35,.30))}
+  /* light only: a black blur on a near-black card just smudges the card */
+  .sheet.light .shot img{filter:drop-shadow(0 .6mm .8mm rgba(90,60,35,.24))}
 
   .body{min-width:0}
   .name{display:flex;align-items:baseline;gap:2.4mm;flex-wrap:wrap}

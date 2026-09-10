@@ -155,20 +155,20 @@ CSS = """
   .pill.pour span{font-size:20pt}
   .pill.pour svg{width:5.4mm;height:5.4mm}
 
-  /* a standing bottle, lit from behind and standing on its own shadow */
+  /* A standing bottle on its own contact shadow. No glow behind it: a soft
+     radial patch that is invisible on screen prints as a smudge around every
+     bottle. */
   .stand{position:relative;display:flex;align-items:flex-end;
          justify-content:center}
-  .stand::before{content:"";position:absolute;left:50%;top:6%;
-        width:26mm;height:88%;margin-left:-13mm;border-radius:50%;
-        background:radial-gradient(ellipse at 50% 50%,
-                   var(--glow) 0%,rgba(255,236,196,0) 70%)}
   .stand::after{content:"";position:absolute;bottom:-.6mm;left:50%;
         width:20mm;height:3.4mm;margin-left:-10mm;border-radius:50%;
         background:radial-gradient(ellipse at 50% 50%,
                    var(--floor) 0%,rgba(0,0,0,0) 72%)}
   .stand img{position:relative;width:auto;display:block}
-  .sheet.dark .stand img{filter:drop-shadow(-1.4mm 1.2mm 1.6mm rgba(0,0,0,.7))}
-  .sheet.light .stand img{filter:drop-shadow(-1mm 1mm 1.4mm rgba(90,60,35,.26))}
+  /* Only the light sheet gets a cast shadow. On the dark card a blurred black
+     shadow has nothing to darken and reads as a grey smudge boxed around the
+     bottle — which is exactly what showed up in the PDF. */
+  .sheet.light .stand img{filter:drop-shadow(-.8mm .8mm 1mm rgba(90,60,35,.22))}
 
   /* ── wide card: bottle left, copy right (glass pours, orange) ── */
   .wide{background:var(--card);border-radius:2mm;border:.25mm solid var(--edge);
