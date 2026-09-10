@@ -7,15 +7,19 @@ copy the one-line rows need, and everything about the layout.
 
 What the sheet does:
 
+  · nothing of ours appears on it — no monogram, no credit line: it is the
+    restaurant's menu, and the wine is the restaurant's to sell;
   · By the Glass sits on top — the two DUO wines, also the two cheapest, so the
-    list climbs from 499 to 790 as the guest reads down;
+    list climbs from 1290 to 2190 as the guest reads down;
   · prices live in two columns, glass first and bottle second, so a wine poured
-    by the glass reads "200 | 499" and every bottle price lines up under one
+    by the glass reads "320 | 1 290" and every bottle price lines up under one
     edge;
-  · each group carries a colour — a tinted band at its head and a bar down the
-    left of every row — because five stacks of identical rows blur together;
-  · bottles are normalised to one thickness and one length, and the base
-    dissolves to the left so the eye starts at the label;
+  · each group carries a colour — a solid band with the name centred in it, and
+    a bar down the left of every row — because five stacks of identical rows
+    blur together;
+  · every bottle is scaled to the same length, runs from the coloured bar to
+    the text and dissolves into that bar at its base, so the eye starts at the
+    label;
   · two icons carry what used to be words: grapes before the variety, fork and
     knife before the pairing.
 
@@ -44,11 +48,16 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # Every bottle ends in the same box: same thickness, same length, base fading
 # out to the left. Real bottles differ by a centimetre here and there, and in a
 # stacked column that difference reads as sloppiness.
-LAY_H = 300      # diameter, px — every bottle ends up equally thick
-LAY_W = 1330     # length, px — every bottle spans exactly this, base to neck.
-                 # Wider than the longest bottle, so no label is ever cropped.
-FADE = 0.19      # the left of the canvas dissolves, so the bottle comes out of
-                 # the coloured bar at the edge of the row instead of floating
+LAY_W = 1330     # length, px — every bottle is scaled to exactly this, so it
+                 # spans from the coloured bar to the text on its own, with
+                 # nothing stretched and no label ever cropped.
+LAY_H = 352      # the diameter a bottle of average build ends up with
+DAMP = 0.5       # how far a bottle's real thickness is pulled towards that
+                 # average: 1 keeps life-size differences (a fat sparkling
+                 # bottle beside a slim Riesling reads as an accident), 0 makes
+                 # them identical and visibly squashed. Halfway looks natural.
+FADE = 0.18      # the left of the canvas dissolves, so the bottle comes out of
+                 # the coloured bar instead of floating in the middle of a row
 
 # One-line descriptions — the two-page layout has room for three, this one does not.
 SHORT = {
@@ -82,6 +91,19 @@ SHORT = {
         "Oak-aged, dense black fruit, cocoa and dried herbs, firm finish.",
 }
 
+# Two names are long enough to push their row onto a second line. The vintage
+# and the varietal they give up are carried by the Russian name instead.
+NAME = {
+    "chateau-tamagne-signature-chardonnay.png": "Château Tamagne Signature Chardonnay",
+    "chateau-tamagne-nature-violet.png": "Château Tamagne Violet Cabernet",
+}
+RU = {
+    "chateau-tamagne-signature-chardonnay.png":
+        "Signature Шардоне 2024 · выдержка в стали",
+    "chateau-tamagne-nature-violet.png":
+        "Violet Каберне Совиньон · красное сухое",
+}
+
 # Grape lists that would wrap onto a second line at this row height.
 GRAPES = {
     "chateau-tamagne-duo-red.png": "Saperavi · Krasnostop · Zweigelt",
@@ -94,6 +116,9 @@ PAIR = {
     "chateau-tamagne-grape-dance-blanc.png": "Phad Thai · Cashew chicken",
     "chateau-tamagne-signature-chardonnay.png": "White snapper · Salmon steak",
     "chateau-tamagne-duo-blanc.png": "Salmon bruschetta · Vareniki",
+    "chateau-tamagne-duo-red.png": "Dumplings · Chicken steak",
+    "chateau-tamagne-nude-saperavi.png": "Borsch · Lamb dumplings",
+    "abrau-durso-reserve-brut.png": "Beef tongue · Vinaigrette",
 }
 
 # Group colours. Dark and light need different values of the same hue: what
@@ -153,19 +178,8 @@ def sections():
     ]
 
 
-def body_start(im):
-    """First column where the bottle is at full diameter — past the heel."""
-    alpha = im.getchannel("A")
-    w, h = im.size
-    for x in range(w):
-        col = alpha.crop((x, 0, x + 1, h)).getbbox()
-        if col and (col[3] - col[1]) >= h * .96:
-            return x
-    return int(w * .05)
-
-
 def lay_bottles_down():
-    """Rotate, normalise and fade every bottle into one shared silhouette."""
+    """Rotate, scale and fade every bottle into one shared silhouette."""
     src = os.path.join(HERE, "assets")
     made = 0
     for name in sorted(os.listdir(src)):
@@ -181,35 +195,23 @@ def lay_bottles_down():
         if box:
             im = im.crop(box)
 
-        # one thickness for every bottle on the sheet
-        im = im.resize((max(1, round(im.width * LAY_H / im.height)), LAY_H),
-                       Image.LANCZOS)
+        # Every bottle is scaled to the same length, so each one runs from the
+        # coloured bar to the text with its own base, shoulder and neck —
+        # nothing stretched, nothing cropped, no label lost. Scaled honestly a
+        # slim Riesling would come out much thinner than a fat sparkling
+        # bottle, so the diameter is pulled part of the way to the average.
+        true_h = LAY_W * im.height / im.width
+        height = max(1, round(LAY_H * (true_h / LAY_H) ** DAMP))
+        canvas = im.resize((LAY_W, height), Image.LANCZOS)
 
-        # every bottle spans the full width: the neck sits at the right edge,
-        # and the base reaches the left one. Long bottles give up part of a
-        # base nobody sees; short ones borrow a slice of their own cylinder —
-        # the body is a smooth tube, so a stretched slice of it is seamless,
-        # and the fade covers most of it anyway.
-        canvas = Image.new("RGBA", (LAY_W, LAY_H), (0, 0, 0, 0))
-        grow = 0
-        if im.width >= LAY_W:
-            canvas.paste(im.crop((im.width - LAY_W, 0, im.width, LAY_H)), (0, 0))
-        else:
-            grow = LAY_W - im.width
-            seam = body_start(im) + int(im.width * 0.03)
-            slice_ = im.crop((seam, 0, seam + 10, LAY_H)).resize((grow, LAY_H))
-            canvas.paste(slice_, (0, 0))
-            canvas.paste(im, (grow, 0))
-
-        # ...and dissolves into the bar it comes out of. The dissolve always
-        # swallows the borrowed slice, so nobody meets a stretched cylinder.
+        # the base dissolves into the bar it comes out of
         alpha = canvas.getchannel("A")
-        edge = max(int(LAY_W * FADE), grow + int(LAY_W * .05))
+        edge = max(1, int(LAY_W * FADE))
         ramp = Image.new("L", (LAY_W, 1))
-        ramp.putdata([min(255, int(255 * (x / edge) ** 1.25)) if x < edge else 255
+        ramp.putdata([min(255, int(255 * (x / edge) ** 1.15)) if x < edge else 255
                       for x in range(LAY_W)])
         canvas.putalpha(Image.composite(alpha, Image.new("L", alpha.size, 0),
-                                        ramp.resize((LAY_W, LAY_H))))
+                                        ramp.resize((LAY_W, height))))
         canvas.save(out)
         made += 1
     if made:
@@ -224,7 +226,7 @@ CSS = """
     --ink:#0C0B0A; --card:#211C19; --band:rgba(255,255,255,.05);
     --frame:#8E3F1E; --frame2:#5E2712;
     --text:#F7F3ED; --note:#BDB4A9; --muted:#9C9288;
-    --price:#C9A84C; --rule:rgba(201,168,76,.20);
+    --price:#C9A84C; --rule:rgba(201,168,76,.20); --onaccent:#17130F;
     --edge:rgba(255,255,255,.06); --shadow:rgba(0,0,0,.45);
   }
   /* ── light: the print version ── */
@@ -232,7 +234,7 @@ CSS = """
     --ink:#FBF7EF; --card:#FFFFFF; --band:rgba(142,63,30,.08);
     --frame:#A9552B; --frame2:#7E3A17;
     --text:#231F1B; --note:#4E463D; --muted:#877C6E;
-    --price:#8C1C1C; --rule:rgba(142,63,30,.28);
+    --price:#8C1C1C; --rule:rgba(142,63,30,.28); --onaccent:#FFF6EA;
     --edge:rgba(35,31,27,.13); --shadow:rgba(90,60,35,.13);
   }
 
@@ -249,7 +251,7 @@ CSS = """
                    linear-gradient(160deg,var(--frame) 0%,var(--frame2) 100%)}
 
   .panel{position:relative;height:100%;border-radius:4mm;overflow:hidden;
-         background:var(--ink);padding:7mm 8mm 5mm;
+         background:var(--ink);padding:6mm 8mm 4.5mm;
          display:flex;flex-direction:column}
   .panel > *{position:relative;z-index:2}
   .sheet.dark .panel::before{content:"";position:absolute;inset:0;
@@ -269,38 +271,36 @@ CSS = """
                    rgba(169,85,43,.10) 0%,rgba(0,0,0,0) 62%)}
 
   /* ── header ── */
-  .head{text-align:center;padding-bottom:2.2mm;border-bottom:.4mm solid var(--rule)}
-  .head h1{font-family:'Bebas Neue',sans-serif;font-size:26pt;line-height:.9;
+  .head{text-align:center;padding-bottom:1.8mm;border-bottom:.4mm solid var(--rule)}
+  .head h1{font-family:'Bebas Neue',sans-serif;font-size:23pt;line-height:.9;
            letter-spacing:.14em}
-  .head .sel{margin-top:1.2mm;font-size:5.5pt;letter-spacing:.36em;
-             text-transform:uppercase;color:var(--muted)}
-  .head .sel b{color:var(--price);font-weight:600}
 
   .stack{flex:1;display:flex;flex-direction:column;min-height:0}
 
   /* ── group ── */
-  .sec{display:flex;flex-direction:column;margin-top:1.8mm}
+  .sec{display:flex;flex-direction:column;margin-top:1.6mm}
   .sec:first-child{margin-top:1.4mm}
-  .sec-head{display:flex;align-items:center;gap:3mm;margin-bottom:.8mm;
-            padding:.6mm 3mm .6mm 2.4mm;border-radius:1.4mm;
-            background:var(--band);border-left:1.5mm solid var(--accent)}
-  .sec-head > span{font-family:'Bebas Neue',sans-serif;font-size:11pt;
-                   letter-spacing:.2em;color:var(--accent);white-space:nowrap}
-  .sec-head i.gap{flex:1}
-  .cols{display:flex;font-size:4.9pt;letter-spacing:.16em;
-        text-transform:uppercase;color:var(--muted)}
+  .sec-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+            margin-bottom:.8mm;padding:.7mm 3mm;border-radius:1.4mm;
+            background:var(--accent);color:var(--onaccent)}
+  .sec-head > span{grid-column:2;justify-self:center;
+                   font-family:'Bebas Neue',sans-serif;font-size:11.5pt;
+                   letter-spacing:.24em;color:var(--onaccent);white-space:nowrap}
+  .cols{grid-column:3;justify-self:end;display:flex;font-size:4.9pt;
+        letter-spacing:.16em;text-transform:uppercase;color:var(--onaccent);
+        opacity:.72}
   .cols u{text-decoration:none;display:flex;align-items:center;
           justify-content:flex-end;gap:1mm}
-  .cols u.g{width:15mm}
-  .cols u.b{width:17mm}
+  .cols u.g{width:13mm}
+  .cols u.b{width:19mm}
   .cols svg{width:2.1mm;height:2.1mm}
 
-  .rows{flex:1;display:flex;flex-direction:column;gap:.9mm}
+  .rows{flex:1;display:flex;flex-direction:column;gap:.8mm}
 
   /* ── one wine ── */
   .row{flex:1;position:relative;background:var(--card);border-radius:1.8mm;
        border:.25mm solid var(--edge);border-left:1.5mm solid var(--accent);
-       padding:.9mm 3mm .9mm 0;
+       padding:.6mm 2.6mm .6mm 0;
        display:grid;grid-template-columns:50mm 1fr auto;gap:2.5mm;
        align-items:center;box-shadow:0 1mm 2.4mm var(--shadow)}
 
@@ -314,22 +314,22 @@ CSS = """
   .en{font-size:7.6pt;font-weight:700;line-height:1.12;color:var(--text)}
   .ru{font-size:6pt;color:var(--price);line-height:1.2}
   .sheet.light .ru{color:#7A4A22}
-  .note{margin-top:.7mm;font-size:6.2pt;line-height:1.26;color:var(--note)}
-  .line{margin-top:.7mm;display:flex;align-items:center;gap:3mm;
+  .note{margin-top:.6mm;font-size:6.2pt;line-height:1.22;color:var(--note)}
+  .line{margin-top:.6mm;display:flex;align-items:center;gap:3mm;
         justify-content:space-between}
   .meta,.pair{display:flex;align-items:center;gap:1.1mm;line-height:1.32}
-  .meta{flex:1 1 auto;min-width:0;font-size:4.9pt;letter-spacing:.07em;
+  .meta{flex:1 1 auto;min-width:0;font-size:4.7pt;letter-spacing:.05em;
         text-transform:uppercase;color:var(--muted)}
   .meta b{color:var(--note);font-weight:600}
-  .pair{flex:0 0 auto;font-size:5.4pt;color:var(--note);white-space:nowrap}
+  .pair{flex:0 0 auto;font-size:5.3pt;color:var(--note);white-space:nowrap}
   .ic{flex:0 0 auto;width:2.5mm;height:2.5mm;color:var(--accent)}
   .ic svg{width:100%;height:100%;display:block}
 
   /* ── prices: glass column, bottle column ── */
   .price{display:flex;align-items:baseline}
   .price u{text-decoration:none;display:block;text-align:right}
-  .price u.g{width:15mm}
-  .price u.b{width:17mm}
+  .price u.g{width:13mm}
+  .price u.b{width:19mm}
   .price span{font-family:'Bebas Neue',sans-serif;font-size:15pt;
               line-height:.9;color:var(--price);letter-spacing:.02em}
   .price u.g span{font-size:13.5pt;opacity:.92}
@@ -338,7 +338,7 @@ CSS = """
         color-mix(in srgb,var(--accent) 15%,var(--card)) 0%,var(--card) 62%)}
 
   /* ── foot ── */
-  .foot{margin-top:2.8mm;padding-top:2mm;border-top:.4mm solid var(--rule);
+  .foot{margin-top:2.4mm;padding-top:1.8mm;border-top:.4mm solid var(--rule);
         display:flex;justify-content:space-between;
         font-size:5.4pt;letter-spacing:.24em;text-transform:uppercase;
         color:var(--muted)}
@@ -350,16 +350,35 @@ CSS = """
 """
 
 
+def ru_name(w):
+    """The Russian name without the house, which the English name just said.
+
+    "Château Tamagne Chardonnay · Шато Тамань Шардоне" spends a third of the
+    line saying the same words twice, and it is exactly the third that pushes
+    the longest names onto a second line.
+    """
+    ru = RU.get(w["shot"], w["ru"])
+    for house in ("Шато Тамань ", "Абрау-Дюрсо ", "Аристов "):
+        if ru.startswith(house):
+            return ru[len(house):]
+    return ru
+
+
+def baht(price):
+    """1290 → 1 290, with a space that never breaks the line."""
+    return f"{price:,}".replace(",", "\u202f")
+
+
 def row_html(w):
-    glass = (f'<u class="g"><span>{w["glass"]}</span></u>' if w["glass"]
+    glass = (f'<u class="g"><span>{baht(w["glass"])}</span></u>' if w["glass"]
              else '<u class="g"></u>')
     return f"""
           <div class="row">
             <div class="shot"><img src="assets/lay_{w['shot']}" alt=""></div>
             <div class="body">
               <div class="name">
-                <span class="en">{w['en']}</span>
-                <span class="ru">{w['ru']}</span>
+                <span class="en">{NAME.get(w['shot'], w['en'])}</span>
+                <span class="ru">{ru_name(w)}</span>
               </div>
               <div class="note">{SHORT[w['shot']]}</div>
               <div class="line">
@@ -372,7 +391,7 @@ def row_html(w):
             </div>
             <div class="price">
               {glass}
-              <u class="b"><span>{w['price']}</span></u>
+              <u class="b"><span>{baht(w['price'])}</span></u>
             </div>
           </div>"""
 
@@ -388,7 +407,7 @@ def sheet_html(theme):
         rows = "".join(row_html(w) for w in wines)
         secs.append(f"""
         <div class="sec {key}" style="--accent:{accent};flex:{len(wines)} 1 auto">
-          <div class="sec-head"><span>{label}</span><i class="gap"></i>{cols}</div>
+          <div class="sec-head"><span>{label}</span>{cols}</div>
           <div class="rows">{rows}</div>
         </div>""")
     return f"""
@@ -396,7 +415,6 @@ def sheet_html(theme):
     <div class="panel">
       <div class="head">
         <h1>Wine List</h1>
-        <div class="sel">Selected by <b>Wine &amp; Whiskey</b></div>
       </div>
       <div class="stack">{''.join(secs)}</div>
       <div class="foot">

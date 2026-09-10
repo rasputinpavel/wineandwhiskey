@@ -23,7 +23,13 @@ DATE = "2026-09-10"
 SLUG = f"spice-house-wine-menu_{DATE}"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-GLASS = 200  # by-the-glass price for the two DUO wines
+GLASS = 320  # by-the-glass price for the two DUO wines.
+             # A bottle pours five glasses, so the pour has to cost more
+             # than a fifth of the bottle or nobody would ever order the
+             # bottle: 1290 / 5 = 258 is break-even, 320 is a quarter of
+             # the bottle and makes five glasses 1600 — the bottle saves
+             # a guest 310, about a quarter, which is a visible reason to
+             # take it.
 
 KUBAN = "Kuban-Vino · Taman"
 ABRAU = "Abrau-Durso · Novorossiysk"
@@ -49,7 +55,7 @@ PAGES = [
                         "The house aperitif. Green apple and citrus, a fine "
                         "persistent bead, dry clean finish.",
                         "Salmon bruschetta · Olivier",
-                        530),
+                        1390),
                     wine(
                         "abrau-durso-reserve-brut.png",
                         "Abrau-Durso Reserve Brut",
@@ -58,7 +64,7 @@ PAGES = [
                         "From Russia's oldest sparkling house, founded 1870. "
                         "Ripe apple and white flowers, dry and elegant.",
                         "Boiled beef tongue · Vinaigrette",
-                        530),
+                        1390),
                     wine(
                         "abrau-durso-victor-dravigny-brut.png",
                         "Abrau-Durso Victor Dravigny Brut",
@@ -68,7 +74,7 @@ PAGES = [
                         "house style in 1905. Long lees ageing — brioche, "
                         "hazelnut, fine mousse.",
                         "Salted salmon · Shrimp salad",
-                        820),
+                        2190),
                 ]),
             dict(
                 label="White · Белое", tone="white",
@@ -81,7 +87,7 @@ PAGES = [
                         "Pale straw, clean and dry. Green apple, citrus and a "
                         "crisp finish — the easiest pour on the list.",
                         "Salmon bruschetta · Vareniki with potato",
-                        499, GLASS),
+                        1290, GLASS),
                     wine(
                         "chateau-tamagne-chardonnay.png",
                         "Château Tamagne Chardonnay",
@@ -90,7 +96,7 @@ PAGES = [
                         "Steel-fermented, no oak. White flowers, pear and "
                         "lemon zest; fresh and precise.",
                         "Salmon steak · Chicken soup",
-                        549),
+                        1390),
                     wine(
                         "chateau-tamagne-grape-dance-blanc.png",
                         "Château Tamagne Grape Dance",
@@ -99,7 +105,7 @@ PAGES = [
                         "An aromatic three-grape blend — peach, meadow herbs "
                         "and a gentle spice. Off the beaten path.",
                         "Phad Thai · Fried chicken with cashew nuts",
-                        599),
+                        1590),
                     wine(
                         "aristov-riesling.png",
                         "Aristov Riesling Meow",
@@ -108,7 +114,7 @@ PAGES = [
                         "Riesling with a cat on the label: lime, white peach, "
                         "a flinty edge. Acidity that stands up to chilli.",
                         "Fried rice with shrimp · Phad Thai",
-                        635),
+                        1690),
                     wine(
                         "chateau-tamagne-signature-chardonnay.png",
                         "Château Tamagne Signature Chardonnay 2024",
@@ -117,7 +123,7 @@ PAGES = [
                         "The top of the Chardonnay range, aged on the lees in "
                         "steel — riper fruit, creamier texture, long finish.",
                         "White snapper with vodka sauce · Salmon steak",
-                        750),
+                        1890),
                 ]),
         ]),
     dict(
@@ -135,7 +141,7 @@ PAGES = [
                         "dried apricot and citrus peel, a light grip of "
                         "tannin. A white that behaves like a red.",
                         "Phad Thai · Kharcho · Fried chicken with cashew nuts",
-                        680),
+                        1790),
                 ]),
             dict(
                 label="Red · Красное", tone="red",
@@ -148,7 +154,7 @@ PAGES = [
                         "Deep ruby, soft and harmonious. Ripe dark berries "
                         "with no rough edges — the red for the whole table.",
                         "Boiled dumplings · Chicken steak",
-                        499, GLASS),
+                        1290, GLASS),
                     wine(
                         "chateau-tamagne-cabernet.png",
                         "Château Tamagne Cabernet Sauvignon",
@@ -157,7 +163,7 @@ PAGES = [
                         "Blackcurrant and bell pepper, medium body, dry "
                         "finish. The classic that never argues with the food.",
                         "Pepper beef · Beef burger",
-                        549),
+                        1390),
                     wine(
                         "chateau-tamagne-nude-saperavi.png",
                         "Château Tamagne NUDE Saperavi",
@@ -166,7 +172,7 @@ PAGES = [
                         "Neither filtered nor fined — dark, juicy and a little "
                         "wild. Sour cherry, plum, a savoury finish.",
                         "Borsch · Dumplings with beef & lamb",
-                        599),
+                        1590),
                     wine(
                         "chateau-tamagne-nature-violet.png",
                         "Château Tamagne Violet Cabernet Sauvignon",
@@ -175,7 +181,7 @@ PAGES = [
                         "From the Nature line, made with minimal intervention: "
                         "violets and dark berries, supple tannin, bright.",
                         "Fried dumplings · Beer beef",
-                        699),
+                        1790),
                     wine(
                         "chateau-tamagne-signature-saperavi.png",
                         "Château Tamagne Signature Saperavi",
@@ -184,7 +190,7 @@ PAGES = [
                         "The serious Saperavi: oak-aged, dense black fruit, "
                         "cocoa and dried herbs, firm confident finish.",
                         "Burgundy lamb · Pepper beef",
-                        790),
+                        1990),
                 ]),
         ]),
 ]
