@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spice House — Wine List (single A4)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --ink:#0C0B0A; --panel:#141110; --card:#211C19;
+    --rust:#8E3F1E; --rust-deep:#5E2712;
+    --gold:#C9A84C; --white:#F7F3ED; --muted:#9C9288;
+    --line:rgba(201,168,76,.20);
+  }
+  html,body{background:#2A2523}
+  body{font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;
+       display:flex;justify-content:center;padding:26px}
+
+  .sheet{width:210mm;height:297mm;position:relative;overflow:hidden;
+         background:var(--rust);padding:4mm;color:var(--white);
+         box-shadow:0 14px 50px rgba(0,0,0,.55)}
+  .sheet::before{content:"";position:absolute;inset:0;
+        background:radial-gradient(ellipse 120% 90% at 50% 0%,
+                   rgba(214,120,60,.55) 0%,rgba(0,0,0,0) 62%),
+                   linear-gradient(160deg,var(--rust) 0%,var(--rust-deep) 100%)}
+
+  .panel{position:relative;height:100%;border-radius:4mm;overflow:hidden;
+         background:var(--ink);padding:7mm 9mm 5mm;
+         display:flex;flex-direction:column}
+  .panel::before{content:"";position:absolute;inset:0;
+        background:radial-gradient(ellipse 90% 50% at 50% -10%,
+                   rgba(201,168,76,.16) 0%,rgba(0,0,0,0) 60%),
+                   radial-gradient(ellipse 70% 40% at 50% 110%,
+                   rgba(142,63,30,.30) 0%,rgba(0,0,0,0) 65%)}
+  .panel::after{content:"";position:absolute;inset:0;opacity:.30;
+        background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='180' height='180' filter='url(%23n)' opacity='.55'/></svg>");
+        mix-blend-mode:overlay}
+  .panel > *{position:relative;z-index:2}
+
+  /* ── header ── */
+  .head{text-align:center;padding-bottom:2.4mm;border-bottom:.4mm solid var(--line)}
+  .head h1{font-family:'Bebas Neue',sans-serif;font-size:26pt;line-height:.9;
+           letter-spacing:.14em}
+  .head .sel{margin-top:1.3mm;font-size:5.5pt;letter-spacing:.36em;
+             text-transform:uppercase;color:var(--muted)}
+  .head .sel b{color:var(--gold);font-weight:600}
+
+  .stack{flex:1;display:flex;flex-direction:column;min-height:0}
+
+  /* ── section ── */
+  .sec{display:flex;flex-direction:column;margin-top:2mm}
+  .sec-head{display:flex;align-items:center;gap:3.5mm;margin-bottom:1.1mm}
+  .sec-head span{font-family:'Bebas Neue',sans-serif;font-size:10.5pt;
+                 letter-spacing:.22em;color:var(--gold);white-space:nowrap}
+  .sec-head i{flex:1;height:.3mm;background:linear-gradient(90deg,
+              var(--line),rgba(201,168,76,0))}
+  .rows{flex:1;display:flex;flex-direction:column;gap:1mm}
+
+  /* ── one wine ── */
+  .row{flex:1;position:relative;background:var(--card);border-radius:2mm;
+       border:.25mm solid rgba(255,255,255,.06);
+       padding:1.1mm 3mm 1.1mm 1.6mm;
+       display:grid;grid-template-columns:47mm 1fr auto;gap:3mm;
+       align-items:center;box-shadow:0 1mm 2.6mm rgba(0,0,0,.45)}
+
+  .shot{position:relative;display:flex;align-items:center;justify-content:center}
+  .shot::before{content:"";position:absolute;width:42mm;height:9mm;
+        border-radius:50%;background:radial-gradient(ellipse at 50% 50%,
+        rgba(255,236,196,.20) 0%,rgba(255,236,196,0) 70%)}
+  .shot img{position:relative;height:11.5mm;width:auto;
+        filter:drop-shadow(0 .9mm 1.1mm rgba(0,0,0,.75))}
+
+  .body{min-width:0}
+  .name{display:flex;align-items:baseline;gap:2.4mm;flex-wrap:wrap}
+  .en{font-size:7.6pt;font-weight:700;line-height:1.12;color:var(--white)}
+  .ru{font-size:6pt;color:var(--gold);line-height:1.2}
+  .note{margin-top:.8mm;font-size:6.2pt;line-height:1.3;color:#BDB4A9}
+  .line{margin-top:.8mm;display:flex;align-items:baseline;gap:3mm;
+        justify-content:space-between}
+  .meta{flex:1 1 auto;min-width:0;font-size:5.1pt;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--muted);line-height:1.4}
+  .meta b{color:#CFC5B8;font-weight:600}
+  .pair{flex:0 0 auto;font-size:5.4pt;line-height:1.4;color:#CFC5B8;text-align:right;
+        white-space:nowrap}
+  .pair span{color:var(--gold);letter-spacing:.14em;text-transform:uppercase;
+             font-size:4.8pt;font-weight:600;margin-right:1.2mm}
+
+  .price{text-align:right;white-space:nowrap}
+  .price .b{font-family:'Bebas Neue',sans-serif;font-size:14.5pt;line-height:.86;
+            color:var(--gold);letter-spacing:.02em}
+  .price .u{font-size:5pt;letter-spacing:.18em;text-transform:uppercase;
+            color:var(--muted);margin-top:.5mm}
+
+  /* ── mirrored row: bottle on the right ── */
+  .row.right{grid-template-columns:auto 1fr 47mm;padding:1.1mm 1.6mm 1.1mm 3mm}
+  .row.right .body{text-align:right}
+  .row.right .name{justify-content:flex-end}
+  .row.right .line{flex-direction:row-reverse}
+  .row.right .pair{text-align:left}
+  .row.right .price{text-align:left}
+  .row.right .glasspill{margin-left:0}
+
+  /* price keeps its rail on the right, only the bottle moves;
+     the copy stays left-aligned — mirroring it too squeezes the grape line */
+  .rail .row.right{grid-template-columns:1fr 47mm auto;
+                   padding:1.1mm 3mm 1.1mm 3mm}
+  .rail .row.right .body{text-align:left}
+  .rail .row.right .name{justify-content:flex-start}
+  .rail .row.right .line{flex-direction:row}
+  .rail .row.right .pair{text-align:right}
+  .rail .row.right .price{text-align:right}
+
+  /* ── by the glass ── */
+  .sec.glass .row{background:linear-gradient(90deg,
+        rgba(201,168,76,.14) 0%,rgba(201,168,76,.05) 45%,var(--card) 100%);
+        border-color:rgba(201,168,76,.34)}
+  .sec.glass .price .b{font-size:16pt}
+  .glasspill{margin-top:.7mm;display:inline-block;border:.3mm solid var(--gold);
+        border-radius:6mm;padding:.4mm 1.6mm;font-size:5.1pt;font-weight:700;
+        letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+
+  .foot{margin-top:3.2mm;padding-top:2.2mm;border-top:.4mm solid var(--line);
+        display:flex;justify-content:space-between;
+        font-size:5.4pt;letter-spacing:.24em;text-transform:uppercase;
+        color:var(--muted)}
+
+  @page{size:210mm 297mm;margin:0}
+  @media print{html,body{background:#fff}body{padding:0}
+               .sheet{box-shadow:none}}
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="panel">
+      <div class="head">
+        <h1>Wine List</h1>
+        <div class="sel">Selected by <b>Wine &amp; Whiskey</b></div>
+      </div>
+      <div class="stack">
+        <div class="sec glass" style="flex:2 1 auto">
+          <div class="sec-head"><span>By the Glass · По бокалам</span><i></i></div>
+          <div class="rows">
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-duo-blanc.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne DUO Blanc</span>
+                <span class="ru">Шато Тамань «Дуо» · белое сухое</span>
+              </div>
+              <div class="note">Pale straw, green apple and citrus, crisp — the easiest pour on the list.</div>
+              <div class="line">
+                <div class="meta"><b>Pervenets Magaracha · Rkatsiteli</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Salmon bruschetta · Vareniki</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">499.-</div>
+              <div class="u">Bottle</div>
+              <div class="glasspill">Glass · Бокал 200.-</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-duo-red.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne DUO Rouge</span>
+                <span class="ru">Шато Тамань «Дуо» · красное сухое</span>
+              </div>
+              <div class="note">Deep ruby, ripe dark berries, soft — the red for the whole table.</div>
+              <div class="line">
+                <div class="meta"><b>Saperavi · Krasnostop · Zweigelt</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Boiled dumplings · Chicken steak</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">499.-</div>
+              <div class="u">Bottle</div>
+              <div class="glasspill">Glass · Бокал 200.-</div>
+            </div>
+          </div></div>
+        </div>
+        <div class="sec " style="flex:3 1 auto">
+          <div class="sec-head"><span>Sparkling · Игристое</span><i></i></div>
+          <div class="rows">
+          <div class="row right">
+            <div class="price">
+              <div class="b">530.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Brut</span>
+                <span class="ru">Шато Тамань Брют · белое игристое</span>
+              </div>
+              <div class="note">Green apple and citrus, a fine bead, dry clean finish.</div>
+              <div class="line">
+                <div class="meta"><b>White blend</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Salmon bruschetta · Olivier</div>
+              </div>
+            </div>
+            <div class="shot">
+              <img src="assets/hl_chateau-tamagne-sparkling-brut-white.png" alt="">
+            </div>
+          </div>
+          <div class="row right">
+            <div class="price">
+              <div class="b">530.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Abrau-Durso Reserve Brut</span>
+                <span class="ru">Абрау-Дюрсо Резерв Брют · белое игристое</span>
+              </div>
+              <div class="note">From Russia's oldest sparkling house, 1870. Ripe apple, dry, elegant.</div>
+              <div class="line">
+                <div class="meta"><b>White blend</b> &nbsp;·&nbsp; Abrau-Durso</div>
+                <div class="pair"><span>Pairs</span>Boiled beef tongue · Vinaigrette</div>
+              </div>
+            </div>
+            <div class="shot">
+              <img src="assets/hl_abrau-durso-reserve-brut.png" alt="">
+            </div>
+          </div>
+          <div class="row right">
+            <div class="price">
+              <div class="b">820.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Abrau-Durso Victor Dravigny Brut</span>
+                <span class="ru">Абрау-Дюрсо «Виктор Дравиньи» Брют</span>
+              </div>
+              <div class="note">Long ageing on the lees — brioche, hazelnut, a fine mousse.</div>
+              <div class="line">
+                <div class="meta"><b>Chardonnay · Pinot Blanc · Riesling</b> &nbsp;·&nbsp; Abrau-Durso</div>
+                <div class="pair"><span>Pairs</span>Salted salmon · Shrimp salad</div>
+              </div>
+            </div>
+            <div class="shot">
+              <img src="assets/hl_abrau-durso-victor-dravigny-brut.png" alt="">
+            </div>
+          </div></div>
+        </div>
+        <div class="sec " style="flex:4 1 auto">
+          <div class="sec-head"><span>White · Белое</span><i></i></div>
+          <div class="rows">
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-chardonnay.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Chardonnay</span>
+                <span class="ru">Шато Тамань Шардоне · белое сухое</span>
+              </div>
+              <div class="note">Steel-fermented, no oak. White flowers, pear and lemon zest.</div>
+              <div class="line">
+                <div class="meta"><b>Chardonnay 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Salmon steak · Chicken soup</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">549.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-grape-dance-blanc.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Grape Dance</span>
+                <span class="ru">Шато Тамань «Танец винограда» · белое</span>
+              </div>
+              <div class="note">An aromatic three-grape blend — peach, meadow herbs, gentle spice.</div>
+              <div class="line">
+                <div class="meta"><b>Bianca · Grüner Tamanian · Chardonnay</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Phad Thai · Chicken with cashew nuts</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">599.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_aristov-riesling.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Aristov Riesling Meow</span>
+                <span class="ru">Аристов Рислинг «Мяу» · белое сухое</span>
+              </div>
+              <div class="note">Lime, white peach, a flinty edge. Acidity that stands up to chilli.</div>
+              <div class="line">
+                <div class="meta"><b>Riesling 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Fried rice with shrimp · Phad Thai</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">635.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-signature-chardonnay.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Signature Chardonnay 2024</span>
+                <span class="ru">Шато Тамань Signature Шардоне · выдержка в стали</span>
+              </div>
+              <div class="note">Aged on the lees in steel — riper fruit, creamier texture, long finish.</div>
+              <div class="line">
+                <div class="meta"><b>Chardonnay 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>White snapper · Salmon steak</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">750.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div></div>
+        </div>
+        <div class="sec " style="flex:1 1 auto">
+          <div class="sec-head"><span>Orange · Оранжевое</span><i></i></div>
+          <div class="rows">
+          <div class="row right">
+            <div class="price">
+              <div class="b">680.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Orange 2024</span>
+                <span class="ru">Шато Тамань Оранж · белое сухое</span>
+              </div>
+              <div class="note">Fermented on the skins — dried apricot, citrus peel, a light grip of tannin.</div>
+              <div class="line">
+                <div class="meta"><b>Citronny Magaracha 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Phad Thai · Kharcho</div>
+              </div>
+            </div>
+            <div class="shot">
+              <img src="assets/hl_chateau-tamagne-nature-orange.png" alt="">
+            </div>
+          </div></div>
+        </div>
+        <div class="sec " style="flex:4 1 auto">
+          <div class="sec-head"><span>Red · Красное</span><i></i></div>
+          <div class="rows">
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-cabernet.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Cabernet Sauvignon</span>
+                <span class="ru">Шато Тамань Каберне Совиньон · красное сухое</span>
+              </div>
+              <div class="note">Blackcurrant and bell pepper, medium body, dry finish.</div>
+              <div class="line">
+                <div class="meta"><b>Cabernet Sauvignon 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Pepper beef · Beef burger</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">549.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-nude-saperavi.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne NUDE Saperavi</span>
+                <span class="ru">Шато Тамань NUDE Саперави · нефильтрованное</span>
+              </div>
+              <div class="note">Neither filtered nor fined — sour cherry, plum, a wild edge.</div>
+              <div class="line">
+                <div class="meta"><b>Saperavi, unfiltered</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Borsch · Dumplings with beef & lamb</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">599.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-nature-violet.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Violet Cabernet Sauvignon</span>
+                <span class="ru">Шато Тамань Violet Каберне Совиньон · красное сухое</span>
+              </div>
+              <div class="note">The Nature line, minimal intervention — violets and dark berries.</div>
+              <div class="line">
+                <div class="meta"><b>Cabernet Sauvignon 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Fried dumplings · Beer beef</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">699.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div>
+          <div class="row">
+            <div class="shot">
+              <img src="assets/h_chateau-tamagne-signature-saperavi.png" alt="">
+            </div>
+            <div class="body">
+              <div class="name">
+                <span class="en">Château Tamagne Signature Saperavi</span>
+                <span class="ru">Шато Тамань Signature Саперави · красное сухое</span>
+              </div>
+              <div class="note">Oak-aged, dense black fruit, cocoa and dried herbs, firm finish.</div>
+              <div class="line">
+                <div class="meta"><b>Saperavi 100%</b> &nbsp;·&nbsp; Kuban-Vino</div>
+                <div class="pair"><span>Pairs</span>Burgundy lamb · Pepper beef</div>
+              </div>
+            </div>
+            <div class="price">
+              <div class="b">790.-</div>
+              <div class="u">Bottle</div>
+              
+            </div>
+          </div></div>
+        </div></div>
+      <div class="foot">
+        <div>All prices in Thai baht</div>
+        <div>Ask your waiter for a recommendation</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

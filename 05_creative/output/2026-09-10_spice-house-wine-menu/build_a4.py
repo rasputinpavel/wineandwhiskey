@@ -8,7 +8,10 @@ Same fourteen wines as build.py, one page instead of two:
   · bottles lie on their side, one row per wine, the way a magazine spread
     stacks them (reference #1);
   · no monogram, no "Wine & Whiskey Phuket" foot — only a thin
-    "selected by Wine & Whiskey" line under the title.
+    "selected by Wine & Whiskey" line under the title;
+  · --alt makes the bottle change sides section by section (glass left,
+    sparkling right, white left, orange right, red left), the way a magazine
+    spread alternates its photographs.
 
 Fitting fourteen rows on 297 mm costs two lines per wine: the description is cut
 to one line, and grapes/producer share a line with the pairing (grapes left,
@@ -16,8 +19,10 @@ pairing right). Names, prices and grapes come from build.py — this file only
 holds the shortened copy.
 
 Usage:
-    python3 build_a4.py           # html + pdf + preview
-    python3 build_a4.py --html    # html only
+    python3 build_a4.py                 # bottles always on the left
+    python3 build_a4.py --alt full      # alternate sides, price mirrors too
+    python3 build_a4.py --alt rail      # alternate sides, price stays right
+    python3 build_a4.py --html          # html only
 """
 import argparse
 import os
@@ -29,7 +34,7 @@ from build import GLASS, PAGES
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATE = "2026-09-10"
-SLUG = f"spice-house-wine-menu-a4_{DATE}"
+SLUG = f"spice-house-wine-menu-a4_{DATE}"  # --alt appends a suffix
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # One-line descriptions — the two-page layout has room for three, this one does not.
@@ -98,33 +103,39 @@ def sections():
         return [w for w in rest if w["label"] == label]
 
     return [
-        ("By the Glass · По бокалам", "glass", by_glass),
-        ("Sparkling · Игристое", "", of("Sparkling")),
-        ("White · Белое", "", of("White")),
-        ("Orange · Оранжевое", "", of("Orange")),
-        ("Red · Красное", "", of("Red")),
+        ("By the Glass · По бокалам", "glass", "left", by_glass),
+        ("Sparkling · Игристое", "", "right", of("Sparkling")),
+        ("White · Белое", "", "left", of("White")),
+        ("Orange · Оранжевое", "", "right", of("Orange")),
+        ("Red · Красное", "", "left", of("Red")),
     ]
 
 
 def lay_bottles_down():
-    """Rotate each bottle onto its side once, trimmed to the glass."""
+    """Rotate each bottle onto its side, both ways round.
+
+    h_*  — neck to the right, for a bottle sitting left of its text.
+    hl_* — neck to the left, for a bottle sitting right of it. Rotated the
+    other way rather than mirrored: a flipped label reads backwards.
+    """
     src = os.path.join(HERE, "assets")
     made = []
     for name in sorted(os.listdir(src)):
-        if not name.endswith(".png") or name.startswith(("h_", "channel_")):
+        if not name.endswith(".png") or name.startswith(("h_", "hl_", "channel_")):
             continue
-        out = os.path.join(src, f"h_{name}")
-        if os.path.exists(out):
-            continue
-        im = Image.open(os.path.join(src, name)).convert("RGBA")
-        im = im.rotate(-90, expand=True)          # neck points right, into the text
-        box = im.getbbox()
-        if box:
-            im = im.crop(box)
-        im.save(out)
-        made.append(f"h_{name}")
+        for prefix, angle in (("h_", -90), ("hl_", 90)):
+            out = os.path.join(src, f"{prefix}{name}")
+            if os.path.exists(out):
+                continue
+            im = Image.open(os.path.join(src, name)).convert("RGBA")
+            im = im.rotate(angle, expand=True)
+            box = im.getbbox()
+            if box:
+                im = im.crop(box)
+            im.save(out)
+            made.append(f"{prefix}{name}")
     if made:
-        print("bottles laid down →", ", ".join(made))
+        print(f"bottles laid down → {len(made)} files")
 
 
 CSS = """
@@ -204,10 +215,10 @@ CSS = """
   .note{margin-top:.8mm;font-size:6.2pt;line-height:1.3;color:#BDB4A9}
   .line{margin-top:.8mm;display:flex;align-items:baseline;gap:3mm;
         justify-content:space-between}
-  .meta{font-size:5.1pt;letter-spacing:.1em;text-transform:uppercase;
+  .meta{flex:1 1 auto;min-width:0;font-size:5.1pt;letter-spacing:.1em;text-transform:uppercase;
         color:var(--muted);line-height:1.4}
   .meta b{color:#CFC5B8;font-weight:600}
-  .pair{font-size:5.4pt;line-height:1.4;color:#CFC5B8;text-align:right;
+  .pair{flex:0 0 auto;font-size:5.4pt;line-height:1.4;color:#CFC5B8;text-align:right;
         white-space:nowrap}
   .pair span{color:var(--gold);letter-spacing:.14em;text-transform:uppercase;
              font-size:4.8pt;font-weight:600;margin-right:1.2mm}
@@ -217,6 +228,25 @@ CSS = """
             color:var(--gold);letter-spacing:.02em}
   .price .u{font-size:5pt;letter-spacing:.18em;text-transform:uppercase;
             color:var(--muted);margin-top:.5mm}
+
+  /* ── mirrored row: bottle on the right ── */
+  .row.right{grid-template-columns:auto 1fr 47mm;padding:1.1mm 1.6mm 1.1mm 3mm}
+  .row.right .body{text-align:right}
+  .row.right .name{justify-content:flex-end}
+  .row.right .line{flex-direction:row-reverse}
+  .row.right .pair{text-align:left}
+  .row.right .price{text-align:left}
+  .row.right .glasspill{margin-left:0}
+
+  /* price keeps its rail on the right, only the bottle moves;
+     the copy stays left-aligned — mirroring it too squeezes the grape line */
+  .rail .row.right{grid-template-columns:1fr 47mm auto;
+                   padding:1.1mm 3mm 1.1mm 3mm}
+  .rail .row.right .body{text-align:left}
+  .rail .row.right .name{justify-content:flex-start}
+  .rail .row.right .line{flex-direction:row}
+  .rail .row.right .pair{text-align:right}
+  .rail .row.right .price{text-align:right}
 
   /* ── by the glass ── */
   .sec.glass .row{background:linear-gradient(90deg,
@@ -238,13 +268,19 @@ CSS = """
 """
 
 
-def row_html(w):
+def row_html(w, side="left", mode="none"):
     pill = (f'<div class="glasspill">Glass · Бокал {w["glass"]}.-</div>'
             if w["glass"] else "")
-    return f"""
-          <div class="row">
-            <div class="shot"><img src="assets/h_{w['shot']}" alt=""></div>
-            <div class="body">
+    right = mode != "none" and side == "right"
+    shot = f"""<div class="shot">
+              <img src="assets/{'hl_' if right else 'h_'}{w['shot']}" alt="">
+            </div>"""
+    price = f"""<div class="price">
+              <div class="b">{w['price']}.-</div>
+              <div class="u">Bottle</div>
+              {pill}
+            </div>"""
+    body = f"""<div class="body">
               <div class="name">
                 <span class="en">{w['en']}</span>
                 <span class="ru">{w['ru']}</span>
@@ -254,19 +290,27 @@ def row_html(w):
                 <div class="meta"><b>{GRAPES.get(w['shot'], w['grapes'])}</b> &nbsp;·&nbsp; {w['maker'].split(' · ')[0]}</div>
                 <div class="pair"><span>Pairs</span>{PAIR.get(w['shot'], w['pairing'])}</div>
               </div>
-            </div>
-            <div class="price">
-              <div class="b">{w['price']}.-</div>
-              <div class="u">Bottle</div>
-              {pill}
-            </div>
+            </div>"""
+
+    if not right:                       # bottle · text · price
+        parts = (shot, body, price)
+    elif mode == "full":                # price · text · bottle — fully mirrored
+        parts = (price, body, shot)
+    else:                               # text · bottle · price — price keeps its rail
+        parts = (body, shot, price)
+
+    return f"""
+          <div class="row{' right' if right else ''}">
+            {parts[0]}
+            {parts[1]}
+            {parts[2]}
           </div>"""
 
 
-def build_html():
+def build_html(mode="none"):
     secs = []
-    for label, cls, wines in sections():
-        rows = "".join(row_html(w) for w in wines)
+    for label, cls, side, wines in sections():
+        rows = "".join(row_html(w, side, mode) for w in wines)
         secs.append(f"""
         <div class="sec {cls}" style="flex:{len(wines)} 1 auto">
           <div class="sec-head"><span>{label}</span><i></i></div>
@@ -283,7 +327,7 @@ def build_html():
 <style>{CSS}</style>
 </head>
 <body>
-  <div class="sheet">
+  <div class="sheet{' rail' if mode == 'rail' else ''}">
     <div class="panel">
       <div class="head">
         <h1>Wine List</h1>
@@ -300,29 +344,35 @@ def build_html():
 </html>"""
 
 
+SUFFIX = {"none": "", "full": "-alt", "rail": "-alt-rail"}
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--alt", choices=("none", "full", "rail"), default="none",
+                    help="alternate the bottle side section by section")
     ap.add_argument("--html", action="store_true")
     args = ap.parse_args()
 
     lay_bottles_down()
 
-    html_path = os.path.join(HERE, f"{SLUG}.html")
+    slug = f"{SLUG}{SUFFIX[args.alt]}"
+    html_path = os.path.join(HERE, f"{slug}.html")
     with open(html_path, "w", encoding="utf-8") as fh:
-        fh.write(build_html())
+        fh.write(build_html(args.alt))
     print("html →", html_path)
     if args.html:
         return
 
-    pdf_path = os.path.join(HERE, f"{SLUG}.pdf")
+    pdf_path = os.path.join(HERE, f"{slug}.pdf")
     subprocess.run([CHROME, "--headless", "--disable-gpu", "--no-pdf-header-footer",
                     f"--print-to-pdf={pdf_path}", f"file://{html_path}"],
                    check=True, capture_output=True)
     print("pdf  →", pdf_path)
 
     subprocess.run(["pdftoppm", "-png", "-r", "150", "-singlefile", pdf_path,
-                    os.path.join(HERE, f"{SLUG}_preview")], check=True)
-    print("png  →", os.path.join(HERE, f"{SLUG}_preview.png"))
+                    os.path.join(HERE, f"{slug}_preview")], check=True)
+    print("png  →", os.path.join(HERE, f"{slug}_preview.png"))
 
 
 if __name__ == "__main__":
