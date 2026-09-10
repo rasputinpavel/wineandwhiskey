@@ -34,13 +34,17 @@ export default async function EditDeliveryNote({ params }: { params: Promise<{ i
     .order('id')
   if (lineErr) return <><PaneHeader item={item} /><div className="p-6"><SchemaError error={lineErr.message} /></div></>
 
-  const lines: Line[] = ((lineRows ?? []) as any[]).map((l, i) => ({
-    key: i + 1,
-    sku_id: l.sku_id,
-    sku_name: l.sku?.name ?? '',
-    qty: String(l.qty ?? ''),
-    unit_price: l.unit_price === null || l.unit_price === undefined ? '' : String(l.unit_price),
-  }))
+  // Stored line ids are uuids, so DB order is arbitrary — order the note here,
+  // alphabetically by wine name. The form itself never re-sorts while editing.
+  const lines: Line[] = ((lineRows ?? []) as any[])
+    .sort((a, b) => (a.sku?.name ?? '').localeCompare(b.sku?.name ?? '', undefined, { sensitivity: 'base' }))
+    .map((l, i) => ({
+      key: i + 1,
+      sku_id: l.sku_id,
+      sku_name: l.sku?.name ?? '',
+      qty: String(l.qty ?? ''),
+      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : String(l.unit_price),
+    }))
 
   const initial = {
     number: n.number,

@@ -25,6 +25,10 @@ const newLine = (key: number): Line => ({
 
 const VAT_RATE = 0.07
 
+// Alphabetical by wine name, case-insensitive — the order a saved note keeps.
+const byName = (a: string | null, b: string | null) =>
+  (a ?? '').localeCompare(b ?? '', undefined, { sensitivity: 'base' })
+
 const money = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
@@ -61,8 +65,12 @@ export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial 
         issued_at: issuedAt,
         number: number.trim() || undefined,
         with_vat: addVat,
+        // Sort here, not while editing: the saved note keeps its lines
+        // alphabetical (A→Z by wine name) without the list moving under the
+        // cursor during entry.
         lines: lines
           .filter(l => l.sku_id && Number(l.qty) > 0)
+          .sort((a, b) => byName(a.sku_name, b.sku_name))
           .map(l => ({
             sku_id: l.sku_id!,
             qty: Number(l.qty),
@@ -103,16 +111,10 @@ export function DeliveryNoteForm({ customerId, suggestedNumber, noteId, initial 
   const vat   = addVat ? subtotal * VAT_RATE : 0
   const total = subtotal + vat
 
-  // Display order: alphabetical by wine name (A→Z). Blank/unpicked lines stay
-  // at the bottom so a freshly added row doesn't jump to the top. Editing is
-  // wired by `key`, so re-ordering the view never touches the wrong line.
-  const shownLines = [...lines].sort((a, b) => {
-    const an = a.sku_name ?? '', bn = b.sku_name ?? ''
-    if (!an && !bn) return a.key - b.key
-    if (!an) return 1
-    if (!bn) return -1
-    return an.localeCompare(bn, undefined, { sensitivity: 'base' })
-  })
+  // While typing, rows stay exactly where they were added — a line that jumps
+  // the moment a wine is picked makes data entry unusable. Alphabetical order
+  // is applied once, on save (see `save()`), and on load in the edit page.
+  const shownLines = lines
 
   return (
     <form onSubmit={e => { e.preventDefault(); save() }} className="space-y-6">
