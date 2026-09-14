@@ -51,6 +51,19 @@ export async function setRunImportCounts(
   if (error) throw error
 }
 
+// Recent runs, newest first — powers the history table on /m/sales/scrape.
+// Without it a run only exists in the browser tab that started it: close the
+// tab and a finished scrape has no Import button anywhere.
+export async function listScrapeRuns(limit = 30): Promise<ScrapeRun[]> {
+  const { data, error } = await sbSales
+    .from('scrape_run')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as ScrapeRun[]
+}
+
 export async function getScrapeRun(id: string): Promise<ScrapeRun | null> {
   const { data, error } = await sbSales.from('scrape_run').select('*').eq('id', id).maybeSingle()
   if (error) throw error

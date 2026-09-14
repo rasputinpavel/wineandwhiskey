@@ -2,11 +2,23 @@ import Link from 'next/link'
 import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { ScrapeFormClient } from '@/components/modules/sales/ScrapeFormClient'
+import { ScrapeHistoryClient } from '@/components/modules/sales/ScrapeHistoryClient'
+import { listScrapeRuns } from '@/lib/sales/queries'
+import type { ScrapeRun } from '@/lib/sales/types'
 
 export const dynamic = 'force-dynamic'
 
-export default function ScrapePage() {
+export default async function ScrapePage() {
   const item = findItem('sales-crm')!
+
+  let runs: ScrapeRun[] = []
+  let runsError: string | null = null
+  try {
+    runs = await listScrapeRuns(30)
+  } catch (err) {
+    runsError = (err as Error).message
+  }
+
   return (
     <>
       <PaneHeader
@@ -29,6 +41,18 @@ export default function ScrapePage() {
             </p>
           </div>
           <ScrapeFormClient />
+
+          <section className="bg-warm-white border border-pale-stone rounded-md p-5 space-y-3">
+            <div>
+              <h2 className="font-heading font-semibold text-deep-black text-base">Run history</h2>
+              <p className="text-xs text-graphite mt-0.5">
+                Every scrape ever started, newest first — including the ones launched from a tab that has since been closed. Unfinished runs keep polling here.
+              </p>
+            </div>
+            {runsError
+              ? <div className="text-xs text-wine-red bg-wine-red/8 border border-wine-red/30 rounded-sm px-3 py-2">Failed to load run history: {runsError}</div>
+              : <ScrapeHistoryClient initialRuns={runs} />}
+          </section>
         </div>
       </div>
     </>
