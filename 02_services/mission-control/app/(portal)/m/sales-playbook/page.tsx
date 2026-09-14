@@ -31,11 +31,35 @@ export default async function SalesPlaybookPage() {
               Sales Playbook
             </h1>
             <p className="text-sm text-graphite mt-1">
-              Everything a rep needs for a first meeting: call script with memory anchors, price list, and a copy-paste pitch.
+              Everything a rep needs for a first meeting: the partner offer to leave behind, a call script with memory anchors, the price list, and copy-paste pitches.
             </p>
           </header>
 
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <a
+            href="/sales-playbook/partner_offer.pdf"
+            target="_blank"
+            rel="noopener"
+            className="block bg-deep-black text-warm-white rounded-md p-6 shadow-card hover:shadow-card-hover transition-all"
+          >
+            <div className="overline text-amber-gold">The leave-behind · 9 pages · PDF</div>
+            <h3 className="font-display uppercase tracking-display mt-1" style={{ fontSize: 30, lineHeight: 1 }}>
+              Partner Offer
+            </h3>
+            <p className="text-sm text-pale-stone mt-2 max-w-[70ch]">
+              All four offers in one document — the whole cellar from one supplier (~300 wines, 15+ countries),
+              the exclusive Russian range, a wine list rebuilt around cost-in, and the pop-up wine bar the venue
+              runs at zero risk. Send it after the call, print it for the meeting.
+            </p>
+            <div className="text-xs text-amber-gold mt-4">Open PDF ↗</div>
+          </a>
+
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <DocCard
+              title="Partner Offer (web)"
+              subtitle="Same nine pages, in the browser"
+              href="/sales-playbook/partner_offer.html"
+              hint="Open offer"
+            />
             <DocCard
               title="Call Script"
               subtitle="15–20 min phone intro"

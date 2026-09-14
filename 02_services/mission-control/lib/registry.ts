@@ -279,7 +279,7 @@ export const SECTIONS: Section[] = [
       },
       {
         slug: 'sales-playbook', name: 'Playbook', icon: '📘', status: 'live',
-        description: 'Cold-outreach materials: call script, B2B price list, messenger pitch template.',
+        description: 'Cold-outreach materials: partner offer deck, call script, B2B price list, messenger pitch templates.',
         route: m('sales-playbook'),
         embed: { kind: 'native' },
       },

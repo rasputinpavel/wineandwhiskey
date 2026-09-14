@@ -2,47 +2,95 @@
 
 For WhatsApp, LINE, Instagram DM, or email. Send after a missed call, after a meeting card hand-off, or as a cold outreach.
 
+**Always attach `partner_offer.pdf`** — nine pages, all four offers, one file. It is the thing that gets forwarded to the owner after you leave the room.
+
+Three openers below. Pick by the venue, not by habit — see "Which hook to lead with" in the call script.
+
 ---
 
-## Short version (messenger)
+## A · Cellar-first (messenger)
 
-Hi [name], this is [sales rep] from **Wine & Whiskey** — we're the exclusive distributor of Russian wines, sparkling, and spirits on Phuket.
+The default. Use when the venue needs a proper list, juggles several suppliers, or clearly cares about wine.
 
-Not pitching you to switch suppliers. We just have a few exclusive labels you can't get anywhere else on the island that work well as cocktail base or by-the-glass additions:
+Hi [name], this is [sales rep] from **Wine & Whiskey** — the wine shop in Rawai. We supply restaurants across the island.
 
-— **Abrau Durso** sparkling — Russia's most famous winery. Prosecco/Crémant alternative, sharper price.
-— **Barrister gin** — London-quality, several profiles. Bombay-plus quality, Beefeater-minus price.
-— Light whites (incl. Riesling) and reds from indigenous Russian grapes like Krasnostop.
+Around **300 wines in stock from more than 15 countries**, so most cards we can cover end to end from one place:
 
-Phuket has a big Russian guest flow — a familiar label on the list often closes the sale.
+— **France & Italy** — Bordeaux, Bourgogne, Rhône, Toscana, Piemonte. Champagne and Crémant.
+— **New World** — Australia, USA, Argentina, Chile, New Zealand, South Africa.
+— **The odd corners** — natural, orange, pét-nat, tawny port, Georgia, Moldova, even a Thai wine from Khao Yai.
+— **Around sixty spirits** — whiskey, cognac, gin, rum, tequila.
 
-Could I drop by for 15–20 min to walk through the catalog? Just an intro — no commitment.
+From ฿400 house pours up to Pauillac Grand Cru — one delivery, one invoice, one number to call.
+
+One range is exclusive to us on the island — Russian houses like **Abrau Durso** sparkling, **Ladoga** vodka and **Barrister** gin. Worth a look if you get Russian guests: a familiar label often closes the sale by itself.
+
+Could I drop by for 15–20 min? Just an intro — no commitment.
 
 — [name], Wine & Whiskey
 [phone] · [email]
 
 ---
 
-## Email version
+## B · Event-first (messenger)
 
-**Subject:** Russian wine & spirits — exclusive lineup for [Venue Name]
+Use on cold venues, gatekeepers, and anyone who brushes off suppliers. It isn't a purchase, so it isn't a decision anyone has to defend.
+
+Hi [name], [sales rep] from **Wine & Whiskey** in Rawai.
+
+I'm not writing to sell you wine. We run **wine evenings inside restaurants** — for two nights we bring in a mobile wine bar: our wine, our stand, our sommelier in your room.
+
+How it works: the wine arrives **on consignment**, so you buy nothing. Guests order from you and pay you — your till, your licence, your mark-up. Afterwards we settle on what actually sold, and unsold bottles leave with us free of charge. **If it sells nothing, you owe nothing.**
+
+A typical weekend puts around **฿30,000 of margin** through the till with **฿0 invested up front**. The only thing on your side is printing the artwork we hand you.
+
+Could I come by for 15 minutes and show you what it looks like? Happy to send the full offer first if that's easier.
+
+— [name], Wine & Whiskey
+[phone] · [email]
+
+---
+
+## C · Wine-list-first (messenger)
+
+Use when the list is visibly thin, dated, or overpriced.
+
+Hi [name], [sales rep] from **Wine & Whiskey** — the wine shop in Rawai, around 300 wines from 15+ countries.
+
+One thing we do besides supplying: we **rebuild wine lists around cost-in**. Most lists here are built from a catalogue — famous regions, famous grapes, a price the guest can check on their phone. You pay for the reputation, and the margin in the middle is thin.
+
+We pick the other way round. Less-known regions and indigenous grapes carry no price expectation, so the guest judges what's in the glass — and blind, these over-deliver. **Bottles from ฿300 in, the same price on your menu as today, roughly double the margin.** We write the card, design it in your branding and hand you print-ready files. No design fee.
+
+Could I look at your current list for ten minutes and show you the difference position by position? No commitment.
+
+— [name], Wine & Whiskey
+[phone] · [email]
+
+---
+
+## Email version (full)
+
+**Subject:** Wine supply, a better-margin list, and an event night — for [Venue Name]
 
 Hi [name],
 
-[Sales rep] from **Wine & Whiskey** here — we're the exclusive distributor of Russian wines, sparkling, and spirits on Phuket.
+[Sales rep] from **Wine & Whiskey** here — we're the wine shop in Rawai, and we supply restaurants across Phuket.
 
-This isn't a pitch to replace your current supplier. We import a small range of exclusive Russian labels that aren't available through anyone else on the island, and they tend to work well as cocktail bases or by-the-glass additions to an existing list.
+This isn't a pitch to replace your current supplier. There are four separate things we do for venues here, and any one of them stands on its own:
 
-A quick snapshot of what we carry:
+**1 · One supplier for the whole list.** Around 300 wines in stock from more than 15 countries — France, Italy, Spain and Portugal through to Australia, the USA, Argentina, Chile, New Zealand and South Africa; Champagne, tawny port, natural, orange and pét-nat; and around sixty spirits behind them. From ฿400 house pours up to Pauillac Grand Cru, so a full card is one delivery and one invoice rather than four.
 
-- **Sparkling — Abrau Durso.** Russia's most famous winery, broad lineup. A Prosecco alternative at the entry level, Crémant alternative a tier up. Noticeably better price point.
-- **Gin — Barrister, London-quality.** Several flavor profiles, designed for cocktails. Bombay-plus on quality, Beefeater-minus on price.
-- **White wines.** Light styles including a solid Riesling.
-- **Red wines.** Indigenous Russian grapes — Krasnostop and others. Something genuinely different for guests looking for a story.
+**2 · The one range that's exclusive to us.** Russian houses no other distributor on the island imports — Abrau Durso sparkling (Prosecco alternative at the entry level, Crémant alternative a tier up, noticeably better price point), reds from indigenous grapes like Krasnostop, Ladoga vodka across three tiers and Barrister gin in three profiles. Nobody can copy that page of your list or undercut you on it.
+
+**3 · A wine list rebuilt around cost-in.** We pick by what the bottle costs you rather than by how famous the region is. Bottles from ฿300 in, the same price on your menu as today, roughly double the margin. We write and design the printed card in your branding — no design fee.
+
+**4 · A pop-up wine bar in your venue.** For two evenings we bring in our wine on consignment, our stand and our sommelier. Guests order from you and pay you — your till, your licence, your mark-up. You buy nothing up front, we settle afterwards on what actually sold, and unsold bottles leave with us. A typical weekend puts around ฿30,000 of margin through the till with nothing invested.
 
 One more angle worth mentioning: Phuket has a huge Russian guest flow, and a familiar label on the list is often what closes the sale for them. That's a margin opportunity most venues here don't tap into.
 
-Could I drop by for 15–20 minutes to walk you through the catalog and pricing? No commitment — just an intro so you know what's available. If something fits your concept, we'll coordinate samples as a next step.
+I've attached our partner offer — nine pages, all four in detail with the numbers.
+
+Could I drop by for 15–20 minutes? I'd bring the catalogue and pricing, and I can look at your current list and tell you what the margin difference would be. If something fits, we'll coordinate samples as a next step.
 
 What works better for you — early in the week or end of the week?
 
