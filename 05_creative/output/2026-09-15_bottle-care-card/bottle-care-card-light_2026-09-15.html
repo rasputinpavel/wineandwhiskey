@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Памятка по бутылкам — Wine &amp; Whiskey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@500&family=DM+Sans:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F0EB;
+    --cream: #EDE0D0;
+    --text: #1A1A1A;
+    --text-2: #3D3D3D;
+    --border: #D4C9BC;
+    --wine: #8C1C1C;
+    --gold: #C9A84C;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--cream);
+    color: var(--text);
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .sheet {
+    width: 480px;
+    max-width: calc(100% - 32px);
+    margin: 48px auto;
+    background: var(--bg);
+    padding: 48px 40px 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 18px rgba(26, 26, 26, 0.06);
+  }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px; margin-bottom: 34px;
+  }
+  .wordmark { font-family: "Bebas Neue", sans-serif; font-size: 18px; letter-spacing: 0.18em; color: var(--text); }
+  .overline { font-family: "Inter", sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-2); }
+
+  .title-block { margin-bottom: 34px; }
+  .display { font-family: "Oswald", "Bebas Neue", sans-serif; font-weight: 500; font-size: 42px; line-height: 1.0; letter-spacing: 0.02em; text-transform: uppercase; margin: 0; color: var(--text); }
+  .display .accent { color: var(--wine); display: block; }
+  .recipient { font-family: "DM Sans", sans-serif; font-weight: 500; font-size: 14.5px; line-height: 1.5; color: var(--text-2); margin-top: 14px; }
+  .recipient strong { color: var(--text); font-weight: 600; }
+
+  .section { margin-bottom: 26px; }
+  .section-label { font-family: "Inter", sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--wine); margin: 0 0 8px; }
+
+  /* ---- bottle card ---- */
+  .bottle { padding: 16px 0 0; border-top: 1px solid var(--border); margin-top: 16px; }
+  .bottle:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+  .bhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .bname { font-family: "DM Sans", sans-serif; font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--text); }
+  .btype { font-size: 11px; color: var(--text-2); margin-top: 3px; }
+  .temp { font-family: "Bebas Neue", sans-serif; font-size: 22px; letter-spacing: 0.04em; color: var(--wine); white-space: nowrap; }
+  .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; gap: 16px; }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--text-2); white-space: nowrap; }
+  .row .v { color: var(--text); font-weight: 500; text-align: right; }
+  .bottle .rows { margin-top: 10px; }
+  .note { margin-top: 8px; font-size: 12px; line-height: 1.55; color: var(--text-2); }
+
+  /* ---- plain text block ---- */
+  .para { font-size: 13px; line-height: 1.6; color: var(--text-2); }
+  .para + .para { margin-top: 8px; }
+
+  /* ---- keep table ---- */
+  .row.total { border-top: 1.5px solid var(--text); border-bottom: none; margin-top: 2px; padding-top: 12px; font-weight: 600; }
+  .row .v.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- dark accent panel ---- */
+  .tip { background: var(--text); color: var(--bg); border-radius: 8px; padding: 24px 28px; margin: 12px 0 30px; }
+  .tip-label { font-family: "Inter", sans-serif; font-weight: 600; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+  .tip-title { font-family: "Oswald", sans-serif; font-weight: 500; font-size: 26px; line-height: 1.1; letter-spacing: 0.02em; text-transform: uppercase; color: var(--bg); }
+  .tip-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(245,240,235,0.18); font-size: 12.5px; line-height: 1.6; color: rgba(245,240,235,0.85); }
+
+  .meta { padding-top: 20px; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.6; color: var(--text-2); }
+  .meta .k { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); display: block; margin-bottom: 3px; }
+  .footer { margin-top: 26px; text-align: center; font-size: 11px; color: var(--text-2); line-height: 1.6; }
+  .footer .mark { font-family: "Bebas Neue", sans-serif; font-size: 14px; letter-spacing: 0.22em; color: var(--text); margin-bottom: 4px; }
+
+  @page { size: 480px 2280px; margin: 0; }
+  @media print {
+    html, body, .sheet, .tip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { background: #fff; }
+    .sheet { width: 480px; max-width: none; margin: 0 auto; box-shadow: none; border: none; border-radius: 0; page-break-inside: avoid; break-inside: avoid; }
+  }
+  @media (max-width: 520px) {
+    .sheet { padding: 32px 24px; }
+    .display { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="topbar">
+    <div class="wordmark">WINE &amp; WHISKEY</div>
+    <div class="overline">15 сентября 2026</div>
+  </div>
+
+  <div class="title-block">
+    <h1 class="display">Как хранить<span class="accent">и подавать</span></h1>
+    <div class="recipient">Памятка к вашей закупке — <strong>пять бутылок</strong>: температура, хранение, бокалы.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Бутылки</div>
+
+    <div class="bottle">
+      <div class="bhead">
+        <div>
+          <div class="bname">Palazzo Grimani Black Label Extra Dry</div>
+          <div class="btype">просекко · Италия</div>
+        </div>
+        <div class="temp">6—8°</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="k">Хранить</span><span class="v">в холодильнике</span></div>
+        <div class="row"><span class="k">Подавать</span><span class="v">холодным, прямо из холодильника</span></div>
+      </div>
+      <div class="note">Базовое игристое на каждый день — открывается по любому поводу и без повода, подходит любым гостям. Extra Dry чуть мягче брюта: лёгкая сладость есть, но вино сухое.</div>
+    </div>
+
+    <div class="bottle">
+      <div class="bhead">
+        <div>
+          <div class="bname">Delot Champagne Blanc de Noirs Brut</div>
+          <div class="btype">шампанское · Франция</div>
+        </div>
+        <div class="temp">6—8°</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="k">Хранить</span><span class="v">в холодильнике</span></div>
+        <div class="row"><span class="k">Подавать</span><span class="v">холодным</span></div>
+      </div>
+      <div class="note">Бутылка для особых гостей. Blanc de Noirs — сделано из красных сортов винограда, поэтому плотнее и насыщеннее обычного шампанского.</div>
+    </div>
+
+    <div class="bottle">
+      <div class="bhead">
+        <div>
+          <div class="bname">Selbach Riesling «Incline» Dry</div>
+          <div class="btype">белое сухое · Германия</div>
+        </div>
+        <div class="temp">8—10°</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="k">Хранить</span><span class="v">в холодильнике</span></div>
+        <div class="row"><span class="k">Подавать</span><span class="v">холодным</span></div>
+      </div>
+      <div class="note">Вариант для тех, кто не хочет пузырьков. Сухой, свежий, лёгкий — хорош и сам по себе, и к еде.</div>
+    </div>
+
+    <div class="bottle">
+      <div class="bhead">
+        <div>
+          <div class="bname">Alamos Malbec</div>
+          <div class="btype">красное сухое · Аргентина</div>
+        </div>
+        <div class="temp">15—17°</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="k">Хранить</span><span class="v">можно в холодильнике</span></div>
+        <div class="row"><span class="k">Подавать</span><span class="v">достать за 15 минут до подачи</span></div>
+      </div>
+      <div class="note">Красное не пьют ледяным: на холоде аромат закрывается. Нужно прохладное, но не холодное — пятнадцати минут на столе достаточно.</div>
+    </div>
+
+    <div class="bottle">
+      <div class="bhead">
+        <div>
+          <div class="bname">Camus VSOP Borderies Single Estate</div>
+          <div class="btype">коньяк · Франция</div>
+        </div>
+        <div class="temp">18—20°</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="k">Хранить</span><span class="v">тёмное прохладное место, бутылка стоя</span></div>
+        <div class="row"><span class="k">Подавать</span><span class="v">комнатной температуры</span></div>
+      </div>
+      <div class="note">В холодильник не нужно. Коньячный бокал, комнатная температура — холодным не подают, от холода аромат закрывается. Если кто-то всё же хочет со льдом — это нормально, дело вкуса.</div>
+    </div>
+
+  </div>
+
+  <div class="section">
+    <div class="section-label">Бокалы</div>
+    <div class="para">Отдельный бокал под каждое вино заводить не нужно. Набор универсальных винных бокалов закрывает всё сразу — белое, красное и игристое.</div>
+    <div class="para">Бокалы специально под шампанское — по желанию: красивые тюльпаны или купе добавят вида, но на вкус не влияют. Коньяк — единственный, кому нужен свой бокал.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Сколько живёт открытая бутылка</div>
+    <div class="row"><span class="k">Просекко, шампанское — с пробкой</span><span class="v num">4—5 дней</span></div>
+    <div class="row"><span class="k">Просекко, шампанское — без пробки</span><span class="v num">1 день</span></div>
+    <div class="row"><span class="k">Рислинг, Мальбек</span><span class="v num">4—6 дней</span></div>
+    <div class="row"><span class="k">Коньяк</span><span class="v num">месяцы</span></div>
+    <div class="note">Всё открытое вино — обратно в холодильник, включая красное. Перед следующей подачей красное снова достаём за 15 минут.</div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-label">Совет</div>
+    <div class="tip-title">Купите пробку<br>для игристого</div>
+    <div class="tip-body">Зажимная пробка стоит копейки и есть в любом супермаркете. С ней недопитая бутылка держит пузырьки несколько дней — не хуже открытого тихого вина. Без неё игристое выдыхается за сутки, а обычная винная пробка газ не удержит.</div>
+  </div>
+
+  <div class="meta">
+    <span class="k">Вопросы по бутылкам</span>
+    Напишите нам — подскажем, что к чему открыть и чем закусить.
+  </div>
+
+  <div class="footer">
+    <div class="mark">WINE &amp; WHISKEY</div>
+    Раваи, Пхукет · ежедневно 11:00 — 22:00
+  </div>
+
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    var h = document.querySelector('.sheet').getBoundingClientRect().height;
+    document.title = 'SHEETHEIGHT:' + Math.ceil(h);
+  });
+</script>
+</body>
+</html>
