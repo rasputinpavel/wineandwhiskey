@@ -22,6 +22,7 @@ export const B2B_PATTERNS: string[] = [
   'arthouse',          // Arthouse Hotelmanagement Co.,Ltd
   'bella chao',        // Bella Chao Trade Co., Ltd.
   'crepes',            // crepes factory co.ltd
+  'family ufo',        // FAMILY UFO BURGER Co.,Ltd (added Sep 2026; pays by QR, caught by name)
   'fifth element',     // fifth element co.ltd
   'fine cusine',       // Fine Cusine Co,.LTD
   'french home',       // French Home co., ltd
@@ -34,6 +35,7 @@ export const B2B_PATTERNS: string[] = [
   'layan paradise',    // Layan Paradise Villa Co.ltd
   'lazy avocado',      // lazy avocado co.ltd
   'milimon',           // Milimon Co., Ltd.
+  'mnk group',         // MNK GROUP CO.,LTD (added Sep 2026; pays by QR, caught by name)
   'next real',         // The next real Co., Ltd
   'pinzerai',          // pinzerai co ltd
   'q-squad',           // Q-Squad Co.,Ltd
@@ -48,6 +50,11 @@ export const B2B_PATTERNS: string[] = [
   'sukmesum',          // Sukmesum
   'phuket kachatip',   // Phuket Kachatip
   'titov',             // Titov
+  // Registered Loyverse customers with a company name that have not yet bought
+  // outside bank transfer (verified Sep 2026 — no individual-name collisions).
+  'four sea oasis',    // Four Sea Oasis Co.,Ltd(Head Office)
+  'staycation development', // Staycation Development Co., LTD
+  'phuket kasorn',     // Phuket Kasorn Pochana Limited
 ]
 
 export function isB2BCustomerName(name: string): boolean {
