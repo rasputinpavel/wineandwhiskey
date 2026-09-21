@@ -34,9 +34,15 @@ CREAM = "#F7F2EA"    # the glowing element: lettering, glass outline
 WINE = "#B01E1E"     # red wine — lifted from #8C1C1C so it still reads lit
 GOLD = "#D9B65A"     # sparkling, hairlines, small caps
 STRAW = "#E9D48F"    # white wine
+LIT   = "#F2E7CD"    # backlit pour — reads as liquid light, not as a colour
 
 
-def glass(liquid, level=0.52, bubbles=False, scale_stroke=9):
+GLASS_BOX = "0 0 400 700"      # padded box, used by the early variants
+GLASS_BOX_TIGHT = "84 72 232 572"  # cropped to the ink: the element is all glass
+GLASS_RATIO_TIGHT = "232/572"
+
+
+def glass(liquid, level=0.52, bubbles=False, scale_stroke=9, tight=False):
     """Line-art wine glass, cream outline + glowing liquid. viewBox 400x700."""
     # bowl half-width at the liquid surface, interpolated along the bowl curve
     top = 96 + (378 - 96) * (1 - level)
@@ -47,7 +53,8 @@ def glass(liquid, level=0.52, bubbles=False, scale_stroke=9):
                           (214, 210, 5), (160, 348, 5), (238, 258, 4), (200, 330, 6),
                           (176, 190, 4), (224, 168, 5)):
             fizz += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{CREAM}" opacity=".75"/>'
-    return f'''<svg viewBox="0 0 400 700" xmlns="http://www.w3.org/2000/svg">
+    box = GLASS_BOX_TIGHT if tight else GLASS_BOX
+    return f'''<svg viewBox="{box}" xmlns="http://www.w3.org/2000/svg">
   <!-- liquid -->
   <path d="M {200 - hw:.0f},{top:.0f} C {200 - hw + 14:.0f},{top + 60:.0f} {200 - hw + 44:.0f},{top + 130:.0f} 193,378
            L 207,378 C {200 + hw - 44:.0f},{top + 130:.0f} {200 + hw - 14:.0f},{top + 60:.0f} {200 + hw:.0f},{top:.0f} Z"
@@ -215,7 +222,69 @@ C = f"""
 </div>
 """
 
-VARIANTS = {"a": A, "b": B, "c": C}
+def price_row(num_px=420, lbl_px=64, color=None, lbl_color=None):
+    """฿160 · PER GLASS on one baseline — the price as a line, not a sticker."""
+    c = color or CREAM
+    lc = lbl_color or GOLD
+    return f'''<div style="display:flex;align-items:center;justify-content:center;gap:26mm">
+      <div class="bebas" style="font-size:{num_px}px;line-height:.8;letter-spacing:1px;color:{c}">
+        <span style="font-size:.42em;vertical-align:.5em;margin-right:.04em">฿</span>160</div>
+      <div style="width:3px;height:{int(num_px * 0.52)}px;background:{lc};opacity:.7"></div>
+      <div class="kicker" style="font-size:{lbl_px}px;letter-spacing:16px;color:{lc};
+           white-space:nowrap">per glass</div>
+    </div>'''
+
+
+# ------------------------------------------------- variant D: price on black --
+D = f"""
+<div class="sheet">
+  <div class="head" style="margin-top:34mm;font-size:272px">Wine by Glass</div>
+  <div class="rule" style="width:300mm;margin-top:11mm"></div>
+  <div style="margin-top:13mm">{price_row(470, 68)}</div>
+
+  <div style="position:absolute;left:0;right:0;top:228mm;height:482mm">
+    <div class="glow" style="left:24%;top:0;width:52%;height:58%;
+         background:radial-gradient(circle,rgba(242,231,205,.34) 0%,rgba(242,231,205,0) 68%)"></div>
+    <div style="position:absolute;left:50%;top:0;transform:translateX(-50%);
+         height:100%;aspect-ratio:{GLASS_RATIO_TIGHT};z-index:2">{glass(LIT, .55, tight=True)}</div>
+  </div>
+
+  <div style="position:absolute;left:0;right:0;bottom:80mm" class="opts">
+    <span class="it"><span class="dot rd"></span>Red</span><span class="sep">/</span>
+    <span class="it"><span class="dot wh"></span>White</span><span class="sep">/</span>
+    <span class="it"><span class="dot sp"></span>Sparkling</span>
+  </div>
+  <div class="mark" style="position:absolute;left:0;right:0;bottom:30mm">
+    <span class="w">Wine</span> <span class="s">&amp; Whiskey</span></div>
+</div>
+"""
+
+# --------------------------------------------- variant E: price on a red band --
+E = f"""
+<div class="sheet">
+  <div class="head" style="margin-top:34mm;font-size:286px">Wine by Glass</div>
+
+  <div style="position:absolute;left:0;right:0;top:132mm;height:132mm;background:var(--wine);
+       display:flex;align-items:center;justify-content:center">{price_row(400, 60, lbl_color=CREAM)}</div>
+
+  <div style="position:absolute;left:0;right:0;top:288mm;height:430mm">
+    <div class="glow" style="left:24%;top:0;width:52%;height:58%;
+         background:radial-gradient(circle,rgba(242,231,205,.34) 0%,rgba(242,231,205,0) 68%)"></div>
+    <div style="position:absolute;left:50%;top:0;transform:translateX(-50%);
+         height:100%;aspect-ratio:{GLASS_RATIO_TIGHT};z-index:2">{glass(LIT, .55, tight=True)}</div>
+  </div>
+
+  <div style="position:absolute;left:0;right:0;bottom:78mm" class="opts">
+    <span class="it"><span class="dot rd"></span>Red</span><span class="sep">/</span>
+    <span class="it"><span class="dot wh"></span>White</span><span class="sep">/</span>
+    <span class="it"><span class="dot sp"></span>Sparkling</span>
+  </div>
+  <div class="mark" style="position:absolute;left:0;right:0;bottom:28mm">
+    <span class="w">Wine</span> <span class="s">&amp; Whiskey</span></div>
+</div>
+"""
+
+VARIANTS = {"a": A, "b": B, "c": C, "d": D, "e": E}
 
 
 def build(key: str):
