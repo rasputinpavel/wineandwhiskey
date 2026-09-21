@@ -11,8 +11,15 @@ stays brutal in daylight. Same family as the BEER pull-up banner.
 A1 portrait (594 x 841 mm). Fonts are embedded, the glass is vector, so the
 file is self contained and prints crisp at any size.
 
+Each variant is written twice:
+  <stem>.pdf        vector — editable, tiny, for us
+  <stem>_print.pdf  flattened 200 dpi — for the printer and for sending on.
+Hand the printer the _print one. The vector file carries soft-masked gradients
+for the glow, and a flattener that gets those wrong paints an opaque box over
+the artwork; that is how the red price band went missing on the way out.
+
 Run from inside this folder:
-    python3 build.py [a|b|c]
+    python3 build.py [a|b|c|d|e]
 """
 import base64
 import subprocess
@@ -115,7 +122,11 @@ CSS = f"""
     font-size:88px;letter-spacing:14px;line-height:1}}
   .mark .w{{color:var(--wine)}} .mark .s{{color:var(--cream)}}
 
-  .glow{{position:absolute;border-radius:50%;z-index:1;filter:blur(1px)}}
+  /* No blur() here on purpose: a CSS filter makes Chrome wrap the element in a
+     PDF transparency group, and a flattener that mishandles it drops an opaque
+     box over whatever sits behind — that's how the red price band disappeared.
+     The gradient is soft enough on its own. */
+  .glow{{position:absolute;border-radius:50%;z-index:1}}
 """
 
 
@@ -287,6 +298,30 @@ E = f"""
 VARIANTS = {"a": A, "b": B, "c": C, "d": D, "e": E}
 
 
+def flatten(pdf_path: Path, dpi: int = 200) -> Path:
+    """A print file with no transparency left in it.
+
+    The vector PDF carries soft-masked gradients for the glow. Print shops and
+    PDF converters flatten those, and a bad flattener paints an opaque box over
+    the artwork — we lost the red price band that way. Rasterising the page once,
+    ourselves, at 200 dpi (well above large-format norms) means what we see is
+    exactly what comes off the press, on any RIP.
+    """
+    from PIL import Image
+
+    out = pdf_path.with_name(pdf_path.stem + "_print.pdf")
+    tmp = pdf_path.with_name(pdf_path.stem + "_flat")
+    subprocess.run(["pdftoppm", "-png", "-r", str(dpi), "-singlefile",
+                    str(pdf_path), str(tmp)], check=True)
+    png = tmp.with_suffix(".png")
+    img = Image.open(png).convert("RGB")
+    img.save(out, "PDF", resolution=dpi, quality=95)
+    png.unlink()
+    print(f"      {out.name}  {img.width}x{img.height}px @ {dpi}dpi "
+          f"({out.stat().st_size // 1024} KB)")
+    return out
+
+
 def build(key: str):
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Wine &amp; Whiskey — Wine by Glass (A1, night)</title>
@@ -301,6 +336,7 @@ def build(key: str):
     subprocess.run(["pdftoppm", "-png", "-r", "72", "-singlefile",
                     str(pdf_path), str(HERE / f"{stem}_preview")], check=True)
     print(f"[{key}] {stem}.pdf + _preview.png")
+    flatten(pdf_path)
 
 
 if __name__ == "__main__":

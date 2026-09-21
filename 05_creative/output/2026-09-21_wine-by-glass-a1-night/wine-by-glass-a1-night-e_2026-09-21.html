@@ -39,7 +39,11 @@
     font-size:88px;letter-spacing:14px;line-height:1}
   .mark .w{color:var(--wine)} .mark .s{color:var(--cream)}
 
-  .glow{position:absolute;border-radius:50%;z-index:1;filter:blur(1px)}
+  /* No blur() here on purpose: a CSS filter makes Chrome wrap the element in a
+     PDF transparency group, and a flattener that mishandles it drops an opaque
+     box over whatever sits behind — that's how the red price band disappeared.
+     The gradient is soft enough on its own. */
+  .glow{position:absolute;border-radius:50%;z-index:1}
 </style></head><body>
 <div class="sheet">
   <div class="head" style="margin-top:34mm;font-size:286px">Wine by Glass</div>
