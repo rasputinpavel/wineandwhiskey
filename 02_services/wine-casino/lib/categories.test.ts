@@ -16,13 +16,24 @@ describe('worldOf', () => {
     expect(worldOf('  ITALY ')).toBe('old')
   })
 
-  it('returns null when the country is unknown, so the category can be skipped', () => {
+  it('returns null when the country is missing, so the category can be skipped', () => {
     expect(worldOf(null)).toBeNull()
     expect(worldOf('   ')).toBeNull()
   })
 
-  it('treats a country outside the Old World list as New World', () => {
-    expect(worldOf('Thailand')).toBe('new')
+  it('returns null for a country we do not recognise rather than guessing', () => {
+    expect(worldOf('Freedonia')).toBeNull()
+    // A typo must not quietly pay out as New World.
+    expect(worldOf('Itlay')).toBeNull()
+  })
+
+  it('treats a recognised country outside the Old World list as New World', () => {
+    expect(worldOf('Thailand')).toBe('new')   // Monsoon Valley is on our shelf
+    expect(worldOf('Chile')).toBe('new')
+  })
+
+  it('counts Cyprus as Old World', () => {
+    expect(worldOf('Cyprus')).toBe('old')
   })
 })
 

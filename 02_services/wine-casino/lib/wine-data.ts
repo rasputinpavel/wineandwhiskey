@@ -25,10 +25,15 @@ export const COUNTRIES: Option[] = [
   { value: 'uruguay',      ru: 'Уругвай',      en: 'Uruguay' },
   { value: 'lebanon',      ru: 'Ливан',        en: 'Lebanon' },
   { value: 'israel',       ru: 'Израиль',      en: 'Israel' },
+  { value: 'bulgaria',     ru: 'Болгария',     en: 'Bulgaria' },
+  { value: 'cyprus',       ru: 'Кипр',         en: 'Cyprus' },
+  // We are in Phuket and Monsoon Valley is on our own shelf.
+  { value: 'thailand',     ru: 'Таиланд',      en: 'Thailand' },
 ]
 
-/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy. */
-export type GrapeOption = Option & { group: 'red' | 'white' }
+/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy.
+ *  `null` means we genuinely do not know — see grapeOption. */
+export type GrapeOption = Option & { group: 'red' | 'white' | null }
 
 export const GRAPES: GrapeOption[] = [
   { value: 'cabernet sauvignon', ru: 'Cabernet Sauvignon', en: 'Cabernet Sauvignon', group: 'red' },
@@ -79,10 +84,16 @@ const REGIONS: Record<string, string[]> = {
   uruguay:       ['Canelones', 'Maldonado'],
   lebanon:       ['Bekaa Valley'],
   israel:        ['Galilee', 'Judean Hills'],
+  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley'],
+  cyprus:        ['Limassol', 'Paphos', 'Commandaria'],
+  thailand:      ['Hua Hin', 'Khao Yai'],
 }
 
-/** A pool of plausible regions: same country first, then anything, so the
- *  region question stays hard even for a country we have few regions for. */
+/** A pool of plausible regions: the wine's own country first, falling back to
+ *  every region we know when that country has too few. The fallback makes the
+ *  question EASIER — foreign decoys are obvious next to a Bekaa Valley — but a
+ *  one-button board would simply hand the answer over, so it is the better of
+ *  the two bad options. */
 export function regionsFor(country: string | null): Option[] {
   const key = (country ?? '').trim().toLowerCase()
   const own = REGIONS[key] ?? []
@@ -98,10 +109,14 @@ export function countryOption(country: string): Option {
   return COUNTRIES.find(c => c.value === key) ?? { value: key, ru: country, en: country }
 }
 
-export function grapeOption(grape: string): GrapeOption {
+/** For a grape outside our pool, take the colour from the bottle rather than
+ *  guessing. Hints state the grape's colour as fact and guests bet chips on it,
+ *  so a wrong guess is worse than no answer: Kisi is a Georgian amber grape we
+ *  actually stock, and a hardcoded 'red' fallback would have announced it red. */
+export function grapeOption(grape: string, color?: WineColor | null): GrapeOption {
   const key = grape.trim().toLowerCase()
   return GRAPES.find(g => g.value === key)
-      ?? { value: key, ru: grape, en: grape, group: 'red' }
+      ?? { value: key, ru: grape, en: grape, group: grapeGroup(color ?? null) }
 }
 
 /** Rosé is pressed from red grapes; orange from white. Sparkling is mostly

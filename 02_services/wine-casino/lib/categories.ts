@@ -1,3 +1,4 @@
+import { COUNTRIES } from './wine-data'
 import type { CategoryDef, Option } from './types'
 
 // Multipliers follow the classic game: the vaguer the question, the cheaper it
@@ -29,10 +30,18 @@ const OLD_WORLD = new Set([
   'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'greece',
   'hungary', 'georgia', 'moldova', 'romania', 'bulgaria', 'croatia', 'slovenia',
   'switzerland', 'serbia', 'czechia', 'north macedonia', 'armenia',
-  'israel', 'lebanon', 'turkey', 'russia',
+  'israel', 'lebanon', 'turkey', 'russia', 'cyprus',
 ])
 
+/**
+ * `null` means "we do not recognise this country", and the caller skips the
+ * category. Treating an unrecognised string as confidently New World would pay
+ * out on a guess: Cyprus was missing from the set above until a review caught
+ * it, and the world category pays x2 either way.
+ */
 export function worldOf(country: string | null): 'old' | 'new' | null {
-  if (!country || !country.trim()) return null
-  return OLD_WORLD.has(country.trim().toLowerCase()) ? 'old' : 'new'
+  const key = country?.trim().toLowerCase()
+  if (!key) return null
+  if (OLD_WORLD.has(key)) return 'old'
+  return COUNTRIES.some(c => c.value === key) ? 'new' : null
 }
