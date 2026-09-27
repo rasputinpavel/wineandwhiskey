@@ -700,34 +700,35 @@ export const GRAPES: GrapeOption[] = [
 const REGIONS: Record<string, string[]> = {
   france:        ['Bordeaux', 'Bourgogne', 'Rhône', 'Loire', 'Languedoc', 'Provence', 'Champagne', 'Alsace'],
   italy:         ['Toscana', 'Piemonte', 'Veneto', 'Puglia', 'Sicilia', 'Abruzzo', 'Umbria', 'Friuli'],
-  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha'],
-  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão'],
-  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden'],
-  austria:       ['Wachau', 'Burgenland', 'Kamptal'],
-  greece:        ['Santorini', 'Nemea', 'Naoussa'],
-  hungary:       ['Tokaj', 'Eger', 'Villány'],
-  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha'],
-  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă'],
-  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь'],
-  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule'],
-  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan'],
-  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra'],
-  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay'],
-  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay'],
-  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles'],
-  uruguay:       ['Canelones', 'Maldonado'],
-  lebanon:       ['Bekaa Valley'],
-  israel:        ['Galilee', 'Judean Hills'],
-  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley'],
-  cyprus:        ['Limassol', 'Paphos', 'Commandaria'],
-  thailand:      ['Hua Hin', 'Khao Yai'],
+  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha', 'Navarra', 'Jerez'],
+  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão', 'Bairrada', 'Setúbal', 'Lisboa', 'Madeira'],
+  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden', 'Rheinhessen', 'Nahe', 'Franken', 'Württemberg'],
+  austria:       ['Wachau', 'Burgenland', 'Kamptal', 'Kremstal', 'Weinviertel', 'Thermenregion', 'Traisental', 'Carnuntum'],
+  greece:        ['Santorini', 'Nemea', 'Naoussa', 'Mantinia', 'Rapsani', 'Amyndeon', 'Peloponnese', 'Crete'],
+  hungary:       ['Tokaj', 'Eger', 'Villány', 'Szekszárd', 'Badacsony', 'Somló', 'Mátra', 'Balaton'],
+  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha', 'Guria', 'Samegrelo', 'Adjara', 'Lechkhumi'],
+  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă', 'Purcari', 'Cricova', 'Nistreana', 'Bălți', 'Orhei'],
+  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь', 'Тамань', 'Анапа', 'Ставрополье', 'Дагестан'],
+  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule', 'Aconcagua', 'Curicó', 'Limarí', 'Leyda'],
+  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan', 'Uco Valley', 'La Rioja', 'Catamarca', 'Neuquén'],
+  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra', 'Clare Valley', 'Hunter Valley', 'Margaret River', 'Adelaide Hills'],
+  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay', 'Martinborough', 'Nelson', 'Gisborne', 'Waipara', 'Wairarapa'],
+  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay', 'Franschhoek', 'Constantia', 'Robertson', 'Elgin'],
+  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles', 'Santa Barbara', 'Columbia Valley', 'Finger Lakes', 'Russian River Valley'],
+  uruguay:       ['Canelones', 'Maldonado', 'Montevideo', 'Colonia', 'San José', 'Florida', 'Rivera', 'Durazno'],
+  lebanon:       ['Bekaa Valley', 'Batroun', 'Jezzine', 'Zahlé', 'Kefraya', 'Mount Lebanon', 'Chouf', 'Rashaya'],
+  israel:        ['Galilee', 'Judean Hills', 'Golan Heights', 'Shomron', 'Samson', 'Negev', 'Upper Galilee', 'Carmel'],
+  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley', 'Rose Valley', 'Black Sea Coast', 'Sakar', 'Melnik', 'Pomorie'],
+  cyprus:        ['Limassol', 'Paphos', 'Commandaria', 'Troodos', 'Pitsilia', 'Krasochoria', 'Vouni Panagias', 'Laona'],
+  thailand:      ['Hua Hin', 'Khao Yai', 'Chiang Mai', 'Loei', 'Chonburi', 'Nakhon Ratchasima', 'Samut Sakhon', 'Ratchaburi'],
 }
 
-/** A pool of plausible regions: the wine's own country first, falling back to
- *  every region we know when that country has too few. The fallback makes the
- *  question EASIER — foreign decoys are obvious next to a Bekaa Valley — but a
- *  one-button board would simply hand the answer over, so it is the better of
- *  the two bad options. */
+/** A pool of plausible regions, drawn from the wine's own country. Every
+ *  country above carries at least OPTION_COUNTS.region entries precisely so the
+ *  board never has to borrow: a foreign decoy is obvious next to a Bekaa Valley,
+ *  and a guest who eliminates the obvious ones is back to a x8 payout on a
+ *  handful of real candidates. The cross-country fallback remains only for a
+ *  country we have not catalogued at all. */
 export function regionsFor(country: string | null): Option[] {
   const key = (country ?? '').trim().toLowerCase()
   const own = REGIONS[key] ?? []
@@ -971,10 +972,19 @@ describe('regionsFor', () => {
     expect(values).not.toContain('rioja')
   })
 
-  it('widens the pool for a country with too few regions of its own', () => {
-    // Lebanon has one region; a one-button board would hand the answer over.
-    // The floor is the region board size (OPTION_COUNTS.region), not a magic 4.
-    expect(regionsFor('Lebanon').length).toBeGreaterThanOrEqual(8)
+  it('fills an eight-button board from every country we stock, without borrowing', () => {
+    for (const c of COUNTRIES) {
+      expect(regionsFor(c.value).length).toBeGreaterThanOrEqual(8)
+    }
+    // Borrowing shows up as another country's region in the pool. If Georgia or
+    // Thailand had fewer than eight of their own, Bordeaux and Rioja would leak
+    // in as decoys, and a guest could discard them on sight for a x8 payout.
+    expect(regionsFor('Georgia').map(r => r.value)).not.toContain('bordeaux')
+    expect(regionsFor('Thailand').map(r => r.value)).not.toContain('rioja')
+  })
+
+  it('still widens the pool for a country we have not catalogued at all', () => {
+    expect(regionsFor('Freedonia').length).toBeGreaterThanOrEqual(8)
   })
 
   it('lowercases values so they match the stored answer', () => {
@@ -988,7 +998,7 @@ describe('regionsFor', () => {
 - [ ] **Step 6: Run the tests**
 
 Run: `cd 02_services/wine-casino && npx vitest run`
-Expected: PASS — 11 tests in `categories.test.ts`, 15 in `wine-data.test.ts`.
+Expected: PASS — 11 tests in `categories.test.ts`, 16 in `wine-data.test.ts`.
 
 - [ ] **Step 7: Commit**
 
@@ -1120,6 +1130,14 @@ describe('buildOptions', () => {
     }
   })
 
+  it('skips the vintage category for a wine from the current year', () => {
+    // Only one legal window exists for a current-year wine, so the answer would
+    // always sit on the last button. A year older and the window can move again.
+    expect(buildOptions({ ...chianti, vintage: 2026 }, ALL, seeded(3), 2026).vintage).toBeUndefined()
+    expect(buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(3), 2026).vintage)
+      .toHaveLength(OPTION_COUNTS.vintage)
+  })
+
   it('skips a category whose fact is missing', () => {
     const noRegion: WineFacts = { ...chianti, region: null, vintage: null }
     const o = buildOptions(noRegion, ALL, seeded(7))
@@ -1244,7 +1262,12 @@ export function buildOptions(
     out.region = withDistractors(correct, regionsFor(facts.country), OPTION_COUNTS.region, rng)
   }
 
-  if (on('vintage') && facts.vintage) {
+  // A vintage board is `count` consecutive years that must contain the answer
+  // and must not reach into the future. For a wine from the current year those
+  // constraints leave exactly one legal window, so the answer is always the last
+  // button — a guaranteed x10 for anyone who spots it. We cannot pose the
+  // question fairly, so we do not pose it.
+  if (on('vintage') && facts.vintage && facts.vintage < thisYear) {
     out.vintage = vintageWindow(facts.vintage, OPTION_COUNTS.vintage, rng, thisYear)
       .map(y => ({ value: String(y), ru: String(y), en: String(y) }))
   }
@@ -1256,7 +1279,7 @@ export function buildOptions(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/options.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
