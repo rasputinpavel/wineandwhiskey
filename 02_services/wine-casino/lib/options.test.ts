@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildOptions, OPTION_COUNTS } from './options'
+import { DEFAULT_CATEGORIES } from './categories'
 import type { CategoryKey, WineFacts } from './types'
 
 const ALL: CategoryKey[] = ['style', 'world', 'country', 'grape', 'region', 'vintage']
@@ -78,6 +79,30 @@ describe('buildOptions', () => {
       }),
     )
     expect(positions.size).toBeGreaterThan(1)
+  })
+
+  it('never makes a blind guess profitable: every multiplier fits its button count', () => {
+    // Betting A chips on a uniform guess returns A*(m - n)/n, so m > n pays
+    // ignorance better than knowledge. This invariant is the whole reason
+    // region has 8 buttons and vintage has 10.
+    for (const cat of DEFAULT_CATEGORIES) {
+      expect(cat.multiplier).toBeLessThanOrEqual(OPTION_COUNTS[cat.key])
+    }
+  })
+
+  it('treats an off-canon style as missing instead of posting an unwinnable board', () => {
+    const offDry: WineFacts = { ...chianti, style: 'off-dry' }
+    expect(buildOptions(offDry, ALL, seeded(11)).style).toBeUndefined()
+  })
+
+  it('never offers a vintage that has not happened yet', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const o = buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(seed), 2026)
+      for (const opt of o.vintage!) {
+        expect(Number(opt.value)).toBeLessThanOrEqual(2026)
+      }
+      expect(o.vintage!.map(x => x.value)).toContain('2025')
+    }
   })
 
   it('skips a category whose fact is missing', () => {

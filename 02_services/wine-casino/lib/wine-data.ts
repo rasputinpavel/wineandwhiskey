@@ -100,7 +100,9 @@ export function regionsFor(country: string | null): Option[] {
   const rest = Object.entries(REGIONS)
     .filter(([k]) => k !== key)
     .flatMap(([, v]) => v)
-  const names = own.length >= 4 ? own : [...own, ...rest]
+  // Keep OPTION_COUNTS.region (options.ts) in step with this number: below it
+  // the board cannot be filled from one country and has to borrow decoys.
+  const names = own.length >= 8 ? own : [...own, ...rest]
   return names.map(n => ({ value: n.toLowerCase(), ru: n, en: n }))
 }
 
