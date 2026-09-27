@@ -31,6 +31,13 @@ describe('hintTimes', () => {
     expect(hintTimes('easy', 10).every(t => t >= 5)).toBe(true)
   })
 
+  it('drops hints it cannot fit rather than stacking two on the same second', () => {
+    // A ten-second round has room for two of easy's three hints. The old floor
+    // produced [8, 5, 5] and silently threw one away.
+    expect(hintTimes('easy', 10)).toEqual([8, 5])
+    expect(new Set(hintTimes('easy', 10)).size).toBe(hintTimes('easy', 10).length)
+  })
+
   it('counts down — later hints have fewer seconds remaining', () => {
     const t = hintTimes('easy', 120)
     expect(t).toEqual([...t].sort((a, b) => b - a))

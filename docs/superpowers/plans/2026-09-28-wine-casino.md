@@ -1311,6 +1311,13 @@ describe('hintTimes', () => {
     expect(hintTimes('easy', 10).every(t => t >= 5)).toBe(true)
   })
 
+  it('drops hints it cannot fit rather than stacking two on the same second', () => {
+    // A ten-second round has room for two of easy's three hints. The old floor
+    // produced [8, 5, 5] and silently threw one away.
+    expect(hintTimes('easy', 10)).toEqual([8, 5])
+    expect(new Set(hintTimes('easy', 10)).size).toBe(hintTimes('easy', 10).length)
+  })
+
   it('counts down — later hints have fewer seconds remaining', () => {
     const t = hintTimes('easy', 120)
     expect(t).toEqual([...t].sort((a, b) => b - a))
@@ -1413,11 +1420,23 @@ export const HINT_SCHEDULE: Record<Difficulty, number[]> = {
   pro:    [],
 }
 
-/** Times are seconds REMAINING, so the list runs high to low. */
+/**
+ * Times are seconds REMAINING, so the list runs high to low.
+ *
+ * A hint inside the last five seconds cannot be acted on, and two hints landing
+ * on the same tick waste one of them — clamping to a floor used to produce
+ * [8, 5, 5] on a ten-second round. When a round is too short for the full
+ * schedule, show fewer hints rather than stacking them at the buzzer.
+ */
 export function hintTimes(difficulty: Difficulty, roundSeconds: number): number[] {
-  return HINT_SCHEDULE[difficulty].map(t =>
-    Math.max(5, Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)),
-  )
+  const out: number[] = []
+  for (const t of HINT_SCHEDULE[difficulty]) {
+    const scaled = Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)
+    const previous = out.length ? out[out.length - 1] : Infinity
+    if (scaled < 5 || scaled >= previous) continue
+    out.push(scaled)
+  }
+  return out
 }
 
 type Text = { ru: string; en: string }
@@ -1520,7 +1539,7 @@ export function buildHints(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/hints.test.ts`
-Expected: PASS, 15 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Correct the spec**
 

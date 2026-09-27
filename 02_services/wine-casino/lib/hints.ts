@@ -13,11 +13,23 @@ export const HINT_SCHEDULE: Record<Difficulty, number[]> = {
   pro:    [],
 }
 
-/** Times are seconds REMAINING, so the list runs high to low. */
+/**
+ * Times are seconds REMAINING, so the list runs high to low.
+ *
+ * A hint inside the last five seconds cannot be acted on, and two hints landing
+ * on the same tick waste one of them — clamping to a floor used to produce
+ * [8, 5, 5] on a ten-second round. When a round is too short for the full
+ * schedule, show fewer hints rather than stacking them at the buzzer.
+ */
 export function hintTimes(difficulty: Difficulty, roundSeconds: number): number[] {
-  return HINT_SCHEDULE[difficulty].map(t =>
-    Math.max(5, Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)),
-  )
+  const out: number[] = []
+  for (const t of HINT_SCHEDULE[difficulty]) {
+    const scaled = Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)
+    const previous = out.length ? out[out.length - 1] : Infinity
+    if (scaled < 5 || scaled >= previous) continue
+    out.push(scaled)
+  }
+  return out
 }
 
 type Text = { ru: string; en: string }
