@@ -79,7 +79,8 @@ describe('regionsFor', () => {
 
   it('widens the pool for a country with too few regions of its own', () => {
     // Lebanon has one region; a one-button board would hand the answer over.
-    expect(regionsFor('Lebanon').length).toBeGreaterThan(4)
+    // The floor is the region board size (OPTION_COUNTS.region), not a magic 4.
+    expect(regionsFor('Lebanon').length).toBeGreaterThanOrEqual(8)
   })
 
   it('lowercases values so they match the stored answer', () => {
