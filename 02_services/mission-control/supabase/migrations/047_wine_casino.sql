@@ -45,7 +45,9 @@ create table if not exists casino.game_wine (
   vintage     integer,
   style       text,                     -- dry|semi-dry|semi-sweet|sweet
   color       text,                     -- red|white|rose|sparkling|orange
-  abv         numeric(4,1),
+  abv         real,                     -- not numeric: PostgREST serialises numeric
+                                        -- as a JSON string to keep precision, and
+                                        -- the app's types promise a number
   image_url   text,
   answers     jsonb not null default '{}'::jsonb,  -- {category: canonical value}
   options     jsonb not null default '{}'::jsonb,  -- {category: [{value,ru,en}]}
@@ -123,6 +125,19 @@ begin
                   where conname = 'bet_amount_positive'
                     and conrelid = 'casino.bet'::regclass) then
     alter table casino.bet add constraint bet_amount_positive check (amount > 0);
+  end if;
+end $$;
+
+-- If an earlier version of this file was already applied, abv is still numeric
+-- and would reach the app as "13.5" rather than 13.5.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'casino' and table_name = 'game_wine'
+      and column_name = 'abv' and data_type = 'numeric'
+  ) then
+    alter table casino.game_wine alter column abv type real;
   end if;
 end $$;
 

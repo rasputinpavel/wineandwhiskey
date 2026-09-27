@@ -62,6 +62,7 @@ export type BetRow = {
   amount: number
   is_correct: boolean | null
   payout: number | null
+  created_at: string
 }
 
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
