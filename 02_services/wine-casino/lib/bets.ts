@@ -1,3 +1,4 @@
+import { canon } from './text'
 import type { CategoryKey, Option, RoundStatus } from './types'
 
 export type BetLine = { category: CategoryKey; option: string; amount: number }
@@ -37,8 +38,13 @@ export function validateBetSlip(input: {
   for (const line of input.slip) {
     if (!input.activeCategories.includes(line.category)) return { ok: false, error: 'unknown_category' }
 
+    // Compared through the same canon() that settleRound uses to decide whether
+    // a bet won. Two different notions of "the same string" in the two halves of
+    // the money path is how you end up accepting a bet you then score as wrong.
     const board = input.options[line.category] ?? []
-    if (!board.some(o => o.value === line.option)) return { ok: false, error: 'unknown_option' }
+    if (!board.some(o => canon(o.value) === canon(line.option))) {
+      return { ok: false, error: 'unknown_option' }
+    }
 
     if (!Number.isInteger(line.amount) || line.amount < 1) return { ok: false, error: 'bad_amount' }
 

@@ -5,8 +5,19 @@ import type { PlacedBet } from './payout'
 
 const answers = { style: 'dry', world: 'old', country: 'italy', vintage: '2019' }
 
-function run(bets: PlacedBet[], players: Array<{ id: string; chips: number }>, rescueChips = 10) {
-  return settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips })
+// Most cases do not care which row a bet came from, so the helper supplies ids.
+function run(
+  bets: Array<Omit<PlacedBet, 'id'>>,
+  players: Array<{ id: string; chips: number }>,
+  rescueChips = 10,
+) {
+  return settleRound({
+    bets: bets.map((b, i) => ({ id: `bet-${i}`, ...b })),
+    answers,
+    categories: DEFAULT_CATEGORIES,
+    players,
+    rescueChips,
+  })
 }
 
 describe('settleRound', () => {
@@ -59,7 +70,7 @@ describe('settleRound', () => {
 
   it('voids a bet in a category the game does not run', () => {
     const r = settleRound({
-      bets: [{ playerId: 'p1', category: 'vintage', option: '2019', amount: 30 }],
+      bets: [{ id: 'b1', playerId: 'p1', category: 'vintage', option: '2019', amount: 30 }],
       answers,
       categories: DEFAULT_CATEGORIES.filter(c => c.key !== 'vintage'),
       players: [{ id: 'p1', chips: 100 }],
@@ -103,9 +114,47 @@ describe('settleRound', () => {
 
   it('never mutates the inputs', () => {
     const players = [{ id: 'p1', chips: 100 }]
-    const bets: PlacedBet[] = [{ playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
-    run(bets, players)
+    const bets: PlacedBet[] = [{ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
+    settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips: 10 })
     expect(players[0].chips).toBe(100)
-    expect(bets[0]).toEqual({ playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+    expect(bets[0]).toEqual({ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+  })
+
+  it('refuses a bet from someone who is not at the table', () => {
+    // Otherwise a winning orphan is reported as won and credited to nobody.
+    expect(() => settleRound({
+      bets: [{ id: 'b1', playerId: 'ghost', category: 'world', option: 'old', amount: 10 }],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }],
+      rescueChips: 10,
+    })).toThrow(/unknown player/)
+  })
+
+  it('refuses a nonsensical rescue amount instead of handing out negative chips', () => {
+    expect(() => run([], [{ id: 'p1', chips: 0 }], -5)).toThrow(/rescueChips/)
+    expect(() => run([], [{ id: 'p1', chips: 0 }], Number.NaN)).toThrow(/rescueChips/)
+    // Zero is legitimate: it simply turns the rescue off.
+    expect(run([], [{ id: 'p1', chips: 0 }], 0).players[0].chipsAfter).toBe(0)
+  })
+
+  it('returns each settled bet under the id it arrived with', () => {
+    // The reveal route writes outcomes back by this id. Mixed players and
+    // categories, so a reordering inside settleRound would show up here.
+    const r = settleRound({
+      bets: [
+        { id: 'b1', playerId: 'p1', category: 'country', option: 'italy', amount: 10 },
+        { id: 'b2', playerId: 'p2', category: 'world', option: 'new', amount: 20 },
+        { id: 'b3', playerId: 'p1', category: 'style', option: 'dry', amount: 4 },
+      ],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }, { id: 'p2', chips: 100 }],
+      rescueChips: 10,
+    })
+    expect(r.bets.find(b => b.id === 'b1')!.isCorrect).toBe(true)
+    expect(r.bets.find(b => b.id === 'b2')!.isCorrect).toBe(false)
+    expect(r.bets.find(b => b.id === 'b3')!.isCorrect).toBe(true)
+    expect(new Set(r.bets.map(b => b.id)).size).toBe(3)
   })
 })
