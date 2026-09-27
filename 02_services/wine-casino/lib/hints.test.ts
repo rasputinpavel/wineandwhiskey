@@ -62,10 +62,42 @@ describe('buildHints', () => {
   })
 
   it('narrows the vintage to a one-year window either side', () => {
+    // Scoped to the vintage category, because on a full board the cheaper
+    // generators fill every slot before this one is reached — see below.
+    const hints = buildHints(chianti, 'easy', 120, ['vintage'])
+    expect(hints[0].ru).toBe('Год между 2018 и 2020')
+    expect(hints[0].en).toBe('Vintage between 2018 and 2020')
+  })
+
+  it('does not spend an easy round hinting at the richest category', () => {
+    // Vintage pays x10 across ten buttons; a plus/minus one year hint cuts that
+    // to three, worth about +2.3 chips per chip staked to someone who never
+    // tasted the wine. Hinting it every easy round made "wait for the year and
+    // shove" the dominant strategy.
     const hints = buildHints(chianti, 'easy', 120, ALL)
-    const vintage = hints.find(h => h.ru.startsWith('Год'))!
-    expect(vintage.ru).toBe('Год между 2018 и 2020')
-    expect(vintage.en).toBe('Vintage between 2018 and 2020')
+    expect(hints.some(h => h.ru.startsWith('Год'))).toBe(false)
+    expect(hints.map(h => h.ru)).toEqual([
+      'Это Старый Свет',
+      'Сорт красный',
+      'Страна начинается на букву И',
+    ])
+  })
+
+  it('says nothing about a country it has no English spelling for', () => {
+    // countryOption echoes unknown input into both languages, so a country typed
+    // in Cyrillic would tell an English guest "The country starts with И".
+    const unknown: WineFacts = { ...chianti, country: 'Туманная Албания', region: null }
+    const hints = buildHints(unknown, 'easy', 120, ['country', 'region'])
+    expect(hints).toEqual([])
+  })
+
+  it('spells out the grape and region hints in both languages', () => {
+    const hints = buildHints(chianti, 'easy', 120, ['grape', 'region'])
+    expect(hints[0].ru).toBe('Сорт красный')
+    expect(hints[1].ru).toBe('Сорт начинается на букву S')
+    expect(hints[1].en).toBe('The grape starts with S')
+    expect(hints[2].ru).toBe('Регион: Италия, на букву T')
+    expect(hints[2].en).toBe('Region: Italy, starts with T')
   })
 
   it('writes every hint in both languages', () => {

@@ -1,5 +1,5 @@
 import { worldOf } from './categories'
-import { countryOption, grapeOption } from './wine-data'
+import { COUNTRIES, countryOption, grapeOption } from './wine-data'
 import type { CategoryKey, Difficulty, Hint, WineFacts } from './types'
 
 // The schedule is written for a 120-second round and scaled from there, so a
@@ -22,6 +22,10 @@ export const HINT_SCHEDULE: Record<Difficulty, number[]> = {
  * schedule, show fewer hints rather than stacking them at the buzzer.
  */
 export function hintTimes(difficulty: Difficulty, roundSeconds: number): number[] {
+  // Without this, a NaN round length makes every comparison below false, the
+  // loop pushes NaN for every slot, and we are back to several hints landing on
+  // the same (non-)tick.
+  if (!Number.isFinite(roundSeconds) || roundSeconds <= 0) return []
   const out: number[] = []
   for (const t of HINT_SCHEDULE[difficulty]) {
     const scaled = Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)
@@ -35,8 +39,14 @@ export function hintTimes(difficulty: Difficulty, roundSeconds: number): number[
 type Text = { ru: string; en: string }
 type Generator = { category: CategoryKey; make: (f: WineFacts) => Text | null }
 
-/** Ordered vaguest first: the opening hint should barely narrow the field, the
- *  last one should rescue a guest who is completely lost. */
+/** Ordered cheapest-category first, which also happens to run vaguest to most
+ *  specific. The order is a balance decision, not a cosmetic one: a hint is free
+ *  information, so whichever categories get hinted become the profitable places
+ *  to bet. Hinting the cheap ones keeps the expensive ones honest.
+ *
+ *  Hints fill the earliest slots when fewer are available than the schedule has
+ *  room for. That is deliberate — an early hint leaves the guest time to act on
+ *  it, where a late one arrives as the clock runs out. */
 const GENERATORS: Generator[] = [
   {
     category: 'world',
@@ -47,15 +57,6 @@ const GENERATORS: Generator[] = [
         ? { ru: 'Это Старый Свет', en: 'This is the Old World' }
         : { ru: 'Это Новый Свет',  en: 'This is the New World' }
     },
-  },
-  {
-    category: 'vintage',
-    make: f => f.vintage
-      ? {
-          ru: `Год между ${f.vintage - 1} и ${f.vintage + 1}`,
-          en: `Vintage between ${f.vintage - 1} and ${f.vintage + 1}`,
-        }
-      : null,
   },
   {
     category: 'grape',
@@ -76,7 +77,12 @@ const GENERATORS: Generator[] = [
     category: 'country',
     make: f => {
       if (!f.country) return null
-      const c = countryOption(f.country)
+      // countryOption falls back to echoing the admin's raw text into BOTH
+      // languages, so a country typed in Cyrillic would tell an English guest
+      // "The country starts with И". Only hint at countries we have both
+      // spellings for; skip the rest, as worldOf already does.
+      const c = COUNTRIES.find(x => x.value === f.country!.trim().toLowerCase())
+      if (!c) return null
       return {
         ru: `Страна начинается на букву ${c.ru.trim()[0].toUpperCase()}`,
         en: `The country starts with ${c.en.trim()[0].toUpperCase()}`,
@@ -96,15 +102,36 @@ const GENERATORS: Generator[] = [
   },
   {
     category: 'region',
+    // The letter comes from the region string itself, which is also what the
+    // board shows in both languages (our Russian regions are Cyrillic on the
+    // bottle and on the button alike), so the hint and the board always agree.
+    // The country name is only named when we hold both spellings.
     make: f => {
       if (!f.region) return null
       const letter = f.region.trim()[0].toUpperCase()
-      const country = f.country ? countryOption(f.country) : null
+      const country = f.country
+        ? COUNTRIES.find(x => x.value === f.country!.trim().toLowerCase()) ?? null
+        : null
       return {
         ru: country ? `Регион: ${country.ru}, на букву ${letter}` : `Регион на букву ${letter}`,
         en: country ? `Region: ${country.en}, starts with ${letter}` : `Region starts with ${letter}`,
       }
     },
+  },
+  {
+    // Last on purpose. Vintage pays x10 across ten buttons, and a plus/minus one
+    // year hint cuts that to three — a return of roughly +2.3 chips per chip
+    // staked for someone who never tasted the wine. Hinting it on every easy
+    // round made "wait for the year hint and shove" the dominant strategy, which
+    // is the opposite of what this game is for. It only fires now when the
+    // cheaper generators above had nothing to say.
+    category: 'vintage',
+    make: f => f.vintage
+      ? {
+          ru: `Год между ${f.vintage - 1} и ${f.vintage + 1}`,
+          en: `Vintage between ${f.vintage - 1} and ${f.vintage + 1}`,
+        }
+      : null,
   },
 ]
 
