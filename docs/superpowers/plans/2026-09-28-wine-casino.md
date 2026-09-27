@@ -1071,7 +1071,7 @@ export function buildOptions(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/options.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1317,7 +1317,7 @@ export function buildHints(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/hints.test.ts`
-Expected: PASS, 14 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Correct the spec**
 
