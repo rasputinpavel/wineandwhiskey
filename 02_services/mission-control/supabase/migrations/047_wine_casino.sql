@@ -61,7 +61,9 @@ create table if not exists casino.game_wine (
 -- a dangling pointer here would be an expensive bug to chase.
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'game_current_wine_fk') then
+  if not exists (select 1 from pg_constraint
+                  where conname = 'game_current_wine_fk'
+                    and conrelid = 'casino.game'::regclass) then
     alter table casino.game
       add constraint game_current_wine_fk
       foreign key (current_wine_id) references casino.game_wine(id) on delete set null;
@@ -117,7 +119,9 @@ create table if not exists casino.bet (
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'bet_amount_positive') then
+  if not exists (select 1 from pg_constraint
+                  where conname = 'bet_amount_positive'
+                    and conrelid = 'casino.bet'::regclass) then
     alter table casino.bet add constraint bet_amount_positive check (amount > 0);
   end if;
 end $$;

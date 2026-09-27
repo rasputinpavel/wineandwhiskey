@@ -439,6 +439,20 @@ create table if not exists casino.game_wine (
   unique (game_id, order_no)
 );
 
+-- Not declared inline on casino.game because game_wine does not exist yet at
+-- that point. The server reads current_wine_id to know which round is live, so
+-- a dangling pointer here would be an expensive bug to chase.
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'game_current_wine_fk'
+                    and conrelid = 'casino.game'::regclass) then
+    alter table casino.game
+      add constraint game_current_wine_fk
+      foreign key (current_wine_id) references casino.game_wine(id) on delete set null;
+  end if;
+end $$;
+
 -- The only game table a phone reads. One row per game, rewritten by the server.
 create table if not exists casino.round_state (
   game_id          uuid primary key references casino.game(id) on delete cascade,
@@ -461,7 +475,7 @@ create table if not exists casino.player (
   game_id    uuid not null references casino.game(id) on delete cascade,
   nickname   text not null,
   chips      integer not null default 0,
-  lang       text not null default 'ru',
+  lang       text not null default 'ru',      -- ru|en
   joined_at  timestamptz not null default now(),
   unique (game_id, nickname)
 );
@@ -486,9 +500,20 @@ create table if not exists casino.bet (
   unique (player_id, wine_id, category, option)
 );
 
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'bet_amount_positive'
+                    and conrelid = 'casino.bet'::regclass) then
+    alter table casino.bet add constraint bet_amount_positive check (amount > 0);
+  end if;
+end $$;
+
 create index if not exists game_wine_game_idx on casino.game_wine (game_id, order_no);
 create index if not exists player_game_idx    on casino.player (game_id);
 create index if not exists bet_wine_idx       on casino.bet (wine_id);
+-- Every host request looks the game up by this token.
+create unique index if not exists game_host_token_idx on casino.game (host_token);
 
 -- RLS -----------------------------------------------------------------------
 alter table casino.game          enable row level security;
@@ -509,12 +534,35 @@ drop policy if exists player_public_read on casino.player;
 create policy player_public_read on casino.player for select to anon using (true);
 
 grant usage on schema casino to anon, authenticated, service_role;
-grant select on casino.round_state, casino.player to anon, authenticated;
+grant select on casino.round_state, casino.player to anon;
 grant all on all tables in schema casino to service_role;
+-- Future tables in this schema inherit service_role access without another grant.
+alter default privileges in schema casino grant all on tables to service_role;
 
 -- Realtime ------------------------------------------------------------------
-alter publication supabase_realtime add table casino.round_state;
-alter publication supabase_realtime add table casino.player;
+-- ALTER PUBLICATION has no IF NOT EXISTS, and the SQL Editor runs a pasted
+-- script as one transaction: a second run would abort the whole migration on
+-- "already member of publication". Guard both.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'casino'
+      and tablename = 'round_state'
+  ) then
+    alter publication supabase_realtime add table casino.round_state;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'casino'
+      and tablename = 'player'
+  ) then
+    alter publication supabase_realtime add table casino.player;
+  end if;
+end $$;
 ```
 
 - [ ] **Step 2: Commit — do NOT try to apply it**
