@@ -659,10 +659,15 @@ export const COUNTRIES: Option[] = [
   { value: 'uruguay',      ru: 'Уругвай',      en: 'Uruguay' },
   { value: 'lebanon',      ru: 'Ливан',        en: 'Lebanon' },
   { value: 'israel',       ru: 'Израиль',      en: 'Israel' },
+  { value: 'bulgaria',     ru: 'Болгария',     en: 'Bulgaria' },
+  { value: 'cyprus',       ru: 'Кипр',         en: 'Cyprus' },
+  // We are in Phuket and Monsoon Valley is on our own shelf.
+  { value: 'thailand',     ru: 'Таиланд',      en: 'Thailand' },
 ]
 
-/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy. */
-export type GrapeOption = Option & { group: 'red' | 'white' }
+/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy.
+ *  `null` means we genuinely do not know — see grapeOption. */
+export type GrapeOption = Option & { group: 'red' | 'white' | null }
 
 export const GRAPES: GrapeOption[] = [
   { value: 'cabernet sauvignon', ru: 'Cabernet Sauvignon', en: 'Cabernet Sauvignon', group: 'red' },
@@ -713,10 +718,16 @@ const REGIONS: Record<string, string[]> = {
   uruguay:       ['Canelones', 'Maldonado'],
   lebanon:       ['Bekaa Valley'],
   israel:        ['Galilee', 'Judean Hills'],
+  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley'],
+  cyprus:        ['Limassol', 'Paphos', 'Commandaria'],
+  thailand:      ['Hua Hin', 'Khao Yai'],
 }
 
-/** A pool of plausible regions: same country first, then anything, so the
- *  region question stays hard even for a country we have few regions for. */
+/** A pool of plausible regions: the wine's own country first, falling back to
+ *  every region we know when that country has too few. The fallback makes the
+ *  question EASIER — foreign decoys are obvious next to a Bekaa Valley — but a
+ *  one-button board would simply hand the answer over, so it is the better of
+ *  the two bad options. */
 export function regionsFor(country: string | null): Option[] {
   const key = (country ?? '').trim().toLowerCase()
   const own = REGIONS[key] ?? []
@@ -732,10 +743,14 @@ export function countryOption(country: string): Option {
   return COUNTRIES.find(c => c.value === key) ?? { value: key, ru: country, en: country }
 }
 
-export function grapeOption(grape: string): GrapeOption {
+/** For a grape outside our pool, take the colour from the bottle rather than
+ *  guessing. Hints state the grape's colour as fact and guests bet chips on it,
+ *  so a wrong guess is worse than no answer: Kisi is a Georgian amber grape we
+ *  actually stock, and a hardcoded 'red' fallback would have announced it red. */
+export function grapeOption(grape: string, color?: WineColor | null): GrapeOption {
   const key = grape.trim().toLowerCase()
   return GRAPES.find(g => g.value === key)
-      ?? { value: key, ru: grape, en: grape, group: 'red' }
+      ?? { value: key, ru: grape, en: grape, group: grapeGroup(color ?? null) }
 }
 
 /** Rosé is pressed from red grapes; orange from white. Sparkling is mostly
@@ -750,6 +765,7 @@ export function grapeGroup(color: WineColor | null): 'red' | 'white' | null {
 - [ ] **Step 3: Create `lib/categories.ts`**
 
 ```ts
+import { COUNTRIES } from './wine-data'
 import type { CategoryDef, Option } from './types'
 
 // Multipliers follow the classic game: the vaguer the question, the cheaper it
@@ -781,12 +797,20 @@ const OLD_WORLD = new Set([
   'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'greece',
   'hungary', 'georgia', 'moldova', 'romania', 'bulgaria', 'croatia', 'slovenia',
   'switzerland', 'serbia', 'czechia', 'north macedonia', 'armenia',
-  'israel', 'lebanon', 'turkey', 'russia',
+  'israel', 'lebanon', 'turkey', 'russia', 'cyprus',
 ])
 
+/**
+ * `null` means "we do not recognise this country", and the caller skips the
+ * category. Treating an unrecognised string as confidently New World would pay
+ * out on a guess: Cyprus was missing from the set above until a review caught
+ * it, and the world category pays x2 either way.
+ */
 export function worldOf(country: string | null): 'old' | 'new' | null {
-  if (!country || !country.trim()) return null
-  return OLD_WORLD.has(country.trim().toLowerCase()) ? 'old' : 'new'
+  const key = country?.trim().toLowerCase()
+  if (!key) return null
+  if (OLD_WORLD.has(key)) return 'old'
+  return COUNTRIES.some(c => c.value === key) ? 'new' : null
 }
 ```
 
@@ -811,13 +835,24 @@ describe('worldOf', () => {
     expect(worldOf('  ITALY ')).toBe('old')
   })
 
-  it('returns null when the country is unknown, so the category can be skipped', () => {
+  it('returns null when the country is missing, so the category can be skipped', () => {
     expect(worldOf(null)).toBeNull()
     expect(worldOf('   ')).toBeNull()
   })
 
-  it('treats a country outside the Old World list as New World', () => {
-    expect(worldOf('Thailand')).toBe('new')
+  it('returns null for a country we do not recognise rather than guessing', () => {
+    expect(worldOf('Freedonia')).toBeNull()
+    // A typo must not quietly pay out as New World.
+    expect(worldOf('Itlay')).toBeNull()
+  })
+
+  it('treats a recognised country outside the Old World list as New World', () => {
+    expect(worldOf('Thailand')).toBe('new')   // Monsoon Valley is on our shelf
+    expect(worldOf('Chile')).toBe('new')
+  })
+
+  it('counts Cyprus as Old World', () => {
+    expect(worldOf('Cyprus')).toBe('old')
   })
 })
 
@@ -848,12 +883,111 @@ describe('fixed option lists', () => {
 })
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Write the test `lib/wine-data.test.ts`**
 
-Run: `cd 02_services/wine-casino && npx vitest run lib/categories.test.ts`
-Expected: all tests PASS (the implementation was written in Step 3, so this is a verification run, not a red step — the pure-logic red/green cycle starts in Task 4).
+These four helpers are where the canonical-value contract lives. If `countryOption('Italy').value`
+ever stops equalling `'Italy'.trim().toLowerCase()`, a guest who taps the right button is told
+they were wrong and loses chips for it. That is worth its own test file.
 
-- [ ] **Step 6: Commit**
+```ts
+import { describe, it, expect } from 'vitest'
+import { COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
+
+describe('the dictionaries themselves', () => {
+  it('keeps every value canonical, because answers are matched by trim().toLowerCase()', () => {
+    for (const o of [...COUNTRIES, ...GRAPES]) {
+      expect(o.value).toBe(o.value.trim().toLowerCase())
+    }
+  })
+
+  it('has no duplicate country or grape', () => {
+    expect(new Set(COUNTRIES.map(c => c.value)).size).toBe(COUNTRIES.length)
+    expect(new Set(GRAPES.map(g => g.value)).size).toBe(GRAPES.length)
+  })
+
+  it('has enough grapes of each colour to fill a six-button board', () => {
+    expect(GRAPES.filter(g => g.group === 'red').length).toBeGreaterThanOrEqual(6)
+    expect(GRAPES.filter(g => g.group === 'white').length).toBeGreaterThanOrEqual(6)
+  })
+})
+
+describe('countryOption', () => {
+  it('matches regardless of case and padding', () => {
+    expect(countryOption('  ITALY ').value).toBe('italy')
+  })
+
+  it('round-trips the answer key that prepareWine will store', () => {
+    for (const raw of ['Italy', 'georgia', ' Cyprus ', 'Thailand']) {
+      expect(countryOption(raw).value).toBe(raw.trim().toLowerCase())
+    }
+  })
+
+  it('falls back to the raw name for a country we do not stock', () => {
+    const o = countryOption('Freedonia')
+    expect(o.value).toBe('freedonia')
+    expect(o.en).toBe('Freedonia')
+  })
+})
+
+describe('grapeOption', () => {
+  it('finds a known grape and keeps its colour', () => {
+    expect(grapeOption('Merlot').group).toBe('red')
+    expect(grapeOption('riesling').group).toBe('white')
+  })
+
+  it('takes the colour from the bottle for a grape outside the pool', () => {
+    // Kisi is a Georgian amber grape we actually stock.
+    expect(grapeOption('Kisi', 'orange').group).toBe('white')
+    expect(grapeOption('Kisi', 'red').group).toBe('red')
+  })
+
+  it('refuses to invent a colour when both grape and bottle are unknown', () => {
+    expect(grapeOption('Kisi').group).toBeNull()
+    expect(grapeOption('Kisi', null).group).toBeNull()
+  })
+
+  it('round-trips the answer key', () => {
+    expect(grapeOption('  Saperavi ').value).toBe('saperavi')
+  })
+})
+
+describe('grapeGroup', () => {
+  it('pairs rose with red grapes and orange with white', () => {
+    expect(grapeGroup('rose')).toBe('red')
+    expect(grapeGroup('orange')).toBe('white')
+  })
+
+  it('returns null for an unknown colour so the caller can widen the pool', () => {
+    expect(grapeGroup(null)).toBeNull()
+  })
+})
+
+describe('regionsFor', () => {
+  it('uses the country own regions when it has enough', () => {
+    const values = regionsFor('Italy').map(r => r.value)
+    expect(values).toContain('toscana')
+    expect(values).not.toContain('rioja')
+  })
+
+  it('widens the pool for a country with too few regions of its own', () => {
+    // Lebanon has one region; a one-button board would hand the answer over.
+    expect(regionsFor('Lebanon').length).toBeGreaterThan(4)
+  })
+
+  it('lowercases values so they match the stored answer', () => {
+    for (const r of regionsFor('Georgia')) {
+      expect(r.value).toBe(r.ru.trim().toLowerCase())
+    }
+  })
+})
+```
+
+- [ ] **Step 6: Run the tests**
+
+Run: `cd 02_services/wine-casino && npx vitest run`
+Expected: PASS — 11 tests in `categories.test.ts`, 15 in `wine-data.test.ts`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd /Users/pavelrasputin/Desktop/Wine_Whiskey
@@ -1176,6 +1310,19 @@ describe('buildHints', () => {
     expect(hints.map(h => h.at)).toEqual([90, 60, 30].slice(0, hints.length))
   })
 
+  it('never claims a colour for a grape we do not know on a bottle with no colour', () => {
+    const kisi: WineFacts = { ...chianti, grape: 'Kisi', color: null }
+    const hints = buildHints(kisi, 'easy', 120, ALL)
+    expect(hints.some(h => h.ru === 'Сорт красный')).toBe(false)
+    expect(hints.some(h => h.ru === 'Сорт белый')).toBe(false)
+  })
+
+  it('does name the colour when the bottle tells us, even for an unknown grape', () => {
+    const kisi: WineFacts = { ...chianti, grape: 'Kisi', color: 'orange' }
+    const hints = buildHints(kisi, 'easy', 120, ALL)
+    expect(hints.some(h => h.ru === 'Сорт белый')).toBe(true)
+  })
+
   it('returns nothing when no fact can produce a hint', () => {
     const blank: WineFacts = {
       name: 'Mystery', country: null, region: null, grape: null,
@@ -1251,7 +1398,12 @@ const GENERATORS: Generator[] = [
     category: 'grape',
     make: f => {
       if (!f.grape) return null
-      const g = grapeOption(f.grape)
+      // A hint is stated as fact and guests bet chips on it. If the grape is
+      // outside our pool AND the bottle's colour is unrecorded, we genuinely do
+      // not know — skip rather than guess. (Kisi, a Georgian amber grape we
+      // stock, used to be announced as red by a hardcoded fallback.)
+      const g = grapeOption(f.grape, f.color)
+      if (!g.group) return null
       return g.group === 'red'
         ? { ru: 'Сорт красный', en: 'The grape is red' }
         : { ru: 'Сорт белый',   en: 'The grape is white' }
@@ -1317,7 +1469,7 @@ export function buildHints(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/hints.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 15 tests.
 
 - [ ] **Step 5: Correct the spec**
 
