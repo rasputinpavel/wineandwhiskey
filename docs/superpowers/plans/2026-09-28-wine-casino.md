@@ -62,6 +62,7 @@
 │           └── inventory/route.ts          GET ?q= search v_sku_breakdown
 ├── lib/
 │   ├── types.ts          shared types, no imports
+│   ├── text.ts           canon() - one answer to 'is this the same string'
 │   ├── wine-data.ts      country / grape / region dictionaries (RU + EN)
 │   ├── categories.ts     category defs, multipliers, Old/New World map
 │   ├── options.ts        answer-option generator            [tested]
@@ -1607,8 +1608,19 @@ import type { PlacedBet } from './payout'
 
 const answers = { style: 'dry', world: 'old', country: 'italy', vintage: '2019' }
 
-function run(bets: PlacedBet[], players: Array<{ id: string; chips: number }>, rescueChips = 10) {
-  return settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips })
+// Most cases do not care which row a bet came from, so the helper supplies ids.
+function run(
+  bets: Array<Omit<PlacedBet, 'id'>>,
+  players: Array<{ id: string; chips: number }>,
+  rescueChips = 10,
+) {
+  return settleRound({
+    bets: bets.map((b, i) => ({ id: `bet-${i}`, ...b })),
+    answers,
+    categories: DEFAULT_CATEGORIES,
+    players,
+    rescueChips,
+  })
 }
 
 describe('settleRound', () => {
@@ -1705,10 +1717,48 @@ describe('settleRound', () => {
 
   it('never mutates the inputs', () => {
     const players = [{ id: 'p1', chips: 100 }]
-    const bets: PlacedBet[] = [{ playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
-    run(bets, players)
+    const bets: PlacedBet[] = [{ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
+    settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips: 10 })
     expect(players[0].chips).toBe(100)
-    expect(bets[0]).toEqual({ playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+    expect(bets[0]).toEqual({ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+  })
+
+  it('refuses a bet from someone who is not at the table', () => {
+    // Otherwise a winning orphan is reported as won and credited to nobody.
+    expect(() => settleRound({
+      bets: [{ id: 'b1', playerId: 'ghost', category: 'world', option: 'old', amount: 10 }],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }],
+      rescueChips: 10,
+    })).toThrow(/unknown player/)
+  })
+
+  it('refuses a nonsensical rescue amount instead of handing out negative chips', () => {
+    expect(() => run([], [{ id: 'p1', chips: 0 }], -5)).toThrow(/rescueChips/)
+    expect(() => run([], [{ id: 'p1', chips: 0 }], Number.NaN)).toThrow(/rescueChips/)
+    // Zero is legitimate: it simply turns the rescue off.
+    expect(run([], [{ id: 'p1', chips: 0 }], 0).players[0].chipsAfter).toBe(0)
+  })
+
+  it('returns each settled bet under the id it arrived with', () => {
+    // The reveal route writes outcomes back by this id. Mixed players and
+    // categories, so a reordering inside settleRound would show up here.
+    const r = settleRound({
+      bets: [
+        { id: 'b1', playerId: 'p1', category: 'country', option: 'italy', amount: 10 },
+        { id: 'b2', playerId: 'p2', category: 'world', option: 'new', amount: 20 },
+        { id: 'b3', playerId: 'p1', category: 'style', option: 'dry', amount: 4 },
+      ],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }, { id: 'p2', chips: 100 }],
+      rescueChips: 10,
+    })
+    expect(r.bets.find(b => b.id === 'b1')!.isCorrect).toBe(true)
+    expect(r.bets.find(b => b.id === 'b2')!.isCorrect).toBe(false)
+    expect(r.bets.find(b => b.id === 'b3')!.isCorrect).toBe(true)
+    expect(new Set(r.bets.map(b => b.id)).size).toBe(3)
   })
 })
 ```
@@ -1718,12 +1768,62 @@ describe('settleRound', () => {
 Run: `cd 02_services/wine-casino && npx vitest run lib/payout.test.ts`
 Expected: FAIL — `Failed to resolve import "./payout"`.
 
+- [ ] **Step 2b: Create `lib/text.ts` and `lib/text.test.ts`**
+
+`trim().toLowerCase()` decides whether a guest's tap counts as the right answer.
+It was written out by hand in five places; two reviews independently flagged that
+the validator and the settler were relying on separate copies agreeing forever.
+One function, one contract.
+
+```ts
+/**
+ * The single answer to "are these the same string?" for anything a guest bets on.
+ *
+ * A wine's facts are typed by a human, the board is generated from dictionaries,
+ * and the answer key is derived from the facts. All three must agree or a guest
+ * taps the right button and is told they were wrong. Every comparison on that
+ * path goes through here so there is one rule, not several that happen to match.
+ */
+export function canon(s: string): string {
+  return s.trim().toLowerCase()
+}
+```
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { canon } from './text'
+
+describe('canon', () => {
+  it('ignores casing and padding, which is all a human typing a wine name adds', () => {
+    expect(canon('  ITALY ')).toBe('italy')
+    expect(canon('Bekaa Valley')).toBe('bekaa valley')
+  })
+
+  it('leaves an already-canonical value untouched, so it is safe to apply twice', () => {
+    expect(canon(canon('  Saperavi '))).toBe(canon('  Saperavi '))
+  })
+
+  it('does not strip inner spacing or punctuation that distinguishes real answers', () => {
+    expect(canon('Ribera del Duero')).toBe('ribera del duero')
+    expect(canon('Hawke\'s Bay')).toBe('hawke\'s bay')
+  })
+})
+```
+
+Run: `cd 02_services/wine-casino && npx vitest run lib/text.test.ts`
+Expected: PASS, 3 tests.
+
 - [ ] **Step 3: Write `lib/payout.ts`**
 
 ```ts
+import { canon } from './text'
 import type { CategoryDef, CategoryKey, WineAnswers } from './types'
 
 export type PlacedBet = {
+  /** casino.bet.id, carried through untouched. The reveal route writes each
+   *  outcome back to its own row by this id rather than trusting that the
+   *  result array still lines up positionally with what it passed in. */
+  id: string
   playerId: string
   category: CategoryKey
   option: string
@@ -1744,10 +1844,6 @@ export type PlayerSettlement = {
 
 export type SettleResult = { bets: SettledBet[]; players: PlayerSettlement[] }
 
-function canon(s: string): string {
-  return s.trim().toLowerCase()
-}
-
 /**
  * Settle one wine. Chips are only moved here — placing a bet does not touch a
  * player's balance, it just reserves against it (see bets.ts).
@@ -1759,6 +1855,22 @@ export function settleRound(input: {
   players: ReadonlyArray<{ id: string; chips: number }>
   rescueChips: number
 }): SettleResult {
+  // A host can type the rescue amount into the game settings form. Zero is a
+  // legitimate choice (rescue disabled); negative would set a busted guest's
+  // balance below zero while reporting them rescued.
+  if (!Number.isFinite(input.rescueChips) || input.rescueChips < 0) {
+    throw new Error(`settleRound: rescueChips must be a number >= 0, got ${input.rescueChips}`)
+  }
+
+  // A bet whose player is not at the table gets its payout computed and shown,
+  // but credited to nobody — money on a screen that never reaches a balance.
+  // Fail loudly; a caller that hands us a mismatched pair has a bug.
+  const seated = new Set(input.players.map(p => p.id))
+  const orphan = input.bets.find(b => !seated.has(b.playerId))
+  if (orphan) {
+    throw new Error(`settleRound: bet ${orphan.id} is from unknown player ${orphan.playerId}`)
+  }
+
   const multiplier = new Map(input.categories.map(c => [c.key, c.multiplier]))
 
   const bets: SettledBet[] = input.bets.map(b => {
@@ -1797,7 +1909,7 @@ export function settleRound(input: {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/payout.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1929,6 +2041,7 @@ Expected: FAIL — `Failed to resolve import "./bets"`.
 - [ ] **Step 3: Write `lib/bets.ts`**
 
 ```ts
+import { canon } from './text'
 import type { CategoryKey, Option, RoundStatus } from './types'
 
 export type BetLine = { category: CategoryKey; option: string; amount: number }
@@ -1968,8 +2081,13 @@ export function validateBetSlip(input: {
   for (const line of input.slip) {
     if (!input.activeCategories.includes(line.category)) return { ok: false, error: 'unknown_category' }
 
+    // Compared through the same canon() that settleRound uses to decide whether
+    // a bet won. Two different notions of "the same string" in the two halves of
+    // the money path is how you end up accepting a bet you then score as wrong.
     const board = input.options[line.category] ?? []
-    if (!board.some(o => o.value === line.option)) return { ok: false, error: 'unknown_option' }
+    if (!board.some(o => canon(o.value) === canon(line.option))) {
+      return { ok: false, error: 'unknown_option' }
+    }
 
     if (!Number.isInteger(line.amount) || line.amount < 1) return { ok: false, error: 'bad_amount' }
 
@@ -2625,7 +2743,7 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   ])
 
   const placed: PlacedBet[] = betRows.map(b => ({
-    playerId: b.player_id, category: b.category, option: b.option, amount: b.amount,
+    id: b.id, playerId: b.player_id, category: b.category, option: b.option, amount: b.amount,
   }))
 
   const result = settleRound({
@@ -2636,10 +2754,10 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
     rescueChips: game.rescue_chips,
   })
 
-  // Persist bet outcomes. Index-aligned with `placed`, which is index-aligned
-  // with `betRows`, because settleRound maps one-to-one and preserves order.
+  // Each settled bet carries its own casino.bet.id, so nothing here depends on
+  // the arrays still lining up.
   await Promise.all(
-    result.bets.map((b, i) => db.saveBetOutcome(betRows[i].id, b.isCorrect, b.payout)),
+    result.bets.map(b => db.saveBetOutcome(b.id, b.isCorrect, b.payout)),
   )
   await Promise.all(result.players.map(p => db.setPlayerChips(p.id, p.chipsAfter)))
 
