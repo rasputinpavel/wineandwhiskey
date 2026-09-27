@@ -89,7 +89,12 @@ export function buildOptions(
     out.region = withDistractors(correct, regionsFor(facts.country), OPTION_COUNTS.region, rng)
   }
 
-  if (on('vintage') && facts.vintage) {
+  // A vintage board is `count` consecutive years that must contain the answer
+  // and must not reach into the future. For a wine from the current year those
+  // constraints leave exactly one legal window, so the answer is always the last
+  // button — a guaranteed x10 for anyone who spots it. We cannot pose the
+  // question fairly, so we do not pose it.
+  if (on('vintage') && facts.vintage && facts.vintage < thisYear) {
     out.vintage = vintageWindow(facts.vintage, OPTION_COUNTS.vintage, rng, thisYear)
       .map(y => ({ value: String(y), ru: String(y), en: String(y) }))
   }

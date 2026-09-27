@@ -66,34 +66,35 @@ export const GRAPES: GrapeOption[] = [
 const REGIONS: Record<string, string[]> = {
   france:        ['Bordeaux', 'Bourgogne', 'Rhône', 'Loire', 'Languedoc', 'Provence', 'Champagne', 'Alsace'],
   italy:         ['Toscana', 'Piemonte', 'Veneto', 'Puglia', 'Sicilia', 'Abruzzo', 'Umbria', 'Friuli'],
-  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha'],
-  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão'],
-  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden'],
-  austria:       ['Wachau', 'Burgenland', 'Kamptal'],
-  greece:        ['Santorini', 'Nemea', 'Naoussa'],
-  hungary:       ['Tokaj', 'Eger', 'Villány'],
-  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha'],
-  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă'],
-  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь'],
-  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule'],
-  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan'],
-  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra'],
-  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay'],
-  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay'],
-  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles'],
-  uruguay:       ['Canelones', 'Maldonado'],
-  lebanon:       ['Bekaa Valley'],
-  israel:        ['Galilee', 'Judean Hills'],
-  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley'],
-  cyprus:        ['Limassol', 'Paphos', 'Commandaria'],
-  thailand:      ['Hua Hin', 'Khao Yai'],
+  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha', 'Navarra', 'Jerez'],
+  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão', 'Bairrada', 'Setúbal', 'Lisboa', 'Madeira'],
+  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden', 'Rheinhessen', 'Nahe', 'Franken', 'Württemberg'],
+  austria:       ['Wachau', 'Burgenland', 'Kamptal', 'Kremstal', 'Weinviertel', 'Thermenregion', 'Traisental', 'Carnuntum'],
+  greece:        ['Santorini', 'Nemea', 'Naoussa', 'Mantinia', 'Rapsani', 'Amyndeon', 'Peloponnese', 'Crete'],
+  hungary:       ['Tokaj', 'Eger', 'Villány', 'Szekszárd', 'Badacsony', 'Somló', 'Mátra', 'Balaton'],
+  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha', 'Guria', 'Samegrelo', 'Adjara', 'Lechkhumi'],
+  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă', 'Purcari', 'Cricova', 'Nistreana', 'Bălți', 'Orhei'],
+  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь', 'Тамань', 'Анапа', 'Ставрополье', 'Дагестан'],
+  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule', 'Aconcagua', 'Curicó', 'Limarí', 'Leyda'],
+  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan', 'Uco Valley', 'La Rioja', 'Catamarca', 'Neuquén'],
+  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra', 'Clare Valley', 'Hunter Valley', 'Margaret River', 'Adelaide Hills'],
+  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay', 'Martinborough', 'Nelson', 'Gisborne', 'Waipara', 'Wairarapa'],
+  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay', 'Franschhoek', 'Constantia', 'Robertson', 'Elgin'],
+  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles', 'Santa Barbara', 'Columbia Valley', 'Finger Lakes', 'Russian River Valley'],
+  uruguay:       ['Canelones', 'Maldonado', 'Montevideo', 'Colonia', 'San José', 'Florida', 'Rivera', 'Durazno'],
+  lebanon:       ['Bekaa Valley', 'Batroun', 'Jezzine', 'Zahlé', 'Kefraya', 'Mount Lebanon', 'Chouf', 'Rashaya'],
+  israel:        ['Galilee', 'Judean Hills', 'Golan Heights', 'Shomron', 'Samson', 'Negev', 'Upper Galilee', 'Carmel'],
+  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley', 'Rose Valley', 'Black Sea Coast', 'Sakar', 'Melnik', 'Pomorie'],
+  cyprus:        ['Limassol', 'Paphos', 'Commandaria', 'Troodos', 'Pitsilia', 'Krasochoria', 'Vouni Panagias', 'Laona'],
+  thailand:      ['Hua Hin', 'Khao Yai', 'Chiang Mai', 'Loei', 'Chonburi', 'Nakhon Ratchasima', 'Samut Sakhon', 'Ratchaburi'],
 }
 
-/** A pool of plausible regions: the wine's own country first, falling back to
- *  every region we know when that country has too few. The fallback makes the
- *  question EASIER — foreign decoys are obvious next to a Bekaa Valley — but a
- *  one-button board would simply hand the answer over, so it is the better of
- *  the two bad options. */
+/** A pool of plausible regions, drawn from the wine's own country. Every
+ *  country above carries at least OPTION_COUNTS.region entries precisely so the
+ *  board never has to borrow: a foreign decoy is obvious next to a Bekaa Valley,
+ *  and a guest who eliminates the obvious ones is back to a x8 payout on a
+ *  handful of real candidates. The cross-country fallback remains only for a
+ *  country we have not catalogued at all. */
 export function regionsFor(country: string | null): Option[] {
   const key = (country ?? '').trim().toLowerCase()
   const own = REGIONS[key] ?? []

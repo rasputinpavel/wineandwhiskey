@@ -105,6 +105,14 @@ describe('buildOptions', () => {
     }
   })
 
+  it('skips the vintage category for a wine from the current year', () => {
+    // Only one legal window exists for a current-year wine, so the answer would
+    // always sit on the last button. A year older and the window can move again.
+    expect(buildOptions({ ...chianti, vintage: 2026 }, ALL, seeded(3), 2026).vintage).toBeUndefined()
+    expect(buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(3), 2026).vintage)
+      .toHaveLength(OPTION_COUNTS.vintage)
+  })
+
   it('skips a category whose fact is missing', () => {
     const noRegion: WineFacts = { ...chianti, region: null, vintage: null }
     const o = buildOptions(noRegion, ALL, seeded(7))
