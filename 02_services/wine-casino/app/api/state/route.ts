@@ -37,7 +37,9 @@ export async function GET(req: Request) {
     },
     state,
     players: players.map(p => ({ id: p.id, nickname: p.nickname, chips: p.chips })),
-    me: me ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang } : null,
+    me: me
+      ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang, rescued: me.rescued }
+      : null,
     // Outcomes are written to the bet rows a moment before the round flips to
     // 'revealed'. Handing them out during that window lets a guest learn they
     // were right before the host has said a word — and someone always shouts.

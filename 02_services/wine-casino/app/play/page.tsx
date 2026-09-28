@@ -19,6 +19,7 @@ export default function Play() {
   const [session, setSession] = useState<Session | null>(null)
   const [categories, setCategories] = useState<CategoryDef[]>([])
   const [myBets, setMyBets] = useState<MyBet[]>([])
+  const [rescued, setRescued] = useState(false)
   const [lang, setLang] = useState<Lang>('ru')
 
   useEffect(() => {
@@ -37,7 +38,11 @@ export default function Play() {
     const qs = new URLSearchParams({ gameId: session.gameId, playerId: session.playerId })
     fetch(`/api/state?${qs}`, { cache: 'no-store' })
       .then(r => r.json())
-      .then(j => { setCategories(j.game?.categories ?? []); setMyBets(j.myBets ?? []) })
+      .then(j => {
+        setCategories(j.game?.categories ?? [])
+        setMyBets(j.myBets ?? [])
+        setRescued(j.me?.rescued === true)
+      })
       .catch(() => { /* the poller in useLiveGame will retry */ })
   }, [session, state?.wine_id, state?.round_status])
 
@@ -151,6 +156,12 @@ export default function Play() {
               </li>
             ))}
           </ul>
+
+          {rescued && (
+            <p className="rounded-md border border-amber-gold/50 bg-amber-gold/10 px-3 py-2 text-sm text-amber-gold">
+              {t('rescued', lang)}
+            </p>
+          )}
 
           <Leaderboard players={players} highlightId={session.playerId} />
         </section>

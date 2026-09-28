@@ -56,6 +56,9 @@ export async function startRound(game: db.GameRow): Promise<db.WineRow> {
     wines.find(w => w.status === 'pending') ??
     wines[0]
 
+  // Last round's rescue notice is stale the moment a new wine is poured.
+  await db.clearRescued(game.id)
+
   const endsAt = new Date(Date.now() + game.round_seconds * 1000).toISOString()
   const wine = await db.updateWine(target.id, {
     status: 'betting',
@@ -133,7 +136,7 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   await Promise.all(
     result.bets.map(b => db.saveBetOutcome(b.id, b.isCorrect, b.payout)),
   )
-  await Promise.all(result.players.map(p => db.setPlayerChips(p.id, p.chipsAfter)))
+  await Promise.all(result.players.map(p => db.settlePlayer(p.id, p.chipsAfter, p.rescued)))
 
   const revealedWine = await db.updateWine(wine.id, { status: 'revealed' })
   const wines = await db.listWines(game.id)

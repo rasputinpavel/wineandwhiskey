@@ -49,6 +49,8 @@ export type PlayerRow = {
   nickname: string
   chips: number
   lang: 'ru' | 'en'
+  /** True for the round in which the house staked this guest after they busted. */
+  rescued: boolean
   joined_at: string
 }
 
@@ -152,8 +154,17 @@ export async function insertPlayer(row: Partial<PlayerRow>): Promise<PlayerRow> 
   return unwrap(await sbCasino.from('player').insert(row).select().single())
 }
 
-export async function setPlayerChips(id: string, chips: number): Promise<void> {
-  const { error } = await sbCasino.from('player').update({ chips }).eq('id', id)
+/** The one write that moves a guest's money. `rescued` rides along because the
+ *  phone has no other way to explain a jump from nothing back to ten chips. */
+export async function settlePlayer(id: string, chips: number, rescued: boolean): Promise<void> {
+  const { error } = await sbCasino.from('player').update({ chips, rescued }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** Clears last round's rescue notices when a new round opens. */
+export async function clearRescued(gameId: string): Promise<void> {
+  const { error } = await sbCasino.from('player')
+    .update({ rescued: false }).eq('game_id', gameId).eq('rescued', true)
   if (error) throw new Error(error.message)
 }
 
