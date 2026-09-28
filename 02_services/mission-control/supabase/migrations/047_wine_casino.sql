@@ -95,6 +95,10 @@ create table if not exists casino.player (
   nickname   text not null,
   chips      integer not null default 0,
   lang       text not null default 'ru', -- ru|en
+  -- Set when the house staked a busted guest this round, cleared when the next
+  -- round opens. Without it the phone shows a jump from 0 to 10 chips that the
+  -- round's own numbers cannot explain, and the guest assumes a miscount.
+  rescued    boolean not null default false,
   joined_at  timestamptz not null default now(),
   unique (game_id, nickname)
 );
@@ -127,6 +131,9 @@ begin
     alter table casino.bet add constraint bet_amount_positive check (amount > 0);
   end if;
 end $$;
+
+-- Added after the first draft, for a database where 047 already ran.
+alter table casino.player add column if not exists rescued boolean not null default false;
 
 -- If an earlier version of this file was already applied, abv is still numeric
 -- and would reach the app as "13.5" rather than 13.5.

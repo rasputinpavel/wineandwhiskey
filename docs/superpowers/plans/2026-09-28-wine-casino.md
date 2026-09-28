@@ -479,6 +479,10 @@ create table if not exists casino.player (
   nickname   text not null,
   chips      integer not null default 0,
   lang       text not null default 'ru',      -- ru|en
+  -- Set when the house staked a busted guest this round, cleared when the next
+  -- round opens. Without it the phone shows a jump from 0 to 10 chips that the
+  -- round's own numbers cannot explain, and the guest assumes a miscount.
+  rescued    boolean not null default false,
   joined_at  timestamptz not null default now(),
   unique (game_id, nickname)
 );
@@ -511,6 +515,9 @@ begin
     alter table casino.bet add constraint bet_amount_positive check (amount > 0);
   end if;
 end $$;
+
+-- Added after the first draft, for a database where 047 already ran.
+alter table casino.player add column if not exists rescued boolean not null default false;
 
 create index if not exists game_wine_game_idx on casino.game_wine (game_id, order_no);
 create index if not exists player_game_idx    on casino.player (game_id);
@@ -2467,6 +2474,8 @@ export type PlayerRow = {
   nickname: string
   chips: number
   lang: 'ru' | 'en'
+  /** True for the round in which the house staked this guest after they busted. */
+  rescued: boolean
   joined_at: string
 }
 
@@ -2570,8 +2579,17 @@ export async function insertPlayer(row: Partial<PlayerRow>): Promise<PlayerRow> 
   return unwrap(await sbCasino.from('player').insert(row).select().single())
 }
 
-export async function setPlayerChips(id: string, chips: number): Promise<void> {
-  const { error } = await sbCasino.from('player').update({ chips }).eq('id', id)
+/** The one write that moves a guest's money. `rescued` rides along because the
+ *  phone has no other way to explain a jump from nothing back to ten chips. */
+export async function settlePlayer(id: string, chips: number, rescued: boolean): Promise<void> {
+  const { error } = await sbCasino.from('player').update({ chips, rescued }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** Clears last round's rescue notices when a new round opens. */
+export async function clearRescued(gameId: string): Promise<void> {
+  const { error } = await sbCasino.from('player')
+    .update({ rescued: false }).eq('game_id', gameId).eq('rescued', true)
   if (error) throw new Error(error.message)
 }
 
@@ -2767,6 +2785,9 @@ export async function startRound(game: db.GameRow): Promise<db.WineRow> {
     wines.find(w => w.status === 'pending') ??
     wines[0]
 
+  // Last round's rescue notice is stale the moment a new wine is poured.
+  await db.clearRescued(game.id)
+
   const endsAt = new Date(Date.now() + game.round_seconds * 1000).toISOString()
   const wine = await db.updateWine(target.id, {
     status: 'betting',
@@ -2844,7 +2865,7 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   await Promise.all(
     result.bets.map(b => db.saveBetOutcome(b.id, b.isCorrect, b.payout)),
   )
-  await Promise.all(result.players.map(p => db.setPlayerChips(p.id, p.chipsAfter)))
+  await Promise.all(result.players.map(p => db.settlePlayer(p.id, p.chipsAfter, p.rescued)))
 
   const revealedWine = await db.updateWine(wine.id, { status: 'revealed' })
   const wines = await db.listWines(game.id)
@@ -3010,7 +3031,9 @@ export async function GET(req: Request) {
     },
     state,
     players: players.map(p => ({ id: p.id, nickname: p.nickname, chips: p.chips })),
-    me: me ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang } : null,
+    me: me
+      ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang, rescued: me.rescued }
+      : null,
     // Outcomes are written to the bet rows a moment before the round flips to
     // 'revealed'. Handing them out during that window lets a guest learn they
     // were right before the host has said a word — and someone always shouts.
@@ -4443,6 +4466,7 @@ export default function Play() {
   const [session, setSession] = useState<Session | null>(null)
   const [categories, setCategories] = useState<CategoryDef[]>([])
   const [myBets, setMyBets] = useState<MyBet[]>([])
+  const [rescued, setRescued] = useState(false)
   const [lang, setLang] = useState<Lang>('ru')
 
   useEffect(() => {
@@ -4461,7 +4485,11 @@ export default function Play() {
     const qs = new URLSearchParams({ gameId: session.gameId, playerId: session.playerId })
     fetch(`/api/state?${qs}`, { cache: 'no-store' })
       .then(r => r.json())
-      .then(j => { setCategories(j.game?.categories ?? []); setMyBets(j.myBets ?? []) })
+      .then(j => {
+        setCategories(j.game?.categories ?? [])
+        setMyBets(j.myBets ?? [])
+        setRescued(j.me?.rescued === true)
+      })
       .catch(() => { /* the poller in useLiveGame will retry */ })
   }, [session, state?.wine_id, state?.round_status])
 
@@ -4575,6 +4603,12 @@ export default function Play() {
               </li>
             ))}
           </ul>
+
+          {rescued && (
+            <p className="rounded-md border border-amber-gold/50 bg-amber-gold/10 px-3 py-2 text-sm text-amber-gold">
+              {t('rescued', lang)}
+            </p>
+          )}
 
           <Leaderboard players={players} highlightId={session.playerId} />
         </section>
