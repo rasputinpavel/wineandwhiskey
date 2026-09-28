@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useState } from 'react'
 import { HintFeed } from '@/components/HintFeed'
 import { Leaderboard } from '@/components/Leaderboard'
 import { QrPanel } from '@/components/QrPanel'
@@ -19,8 +20,16 @@ export function ScreenClient({
   // the former should still be showing the join QR.
   const beforeFirstWine = gameStatus === 'lobby' && (state?.round_no ?? 0) === 0
 
+  // Where guests actually type. The screen knows its own address, so this is
+  // right even when NEXT_PUBLIC_CASINO_URL was never set.
+  const [joinHost, setJoinHost] = useState('')
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_CASINO_URL || window.location.origin
+    setJoinHost(base.replace(/^https?:\/\//, '').replace(/\/$/, ''))
+  }, [])
+
   return (
-    <main className="min-h-screen bg-felt p-10">
+    <main className="min-h-screen bg-felt p-10 pb-28">
       <header className="mb-8 flex items-start justify-between">
         <h1 className="font-display text-6xl tracking-display text-amber-gold">{title}</h1>
         {state?.wine_id && (
@@ -62,7 +71,10 @@ export function ScreenClient({
       {status === 'betting' && (
         <div className="grid grid-cols-3 gap-10">
           <div className="col-span-2">
-            <h2 className="mb-4 font-heading text-3xl text-warm-white">Place your bets</h2>
+            <h2 className="mb-1 font-heading text-3xl text-warm-white">Place your bets</h2>
+            <p className="mb-4 text-xl text-pale-stone">
+              On your phone — nothing to tap here
+            </p>
             <div className="grid grid-cols-2 gap-3">
               {categories.map(c => (
                 <div key={c.key} className="rounded-lg border border-pale-stone/25 px-4 py-3">
@@ -100,6 +112,19 @@ export function ScreenClient({
           </div>
           <Leaderboard players={players} max={12} />
         </div>
+      )}
+
+      {/* The join details belong on screen the whole evening, not just in the
+          lobby: a guest arriving mid-round has no other way to find the PIN,
+          and the betting board above reads like an invitation to tap the TV. */}
+      {gameStatus !== 'finished' && !beforeFirstWine && (
+        <footer className="fixed inset-x-0 bottom-0 flex items-center justify-center gap-8 border-t border-pale-stone/15 bg-felt-light/80 px-8 py-3 backdrop-blur">
+          <span className="text-lg text-pale-stone">Ставки с телефона · Bet from your phone</span>
+          <span className="font-heading text-xl text-warm-white">{joinHost}</span>
+          <span className="text-lg text-pale-stone">
+            PIN <b className="font-display text-3xl tracking-display text-amber-gold">{pin}</b>
+          </span>
+        </footer>
       )}
 
       {gameStatus === 'finished' && (
