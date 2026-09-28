@@ -1464,7 +1464,7 @@ Expected: FAIL — `Failed to resolve import "./hints"`.
 
 ```ts
 import { worldOf } from './categories'
-import { COUNTRIES, countryOption, grapeOption } from './wine-data'
+import { COUNTRIES, grapeOption } from './wine-data'
 import type { CategoryKey, Difficulty, Hint, WineFacts } from './types'
 
 // The schedule is written for a 120-second round and scaled from there, so a
@@ -1624,7 +1624,7 @@ export function buildHints(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/hints.test.ts`
-Expected: PASS, 20 tests.
+Expected: PASS, 19 tests.
 
 - [ ] **Step 5: Correct the spec**
 

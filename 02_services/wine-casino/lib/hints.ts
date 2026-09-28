@@ -1,5 +1,5 @@
 import { worldOf } from './categories'
-import { COUNTRIES, countryOption, grapeOption } from './wine-data'
+import { COUNTRIES, grapeOption } from './wine-data'
 import type { CategoryKey, Difficulty, Hint, WineFacts } from './types'
 
 // The schedule is written for a 120-second round and scaled from there, so a
