@@ -6,10 +6,19 @@ import QRCode from 'qrcode'
  *  plus the PIN in huge digits for anyone whose camera will not cooperate. */
 export function QrPanel({ pin }: { pin: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const base = process.env.NEXT_PUBLIC_CASINO_URL ?? ''
-  const joinUrl = `${base}/?pin=${pin}`
+  const [joinUrl, setJoinUrl] = useState('')
 
   useEffect(() => {
+    // The env var is baked in at build time and can be missing; the TV always
+    // knows its own origin. Without a scheme the QR encodes bare text and a
+    // phone camera offers nothing to tap, which strands guests at the one
+    // moment the thing has to work.
+    const base = process.env.NEXT_PUBLIC_CASINO_URL || window.location.origin
+    setJoinUrl(`${base}/?pin=${pin}`)
+  }, [pin])
+
+  useEffect(() => {
+    if (!joinUrl) return
     QRCode.toDataURL(joinUrl, { width: 480, margin: 1, color: { dark: '#14342B', light: '#F5F0EB' } })
       .then(setDataUrl)
       .catch(() => setDataUrl(null))
