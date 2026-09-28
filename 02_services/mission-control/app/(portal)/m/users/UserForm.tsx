@@ -7,7 +7,7 @@ import { useState } from 'react'
 export type SectionOpt = { key: string; label: string; items: { slug: string; name: string }[] }
 
 export type ExistingUser = {
-  id: string; login: string; is_admin: boolean; disabled: boolean; allowed: '*' | string[]
+  id: string; login: string; is_admin: boolean; disabled: boolean; allowed: '*' | string[]; sales_name?: string | null
 }
 
 type Props = { sections: SectionOpt[]; user?: ExistingUser }
@@ -23,6 +23,7 @@ export function UserForm({ sections, user }: Props) {
   const [selected, setSelected] = useState<Set<string>>(
     new Set(Array.isArray(user?.allowed) ? user!.allowed : []),
   )
+  const [salesName, setSalesName] = useState(user?.sales_name ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
@@ -45,7 +46,7 @@ export function UserForm({ sections, user }: Props) {
     const allowed = buildAllowed()
     try {
       if (isEdit) {
-        const body: Record<string, unknown> = { allowed, is_admin: isAdmin }
+        const body: Record<string, unknown> = { allowed, is_admin: isAdmin, sales_name: salesName || null }
         if (password) body.password = password
         const res = await fetch(`/api/m/users/${user!.id}`, {
           method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -55,7 +56,7 @@ export function UserForm({ sections, user }: Props) {
       } else {
         const res = await fetch('/api/m/users', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ login, password, allowed, is_admin: isAdmin }),
+          body: JSON.stringify({ login, password, allowed, is_admin: isAdmin, sales_name: salesName || null }),
         })
         if (!res.ok) { const j = await res.json().catch(() => ({})); setError(j.error || 'Failed'); setBusy(false); return }
         // Show the password once, then let the admin return to the list.
@@ -90,6 +91,11 @@ export function UserForm({ sections, user }: Props) {
 
       <label className="mb-1 block text-sm font-medium">{isEdit ? 'New password (leave blank to keep)' : 'Password'}</label>
       <input value={password} onChange={e => setPassword(e.target.value)} type="text" autoComplete="off"
+        className="mb-4 w-full rounded border border-pale-stone px-3 py-2 text-sm" />
+
+      <label className="mb-1 block text-sm font-medium">Sales name</label>
+      <input value={salesName} onChange={e => setSalesName(e.target.value)}
+        placeholder="Name shown on leads this person owns (e.g. Grace)"
         className="mb-4 w-full rounded border border-pale-stone px-3 py-2 text-sm" />
 
       <label className="mb-4 flex items-center gap-2 text-sm">

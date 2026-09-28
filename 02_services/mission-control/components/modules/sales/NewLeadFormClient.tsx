@@ -8,7 +8,9 @@ import {
 } from '@/lib/sales/config'
 import { LEAD_STAGES, LEAD_STAGE_LABEL, type LeadStage } from '@/lib/sales/types'
 
-export function NewLeadFormClient() {
+type Duplicate = { id: string; name: string; assignee: string | null }
+
+export function NewLeadFormClient({ salesName }: { salesName: string }) {
   const router = useRouter()
   const [name, setName]                 = useState('')
   const [kind, setKind]                 = useState<BusinessKind>('restaurant')
@@ -17,10 +19,12 @@ export function NewLeadFormClient() {
   const [address, setAddress]           = useState('')
   const [phone, setPhone]               = useState('')
   const [website, setWebsite]           = useState('')
-  const [assignee, setAssignee]         = useState('')
+  const [assignee, setAssignee]         = useState(salesName)
   const [notes, setNotes]               = useState('')
   const [submitting, setSubmitting]     = useState(false)
   const [error, setError]               = useState<string | null>(null)
+  const [duplicate, setDuplicate]       = useState<Duplicate | null>(null)
+  const [claiming, setClaiming]         = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,6 +32,7 @@ export function NewLeadFormClient() {
     if (!name.trim()) { setError('Name is required'); return }
 
     setSubmitting(true)
+    setDuplicate(null)
     try {
       const res = await fetch('/api/m/sales/leads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -42,12 +47,30 @@ export function NewLeadFormClient() {
         }),
       })
       const json = await res.json()
+      if (res.status === 409 && json.error === 'duplicate') { setDuplicate(json.duplicate as Duplicate); return }
       if (!res.ok) { setError(json.error ?? 'Failed to create lead'); return }
       router.push(`/m/sales/${json.lead.id}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function claim() {
+    if (!duplicate) return
+    setClaiming(true); setError(null)
+    try {
+      const res = await fetch(`/api/m/sales/leads/${duplicate.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignee: salesName }),
+      })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setError(j.error ?? 'Failed to claim'); return }
+      router.push(`/m/sales/${duplicate.id}`)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setClaiming(false)
     }
   }
 
@@ -119,6 +142,28 @@ export function NewLeadFormClient() {
           className="w-full text-sm border border-pale-stone bg-warm-white rounded-sm px-2 py-1.5 leading-relaxed"
         />
       </Field>
+
+      {duplicate && (
+        <div className="text-sm bg-amber-gold/10 border border-amber-gold/50 rounded-sm px-3 py-3 space-y-2">
+          {duplicate.assignee ? (
+            <div>Lead <strong>“{duplicate.name}”</strong> already exists — assigned to <strong>{duplicate.assignee}</strong>.</div>
+          ) : (
+            <div>Lead <strong>“{duplicate.name}”</strong> already exists and is unassigned.</div>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => router.push(`/m/sales/${duplicate.id}`)}
+              className="text-xs px-3 py-1.5 border border-pale-stone text-graphite rounded-sm hover:border-wine-red hover:text-wine-red">
+              Open lead
+            </button>
+            {!duplicate.assignee && salesName && (
+              <button type="button" onClick={claim} disabled={claiming}
+                className="text-xs px-3 py-1.5 bg-wine-red text-warm-white rounded-sm hover:bg-burgundy-deep disabled:opacity-50">
+                {claiming ? 'Claiming…' : 'Claim it'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && <div className="text-xs text-wine-red bg-wine-red/8 border border-wine-red/30 rounded-sm px-3 py-2">{error}</div>}
 

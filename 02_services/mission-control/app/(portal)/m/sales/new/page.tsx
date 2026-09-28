@@ -1,12 +1,16 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
+import { verifyToken, COOKIE_NAME } from '@/lib/auth'
 import { NewLeadFormClient } from '@/components/modules/sales/NewLeadFormClient'
 
 export const dynamic = 'force-dynamic'
 
-export default function NewLeadPage() {
+export default async function NewLeadPage() {
   const item = findItem('sales-crm')!
+  const token = (await cookies()).get(COOKIE_NAME)?.value
+  const user = token ? await verifyToken(token) : null
   return (
     <>
       <PaneHeader
@@ -28,7 +32,7 @@ export default function NewLeadPage() {
               For leads that didn’t come from Apify — referrals, walk-ins, places not on Google Maps yet.
             </p>
           </div>
-          <NewLeadFormClient />
+          <NewLeadFormClient salesName={user?.sales_name ?? ''} />
         </div>
       </div>
     </>

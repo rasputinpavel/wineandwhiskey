@@ -11,6 +11,7 @@ import { sbSales } from '@/lib/supabase'
 import { logActivity } from '@/lib/sales/queries'
 import { LEAD_STAGES, ACTIVE_PIPELINE_STAGES, type LeadStage } from '@/lib/sales/types'
 import { BUSINESS_KINDS, type BusinessKind } from '@/lib/sales/config'
+import { normalizeName } from '@/lib/sales/dedup'
 
 export async function POST(req: Request) {
   let body: Record<string, unknown>
@@ -19,6 +20,19 @@ export async function POST(req: Request) {
   // name is the only hard requirement.
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 })
+
+  // Duplicate guard: block manual creation of a lead whose normalized name
+  // already exists. Owned → the form shows the owner; unassigned → the form
+  // offers to claim it. Matches the generated name_norm column (migration 033).
+  const norm = normalizeName(name)
+  const { data: dup } = await sbSales.from('lead')
+    .select('id, name, assignee').eq('name_norm', norm).limit(1).maybeSingle()
+  if (dup) {
+    return NextResponse.json(
+      { error: 'duplicate', duplicate: { id: dup.id, name: dup.name, assignee: dup.assignee ?? null } },
+      { status: 409 },
+    )
+  }
 
   const business_kind: BusinessKind =
     typeof body.business_kind === 'string' && (BUSINESS_KINDS as readonly string[]).includes(body.business_kind)

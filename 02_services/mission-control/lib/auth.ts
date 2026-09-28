@@ -11,6 +11,7 @@ export type User = {
   allowed: '*' | string[]
   is_admin?: boolean
   disabled?: boolean
+  sales_name?: string
   // Exactly one is set depending on source: env users carry plaintext `password`,
   // DB users carry `password_hash`.
   password?: string
@@ -35,6 +36,7 @@ function parseEnvUsers(): User[] {
             password: u.password,
             allowed: u.allowed === '*' ? '*' : Array.isArray(u.allowed) ? u.allowed : [],
             is_admin: u.is_admin === true,
+            sales_name: typeof u.sales_name === 'string' ? u.sales_name : undefined,
           }))
       }
     } catch {}

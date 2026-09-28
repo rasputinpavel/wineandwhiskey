@@ -10,6 +10,7 @@ export type DbUser = {
   allowed: '*' | string[]
   is_admin: boolean
   disabled: boolean
+  sales_name: string | null
   created_at: string
   updated_at: string
 }
@@ -26,6 +27,7 @@ function toAuthUser(r: DbUser): User {
     allowed: r.allowed === '*' ? '*' : Array.isArray(r.allowed) ? r.allowed : [],
     is_admin: r.is_admin,
     disabled: r.disabled,
+    sales_name: r.sales_name ?? undefined,
     password_hash: r.password_hash,
   }
 }
@@ -79,13 +81,14 @@ export type CreateInput = {
   password: string
   allowed: '*' | string[]
   is_admin: boolean
+  sales_name?: string | null
 }
 
 // Returns { error } for a duplicate login so the route can answer 409.
 export async function createUser(input: CreateInput): Promise<{ user?: PublicUser; error?: string }> {
   const password_hash = await hashPassword(input.password)
   const { data, error } = await sbPortal.from('users')
-    .insert({ login: input.login, password_hash, allowed: input.allowed, is_admin: input.is_admin })
+    .insert({ login: input.login, password_hash, allowed: input.allowed, is_admin: input.is_admin, sales_name: input.sales_name ?? null })
     .select('*').single()
   if (error) {
     if (error.code === '23505') return { error: 'duplicate' } // unique_violation on login
@@ -99,6 +102,7 @@ export type UpdateInput = {
   allowed?: '*' | string[]
   is_admin?: boolean
   disabled?: boolean
+  sales_name?: string | null
   password?: string // when set, re-hash
 }
 
@@ -107,6 +111,7 @@ export async function updateUser(id: string, input: UpdateInput): Promise<{ user
   if (input.allowed !== undefined) patch.allowed = input.allowed
   if (input.is_admin !== undefined) patch.is_admin = input.is_admin
   if (input.disabled !== undefined) patch.disabled = input.disabled
+  if (input.sales_name !== undefined) patch.sales_name = input.sales_name
   if (input.password) patch.password_hash = await hashPassword(input.password)
   if (Object.keys(patch).length === 0) return { error: 'nothing to update' }
 
