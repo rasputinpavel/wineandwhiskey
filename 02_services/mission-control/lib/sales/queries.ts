@@ -64,6 +64,20 @@ export async function listScrapeRuns(limit = 30): Promise<ScrapeRun[]> {
   return (data ?? []) as ScrapeRun[]
 }
 
+// Everyone who owns at least one lead. Feeds the owner dropdown together with
+// the portal users' sales_name, so a manager can be picked before their first
+// lead is assigned. assignee is free text, so this is the only record of the
+// people who were typed in by hand (Irina, Benz — no portal logins).
+export async function listLeadAssignees(): Promise<string[]> {
+  const { data, error } = await sbSales
+    .from('lead')
+    .select('assignee')
+    .not('assignee', 'is', null)
+  if (error) throw error
+  const names = (data ?? []).map(r => (r as { assignee: string }).assignee.trim()).filter(Boolean)
+  return [...new Set(names)]
+}
+
 export async function getScrapeRun(id: string): Promise<ScrapeRun | null> {
   const { data, error } = await sbSales.from('scrape_run').select('*').eq('id', id).maybeSingle()
   if (error) throw error

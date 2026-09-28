@@ -13,12 +13,18 @@ type SortDir = 'asc' | 'desc'
 type SpRecord = Record<string, string | string[] | undefined>
 
 export function LeadsTableClient({
-  leads, sp, sort, dir,
+  leads, sp, sort, dir, assigneeOptions = [], isFiltered = false,
 }: {
   leads: Lead[]
   sp?: SpRecord
   sort?: string
   dir?: SortDir
+  // Empty because of a filter, not because the CRM is empty — a manager with no
+  // leads of their own shouldn't be told to go and run a scrape.
+  isFiltered?: boolean
+  // Names already in use — offered as suggestions so the free-text owner field
+  // doesn't drift into Irina / irina / Irna, which would split the filter.
+  assigneeOptions?: string[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -53,13 +59,18 @@ export function LeadsTableClient({
   if (leads.length === 0) {
     return (
       <div className="border border-pale-stone rounded-md bg-warm-white p-8 text-center text-graphite text-sm">
-        No leads yet. Hit «New scrape ↗» above to import some.
+        {isFiltered
+          ? 'No leads match these filters.'
+          : 'No leads yet. Hit «New scrape ↗» above to import some.'}
       </div>
     )
   }
 
   return (
     <div className="border border-pale-stone rounded-md overflow-hidden bg-warm-white">
+      <datalist id="lead-assignees">
+        {assigneeOptions.map(o => <option key={o} value={o} />)}
+      </datalist>
       <table className="w-full text-sm table-fixed">
         <colgroup>
           <col className="w-[28%]" />
@@ -135,6 +146,7 @@ export function LeadsTableClient({
                     defaultValue={lead.assignee ?? ''}
                     disabled={pending}
                     placeholder="—"
+                    list="lead-assignees"
                     onBlur={e => {
                       const v = e.currentTarget.value.trim()
                       if (v !== (lead.assignee ?? '')) patch(lead.id, { assignee: v || null })

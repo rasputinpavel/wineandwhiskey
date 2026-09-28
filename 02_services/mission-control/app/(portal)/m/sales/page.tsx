@@ -4,7 +4,9 @@ import { findItem } from '@/lib/registry'
 import { PaneHeader } from '@/components/shell/PaneHeader'
 import { sbSales } from '@/lib/supabase'
 import { verifyToken, COOKIE_NAME } from '@/lib/auth'
-import { resolveOwner } from '@/lib/sales/dedup'
+import { resolveOwner, resolveOwnerFilter, UNASSIGNED } from '@/lib/sales/dedup'
+import { listLeadAssignees } from '@/lib/sales/queries'
+import { listUsers } from '@/lib/portal/users-store'
 import {
   LEAD_STAGES, LEAD_STAGE_LABEL, ACTIVE_PIPELINE_STAGES,
   type Lead, isStale,
@@ -40,6 +42,8 @@ type SearchParams = {
   // many were checked.
   priceLevel?: string | string[]
   owner?: 'mine' | 'all'
+  // A specific person from the owner dropdown, or UNASSIGNED for ownerless leads.
+  assignee?: string
 }
 
 const PRICE_LEVELS = ['$', '$$', '$$$', '$$$$'] as const
@@ -50,6 +54,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const currentUser = token ? await verifyToken(token) : null
   const salesName = currentUser?.sales_name
   const owner = resolveOwner({ paramOwner: sp.owner, salesName, isAdmin: currentUser?.is_admin })
+  const ownerFilter = resolveOwnerFilter({
+    paramOwner: sp.owner, paramAssignee: sp.assignee,
+    salesName, isAdmin: currentUser?.is_admin,
+  })
   const item = findItem('sales-crm')!
   const view: 'table' | 'kanban' = sp.view === 'kanban' ? 'kanban' : 'table'
   const sort: SalesSortCol = parseSort(sp.sort, SORT_COLS, 'updated_at')
@@ -70,9 +78,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (sp.district) {
     query = query.eq('district', sp.district)
   }
-  if (owner === 'mine' && salesName) {
-    query = query.eq('assignee', salesName)
-  }
+  if (ownerFilter.kind === 'person')          query = query.eq('assignee', ownerFilter.name)
+  else if (ownerFilter.kind === 'unassigned') query = query.is('assignee', null)
   if (sp.q) {
     query = query.ilike('name', `%${sp.q}%`)
   }
@@ -94,7 +101,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const priceLevels = normalizePriceLevels(sp.priceLevel)
   if (priceLevels.length > 0) query = query.in('price_level', priceLevels)
 
-  const { data, error } = await query.limit(500)
+  const [{ data, error }, ownerOptions] = await Promise.all([
+    query.limit(500),
+    listOwnerOptions(),
+  ])
   if (error) {
     return (
       <>
@@ -140,11 +150,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             {salesName && (
               <div className="flex border border-pale-stone rounded-sm overflow-hidden">
                 <Link
-                  href={makeHref(sp, { owner: 'mine' })}
+                  href={makeHref(sp, { owner: 'mine', assignee: undefined })}
                   className={owner === 'mine' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
                 >My leads</Link>
                 <Link
-                  href={makeHref(sp, { owner: 'all' })}
+                  href={makeHref(sp, { owner: 'all', assignee: undefined })}
                   className={owner === 'all' ? 'text-xs px-3 py-1.5 bg-deep-black text-warm-white' : 'text-xs px-3 py-1.5 text-graphite hover:text-wine-red'}
                 >All</Link>
               </div>
@@ -217,8 +227,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <input type="hidden" name="view"  value={sp.view ?? ''} />
             <input type="hidden" name="sort"  value={sp.sort ?? ''} />
             <input type="hidden" name="dir"   value={sp.dir ?? ''} />
+            <input type="hidden" name="owner" value={sp.owner ?? ''} />
 
-            <span className="text-graphite">District</span>
+            <span className="text-graphite">Owner</span>
+            <select name="assignee" defaultValue={sp.assignee ?? ''} className="border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5">
+              <option value="">Anyone</option>
+              {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              <option value={UNASSIGNED}>— unassigned —</option>
+            </select>
+
+            <span className="text-graphite ml-1">District</span>
             <select name="district" defaultValue={sp.district ?? ''} className="border border-pale-stone bg-warm-white rounded-sm px-1.5 py-0.5">
               <option value="">All</option>
               {PHUKET_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -273,7 +291,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
           {view === 'kanban'
             ? <LeadsKanbanClient leads={leads as Lead[]} />
-            : <LeadsTableClient leads={leads as Lead[]} sp={sp} sort={sort} dir={dir} />}
+            : <LeadsTableClient leads={leads as Lead[]} sp={sp} sort={sort} dir={dir} assigneeOptions={ownerOptions} isFiltered={hasActiveFilter(sp) || ownerFilter.kind !== 'all'} />}
         </div>
       </div>
     </>
@@ -307,7 +325,7 @@ function makeHref(sp: SearchParams, override: Partial<SearchParams>): string {
 
 function hasActiveFilter(sp: SearchParams): boolean {
   return Boolean(
-    sp.district || sp.q || sp.minRating || sp.minReviews
+    sp.assignee || sp.district || sp.q || sp.minRating || sp.minReviews
     || sp.stale === '1' || sp.hasWebsite === '1' || sp.hasPhone === '1' || sp.hasMenu === '1'
     || normalizePriceLevels(sp.priceLevel).length > 0
   )
@@ -319,3 +337,14 @@ function normalizePriceLevels(raw: string | string[] | undefined): string[] {
   return arr.filter(v => (PRICE_LEVELS as readonly string[]).includes(v))
 }
 
+// People to offer in the owner dropdown: whoever is already assigned on a lead,
+// plus every portal user with a sales_name so a manager can be picked before
+// their first lead lands. Neither source is authoritative on its own — assignee
+// is free text and not every seller has a portal login.
+async function listOwnerOptions(): Promise<string[]> {
+  const [assigned, users] = await Promise.all([
+    listLeadAssignees().catch(() => [] as string[]),
+    listUsers().then(us => us.map(u => u.sales_name).filter((n): n is string => !!n)).catch(() => [] as string[]),
+  ])
+  return [...new Set([...assigned, ...users])].sort((a, b) => a.localeCompare(b))
+}
