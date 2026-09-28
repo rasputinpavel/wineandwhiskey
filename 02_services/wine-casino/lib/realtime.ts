@@ -80,30 +80,45 @@ export function useLiveGame(gameId: string | null, playerId?: string | null): Li
   // Realtime.
   useEffect(() => {
     if (!gameId) return
-    const sb = browserClient()
 
-    const channel = sb
-      .channel(`casino:${gameId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'casino', table: 'round_state', filter: `game_id=eq.${gameId}` },
-        payload => setState(payload.new as PublicRoundState),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'casino', table: 'player', filter: `game_id=eq.${gameId}` },
-        payload => {
-          const row = payload.new as PublicPlayer & { game_id: string }
-          setPlayers(prev => {
-            const next = prev.filter(p => p.id !== row.id)
-            next.push({ id: row.id, nickname: row.nickname, chips: row.chips })
-            return next.sort((a, b) => b.chips - a.chips || a.nickname.localeCompare(b.nickname))
-          })
-        },
-      )
-      .subscribe(status => setConnected(status === 'SUBSCRIBED'))
+    // Realtime is the optimisation, not the floor: the polling effect above
+    // runs the entire evening correctly by itself. browserClient() throws by
+    // design when a NEXT_PUBLIC_* var is missing (see lib/supabase.ts) so a
+    // broken deploy fails loudly at build/prerender time -- but if one still
+    // slips through to a running phone, that throw must not escape this
+    // effect and crash the whole /play tree into Next's error screen. Catch
+    // it, log once, leave `connected` false so the poller keeps carrying the
+    // game, and return a no-op cleanup. Losing the socket must never cost
+    // more than POLL_MS (three seconds) of latency.
+    try {
+      const sb = browserClient()
 
-    return () => { void sb.removeChannel(channel) }
+      const channel = sb
+        .channel(`casino:${gameId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'casino', table: 'round_state', filter: `game_id=eq.${gameId}` },
+          payload => setState(payload.new as PublicRoundState),
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'casino', table: 'player', filter: `game_id=eq.${gameId}` },
+          payload => {
+            const row = payload.new as PublicPlayer & { game_id: string }
+            setPlayers(prev => {
+              const next = prev.filter(p => p.id !== row.id)
+              next.push({ id: row.id, nickname: row.nickname, chips: row.chips })
+              return next.sort((a, b) => b.chips - a.chips || a.nickname.localeCompare(b.nickname))
+            })
+          },
+        )
+        .subscribe(status => setConnected(status === 'SUBSCRIBED'))
+
+      return () => { void sb.removeChannel(channel) }
+    } catch (err) {
+      console.error('wine-casino: Realtime unavailable, falling back to REST polling', err)
+      return () => {}
+    }
   }, [gameId])
 
   return { state, players, connected }

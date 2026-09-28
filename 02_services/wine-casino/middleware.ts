@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/admin-auth'
+import { ADMIN_COOKIE, requiredCasinoSecret, verifyAdminToken } from '@/lib/admin-auth'
 
 // Everything except /admin is public by design: guests, the host and the TV all
 // carry their own token in the URL or in localStorage.
@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
   const isAdmin = pathname.startsWith('/admin') || pathname.startsWith('/api/admin')
   if (!isAdmin) return NextResponse.next()
 
-  const secret = process.env.CASINO_SECRET || 'change-me'
+  const secret = requiredCasinoSecret()
   const ok = await verifyAdminToken(secret, request.cookies.get(ADMIN_COOKIE)?.value)
   if (ok) return NextResponse.next()
 

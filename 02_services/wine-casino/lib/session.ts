@@ -23,8 +23,22 @@ export function loadSession(): Session | null {
   }
 }
 
-export function saveSession(s: Session): void {
-  try { window.localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* private mode */ }
+/**
+ * Returns false when the write failed, or -- iOS Safari's "Block All
+ * Cookies", some locked-down work profiles, some private modes -- when it
+ * silently accepted the write but never actually persisted it. The caller
+ * must not navigate to /play on a false: there would be no session to load
+ * there, and the guest would bounce straight back to the join screen with no
+ * explanation.
+ */
+export function saveSession(s: Session): boolean {
+  try {
+    const payload = JSON.stringify(s)
+    window.localStorage.setItem(KEY, payload)
+    return window.localStorage.getItem(KEY) === payload
+  } catch {
+    return false
+  }
 }
 
 export function clearSession(): void {

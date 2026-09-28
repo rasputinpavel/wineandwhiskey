@@ -13,6 +13,11 @@ export function ScreenClient({
   const { state, players } = useLiveGame(gameId)
   const status = state?.round_status ?? 'pending'
   const gameStatus = state?.game_status ?? 'lobby'
+  // round_status stays 'pending' both before the first wine and between every
+  // pair of wines (see lib/round.ts's nextWine/publish), so it alone cannot
+  // tell "nobody has played yet" from "everyone wants the standings". Only
+  // the former should still be showing the join QR.
+  const beforeFirstWine = gameStatus === 'lobby' && (state?.round_no ?? 0) === 0
 
   return (
     <main className="min-h-screen bg-felt p-10">
@@ -30,7 +35,7 @@ export function ScreenClient({
 
       {/* Lobby: the join panel is the whole screen, because that is the only
           thing anyone needs to do right now. */}
-      {gameStatus !== 'finished' && status === 'pending' && (
+      {gameStatus !== 'finished' && status === 'pending' && beforeFirstWine && (
         <div className="grid grid-cols-2 gap-12">
           <QrPanel pin={pin} />
           <div>
@@ -39,6 +44,18 @@ export function ScreenClient({
             </h2>
             <Leaderboard players={players} max={20} />
           </div>
+        </div>
+      )}
+
+      {/* Between wines: everyone at the table wants to see who is winning,
+          not the join QR again. Keep the PIN visible, small, for latecomers. */}
+      {gameStatus !== 'finished' && status === 'pending' && !beforeFirstWine && (
+        <div className="mx-auto max-w-2xl space-y-6 text-center">
+          <div className="text-sm uppercase tracking-overline text-pale-stone">
+            PIN {pin} · Up next: wine {state?.round_no ?? 0}/{state?.total_rounds ?? 0}
+          </div>
+          <h2 className="font-display text-5xl text-amber-gold">Standings</h2>
+          <Leaderboard players={players} max={20} />
         </div>
       )}
 

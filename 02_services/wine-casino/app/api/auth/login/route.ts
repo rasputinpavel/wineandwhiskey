@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_COOKIE, ADMIN_MAX_AGE, signAdminToken } from '@/lib/admin-auth'
+import { ADMIN_COOKIE, ADMIN_MAX_AGE, requiredCasinoSecret, signAdminToken } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad_password' }, { status: 401 })
   }
 
-  const token = await signAdminToken(process.env.CASINO_SECRET || 'change-me', ADMIN_MAX_AGE * 1000)
+  const token = await signAdminToken(requiredCasinoSecret(), ADMIN_MAX_AGE * 1000)
   const res = NextResponse.json({ ok: true })
   res.cookies.set(ADMIN_COOKIE, token, {
     httpOnly: true, sameSite: 'lax', path: '/',

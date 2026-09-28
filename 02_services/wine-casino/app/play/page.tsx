@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BetBoard } from '@/components/BetBoard'
 import { HintFeed } from '@/components/HintFeed'
+import { LangToggle } from '@/components/LangToggle'
 import { Leaderboard } from '@/components/Leaderboard'
 import { Timer } from '@/components/Timer'
 import { useCountdown, useLiveGame } from '@/lib/realtime'
@@ -98,6 +99,13 @@ export default function Play() {
             </div>
           )}
           {status === 'betting' && <Timer endsAt={state?.ends_at ?? null} />}
+          {/* Picking the wrong language at the join screen used to be a
+              one-way door: the only way out was `exit`, which cost the seat
+              and the chips. This only changes what this device displays --
+              it is never written back to the server. */}
+          <div className="mt-2 flex justify-end">
+            <LangToggle lang={lang} onChange={setLang} />
+          </div>
         </div>
       </header>
 

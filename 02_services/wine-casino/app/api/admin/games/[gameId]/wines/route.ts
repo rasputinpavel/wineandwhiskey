@@ -29,7 +29,12 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!game) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   const existing = await db.listWines(gameId)
-  const orderNo = existing.length + 1
+  // Not existing.length + 1: deleting a wine never renumbers the rest (the
+  // guest-facing label is `#${orderNo}`, and a hole like "#1, #3" is honest),
+  // so the next slot has to be one past the highest order_no still on file --
+  // otherwise the next insert collides with a live row under the
+  // `unique (game_id, order_no)` constraint and 500s.
+  const orderNo = existing.reduce((max, w) => Math.max(max, w.order_no), 0) + 1
 
   const facts = {
     name: body.name.trim(),

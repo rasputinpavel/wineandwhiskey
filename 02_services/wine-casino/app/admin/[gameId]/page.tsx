@@ -21,6 +21,7 @@ export default function GameEditor({ params }: { params: Promise<{ gameId: strin
   const [wines, setWines] = useState<EditableWine[]>([])
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/admin/games/${gameId}`, { cache: 'no-store' })
@@ -44,23 +45,45 @@ export default function GameEditor({ params }: { params: Promise<{ gameId: strin
   }, [q])
 
   async function addWine(payload: Record<string, unknown>) {
-    await fetch(`/api/admin/games/${gameId}/wines`, {
+    setError(null)
+    const res = await fetch(`/api/admin/games/${gameId}/wines`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setError(`Could not add wine (${res.status}): ${body.error ?? 'unknown error'}`)
+      return
+    }
     setQ('')
     setHits([])
     await load()
   }
 
   async function patchGame(patch: Record<string, unknown>) {
-    await fetch(`/api/admin/games/${gameId}`, {
+    setError(null)
+    const res = await fetch(`/api/admin/games/${gameId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(patch),
     })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setError(`Could not save settings (${res.status}): ${body.error ?? 'unknown error'}`)
+      return
+    }
     await load()
+  }
+
+  // Number inputs default to '' -> Number('') is 0, and a blank or
+  // non-numeric entry becomes NaN, which JSON.stringify's away to `null` and
+  // hits a NOT NULL column with a 500. Clamp to the same floor a working
+  // round needs: a round that is already over, a bank of nothing, or a
+  // negative rescue makes no sense as a game.
+  function clamp(raw: string, min: number): number {
+    const n = Number(raw)
+    return Number.isFinite(n) ? Math.max(min, n) : min
   }
 
   if (!game) return <main className="p-6">Loading…</main>
@@ -95,27 +118,33 @@ export default function GameEditor({ params }: { params: Promise<{ gameId: strin
           <input
             className="mt-1 w-full rounded-md bg-graphite/40 px-2 py-2" type="number"
             defaultValue={game.round_seconds}
-            onBlur={e => patchGame({ roundSeconds: Number(e.target.value) })}
+            onBlur={e => patchGame({ roundSeconds: clamp(e.target.value, 15) })}
           />
         </label>
         <label className="text-sm">Start chips
           <input
             className="mt-1 w-full rounded-md bg-graphite/40 px-2 py-2" type="number"
             defaultValue={game.starting_chips}
-            onBlur={e => patchGame({ startingChips: Number(e.target.value) })}
+            onBlur={e => patchGame({ startingChips: clamp(e.target.value, 1) })}
           />
         </label>
         <label className="text-sm">Rescue chips
           <input
             className="mt-1 w-full rounded-md bg-graphite/40 px-2 py-2" type="number"
             defaultValue={game.rescue_chips}
-            onBlur={e => patchGame({ rescueChips: Number(e.target.value) })}
+            onBlur={e => patchGame({ rescueChips: clamp(e.target.value, 0) })}
           />
         </label>
         <p className="col-span-4 text-xs text-pale-stone">
           Changing difficulty, round length or categories rebuilds every wine’s board and hint texts.
         </p>
       </section>
+
+      {error && (
+        <p className="rounded-md border border-wine-red/50 bg-wine-red/10 px-4 py-2 text-sm text-wine-red">
+          {error}
+        </p>
+      )}
 
       <section className="space-y-2">
         <h2 className="font-heading text-xl">Add a wine</h2>

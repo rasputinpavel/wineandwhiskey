@@ -9,6 +9,12 @@ const STRINGS = {
   joinButton:       { ru: 'Войти в казино',           en: 'Enter the casino' },
   joinNotFound:     { ru: 'Игра не найдена',          en: 'Game not found' },
   joinClosed:       { ru: 'Игра уже завершена',       en: 'This game has finished' },
+  joinStorageBlocked: {
+    ru: 'Браузер блокирует данные сайтов, поэтому казино не сможет запомнить ваше место. ' +
+        'Включите cookies/данные сайтов или выйдите из приватного режима — и заходите снова.',
+    en: 'Your browser is blocking site data, so the casino cannot remember your seat. ' +
+        'Turn on cookies/site data or leave private browsing, then come back in.',
+  },
   lobbyWaiting:     { ru: 'Ждём ведущего…',           en: 'Waiting for the host…' },
   lobbyPlayers:     { ru: 'За столом',                en: 'At the table' },
   bank:             { ru: 'Банк',                     en: 'Bank' },

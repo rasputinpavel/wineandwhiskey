@@ -37,10 +37,16 @@ function JoinForm() {
       return
     }
     const data = await res.json()
-    saveSession({
+    const saved = saveSession({
       gameId: data.gameId, playerId: data.playerId, playerToken: data.playerToken,
       nickname: data.nickname, lang,
     })
+    if (!saved) {
+      // Navigating anyway would just bounce them: /play finds no session and
+      // sends them straight back here with no explanation of why.
+      setError(t('joinStorageBlocked', lang))
+      return
+    }
     router.push('/play')
   }
 

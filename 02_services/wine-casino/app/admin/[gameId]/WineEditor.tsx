@@ -22,6 +22,7 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
   const [form, setForm] = useState(wine)
   const [hints, setHints] = useState<Hint[]>(wine.hints)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function set<K extends keyof EditableWine>(key: K, value: EditableWine[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -29,7 +30,8 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
 
   async function save(regenerateHints: boolean) {
     setBusy(true)
-    await fetch(`/api/admin/games/${gameId}/wines/${wine.id}`, {
+    setError(null)
+    const res = await fetch(`/api/admin/games/${gameId}/wines/${wine.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -40,12 +42,23 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
       }),
     })
     setBusy(false)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setError(`Save failed (${res.status}): ${body.error ?? 'unknown error'}`)
+      return
+    }
     onSaved()
   }
 
   async function remove() {
     if (!confirm(`Remove "${wine.name}" from this game?`)) return
-    await fetch(`/api/admin/games/${gameId}/wines/${wine.id}`, { method: 'DELETE' })
+    setError(null)
+    const res = await fetch(`/api/admin/games/${gameId}/wines/${wine.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setError(`Remove failed (${res.status}): ${body.error ?? 'unknown error'}`)
+      return
+    }
     onSaved()
   }
 
@@ -147,6 +160,8 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
           </div>
         ))}
       </div>
+
+      {error && <p className="text-sm text-wine-red">{error}</p>}
 
       <div className="flex gap-2">
         <button disabled={busy} onClick={() => save(false)} className="rounded-md bg-amber-gold px-4 py-2 text-deep-black">
