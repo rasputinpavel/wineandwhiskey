@@ -62,6 +62,7 @@
 │           └── inventory/route.ts          GET ?q= search v_sku_breakdown
 ├── lib/
 │   ├── types.ts          shared types, no imports
+│   ├── text.ts           canon() - one answer to 'is this the same string'
 │   ├── wine-data.ts      country / grape / region dictionaries (RU + EN)
 │   ├── categories.ts     category defs, multipliers, Old/New World map
 │   ├── options.ts        answer-option generator            [tested]
@@ -428,7 +429,9 @@ create table if not exists casino.game_wine (
   vintage     integer,
   style       text,                     -- dry|semi-dry|semi-sweet|sweet
   color       text,                     -- red|white|rose|sparkling|orange
-  abv         numeric(4,1),
+  abv         real,                     -- not numeric: PostgREST serialises numeric
+                                        -- as a JSON string to keep precision, and
+                                        -- the app's types promise a number
   image_url   text,
   answers     jsonb not null default '{}'::jsonb,  -- {category: canonical value}
   options     jsonb not null default '{}'::jsonb,  -- {category: [{value,ru,en}]}
@@ -438,6 +441,20 @@ create table if not exists casino.game_wine (
   ends_at     timestamptz,
   unique (game_id, order_no)
 );
+
+-- Not declared inline on casino.game because game_wine does not exist yet at
+-- that point. The server reads current_wine_id to know which round is live, so
+-- a dangling pointer here would be an expensive bug to chase.
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'game_current_wine_fk'
+                    and conrelid = 'casino.game'::regclass) then
+    alter table casino.game
+      add constraint game_current_wine_fk
+      foreign key (current_wine_id) references casino.game_wine(id) on delete set null;
+  end if;
+end $$;
 
 -- The only game table a phone reads. One row per game, rewritten by the server.
 create table if not exists casino.round_state (
@@ -461,7 +478,11 @@ create table if not exists casino.player (
   game_id    uuid not null references casino.game(id) on delete cascade,
   nickname   text not null,
   chips      integer not null default 0,
-  lang       text not null default 'ru',
+  lang       text not null default 'ru',      -- ru|en
+  -- Set when the house staked a busted guest this round, cleared when the next
+  -- round opens. Without it the phone shows a jump from 0 to 10 chips that the
+  -- round's own numbers cannot explain, and the guest assumes a miscount.
+  rescued    boolean not null default false,
   joined_at  timestamptz not null default now(),
   unique (game_id, nickname)
 );
@@ -486,9 +507,23 @@ create table if not exists casino.bet (
   unique (player_id, wine_id, category, option)
 );
 
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'bet_amount_positive'
+                    and conrelid = 'casino.bet'::regclass) then
+    alter table casino.bet add constraint bet_amount_positive check (amount > 0);
+  end if;
+end $$;
+
+-- Added after the first draft, for a database where 047 already ran.
+alter table casino.player add column if not exists rescued boolean not null default false;
+
 create index if not exists game_wine_game_idx on casino.game_wine (game_id, order_no);
 create index if not exists player_game_idx    on casino.player (game_id);
 create index if not exists bet_wine_idx       on casino.bet (wine_id);
+-- Every host request looks the game up by this token.
+create unique index if not exists game_host_token_idx on casino.game (host_token);
 
 -- RLS -----------------------------------------------------------------------
 alter table casino.game          enable row level security;
@@ -509,12 +544,35 @@ drop policy if exists player_public_read on casino.player;
 create policy player_public_read on casino.player for select to anon using (true);
 
 grant usage on schema casino to anon, authenticated, service_role;
-grant select on casino.round_state, casino.player to anon, authenticated;
+grant select on casino.round_state, casino.player to anon;
 grant all on all tables in schema casino to service_role;
+-- Future tables in this schema inherit service_role access without another grant.
+alter default privileges in schema casino grant all on tables to service_role;
 
 -- Realtime ------------------------------------------------------------------
-alter publication supabase_realtime add table casino.round_state;
-alter publication supabase_realtime add table casino.player;
+-- ALTER PUBLICATION has no IF NOT EXISTS, and the SQL Editor runs a pasted
+-- script as one transaction: a second run would abort the whole migration on
+-- "already member of publication". Guard both.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'casino'
+      and tablename = 'round_state'
+  ) then
+    alter publication supabase_realtime add table casino.round_state;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'casino'
+      and tablename = 'player'
+  ) then
+    alter publication supabase_realtime add table casino.player;
+  end if;
+end $$;
 ```
 
 - [ ] **Step 2: Commit — do NOT try to apply it**
@@ -611,10 +669,15 @@ export const COUNTRIES: Option[] = [
   { value: 'uruguay',      ru: 'Уругвай',      en: 'Uruguay' },
   { value: 'lebanon',      ru: 'Ливан',        en: 'Lebanon' },
   { value: 'israel',       ru: 'Израиль',      en: 'Israel' },
+  { value: 'bulgaria',     ru: 'Болгария',     en: 'Bulgaria' },
+  { value: 'cyprus',       ru: 'Кипр',         en: 'Cyprus' },
+  // We are in Phuket and Monsoon Valley is on our own shelf.
+  { value: 'thailand',     ru: 'Таиланд',      en: 'Thailand' },
 ]
 
-/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy. */
-export type GrapeOption = Option & { group: 'red' | 'white' }
+/** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy.
+ *  `null` means we genuinely do not know — see grapeOption. */
+export type GrapeOption = Option & { group: 'red' | 'white' | null }
 
 export const GRAPES: GrapeOption[] = [
   { value: 'cabernet sauvignon', ru: 'Cabernet Sauvignon', en: 'Cabernet Sauvignon', group: 'red' },
@@ -647,35 +710,44 @@ export const GRAPES: GrapeOption[] = [
 const REGIONS: Record<string, string[]> = {
   france:        ['Bordeaux', 'Bourgogne', 'Rhône', 'Loire', 'Languedoc', 'Provence', 'Champagne', 'Alsace'],
   italy:         ['Toscana', 'Piemonte', 'Veneto', 'Puglia', 'Sicilia', 'Abruzzo', 'Umbria', 'Friuli'],
-  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha'],
-  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão'],
-  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden'],
-  austria:       ['Wachau', 'Burgenland', 'Kamptal'],
-  greece:        ['Santorini', 'Nemea', 'Naoussa'],
-  hungary:       ['Tokaj', 'Eger', 'Villány'],
-  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha'],
-  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă'],
-  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь'],
-  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule'],
-  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan'],
-  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra'],
-  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay'],
-  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay'],
-  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles'],
-  uruguay:       ['Canelones', 'Maldonado'],
-  lebanon:       ['Bekaa Valley'],
-  israel:        ['Galilee', 'Judean Hills'],
+  spain:         ['Rioja', 'Ribera del Duero', 'Priorat', 'Rueda', 'Rías Baixas', 'La Mancha', 'Navarra', 'Jerez'],
+  portugal:      ['Douro', 'Alentejo', 'Vinho Verde', 'Dão', 'Bairrada', 'Setúbal', 'Lisboa', 'Madeira'],
+  germany:       ['Mosel', 'Rheingau', 'Pfalz', 'Baden', 'Rheinhessen', 'Nahe', 'Franken', 'Württemberg'],
+  austria:       ['Wachau', 'Burgenland', 'Kamptal', 'Kremstal', 'Weinviertel', 'Thermenregion', 'Traisental', 'Carnuntum'],
+  greece:        ['Santorini', 'Nemea', 'Naoussa', 'Mantinia', 'Rapsani', 'Amyndeon', 'Peloponnese', 'Crete'],
+  hungary:       ['Tokaj', 'Eger', 'Villány', 'Szekszárd', 'Badacsony', 'Somló', 'Mátra', 'Balaton'],
+  georgia:       ['Kakheti', 'Kartli', 'Imereti', 'Racha', 'Guria', 'Samegrelo', 'Adjara', 'Lechkhumi'],
+  moldova:       ['Codru', 'Valul lui Traian', 'Ștefan Vodă', 'Purcari', 'Cricova', 'Nistreana', 'Bălți', 'Orhei'],
+  russia:        ['Кубань', 'Крым', 'Долина Дона', 'Севастополь', 'Тамань', 'Анапа', 'Ставрополье', 'Дагестан'],
+  chile:         ['Maipo', 'Colchagua', 'Casablanca', 'Maule', 'Aconcagua', 'Curicó', 'Limarí', 'Leyda'],
+  argentina:     ['Mendoza', 'Salta', 'Patagonia', 'San Juan', 'Uco Valley', 'La Rioja', 'Catamarca', 'Neuquén'],
+  australia:     ['Barossa', 'McLaren Vale', 'Yarra Valley', 'Coonawarra', 'Clare Valley', 'Hunter Valley', 'Margaret River', 'Adelaide Hills'],
+  'new zealand': ['Marlborough', 'Central Otago', 'Hawke\'s Bay', 'Martinborough', 'Nelson', 'Gisborne', 'Waipara', 'Wairarapa'],
+  'south africa':['Stellenbosch', 'Swartland', 'Paarl', 'Walker Bay', 'Franschhoek', 'Constantia', 'Robertson', 'Elgin'],
+  usa:           ['Napa Valley', 'Sonoma', 'Willamette Valley', 'Paso Robles', 'Santa Barbara', 'Columbia Valley', 'Finger Lakes', 'Russian River Valley'],
+  uruguay:       ['Canelones', 'Maldonado', 'Montevideo', 'Colonia', 'San José', 'Florida', 'Rivera', 'Durazno'],
+  lebanon:       ['Bekaa Valley', 'Batroun', 'Jezzine', 'Zahlé', 'Kefraya', 'Mount Lebanon', 'Chouf', 'Rashaya'],
+  israel:        ['Galilee', 'Judean Hills', 'Golan Heights', 'Shomron', 'Samson', 'Negev', 'Upper Galilee', 'Carmel'],
+  bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley', 'Rose Valley', 'Black Sea Coast', 'Sakar', 'Melnik', 'Pomorie'],
+  cyprus:        ['Limassol', 'Paphos', 'Commandaria', 'Troodos', 'Pitsilia', 'Krasochoria', 'Vouni Panagias', 'Laona'],
+  thailand:      ['Hua Hin', 'Khao Yai', 'Chiang Mai', 'Loei', 'Chonburi', 'Nakhon Ratchasima', 'Samut Sakhon', 'Ratchaburi'],
 }
 
-/** A pool of plausible regions: same country first, then anything, so the
- *  region question stays hard even for a country we have few regions for. */
+/** A pool of plausible regions, drawn from the wine's own country. Every
+ *  country above carries at least OPTION_COUNTS.region entries precisely so the
+ *  board never has to borrow: a foreign decoy is obvious next to a Bekaa Valley,
+ *  and a guest who eliminates the obvious ones is back to a x8 payout on a
+ *  handful of real candidates. The cross-country fallback remains only for a
+ *  country we have not catalogued at all. */
 export function regionsFor(country: string | null): Option[] {
   const key = (country ?? '').trim().toLowerCase()
   const own = REGIONS[key] ?? []
   const rest = Object.entries(REGIONS)
     .filter(([k]) => k !== key)
     .flatMap(([, v]) => v)
-  const names = own.length >= 4 ? own : [...own, ...rest]
+  // Keep OPTION_COUNTS.region (options.ts) in step with this number: below it
+  // the board cannot be filled from one country and has to borrow decoys.
+  const names = own.length >= 8 ? own : [...own, ...rest]
   return names.map(n => ({ value: n.toLowerCase(), ru: n, en: n }))
 }
 
@@ -684,10 +756,14 @@ export function countryOption(country: string): Option {
   return COUNTRIES.find(c => c.value === key) ?? { value: key, ru: country, en: country }
 }
 
-export function grapeOption(grape: string): GrapeOption {
+/** For a grape outside our pool, take the colour from the bottle rather than
+ *  guessing. Hints state the grape's colour as fact and guests bet chips on it,
+ *  so a wrong guess is worse than no answer: Kisi is a Georgian amber grape we
+ *  actually stock, and a hardcoded 'red' fallback would have announced it red. */
+export function grapeOption(grape: string, color?: WineColor | null): GrapeOption {
   const key = grape.trim().toLowerCase()
   return GRAPES.find(g => g.value === key)
-      ?? { value: key, ru: grape, en: grape, group: 'red' }
+      ?? { value: key, ru: grape, en: grape, group: grapeGroup(color ?? null) }
 }
 
 /** Rosé is pressed from red grapes; orange from white. Sparkling is mostly
@@ -702,6 +778,7 @@ export function grapeGroup(color: WineColor | null): 'red' | 'white' | null {
 - [ ] **Step 3: Create `lib/categories.ts`**
 
 ```ts
+import { COUNTRIES } from './wine-data'
 import type { CategoryDef, Option } from './types'
 
 // Multipliers follow the classic game: the vaguer the question, the cheaper it
@@ -733,12 +810,20 @@ const OLD_WORLD = new Set([
   'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'greece',
   'hungary', 'georgia', 'moldova', 'romania', 'bulgaria', 'croatia', 'slovenia',
   'switzerland', 'serbia', 'czechia', 'north macedonia', 'armenia',
-  'israel', 'lebanon', 'turkey', 'russia',
+  'israel', 'lebanon', 'turkey', 'russia', 'cyprus',
 ])
 
+/**
+ * `null` means "we do not recognise this country", and the caller skips the
+ * category. Treating an unrecognised string as confidently New World would pay
+ * out on a guess: Cyprus was missing from the set above until a review caught
+ * it, and the world category pays x2 either way.
+ */
 export function worldOf(country: string | null): 'old' | 'new' | null {
-  if (!country || !country.trim()) return null
-  return OLD_WORLD.has(country.trim().toLowerCase()) ? 'old' : 'new'
+  const key = country?.trim().toLowerCase()
+  if (!key) return null
+  if (OLD_WORLD.has(key)) return 'old'
+  return COUNTRIES.some(c => c.value === key) ? 'new' : null
 }
 ```
 
@@ -763,13 +848,24 @@ describe('worldOf', () => {
     expect(worldOf('  ITALY ')).toBe('old')
   })
 
-  it('returns null when the country is unknown, so the category can be skipped', () => {
+  it('returns null when the country is missing, so the category can be skipped', () => {
     expect(worldOf(null)).toBeNull()
     expect(worldOf('   ')).toBeNull()
   })
 
-  it('treats a country outside the Old World list as New World', () => {
-    expect(worldOf('Thailand')).toBe('new')
+  it('returns null for a country we do not recognise rather than guessing', () => {
+    expect(worldOf('Freedonia')).toBeNull()
+    // A typo must not quietly pay out as New World.
+    expect(worldOf('Itlay')).toBeNull()
+  })
+
+  it('treats a recognised country outside the Old World list as New World', () => {
+    expect(worldOf('Thailand')).toBe('new')   // Monsoon Valley is on our shelf
+    expect(worldOf('Chile')).toBe('new')
+  })
+
+  it('counts Cyprus as Old World', () => {
+    expect(worldOf('Cyprus')).toBe('old')
   })
 })
 
@@ -800,12 +896,121 @@ describe('fixed option lists', () => {
 })
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Write the test `lib/wine-data.test.ts`**
 
-Run: `cd 02_services/wine-casino && npx vitest run lib/categories.test.ts`
-Expected: all tests PASS (the implementation was written in Step 3, so this is a verification run, not a red step — the pure-logic red/green cycle starts in Task 4).
+These four helpers are where the canonical-value contract lives. If `countryOption('Italy').value`
+ever stops equalling `'Italy'.trim().toLowerCase()`, a guest who taps the right button is told
+they were wrong and loses chips for it. That is worth its own test file.
 
-- [ ] **Step 6: Commit**
+```ts
+import { describe, it, expect } from 'vitest'
+import { COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
+
+describe('the dictionaries themselves', () => {
+  it('keeps every value canonical, because answers are matched by trim().toLowerCase()', () => {
+    for (const o of [...COUNTRIES, ...GRAPES]) {
+      expect(o.value).toBe(o.value.trim().toLowerCase())
+    }
+  })
+
+  it('has no duplicate country or grape', () => {
+    expect(new Set(COUNTRIES.map(c => c.value)).size).toBe(COUNTRIES.length)
+    expect(new Set(GRAPES.map(g => g.value)).size).toBe(GRAPES.length)
+  })
+
+  it('has enough grapes of each colour to fill a six-button board', () => {
+    expect(GRAPES.filter(g => g.group === 'red').length).toBeGreaterThanOrEqual(6)
+    expect(GRAPES.filter(g => g.group === 'white').length).toBeGreaterThanOrEqual(6)
+  })
+})
+
+describe('countryOption', () => {
+  it('matches regardless of case and padding', () => {
+    expect(countryOption('  ITALY ').value).toBe('italy')
+  })
+
+  it('round-trips the answer key that prepareWine will store', () => {
+    for (const raw of ['Italy', 'georgia', ' Cyprus ', 'Thailand']) {
+      expect(countryOption(raw).value).toBe(raw.trim().toLowerCase())
+    }
+  })
+
+  it('falls back to the raw name for a country we do not stock', () => {
+    const o = countryOption('Freedonia')
+    expect(o.value).toBe('freedonia')
+    expect(o.en).toBe('Freedonia')
+  })
+})
+
+describe('grapeOption', () => {
+  it('finds a known grape and keeps its colour', () => {
+    expect(grapeOption('Merlot').group).toBe('red')
+    expect(grapeOption('riesling').group).toBe('white')
+  })
+
+  it('takes the colour from the bottle for a grape outside the pool', () => {
+    // Kisi is a Georgian amber grape we actually stock.
+    expect(grapeOption('Kisi', 'orange').group).toBe('white')
+    expect(grapeOption('Kisi', 'red').group).toBe('red')
+  })
+
+  it('refuses to invent a colour when both grape and bottle are unknown', () => {
+    expect(grapeOption('Kisi').group).toBeNull()
+    expect(grapeOption('Kisi', null).group).toBeNull()
+  })
+
+  it('round-trips the answer key', () => {
+    expect(grapeOption('  Saperavi ').value).toBe('saperavi')
+  })
+})
+
+describe('grapeGroup', () => {
+  it('pairs rose with red grapes and orange with white', () => {
+    expect(grapeGroup('rose')).toBe('red')
+    expect(grapeGroup('orange')).toBe('white')
+  })
+
+  it('returns null for an unknown colour so the caller can widen the pool', () => {
+    expect(grapeGroup(null)).toBeNull()
+  })
+})
+
+describe('regionsFor', () => {
+  it('uses the country own regions when it has enough', () => {
+    const values = regionsFor('Italy').map(r => r.value)
+    expect(values).toContain('toscana')
+    expect(values).not.toContain('rioja')
+  })
+
+  it('fills an eight-button board from every country we stock, without borrowing', () => {
+    for (const c of COUNTRIES) {
+      expect(regionsFor(c.value).length).toBeGreaterThanOrEqual(8)
+    }
+    // Borrowing shows up as another country's region in the pool. If Georgia or
+    // Thailand had fewer than eight of their own, Bordeaux and Rioja would leak
+    // in as decoys, and a guest could discard them on sight for a x8 payout.
+    expect(regionsFor('Georgia').map(r => r.value)).not.toContain('bordeaux')
+    expect(regionsFor('Thailand').map(r => r.value)).not.toContain('rioja')
+  })
+
+  it('still widens the pool for a country we have not catalogued at all', () => {
+    expect(regionsFor('Freedonia').length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('lowercases values so they match the stored answer', () => {
+    for (const r of regionsFor('Georgia')) {
+      expect(r.value).toBe(r.ru.trim().toLowerCase())
+    }
+  })
+})
+```
+
+- [ ] **Step 6: Run the tests**
+
+Run: `cd 02_services/wine-casino && npx vitest run`
+Expected: PASS — 11 tests in `categories.test.ts`, 16 in `wine-data.test.ts`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd /Users/pavelrasputin/Desktop/Wine_Whiskey
@@ -830,6 +1035,7 @@ order without any shared shuffle seed.
 ```ts
 import { describe, it, expect } from 'vitest'
 import { buildOptions, OPTION_COUNTS } from './options'
+import { DEFAULT_CATEGORIES } from './categories'
 import type { CategoryKey, WineFacts } from './types'
 
 const ALL: CategoryKey[] = ['style', 'world', 'country', 'grape', 'region', 'vintage']
@@ -910,6 +1116,38 @@ describe('buildOptions', () => {
     expect(positions.size).toBeGreaterThan(1)
   })
 
+  it('never makes a blind guess profitable: every multiplier fits its button count', () => {
+    // Betting A chips on a uniform guess returns A*(m - n)/n, so m > n pays
+    // ignorance better than knowledge. This invariant is the whole reason
+    // region has 8 buttons and vintage has 10.
+    for (const cat of DEFAULT_CATEGORIES) {
+      expect(cat.multiplier).toBeLessThanOrEqual(OPTION_COUNTS[cat.key])
+    }
+  })
+
+  it('treats an off-canon style as missing instead of posting an unwinnable board', () => {
+    const offDry: WineFacts = { ...chianti, style: 'off-dry' }
+    expect(buildOptions(offDry, ALL, seeded(11)).style).toBeUndefined()
+  })
+
+  it('never offers a vintage that has not happened yet', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const o = buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(seed), 2026)
+      for (const opt of o.vintage!) {
+        expect(Number(opt.value)).toBeLessThanOrEqual(2026)
+      }
+      expect(o.vintage!.map(x => x.value)).toContain('2025')
+    }
+  })
+
+  it('skips the vintage category for a wine from the current year', () => {
+    // Only one legal window exists for a current-year wine, so the answer would
+    // always sit on the last button. A year older and the window can move again.
+    expect(buildOptions({ ...chianti, vintage: 2026 }, ALL, seeded(3), 2026).vintage).toBeUndefined()
+    expect(buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(3), 2026).vintage)
+      .toHaveLength(OPTION_COUNTS.vintage)
+  })
+
   it('skips a category whose fact is missing', () => {
     const noRegion: WineFacts = { ...chianti, region: null, vintage: null }
     const o = buildOptions(noRegion, ALL, seeded(7))
@@ -943,19 +1181,29 @@ Expected: FAIL — `Failed to resolve import "./options"`.
 
 ```ts
 import { STYLE_OPTIONS, WORLD_OPTIONS, worldOf } from './categories'
+
 import { COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
 import type { CategoryKey, Option, OptionSet, WineFacts } from './types'
 
 // How many buttons a guest sees per category. Fixed across difficulties —
 // difficulty only moves the hint schedule (see hints.ts).
+//
+// THE RULE: every count must be >= its category's multiplier. Betting A chips
+// on a uniform blind guess returns A*(m - n)/n, so m > n makes ignorance
+// profitable. With region at 4 buttons paying x8, and vintage at 5 paying x10,
+// a guest who knew nothing about wine and mashed those two every round doubled
+// their stake in expectation and beat anyone who actually tasted. The
+// categories.test.ts invariant test locks this down.
 export const OPTION_COUNTS: Record<CategoryKey, number> = {
   style:   4,
   world:   2,
   country: 6,
   grape:   6,
-  region:  4,
-  vintage: 5,
+  region:  8,
+  vintage: 10,
 }
+
+const STYLE_VALUES = new Set(STYLE_OPTIONS.map(o => o.value))
 
 type Rng = () => number
 
@@ -975,10 +1223,16 @@ function withDistractors(correct: Option, pool: readonly Option[], count: number
 
 /** `count` consecutive years containing the true one, at a random offset so the
  *  answer is not always in the middle. Ascending, because a jumbled list of
- *  years is just annoying to read on a phone. */
-function vintageWindow(vintage: number, count: number, rng: Rng): number[] {
-  const offset = Math.floor(rng() * count)
-  const start = vintage - offset
+ *  years is just annoying to read on a phone.
+ *
+ *  The window never runs past the current year: a vintage that has not happened
+ *  yet is an obvious non-answer and hands the guest a free elimination, which
+ *  is exactly the edge the option counts above exist to remove. `thisYear` is a
+ *  parameter so the function stays pure and testable. */
+function vintageWindow(vintage: number, count: number, rng: Rng, thisYear: number): number[] {
+  const drift = Math.floor(rng() * count)
+  const latest = Math.max(vintage, Math.min(vintage + drift, thisYear))
+  const start = latest - count + 1
   return Array.from({ length: count }, (_, i) => start + i)
 }
 
@@ -986,12 +1240,19 @@ export function buildOptions(
   facts: WineFacts,
   activeCategories: readonly CategoryKey[],
   rng: Rng = Math.random,
+  thisYear: number = new Date().getFullYear(),
 ): OptionSet {
   const on = (k: CategoryKey) => activeCategories.includes(k)
   const out: OptionSet = {}
 
-  // Style and world are closed sets — showing all of them is the game.
-  if (on('style') && facts.style) out.style = [...STYLE_OPTIONS]
+  // Style and world are closed sets — showing all of them is the game. Style is
+  // the one category whose correct answer is NOT derived from the fact itself,
+  // so an off-canon value (a hand-typed "off-dry", a bulk import) would put four
+  // buttons on the board with the right answer among none of them: every bet
+  // unwinnable and no answer to highlight at the reveal. Skip instead.
+  if (on('style') && facts.style && STYLE_VALUES.has(facts.style.trim().toLowerCase())) {
+    out.style = [...STYLE_OPTIONS]
+  }
   if (on('world') && worldOf(facts.country)) out.world = [...WORLD_OPTIONS]
 
   if (on('country') && facts.country) {
@@ -1011,8 +1272,13 @@ export function buildOptions(
     out.region = withDistractors(correct, regionsFor(facts.country), OPTION_COUNTS.region, rng)
   }
 
-  if (on('vintage') && facts.vintage) {
-    out.vintage = vintageWindow(facts.vintage, OPTION_COUNTS.vintage, rng)
+  // A vintage board is `count` consecutive years that must contain the answer
+  // and must not reach into the future. For a wine from the current year those
+  // constraints leave exactly one legal window, so the answer is always the last
+  // button — a guaranteed x10 for anyone who spots it. We cannot pose the
+  // question fairly, so we do not pose it.
+  if (on('vintage') && facts.vintage && facts.vintage < thisYear) {
+    out.vintage = vintageWindow(facts.vintage, OPTION_COUNTS.vintage, rng, thisYear)
       .map(y => ({ value: String(y), ru: String(y), en: String(y) }))
   }
 
@@ -1023,7 +1289,7 @@ export function buildOptions(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/options.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1078,6 +1344,13 @@ describe('hintTimes', () => {
     expect(hintTimes('easy', 10).every(t => t >= 5)).toBe(true)
   })
 
+  it('drops hints it cannot fit rather than stacking two on the same second', () => {
+    // A ten-second round has room for two of easy's three hints. The old floor
+    // produced [8, 5, 5] and silently threw one away.
+    expect(hintTimes('easy', 10)).toEqual([8, 5])
+    expect(new Set(hintTimes('easy', 10)).size).toBe(hintTimes('easy', 10).length)
+  })
+
   it('counts down — later hints have fewer seconds remaining', () => {
     const t = hintTimes('easy', 120)
     expect(t).toEqual([...t].sort((a, b) => b - a))
@@ -1102,10 +1375,42 @@ describe('buildHints', () => {
   })
 
   it('narrows the vintage to a one-year window either side', () => {
+    // Scoped to the vintage category, because on a full board the cheaper
+    // generators fill every slot before this one is reached — see below.
+    const hints = buildHints(chianti, 'easy', 120, ['vintage'])
+    expect(hints[0].ru).toBe('Год между 2018 и 2020')
+    expect(hints[0].en).toBe('Vintage between 2018 and 2020')
+  })
+
+  it('does not spend an easy round hinting at the richest category', () => {
+    // Vintage pays x10 across ten buttons; a plus/minus one year hint cuts that
+    // to three, worth about +2.3 chips per chip staked to someone who never
+    // tasted the wine. Hinting it every easy round made "wait for the year and
+    // shove" the dominant strategy.
     const hints = buildHints(chianti, 'easy', 120, ALL)
-    const vintage = hints.find(h => h.ru.startsWith('Год'))!
-    expect(vintage.ru).toBe('Год между 2018 и 2020')
-    expect(vintage.en).toBe('Vintage between 2018 and 2020')
+    expect(hints.some(h => h.ru.startsWith('Год'))).toBe(false)
+    expect(hints.map(h => h.ru)).toEqual([
+      'Это Старый Свет',
+      'Сорт красный',
+      'Страна начинается на букву И',
+    ])
+  })
+
+  it('says nothing about a country it has no English spelling for', () => {
+    // countryOption echoes unknown input into both languages, so a country typed
+    // in Cyrillic would tell an English guest "The country starts with И".
+    const unknown: WineFacts = { ...chianti, country: 'Туманная Албания', region: null }
+    const hints = buildHints(unknown, 'easy', 120, ['country', 'region'])
+    expect(hints).toEqual([])
+  })
+
+  it('spells out the grape and region hints in both languages', () => {
+    const hints = buildHints(chianti, 'easy', 120, ['grape', 'region'])
+    expect(hints[0].ru).toBe('Сорт красный')
+    expect(hints[1].ru).toBe('Сорт начинается на букву S')
+    expect(hints[1].en).toBe('The grape starts with S')
+    expect(hints[2].ru).toBe('Регион: Италия, на букву T')
+    expect(hints[2].en).toBe('Region: Italy, starts with T')
   })
 
   it('writes every hint in both languages', () => {
@@ -1126,6 +1431,19 @@ describe('buildHints', () => {
     const hints = buildHints(bare, 'easy', 120, ALL)
     expect(hints.length).toBeGreaterThan(0)
     expect(hints.map(h => h.at)).toEqual([90, 60, 30].slice(0, hints.length))
+  })
+
+  it('never claims a colour for a grape we do not know on a bottle with no colour', () => {
+    const kisi: WineFacts = { ...chianti, grape: 'Kisi', color: null }
+    const hints = buildHints(kisi, 'easy', 120, ALL)
+    expect(hints.some(h => h.ru === 'Сорт красный')).toBe(false)
+    expect(hints.some(h => h.ru === 'Сорт белый')).toBe(false)
+  })
+
+  it('does name the colour when the bottle tells us, even for an unknown grape', () => {
+    const kisi: WineFacts = { ...chianti, grape: 'Kisi', color: 'orange' }
+    const hints = buildHints(kisi, 'easy', 120, ALL)
+    expect(hints.some(h => h.ru === 'Сорт белый')).toBe(true)
   })
 
   it('returns nothing when no fact can produce a hint', () => {
@@ -1153,7 +1471,7 @@ Expected: FAIL — `Failed to resolve import "./hints"`.
 
 ```ts
 import { worldOf } from './categories'
-import { countryOption, grapeOption } from './wine-data'
+import { COUNTRIES, grapeOption } from './wine-data'
 import type { CategoryKey, Difficulty, Hint, WineFacts } from './types'
 
 // The schedule is written for a 120-second round and scaled from there, so a
@@ -1167,18 +1485,40 @@ export const HINT_SCHEDULE: Record<Difficulty, number[]> = {
   pro:    [],
 }
 
-/** Times are seconds REMAINING, so the list runs high to low. */
+/**
+ * Times are seconds REMAINING, so the list runs high to low.
+ *
+ * A hint inside the last five seconds cannot be acted on, and two hints landing
+ * on the same tick waste one of them — clamping to a floor used to produce
+ * [8, 5, 5] on a ten-second round. When a round is too short for the full
+ * schedule, show fewer hints rather than stacking them at the buzzer.
+ */
 export function hintTimes(difficulty: Difficulty, roundSeconds: number): number[] {
-  return HINT_SCHEDULE[difficulty].map(t =>
-    Math.max(5, Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)),
-  )
+  // Without this, a NaN round length makes every comparison below false, the
+  // loop pushes NaN for every slot, and we are back to several hints landing on
+  // the same (non-)tick.
+  if (!Number.isFinite(roundSeconds) || roundSeconds <= 0) return []
+  const out: number[] = []
+  for (const t of HINT_SCHEDULE[difficulty]) {
+    const scaled = Math.round((t / BASE_ROUND_SECONDS) * roundSeconds)
+    const previous = out.length ? out[out.length - 1] : Infinity
+    if (scaled < 5 || scaled >= previous) continue
+    out.push(scaled)
+  }
+  return out
 }
 
 type Text = { ru: string; en: string }
 type Generator = { category: CategoryKey; make: (f: WineFacts) => Text | null }
 
-/** Ordered vaguest first: the opening hint should barely narrow the field, the
- *  last one should rescue a guest who is completely lost. */
+/** Ordered cheapest-category first, which also happens to run vaguest to most
+ *  specific. The order is a balance decision, not a cosmetic one: a hint is free
+ *  information, so whichever categories get hinted become the profitable places
+ *  to bet. Hinting the cheap ones keeps the expensive ones honest.
+ *
+ *  Hints fill the earliest slots when fewer are available than the schedule has
+ *  room for. That is deliberate — an early hint leaves the guest time to act on
+ *  it, where a late one arrives as the clock runs out. */
 const GENERATORS: Generator[] = [
   {
     category: 'world',
@@ -1191,19 +1531,15 @@ const GENERATORS: Generator[] = [
     },
   },
   {
-    category: 'vintage',
-    make: f => f.vintage
-      ? {
-          ru: `Год между ${f.vintage - 1} и ${f.vintage + 1}`,
-          en: `Vintage between ${f.vintage - 1} and ${f.vintage + 1}`,
-        }
-      : null,
-  },
-  {
     category: 'grape',
     make: f => {
       if (!f.grape) return null
-      const g = grapeOption(f.grape)
+      // A hint is stated as fact and guests bet chips on it. If the grape is
+      // outside our pool AND the bottle's colour is unrecorded, we genuinely do
+      // not know — skip rather than guess. (Kisi, a Georgian amber grape we
+      // stock, used to be announced as red by a hardcoded fallback.)
+      const g = grapeOption(f.grape, f.color)
+      if (!g.group) return null
       return g.group === 'red'
         ? { ru: 'Сорт красный', en: 'The grape is red' }
         : { ru: 'Сорт белый',   en: 'The grape is white' }
@@ -1213,7 +1549,12 @@ const GENERATORS: Generator[] = [
     category: 'country',
     make: f => {
       if (!f.country) return null
-      const c = countryOption(f.country)
+      // countryOption falls back to echoing the admin's raw text into BOTH
+      // languages, so a country typed in Cyrillic would tell an English guest
+      // "The country starts with И". Only hint at countries we have both
+      // spellings for; skip the rest, as worldOf already does.
+      const c = COUNTRIES.find(x => x.value === f.country!.trim().toLowerCase())
+      if (!c) return null
       return {
         ru: `Страна начинается на букву ${c.ru.trim()[0].toUpperCase()}`,
         en: `The country starts with ${c.en.trim()[0].toUpperCase()}`,
@@ -1233,15 +1574,36 @@ const GENERATORS: Generator[] = [
   },
   {
     category: 'region',
+    // The letter comes from the region string itself, which is also what the
+    // board shows in both languages (our Russian regions are Cyrillic on the
+    // bottle and on the button alike), so the hint and the board always agree.
+    // The country name is only named when we hold both spellings.
     make: f => {
       if (!f.region) return null
       const letter = f.region.trim()[0].toUpperCase()
-      const country = f.country ? countryOption(f.country) : null
+      const country = f.country
+        ? COUNTRIES.find(x => x.value === f.country!.trim().toLowerCase()) ?? null
+        : null
       return {
         ru: country ? `Регион: ${country.ru}, на букву ${letter}` : `Регион на букву ${letter}`,
         en: country ? `Region: ${country.en}, starts with ${letter}` : `Region starts with ${letter}`,
       }
     },
+  },
+  {
+    // Last on purpose. Vintage pays x10 across ten buttons, and a plus/minus one
+    // year hint cuts that to three — a return of roughly +2.3 chips per chip
+    // staked for someone who never tasted the wine. Hinting it on every easy
+    // round made "wait for the year hint and shove" the dominant strategy, which
+    // is the opposite of what this game is for. It only fires now when the
+    // cheaper generators above had nothing to say.
+    category: 'vintage',
+    make: f => f.vintage
+      ? {
+          ru: `Год между ${f.vintage - 1} и ${f.vintage + 1}`,
+          en: `Vintage between ${f.vintage - 1} and ${f.vintage + 1}`,
+        }
+      : null,
   },
 ]
 
@@ -1269,7 +1631,7 @@ export function buildHints(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/hints.test.ts`
-Expected: PASS, 14 tests.
+Expected: PASS, 19 tests.
 
 - [ ] **Step 5: Correct the spec**
 
@@ -1314,8 +1676,19 @@ import type { PlacedBet } from './payout'
 
 const answers = { style: 'dry', world: 'old', country: 'italy', vintage: '2019' }
 
-function run(bets: PlacedBet[], players: Array<{ id: string; chips: number }>, rescueChips = 10) {
-  return settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips })
+// Most cases do not care which row a bet came from, so the helper supplies ids.
+function run(
+  bets: Array<Omit<PlacedBet, 'id'>>,
+  players: Array<{ id: string; chips: number }>,
+  rescueChips = 10,
+) {
+  return settleRound({
+    bets: bets.map((b, i) => ({ id: `bet-${i}`, ...b })),
+    answers,
+    categories: DEFAULT_CATEGORIES,
+    players,
+    rescueChips,
+  })
 }
 
 describe('settleRound', () => {
@@ -1368,7 +1741,7 @@ describe('settleRound', () => {
 
   it('voids a bet in a category the game does not run', () => {
     const r = settleRound({
-      bets: [{ playerId: 'p1', category: 'vintage', option: '2019', amount: 30 }],
+      bets: [{ id: 'b1', playerId: 'p1', category: 'vintage', option: '2019', amount: 30 }],
       answers,
       categories: DEFAULT_CATEGORIES.filter(c => c.key !== 'vintage'),
       players: [{ id: 'p1', chips: 100 }],
@@ -1412,10 +1785,48 @@ describe('settleRound', () => {
 
   it('never mutates the inputs', () => {
     const players = [{ id: 'p1', chips: 100 }]
-    const bets: PlacedBet[] = [{ playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
-    run(bets, players)
+    const bets: PlacedBet[] = [{ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 }]
+    settleRound({ bets, answers, categories: DEFAULT_CATEGORIES, players, rescueChips: 10 })
     expect(players[0].chips).toBe(100)
-    expect(bets[0]).toEqual({ playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+    expect(bets[0]).toEqual({ id: 'b1', playerId: 'p1', category: 'world', option: 'old', amount: 10 })
+  })
+
+  it('refuses a bet from someone who is not at the table', () => {
+    // Otherwise a winning orphan is reported as won and credited to nobody.
+    expect(() => settleRound({
+      bets: [{ id: 'b1', playerId: 'ghost', category: 'world', option: 'old', amount: 10 }],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }],
+      rescueChips: 10,
+    })).toThrow(/unknown player/)
+  })
+
+  it('refuses a nonsensical rescue amount instead of handing out negative chips', () => {
+    expect(() => run([], [{ id: 'p1', chips: 0 }], -5)).toThrow(/rescueChips/)
+    expect(() => run([], [{ id: 'p1', chips: 0 }], Number.NaN)).toThrow(/rescueChips/)
+    // Zero is legitimate: it simply turns the rescue off.
+    expect(run([], [{ id: 'p1', chips: 0 }], 0).players[0].chipsAfter).toBe(0)
+  })
+
+  it('returns each settled bet under the id it arrived with', () => {
+    // The reveal route writes outcomes back by this id. Mixed players and
+    // categories, so a reordering inside settleRound would show up here.
+    const r = settleRound({
+      bets: [
+        { id: 'b1', playerId: 'p1', category: 'country', option: 'italy', amount: 10 },
+        { id: 'b2', playerId: 'p2', category: 'world', option: 'new', amount: 20 },
+        { id: 'b3', playerId: 'p1', category: 'style', option: 'dry', amount: 4 },
+      ],
+      answers,
+      categories: DEFAULT_CATEGORIES,
+      players: [{ id: 'p1', chips: 100 }, { id: 'p2', chips: 100 }],
+      rescueChips: 10,
+    })
+    expect(r.bets.find(b => b.id === 'b1')!.isCorrect).toBe(true)
+    expect(r.bets.find(b => b.id === 'b2')!.isCorrect).toBe(false)
+    expect(r.bets.find(b => b.id === 'b3')!.isCorrect).toBe(true)
+    expect(new Set(r.bets.map(b => b.id)).size).toBe(3)
   })
 })
 ```
@@ -1425,12 +1836,62 @@ describe('settleRound', () => {
 Run: `cd 02_services/wine-casino && npx vitest run lib/payout.test.ts`
 Expected: FAIL — `Failed to resolve import "./payout"`.
 
+- [ ] **Step 2b: Create `lib/text.ts` and `lib/text.test.ts`**
+
+`trim().toLowerCase()` decides whether a guest's tap counts as the right answer.
+It was written out by hand in five places; two reviews independently flagged that
+the validator and the settler were relying on separate copies agreeing forever.
+One function, one contract.
+
+```ts
+/**
+ * The single answer to "are these the same string?" for anything a guest bets on.
+ *
+ * A wine's facts are typed by a human, the board is generated from dictionaries,
+ * and the answer key is derived from the facts. All three must agree or a guest
+ * taps the right button and is told they were wrong. Every comparison on that
+ * path goes through here so there is one rule, not several that happen to match.
+ */
+export function canon(s: string): string {
+  return s.trim().toLowerCase()
+}
+```
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { canon } from './text'
+
+describe('canon', () => {
+  it('ignores casing and padding, which is all a human typing a wine name adds', () => {
+    expect(canon('  ITALY ')).toBe('italy')
+    expect(canon('Bekaa Valley')).toBe('bekaa valley')
+  })
+
+  it('leaves an already-canonical value untouched, so it is safe to apply twice', () => {
+    expect(canon(canon('  Saperavi '))).toBe(canon('  Saperavi '))
+  })
+
+  it('does not strip inner spacing or punctuation that distinguishes real answers', () => {
+    expect(canon('Ribera del Duero')).toBe('ribera del duero')
+    expect(canon('Hawke\'s Bay')).toBe('hawke\'s bay')
+  })
+})
+```
+
+Run: `cd 02_services/wine-casino && npx vitest run lib/text.test.ts`
+Expected: PASS, 3 tests.
+
 - [ ] **Step 3: Write `lib/payout.ts`**
 
 ```ts
+import { canon } from './text'
 import type { CategoryDef, CategoryKey, WineAnswers } from './types'
 
 export type PlacedBet = {
+  /** casino.bet.id, carried through untouched. The reveal route writes each
+   *  outcome back to its own row by this id rather than trusting that the
+   *  result array still lines up positionally with what it passed in. */
+  id: string
   playerId: string
   category: CategoryKey
   option: string
@@ -1451,10 +1912,6 @@ export type PlayerSettlement = {
 
 export type SettleResult = { bets: SettledBet[]; players: PlayerSettlement[] }
 
-function canon(s: string): string {
-  return s.trim().toLowerCase()
-}
-
 /**
  * Settle one wine. Chips are only moved here — placing a bet does not touch a
  * player's balance, it just reserves against it (see bets.ts).
@@ -1466,6 +1923,22 @@ export function settleRound(input: {
   players: ReadonlyArray<{ id: string; chips: number }>
   rescueChips: number
 }): SettleResult {
+  // A host can type the rescue amount into the game settings form. Zero is a
+  // legitimate choice (rescue disabled); negative would set a busted guest's
+  // balance below zero while reporting them rescued.
+  if (!Number.isFinite(input.rescueChips) || input.rescueChips < 0) {
+    throw new Error(`settleRound: rescueChips must be a number >= 0, got ${input.rescueChips}`)
+  }
+
+  // A bet whose player is not at the table gets its payout computed and shown,
+  // but credited to nobody — money on a screen that never reaches a balance.
+  // Fail loudly; a caller that hands us a mismatched pair has a bug.
+  const seated = new Set(input.players.map(p => p.id))
+  const orphan = input.bets.find(b => !seated.has(b.playerId))
+  if (orphan) {
+    throw new Error(`settleRound: bet ${orphan.id} is from unknown player ${orphan.playerId}`)
+  }
+
   const multiplier = new Map(input.categories.map(c => [c.key, c.multiplier]))
 
   const bets: SettledBet[] = input.bets.map(b => {
@@ -1504,7 +1977,7 @@ export function settleRound(input: {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd 02_services/wine-casino && npx vitest run lib/payout.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1636,6 +2109,7 @@ Expected: FAIL — `Failed to resolve import "./bets"`.
 - [ ] **Step 3: Write `lib/bets.ts`**
 
 ```ts
+import { canon } from './text'
 import type { CategoryKey, Option, RoundStatus } from './types'
 
 export type BetLine = { category: CategoryKey; option: string; amount: number }
@@ -1675,8 +2149,13 @@ export function validateBetSlip(input: {
   for (const line of input.slip) {
     if (!input.activeCategories.includes(line.category)) return { ok: false, error: 'unknown_category' }
 
+    // Compared through the same canon() that settleRound uses to decide whether
+    // a bet won. Two different notions of "the same string" in the two halves of
+    // the money path is how you end up accepting a bet you then score as wrong.
     const board = input.options[line.category] ?? []
-    if (!board.some(o => o.value === line.option)) return { ok: false, error: 'unknown_option' }
+    if (!board.some(o => canon(o.value) === canon(line.option))) {
+      return { ok: false, error: 'unknown_option' }
+    }
 
     if (!Number.isInteger(line.amount) || line.amount < 1) return { ok: false, error: 'bad_amount' }
 
@@ -1899,8 +2378,25 @@ import { createClient } from '@supabase/supabase-js'
 // Same Supabase project as mission-control and kiosk. The `casino` schema must
 // be listed under Settings -> API -> Exposed schemas or every call 404s.
 
-const url = process.env.SUPABASE_URL!
-const serviceKey = process.env.SUPABASE_SERVICE_KEY!
+/**
+ * Clients are built at module load, like the sibling kiosk service, so a missing
+ * variable stops `next build` rather than surfacing mid-game. Supabase's own
+ * error for this is "supabaseUrl is required", which tells you nothing about
+ * which service or which variable, so we say it ourselves.
+ */
+function required(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `wine-casino: ${name} is not set. Copy .env.example to .env.local for local work, ` +
+      `or set it on the Railway service before deploying — the build reads it, not just the running app.`,
+    )
+  }
+  return value
+}
+
+const url = required('SUPABASE_URL')
+const serviceKey = required('SUPABASE_SERVICE_KEY')
 
 /** Server-side only. Bypasses RLS — this is the client that sees the answers. */
 export const sbCasino = createClient(url, serviceKey, { db: { schema: 'casino' } })
@@ -1908,11 +2404,17 @@ export const sbCasino = createClient(url, serviceKey, { db: { schema: 'casino' }
 /** inventory.v_sku_breakdown, for the admin's wine search. Read-only. */
 export const sbInventory = createClient(url, serviceKey, { db: { schema: 'inventory' } })
 
-/** Browser client for Realtime + the two anon-readable tables. Never sees answers. */
+/**
+ * Browser client for Realtime + the two anon-readable tables. Never sees answers.
+ *
+ * NEXT_PUBLIC_* values are inlined at build time: if they are missing when the
+ * image is built, the phones get `undefined` and Realtime fails silently, with
+ * the polling fallback quietly carrying the whole game. Fail loudly instead.
+ */
 export function browserClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    required('NEXT_PUBLIC_SUPABASE_URL'),
+    required('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
     { db: { schema: 'casino' } },
   )
 }
@@ -1972,6 +2474,8 @@ export type PlayerRow = {
   nickname: string
   chips: number
   lang: 'ru' | 'en'
+  /** True for the round in which the house staked this guest after they busted. */
+  rescued: boolean
   joined_at: string
 }
 
@@ -1985,6 +2489,7 @@ export type BetRow = {
   amount: number
   is_correct: boolean | null
   payout: number | null
+  created_at: string
 }
 
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
@@ -2074,8 +2579,17 @@ export async function insertPlayer(row: Partial<PlayerRow>): Promise<PlayerRow> 
   return unwrap(await sbCasino.from('player').insert(row).select().single())
 }
 
-export async function setPlayerChips(id: string, chips: number): Promise<void> {
-  const { error } = await sbCasino.from('player').update({ chips }).eq('id', id)
+/** The one write that moves a guest's money. `rescued` rides along because the
+ *  phone has no other way to explain a jump from nothing back to ten chips. */
+export async function settlePlayer(id: string, chips: number, rescued: boolean): Promise<void> {
+  const { error } = await sbCasino.from('player').update({ chips, rescued }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** Clears last round's rescue notices when a new round opens. */
+export async function clearRescued(gameId: string): Promise<void> {
+  const { error } = await sbCasino.from('player')
+    .update({ rescued: false }).eq('game_id', gameId).eq('rescued', true)
   if (error) throw new Error(error.message)
 }
 
@@ -2271,6 +2785,9 @@ export async function startRound(game: db.GameRow): Promise<db.WineRow> {
     wines.find(w => w.status === 'pending') ??
     wines[0]
 
+  // Last round's rescue notice is stale the moment a new wine is poured.
+  await db.clearRescued(game.id)
+
   const endsAt = new Date(Date.now() + game.round_seconds * 1000).toISOString()
   const wine = await db.updateWine(target.id, {
     status: 'betting',
@@ -2332,7 +2849,7 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   ])
 
   const placed: PlacedBet[] = betRows.map(b => ({
-    playerId: b.player_id, category: b.category, option: b.option, amount: b.amount,
+    id: b.id, playerId: b.player_id, category: b.category, option: b.option, amount: b.amount,
   }))
 
   const result = settleRound({
@@ -2343,12 +2860,12 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
     rescueChips: game.rescue_chips,
   })
 
-  // Persist bet outcomes. Index-aligned with `placed`, which is index-aligned
-  // with `betRows`, because settleRound maps one-to-one and preserves order.
+  // Each settled bet carries its own casino.bet.id, so nothing here depends on
+  // the arrays still lining up.
   await Promise.all(
-    result.bets.map((b, i) => db.saveBetOutcome(betRows[i].id, b.isCorrect, b.payout)),
+    result.bets.map(b => db.saveBetOutcome(b.id, b.isCorrect, b.payout)),
   )
-  await Promise.all(result.players.map(p => db.setPlayerChips(p.id, p.chipsAfter)))
+  await Promise.all(result.players.map(p => db.settlePlayer(p.id, p.chipsAfter, p.rescued)))
 
   const revealedWine = await db.updateWine(wine.id, { status: 'revealed' })
   const wines = await db.listWines(game.id)
@@ -2514,10 +3031,18 @@ export async function GET(req: Request) {
     },
     state,
     players: players.map(p => ({ id: p.id, nickname: p.nickname, chips: p.chips })),
-    me: me ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang } : null,
+    me: me
+      ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang, rescued: me.rescued }
+      : null,
+    // Outcomes are written to the bet rows a moment before the round flips to
+    // 'revealed'. Handing them out during that window lets a guest learn they
+    // were right before the host has said a word — and someone always shouts.
     myBets: myBets.map(b => ({
-      category: b.category, option: b.option, amount: b.amount,
-      isCorrect: b.is_correct, payout: b.payout,
+      category: b.category,
+      option: b.option,
+      amount: b.amount,
+      isCorrect: state?.round_status === 'revealed' ? b.is_correct : null,
+      payout: state?.round_status === 'revealed' ? b.payout : null,
     })),
   })
 }
@@ -2947,6 +3472,7 @@ import 'server-only'
 import { buildOptions } from './options'
 import { buildHints } from './hints'
 import { worldOf } from './categories'
+import { canon } from './text'
 import type { CategoryDef, Difficulty, Hint, OptionSet, WineAnswers, WineFacts } from './types'
 
 export type PreparedWine = { answers: WineAnswers; options: OptionSet; hints: Hint[] }
@@ -2965,14 +3491,18 @@ export function prepareWine(
 ): PreparedWine {
   const keys = categories.map(c => c.key)
 
+  // Built through the same canon() that settleRound uses to read it back. The
+  // board comes from buildOptions and the answers from here; if the two ever
+  // normalise differently, a guest taps the right button and is told they were
+  // wrong.
   const answers: WineAnswers = {}
-  if (keys.includes('style') && facts.style)     answers.style = facts.style.trim().toLowerCase()
+  if (keys.includes('style') && facts.style)     answers.style = canon(facts.style)
   const world = worldOf(facts.country)
   if (keys.includes('world') && world)           answers.world = world
-  if (keys.includes('country') && facts.country) answers.country = facts.country.trim().toLowerCase()
-  if (keys.includes('region') && facts.region)   answers.region = facts.region.trim().toLowerCase()
-  if (keys.includes('grape') && facts.grape)     answers.grape = facts.grape.trim().toLowerCase()
-  if (keys.includes('vintage') && facts.vintage) answers.vintage = String(facts.vintage)
+  if (keys.includes('country') && facts.country) answers.country = canon(facts.country)
+  if (keys.includes('region') && facts.region)   answers.region = canon(facts.region)
+  if (keys.includes('grape') && facts.grape)     answers.grape = canon(facts.grape)
+  if (keys.includes('vintage') && facts.vintage) answers.vintage = canon(String(facts.vintage))
 
   return {
     answers,
@@ -3521,10 +4051,19 @@ import QRCode from 'qrcode'
  *  plus the PIN in huge digits for anyone whose camera will not cooperate. */
 export function QrPanel({ pin }: { pin: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const base = process.env.NEXT_PUBLIC_CASINO_URL ?? ''
-  const joinUrl = `${base}/?pin=${pin}`
+  const [joinUrl, setJoinUrl] = useState('')
 
   useEffect(() => {
+    // The env var is baked in at build time and can be missing; the TV always
+    // knows its own origin. Without a scheme the QR encodes bare text and a
+    // phone camera offers nothing to tap, which strands guests at the one
+    // moment the thing has to work.
+    const base = process.env.NEXT_PUBLIC_CASINO_URL || window.location.origin
+    setJoinUrl(`${base}/?pin=${pin}`)
+  }, [pin])
+
+  useEffect(() => {
+    if (!joinUrl) return
     QRCode.toDataURL(joinUrl, { width: 480, margin: 1, color: { dark: '#14342B', light: '#F5F0EB' } })
       .then(setDataUrl)
       .catch(() => setDataUrl(null))
@@ -3927,6 +4466,7 @@ export default function Play() {
   const [session, setSession] = useState<Session | null>(null)
   const [categories, setCategories] = useState<CategoryDef[]>([])
   const [myBets, setMyBets] = useState<MyBet[]>([])
+  const [rescued, setRescued] = useState(false)
   const [lang, setLang] = useState<Lang>('ru')
 
   useEffect(() => {
@@ -3945,7 +4485,11 @@ export default function Play() {
     const qs = new URLSearchParams({ gameId: session.gameId, playerId: session.playerId })
     fetch(`/api/state?${qs}`, { cache: 'no-store' })
       .then(r => r.json())
-      .then(j => { setCategories(j.game?.categories ?? []); setMyBets(j.myBets ?? []) })
+      .then(j => {
+        setCategories(j.game?.categories ?? [])
+        setMyBets(j.myBets ?? [])
+        setRescued(j.me?.rescued === true)
+      })
       .catch(() => { /* the poller in useLiveGame will retry */ })
   }, [session, state?.wine_id, state?.round_status])
 
@@ -4059,6 +4603,12 @@ export default function Play() {
               </li>
             ))}
           </ul>
+
+          {rescued && (
+            <p className="rounded-md border border-amber-gold/50 bg-amber-gold/10 px-3 py-2 text-sm text-amber-gold">
+              {t('rescued', lang)}
+            </p>
+          )}
 
           <Leaderboard players={players} highlightId={session.playerId} />
         </section>
@@ -4510,6 +5060,7 @@ export default function AdminGames() {
 ```tsx
 'use client'
 import { useState } from 'react'
+import { COUNTRIES, GRAPES, regionsFor } from '@/lib/wine-data'
 import type { Hint, WineColor } from '@/lib/types'
 
 export type EditableWine = {
@@ -4569,9 +5120,18 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
 
       <div className="grid grid-cols-2 gap-2">
         <input className={`${field} col-span-2`} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name" />
-        <input className={field} value={form.country ?? ''} onChange={e => set('country', e.target.value || null)} placeholder="Country" />
-        <input className={field} value={form.region ?? ''} onChange={e => set('region', e.target.value || null)} placeholder="Region" />
-        <input className={field} value={form.grape ?? ''} onChange={e => set('grape', e.target.value || null)} placeholder="Grape" />
+        <input
+          className={field} list="dl-countries" value={form.country ?? ''}
+          onChange={e => set('country', e.target.value || null)} placeholder="Country"
+        />
+        <input
+          className={field} list="dl-regions" value={form.region ?? ''}
+          onChange={e => set('region', e.target.value || null)} placeholder="Region"
+        />
+        <input
+          className={field} list="dl-grapes" value={form.grape ?? ''}
+          onChange={e => set('grape', e.target.value || null)} placeholder="Grape"
+        />
         <input
           className={field} type="number" value={form.vintage ?? ''}
           onChange={e => set('vintage', e.target.value ? Number(e.target.value) : null)} placeholder="Vintage"
@@ -4597,6 +5157,34 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
         />
         <input className={field} value={form.image_url ?? ''} onChange={e => set('image_url', e.target.value || null)} placeholder="Image URL" />
       </div>
+
+      {/* Free text is still allowed — some bottles are not in our dictionaries —
+          but a value we do not recognise silently drops its category from the
+          board, and the admin deserves to know why the question vanished. */}
+      <datalist id="dl-countries">
+        {COUNTRIES.map(c => <option key={c.value} value={c.en} />)}
+      </datalist>
+      <datalist id="dl-grapes">
+        {GRAPES.map(g => <option key={g.value} value={g.en} />)}
+      </datalist>
+      <datalist id="dl-regions">
+        {regionsFor(form.country).map(r => <option key={r.value} value={r.ru} />)}
+      </datalist>
+
+      {form.country && !COUNTRIES.some(c => c.value === form.country!.trim().toLowerCase()) && (
+        <p className="text-xs text-wine-red">
+          Country not in our list. Old/New World is skipped for this wine and there will be
+          no country hint. The Country question still runs, but your spelling becomes one of
+          the buttons next to our dictionary names — if it looks different from them, guests
+          will spot it without tasting.
+        </p>
+      )}
+      {form.vintage != null && form.vintage >= new Date().getFullYear() && (
+        <p className="text-xs text-wine-red">
+          Current-year vintage — the Vintage category will be skipped, because the board
+          could only be built one way and the answer would always be the last button.
+        </p>
+      )}
 
       <div className="space-y-2">
         <h4 className="text-xs uppercase tracking-overline text-pale-stone">Hints</h4>

@@ -14,6 +14,7 @@ This is the operating system for managing the Wine & Whiskey retail store.
   - `barrymore/` — Secretary bot (Бэрримор).
 - **02_services/** — Web services on Railway.
   - `price-service/` — Next.js price list manager.
+  - `wine-casino/` — Multiplayer wine-tasting casino (Kahoot-style, QR/PIN).
 - **03_automation/** — Data sync scripts (run via `npm run <name>` from root).
 - **04_brand/** — Design system, tokens, logo, visual references.
 - **05_creative/** — All creative output, organized by type.
