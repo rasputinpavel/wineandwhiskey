@@ -31,9 +31,10 @@ export async function POST(req: Request) {
     ? '*'
     : Array.isArray(body.allowed) ? body.allowed.filter((s): s is string => typeof s === 'string') : []
   const is_admin = body.is_admin === true
+  const sales_name = typeof body.sales_name === 'string' && body.sales_name.trim() ? body.sales_name.trim() : null
 
   try {
-    const { user, error } = await createUser({ login, password, allowed, is_admin })
+    const { user, error } = await createUser({ login, password, allowed, is_admin, sales_name })
     if (error === 'duplicate') return NextResponse.json({ error: 'login already exists' }, { status: 409 })
     if (error) return NextResponse.json({ error }, { status: 503 })
     return NextResponse.json({ user }, { status: 201 })

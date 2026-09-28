@@ -23,7 +23,7 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
       <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <h2 className="mb-4 font-heading text-lg text-deep-black">Edit {user.login}</h2>
         <UserForm sections={sections}
-          user={{ id: user.id, login: user.login, is_admin: user.is_admin, disabled: user.disabled, allowed: user.allowed }} />
+          user={{ id: user.id, login: user.login, is_admin: user.is_admin, disabled: user.disabled, allowed: user.allowed, sales_name: user.sales_name }} />
       </div>
     </>
   )
