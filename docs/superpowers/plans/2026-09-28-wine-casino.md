@@ -3449,6 +3449,7 @@ import 'server-only'
 import { buildOptions } from './options'
 import { buildHints } from './hints'
 import { worldOf } from './categories'
+import { canon } from './text'
 import type { CategoryDef, Difficulty, Hint, OptionSet, WineAnswers, WineFacts } from './types'
 
 export type PreparedWine = { answers: WineAnswers; options: OptionSet; hints: Hint[] }
@@ -3467,14 +3468,18 @@ export function prepareWine(
 ): PreparedWine {
   const keys = categories.map(c => c.key)
 
+  // Built through the same canon() that settleRound uses to read it back. The
+  // board comes from buildOptions and the answers from here; if the two ever
+  // normalise differently, a guest taps the right button and is told they were
+  // wrong.
   const answers: WineAnswers = {}
-  if (keys.includes('style') && facts.style)     answers.style = facts.style.trim().toLowerCase()
+  if (keys.includes('style') && facts.style)     answers.style = canon(facts.style)
   const world = worldOf(facts.country)
   if (keys.includes('world') && world)           answers.world = world
-  if (keys.includes('country') && facts.country) answers.country = facts.country.trim().toLowerCase()
-  if (keys.includes('region') && facts.region)   answers.region = facts.region.trim().toLowerCase()
-  if (keys.includes('grape') && facts.grape)     answers.grape = facts.grape.trim().toLowerCase()
-  if (keys.includes('vintage') && facts.vintage) answers.vintage = String(facts.vintage)
+  if (keys.includes('country') && facts.country) answers.country = canon(facts.country)
+  if (keys.includes('region') && facts.region)   answers.region = canon(facts.region)
+  if (keys.includes('grape') && facts.grape)     answers.grape = canon(facts.grape)
+  if (keys.includes('vintage') && facts.vintage) answers.vintage = canon(String(facts.vintage))
 
   return {
     answers,
