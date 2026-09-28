@@ -2404,20 +2404,8 @@ export const sbCasino = createClient(url, serviceKey, { db: { schema: 'casino' }
 /** inventory.v_sku_breakdown, for the admin's wine search. Read-only. */
 export const sbInventory = createClient(url, serviceKey, { db: { schema: 'inventory' } })
 
-/**
- * Browser client for Realtime + the two anon-readable tables. Never sees answers.
- *
- * NEXT_PUBLIC_* values are inlined at build time: if they are missing when the
- * image is built, the phones get `undefined` and Realtime fails silently, with
- * the polling fallback quietly carrying the whole game. Fail loudly instead.
- */
-export function browserClient() {
-  return createClient(
-    required('NEXT_PUBLIC_SUPABASE_URL'),
-    required('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
-    { db: { schema: 'casino' } },
-  )
-}
+// The browser client lives in lib/supabase-browser.ts: importing this module
+// from client code crashes it, because the asserts above are server-only.
 ```
 
 - [ ] **Step 2: Create `lib/db.ts`**

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { browserClient } from './supabase'
+import { browserClient } from './supabase-browser'
 import type { GameStatus, Hint, OptionSet, RoundStatus, WineAnswers } from './types'
 
 export type PublicRoundState = {
