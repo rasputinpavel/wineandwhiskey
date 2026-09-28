@@ -113,8 +113,10 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
 
       {form.country && !COUNTRIES.some(c => c.value === form.country!.trim().toLowerCase()) && (
         <p className="text-xs text-wine-red">
-          Country not in our list — the Old/New World and Country categories will be
-          skipped for this wine, and no country hint will be offered.
+          Country not in our list. Old/New World is skipped for this wine and there will be
+          no country hint. The Country question still runs, but your spelling becomes one of
+          the buttons next to our dictionary names — if it looks different from them, guests
+          will spot it without tasting.
         </p>
       )}
       {form.vintage != null && form.vintage >= new Date().getFullYear() && (
