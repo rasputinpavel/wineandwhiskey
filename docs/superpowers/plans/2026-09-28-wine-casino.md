@@ -5060,6 +5060,7 @@ export default function AdminGames() {
 ```tsx
 'use client'
 import { useState } from 'react'
+import { COUNTRIES, GRAPES, regionsFor } from '@/lib/wine-data'
 import type { Hint, WineColor } from '@/lib/types'
 
 export type EditableWine = {
@@ -5119,9 +5120,18 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
 
       <div className="grid grid-cols-2 gap-2">
         <input className={`${field} col-span-2`} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name" />
-        <input className={field} value={form.country ?? ''} onChange={e => set('country', e.target.value || null)} placeholder="Country" />
-        <input className={field} value={form.region ?? ''} onChange={e => set('region', e.target.value || null)} placeholder="Region" />
-        <input className={field} value={form.grape ?? ''} onChange={e => set('grape', e.target.value || null)} placeholder="Grape" />
+        <input
+          className={field} list="dl-countries" value={form.country ?? ''}
+          onChange={e => set('country', e.target.value || null)} placeholder="Country"
+        />
+        <input
+          className={field} list="dl-regions" value={form.region ?? ''}
+          onChange={e => set('region', e.target.value || null)} placeholder="Region"
+        />
+        <input
+          className={field} list="dl-grapes" value={form.grape ?? ''}
+          onChange={e => set('grape', e.target.value || null)} placeholder="Grape"
+        />
         <input
           className={field} type="number" value={form.vintage ?? ''}
           onChange={e => set('vintage', e.target.value ? Number(e.target.value) : null)} placeholder="Vintage"
@@ -5147,6 +5157,32 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
         />
         <input className={field} value={form.image_url ?? ''} onChange={e => set('image_url', e.target.value || null)} placeholder="Image URL" />
       </div>
+
+      {/* Free text is still allowed — some bottles are not in our dictionaries —
+          but a value we do not recognise silently drops its category from the
+          board, and the admin deserves to know why the question vanished. */}
+      <datalist id="dl-countries">
+        {COUNTRIES.map(c => <option key={c.value} value={c.en} />)}
+      </datalist>
+      <datalist id="dl-grapes">
+        {GRAPES.map(g => <option key={g.value} value={g.en} />)}
+      </datalist>
+      <datalist id="dl-regions">
+        {regionsFor(form.country).map(r => <option key={r.value} value={r.ru} />)}
+      </datalist>
+
+      {form.country && !COUNTRIES.some(c => c.value === form.country!.trim().toLowerCase()) && (
+        <p className="text-xs text-wine-red">
+          Country not in our list — the Old/New World and Country categories will be
+          skipped for this wine, and no country hint will be offered.
+        </p>
+      )}
+      {form.vintage != null && form.vintage >= new Date().getFullYear() && (
+        <p className="text-xs text-wine-red">
+          Current-year vintage — the Vintage category will be skipped, because the board
+          could only be built one way and the answer would always be the last button.
+        </p>
+      )}
 
       <div className="space-y-2">
         <h4 className="text-xs uppercase tracking-overline text-pale-stone">Hints</h4>
