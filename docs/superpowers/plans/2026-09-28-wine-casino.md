@@ -2988,9 +2988,15 @@ export async function GET(req: Request) {
     state,
     players: players.map(p => ({ id: p.id, nickname: p.nickname, chips: p.chips })),
     me: me ? { id: me.id, nickname: me.nickname, chips: me.chips, lang: me.lang } : null,
+    // Outcomes are written to the bet rows a moment before the round flips to
+    // 'revealed'. Handing them out during that window lets a guest learn they
+    // were right before the host has said a word — and someone always shouts.
     myBets: myBets.map(b => ({
-      category: b.category, option: b.option, amount: b.amount,
-      isCorrect: b.is_correct, payout: b.payout,
+      category: b.category,
+      option: b.option,
+      amount: b.amount,
+      isCorrect: state?.round_status === 'revealed' ? b.is_correct : null,
+      payout: state?.round_status === 'revealed' ? b.payout : null,
     })),
   })
 }
