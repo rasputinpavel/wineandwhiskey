@@ -23,6 +23,14 @@ export async function POST(req: Request) {
   const [game, wine] = await Promise.all([db.getGame(player.game_id), db.getWine(body.wineId)])
   if (!game || !wine) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
+  // The clock is not decoration. The host may be slow to press Close, and a
+  // guest who waits out the timer would otherwise bet with the last hint in
+  // hand and no time risk. Small grace for a slip that left the phone in time.
+  const BET_GRACE_MS = 2000
+  if (wine.ends_at && Date.now() > Date.parse(wine.ends_at) + BET_GRACE_MS) {
+    return NextResponse.json({ error: 'round_closed' }, { status: 409 })
+  }
+
   const verdict = validateBetSlip({
     roundStatus: wine.status,
     activeCategories: game.categories.map(c => c.key),

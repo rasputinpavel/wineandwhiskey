@@ -56,6 +56,13 @@ export async function startRound(game: db.GameRow): Promise<db.WineRow> {
     wines.find(w => w.status === 'pending') ??
     wines[0]
 
+  // The button that leads here is disabled once a round is anything but
+  // 'pending', but the API must not trust the button: a stale panel or a
+  // replayed request must not be able to re-open a wine that already paid out.
+  if (target.status === 'revealed') {
+    throw new Error('wine already revealed; use Next wine instead')
+  }
+
   // Last round's rescue notice is stale the moment a new wine is poured.
   await db.clearRescued(game.id)
 
@@ -89,7 +96,10 @@ export async function tickHints(game: db.GameRow): Promise<Hint[]> {
   const due = wine.hints.filter(h => remaining <= h.at)
   if (due.length === state.revealed_hints.length) return state.revealed_hints
 
-  await db.upsertRoundState({ game_id: game.id, revealed_hints: due })
+  // Conditional on the wine we read: a tick that started against the old
+  // round must not win a race against Start and paste stale hints onto the
+  // new one. See db.appendHintsIfCurrent.
+  await db.appendHintsIfCurrent(game.id, wine.id, due)
   return due
 }
 
@@ -111,8 +121,25 @@ export type RevealSummary = {
 export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   if (!game.current_wine_id) throw new Error('no current wine')
 
-  const wine = await db.getWine(game.current_wine_id)
-  if (!wine) throw new Error('current wine missing')
+  // Claim the round before reading any bets. The status IS the lock: a second
+  // Reveal — a mis-tapped button, a retried request, a second host device —
+  // finds nothing to claim and returns the settlement already on file rather
+  // than paying everyone a second time out of their new balances.
+  const wine = await db.claimWineForReveal(game.current_wine_id)
+  if (!wine) {
+    // Already revealed. Report what was settled, do not settle again.
+    const existing = await db.getWine(game.current_wine_id)
+    if (!existing) throw new Error('current wine missing')
+    const players = await db.listPlayers(game.id)
+    return {
+      wine: existing,
+      players: players.map(p => ({
+        id: p.id, nickname: p.nickname,
+        chipsBefore: p.chips, chipsAfter: p.chips,
+        staked: 0, won: 0, rescued: p.rescued,
+      })),
+    }
+  }
 
   const [players, betRows] = await Promise.all([
     db.listPlayers(game.id),
@@ -136,16 +163,22 @@ export async function revealRound(game: db.GameRow): Promise<RevealSummary> {
   await Promise.all(
     result.bets.map(b => db.saveBetOutcome(b.id, b.isCorrect, b.payout)),
   )
-  await Promise.all(result.players.map(p => db.settlePlayer(p.id, p.chipsAfter, p.rescued)))
 
-  const revealedWine = await db.updateWine(wine.id, { status: 'revealed' })
+  // Publish the reveal *before* moving any chips. Both phones and the TV
+  // subscribe to casino.player, so if the chips moved first, the leaderboard
+  // would visibly reshuffle a beat before the bottle appears — telling a
+  // guest whether they won before the host says a word. The wine's status is
+  // already 'revealed' (the claim above did that), so this projection is the
+  // real reveal moment.
   const wines = await db.listWines(game.id)
   const state = await db.getRoundState(game.id)
-  await publish(game, revealedWine, wines, { revealedHints: state?.revealed_hints ?? [] })
+  await publish(game, wine, wines, { revealedHints: state?.revealed_hints ?? [] })
+
+  await Promise.all(result.players.map(p => db.settlePlayer(p.id, p.chipsAfter, p.rescued)))
 
   const byId = new Map(players.map(p => [p.id, p.nickname]))
   return {
-    wine: revealedWine,
+    wine,
     players: result.players.map(p => ({ ...p, nickname: byId.get(p.id) ?? '?' })),
   }
 }

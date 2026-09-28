@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as db from '@/lib/db'
 import { tickHints } from '@/lib/round'
+import { verifyPlayer } from '@/lib/player-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,10 @@ export async function GET(req: Request) {
   const pin = url.searchParams.get('pin')
   const gameId = url.searchParams.get('gameId')
   const playerId = url.searchParams.get('playerId')
+  // A bearer token, not a query param: query strings end up in access logs,
+  // and a player's own slip is exactly what this endpoint must not hand to
+  // anyone who merely knows their id (the PIN is on the TV for everyone to see).
+  const playerToken = req.headers.get('x-player-token')
 
   const game = gameId ? await db.getGame(gameId) : pin ? await db.getGameByPin(pin) : null
   if (!game) return NextResponse.json({ error: 'game_not_found' }, { status: 404 })
@@ -25,7 +30,13 @@ export async function GET(req: Request) {
     db.listPlayers(game.id),
   ])
 
-  const me = playerId ? players.find(p => p.id === playerId) ?? null : null
+  // A player's own slip is private: the PIN is public, so identity has to be
+  // proved, not asserted. Unverified callers still get the public projection
+  // and the leaderboard — that is what the TV and the lobby need.
+  const claimed = playerId && playerToken && (await verifyPlayer(playerId, playerToken))
+    ? players.find(p => p.id === playerId) ?? null
+    : null
+  const me = claimed
   const myBets = me && state?.wine_id
     ? await db.listBetsForPlayerWine(me.id, state.wine_id)
     : []

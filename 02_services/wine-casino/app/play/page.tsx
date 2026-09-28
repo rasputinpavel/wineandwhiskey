@@ -5,7 +5,7 @@ import { BetBoard } from '@/components/BetBoard'
 import { HintFeed } from '@/components/HintFeed'
 import { Leaderboard } from '@/components/Leaderboard'
 import { Timer } from '@/components/Timer'
-import { useLiveGame } from '@/lib/realtime'
+import { useCountdown, useLiveGame } from '@/lib/realtime'
 import { clearSession, loadSession } from '@/lib/session'
 import type { Session } from '@/lib/session'
 import { t } from '@/lib/i18n'
@@ -36,7 +36,9 @@ export default function Play() {
   useEffect(() => {
     if (!session) return
     const qs = new URLSearchParams({ gameId: session.gameId, playerId: session.playerId })
-    fetch(`/api/state?${qs}`, { cache: 'no-store' })
+    // Proves identity so the server hands back this player's own slip — the
+    // PIN is public, so an id in the query string alone proves nothing.
+    fetch(`/api/state?${qs}`, { cache: 'no-store', headers: { 'x-player-token': session.playerToken } })
       .then(r => r.json())
       .then(j => {
         setCategories(j.game?.categories ?? [])
@@ -50,6 +52,10 @@ export default function Play() {
     () => players.find(p => p.id === session?.playerId) ?? null,
     [players, session],
   )
+
+  // Must run on every render, before the early return below, or the hook
+  // count changes between the "no session yet" and "session loaded" renders.
+  const secondsLeft = useCountdown(state?.ends_at ?? null)
 
   async function saveSlip(slip: BetLine[]): Promise<{ ok: boolean; error?: string }> {
     if (!session || !state?.wine_id) return { ok: false, error: 'errGeneric' }
@@ -71,6 +77,10 @@ export default function Play() {
   const chips = me?.chips ?? 0
   const status = state?.round_status ?? 'pending'
   const gameStatus = state?.game_status ?? 'lobby'
+  // The clock is enforced server-side (app/api/bet/route.ts), but the board
+  // must also disappear the moment it hits zero: a guest who waits out the
+  // timer should not still see a live board with no time risk on it.
+  const bettingOpen = status === 'betting' && Boolean(state?.wine_id) && secondsLeft > 0
 
   return (
     <main className="mx-auto min-h-screen max-w-md p-4">
@@ -112,7 +122,7 @@ export default function Play() {
         </section>
       )}
 
-      {status === 'betting' && state?.wine_id && (
+      {bettingOpen && state?.wine_id && (
         <>
           <div className="mb-4">
             <HintFeed hints={state.revealed_hints} lang={lang} />
@@ -128,7 +138,7 @@ export default function Play() {
         </>
       )}
 
-      {status === 'locked' && (
+      {(status === 'locked' || (status === 'betting' && !bettingOpen)) && (
         <section className="space-y-3">
           <p className="font-heading text-xl text-wine-red">{t('betsClosed', lang)}</p>
           <HintFeed hints={state?.revealed_hints ?? []} lang={lang} />

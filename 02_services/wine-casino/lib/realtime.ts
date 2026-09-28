@@ -52,8 +52,12 @@ export function useLiveGame(gameId: string | null, playerId?: string | null): Li
     let stopped = false
 
     async function load() {
+      // This hook only ever reads json.state and json.players (the public
+      // projection and the leaderboard), so it has no business asking for a
+      // player's private slip — and no way to prove it is that player anyway.
+      // Do not send playerId here; app/play/page.tsx fetches its own slip
+      // separately, over an authenticated call.
       const qs = new URLSearchParams({ gameId: gameId! })
-      if (playerId) qs.set('playerId', playerId)
       const res = await fetch(`/api/state?${qs}`, { cache: 'no-store' })
       if (!res.ok || stopped) return
       const json = await res.json()
@@ -68,7 +72,10 @@ export function useLiveGame(gameId: string | null, playerId?: string | null): Li
     }, POLL_MS)
 
     return () => { stopped = true; clearInterval(timer) }
-  }, [gameId, playerId])
+    // playerId is accepted for the caller's own use (e.g. highlighting the
+    // player's row) but intentionally not a dependency of this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId])
 
   // Realtime.
   useEffect(() => {

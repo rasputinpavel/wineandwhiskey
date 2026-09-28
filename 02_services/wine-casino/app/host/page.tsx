@@ -33,9 +33,15 @@ function HostPanel() {
 
   const refresh = useCallback(async () => {
     if (!token) return
-    const res = await fetch(`/api/host/state?t=${token}`, { cache: 'no-store' })
-    if (!res.ok) { setError('Bad host link'); return }
-    setData(await res.json())
+    try {
+      const res = await fetch(`/api/host/state?t=${token}`, { cache: 'no-store' })
+      if (!res.ok) { setError('Bad host link'); return }
+      setData(await res.json())
+    } catch {
+      // Shop wifi blips. Keep whatever we last had on screen; the buttons
+      // stay live because `busy` is cleared regardless (see `act`).
+      setError('Connection lost — retrying…')
+    }
   }, [token])
 
   useEffect(() => { void refresh() }, [refresh])
@@ -58,14 +64,21 @@ function HostPanel() {
   async function act(action: 'open' | 'start' | 'lock' | 'reveal' | 'next') {
     setBusy(true)
     setError(null)
-    const res = await fetch('/api/host/round', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ t: token, action }),
-    })
-    setBusy(false)
-    if (!res.ok) { setError(`Action "${action}" failed`); return }
-    await refresh()
+    try {
+      const res = await fetch('/api/host/round', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ t: token, action }),
+      })
+      if (!res.ok) { setError(`Action "${action}" failed`); return }
+      await refresh()
+    } catch {
+      // A rejected fetch must never leave every button dead with no
+      // explanation — that is exactly what shop wifi does to this panel.
+      setError(`Action "${action}" failed — check connection`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (!token) return <main className="p-8">Missing host token.</main>
@@ -114,7 +127,7 @@ function HostPanel() {
         <button disabled={busy} onClick={() => act('open')} className="rounded-md border border-pale-stone/40 py-3">
           Open lobby
         </button>
-        <button disabled={busy || status === 'betting'} onClick={() => act('start')} className="rounded-md bg-amber-gold py-3 text-deep-black disabled:opacity-40">
+        <button disabled={busy || status !== 'pending'} onClick={() => act('start')} className="rounded-md bg-amber-gold py-3 text-deep-black disabled:opacity-40">
           Start round
         </button>
         <button disabled={busy || status !== 'betting'} onClick={() => act('lock')} className="rounded-md border border-wine-red py-3 text-wine-red disabled:opacity-40">

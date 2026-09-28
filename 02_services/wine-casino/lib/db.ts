@@ -136,6 +136,23 @@ export async function deleteWine(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Atomically flips a wine from betting/locked to revealed. The status IS the
+ * lock: a second caller — a mis-tapped button, a retried request, a second
+ * host device — finds nothing left in those statuses and gets `null` back,
+ * instead of a row it can go on to settle a second time.
+ */
+export async function claimWineForReveal(id: string): Promise<WineRow | null> {
+  const { data, error } = await sbCasino.from('game_wine')
+    .update({ status: 'revealed' })
+    .eq('id', id)
+    .in('status', ['betting', 'locked'])
+    .select()
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data as WineRow | null
+}
+
 // --- players ---------------------------------------------------------------
 
 export async function listPlayers(gameId: string): Promise<PlayerRow[]> {
@@ -240,6 +257,22 @@ export async function getRoundState(gameId: string): Promise<RoundStateRow | nul
 export async function upsertRoundState(row: Partial<RoundStateRow> & { game_id: string }): Promise<void> {
   const { error } = await sbCasino.from('round_state')
     .upsert({ ...row, updated_at: new Date().toISOString() })
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Writes hints only if the row still points at the wine we read them for.
+ * `tickHints` runs for every polling phone with no version check across its
+ * read-then-write, so a tick that started against the old wine must not be
+ * allowed to paste stale hints onto the new one after the host presses Start.
+ */
+export async function appendHintsIfCurrent(
+  gameId: string, wineId: string, hints: Hint[],
+): Promise<void> {
+  const { error } = await sbCasino.from('round_state')
+    .update({ revealed_hints: hints, updated_at: new Date().toISOString() })
+    .eq('game_id', gameId)
+    .eq('wine_id', wineId)
   if (error) throw new Error(error.message)
 }
 
