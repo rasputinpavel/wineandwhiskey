@@ -5024,10 +5024,12 @@ export default function AdminGames() {
 
       <ul className="space-y-2">
         {games.map(g => (
-          <li key={g.id}>
+          <li key={g.id} className="flex items-stretch gap-2">
+            {/* A delete button per row: the DELETE route existed from the start
+                but nothing in the UI reached it, so test games piled up. */}
             <Link
               href={`/admin/${g.id}`}
-              className="flex items-center justify-between rounded-md bg-graphite/30 px-4 py-3 hover:bg-graphite/50"
+              className="flex flex-1 items-center justify-between rounded-md bg-graphite/30 px-4 py-3 hover:bg-graphite/50"
             >
               <span>
                 <b>{g.title}</b>

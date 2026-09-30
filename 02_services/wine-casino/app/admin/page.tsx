@@ -13,6 +13,7 @@ export default function AdminGames() {
   const [title, setTitle] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function load() {
     const res = await fetch('/api/admin/games', { cache: 'no-store' })
@@ -22,14 +23,39 @@ export default function AdminGames() {
 
   async function create() {
     setBusy(true)
-    await fetch('/api/admin/games', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title, difficulty }),
-    })
-    setBusy(false)
-    setTitle('')
-    await load()
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/games', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title, difficulty }),
+      })
+      if (!res.ok) { setError(`Could not create the game (HTTP ${res.status})`); return }
+      setTitle('')
+      await load()
+    } catch {
+      setError('Could not reach the server')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(g: Row) {
+    // Deleting a game takes its wines, players and bets with it — the foreign
+    // keys cascade. Name the game and the PIN in the prompt so nobody wipes
+    // tonight's evening while meaning to clear last week's rehearsal.
+    if (!confirm(`Delete "${g.title}" (PIN ${g.pin})?\n\nIts wines, players and bets go too. This cannot be undone.`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/games/${g.id}`, { method: 'DELETE' })
+      if (!res.ok) { setError(`Could not delete the game (HTTP ${res.status})`); return }
+      await load()
+    } catch {
+      setError('Could not reach the server')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -58,12 +84,14 @@ export default function AdminGames() {
         </button>
       </section>
 
+      {error && <p className="rounded-md bg-wine-red/20 px-3 py-2 text-sm text-wine-red">{error}</p>}
+
       <ul className="space-y-2">
         {games.map(g => (
-          <li key={g.id}>
+          <li key={g.id} className="flex items-stretch gap-2">
             <Link
               href={`/admin/${g.id}`}
-              className="flex items-center justify-between rounded-md bg-graphite/30 px-4 py-3 hover:bg-graphite/50"
+              className="flex flex-1 items-center justify-between rounded-md bg-graphite/30 px-4 py-3 hover:bg-graphite/50"
             >
               <span>
                 <b>{g.title}</b>
@@ -71,6 +99,14 @@ export default function AdminGames() {
               </span>
               <span className="text-xs text-pale-stone">{new Date(g.created_at).toLocaleDateString()}</span>
             </Link>
+            <button
+              disabled={busy}
+              onClick={() => remove(g)}
+              title="Delete this game"
+              className="rounded-md border border-wine-red/50 px-3 text-sm text-wine-red hover:bg-wine-red/10 disabled:opacity-40"
+            >
+              delete
+            </button>
           </li>
         ))}
       </ul>
