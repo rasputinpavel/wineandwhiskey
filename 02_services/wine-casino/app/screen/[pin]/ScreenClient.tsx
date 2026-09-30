@@ -24,8 +24,9 @@ export function ScreenClient({
   // right even when NEXT_PUBLIC_CASINO_URL was never set.
   const [joinHost, setJoinHost] = useState('')
   useEffect(() => {
-    const base = process.env.NEXT_PUBLIC_CASINO_URL || window.location.origin
-    setJoinHost(base.replace(/^https?:\/\//, '').replace(/\/$/, ''))
+    const raw = (process.env.NEXT_PUBLIC_CASINO_URL || '').trim()
+    const base = raw || window.location.origin
+    setJoinHost(base.replace(/^https?:\/\//i, '').replace(/\/+$/, ''))
   }, [])
 
   return (

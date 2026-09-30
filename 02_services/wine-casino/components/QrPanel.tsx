@@ -13,7 +13,12 @@ export function QrPanel({ pin }: { pin: string }) {
     // knows its own origin. Without a scheme the QR encodes bare text and a
     // phone camera offers nothing to tap, which strands guests at the one
     // moment the thing has to work.
-    const base = process.env.NEXT_PUBLIC_CASINO_URL || window.location.origin
+    // A QR without a scheme is just text: the camera reads it and offers
+    // nothing to tap. NEXT_PUBLIC_CASINO_URL is typed by a human into Railway,
+    // so normalise rather than trust it — a bare domain there stranded a whole
+    // table at the door once already.
+    const raw = (process.env.NEXT_PUBLIC_CASINO_URL || '').trim().replace(/\/+$/, '')
+    const base = raw ? (/^https?:\/\//i.test(raw) ? raw : `https://${raw}`) : window.location.origin
     setJoinUrl(`${base}/?pin=${pin}`)
   }, [pin])
 
