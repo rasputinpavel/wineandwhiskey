@@ -51,9 +51,19 @@ the portal tile, hashtag-based daily scanning (considered and rejected — see �
 Daily at 09:00 Bangkok, `sync-trends.yml` runs `npm run trends`:
 
 1. Load accounts from `trend_accounts` where `is_active = true`.
-2. For each, call Apify `apify~instagram-scraper` with `resultsType: 'posts'` and
+2. For each, call Apify `apify~instagram-scraper` with
+   `directUrls: ['https://www.instagram.com/<username>/reels/']`, `resultsType: 'reels'` and
    **`resultsLimit: 10`** (down from 30 — a daily run only needs recent posts, and the actor
-   bills per result).
+   bills per result). Keep posts where `videoPlayCount != null`.
+
+   **Corrected 2026-10-01, after the first dry run returned zero reels for a live account.**
+   This spec originally carried forward the script's existing `usernames` +
+   `resultsType: 'posts'` input, filtered by `type === 'Video'`. That pattern is known-broken:
+   `02_services/trendwatch/lib/apify.ts:75` fixed it months ago and says why — "the older
+   `usernames + resultsType=posts` filter often returned zero videos" — but the fix only ever
+   landed inside the undeployed service, never in the script the Action runs. So the daily job
+   would have collected nothing even with a working token: a second silent failure stacked on
+   the first.
 3. Keep posts that clear the threshold (§5).
 4. Insert the ones not already present by `instagram_id` into `trend_reels`.
 5. Of those, notify the ones published within `NOTIFY_MAX_AGE_DAYS` (§5).

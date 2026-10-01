@@ -939,6 +939,81 @@ git commit -m "трендвотч: синк падает громко и при�
 
 ---
 
+### Task 6b: Scrape reels the way that actually works
+
+Added 2026-10-01, after Task 6's dry run printed `0 Reels found` for a live account. This plan
+inherited the script's actor input unexamined, and that input is known-broken.
+`02_services/trendwatch/lib/apify.ts:75-77` carries both the fix and the reason: "Using
+directUrls + resultsType=reels — same pattern that fixed hashtag scraping. The older `usernames
++ resultsType=posts` filter often returned zero videos." That fix never reached the script the
+daily Action runs, so the job would have collected nothing even once the token was in place.
+
+The field shapes are identical (`Post` in `sync_trends.ts` and `InstagramPost` in the service
+list the same keys), so only the actor input and the filter predicate change.
+
+**Files:**
+- Modify: `03_automation/sync_trends.ts`
+
+- [ ] **Step 1: Switch the actor input and the filter**
+
+In `scrapeAccount`, replace the request body:
+
+```ts
+    body: JSON.stringify({ usernames: [username], resultsType: 'posts', resultsLimit: maxPosts }),
+```
+
+with:
+
+```ts
+    // directUrls + resultsType=reels, ported from 02_services/trendwatch/lib/apify.ts:75.
+    // The older `usernames` + `resultsType: 'posts'` input returns zero videos for most
+    // accounts, which is why this job collected nothing even on the days it ran.
+    body: JSON.stringify({
+      directUrls:   [`https://www.instagram.com/${username}/reels/`],
+      resultsType:  'reels',
+      resultsLimit: maxPosts,
+    }),
+```
+
+and replace the return filter:
+
+```ts
+  return items.filter(p => p.type === 'Video')
+```
+
+with:
+
+```ts
+  console.log(`  ${items.length} items from Apify, ${items.filter(p => p.videoPlayCount != null).length} with a view count`)
+  return items.filter(p => p.videoPlayCount != null)
+```
+
+- [ ] **Step 2: Prove it returns reels**
+
+Run once: `npm run trends -- --dry-run --account lucialoveswine`
+
+Expected: a non-zero `items from Apify` count and a non-zero "with a view count" count. The
+`above threshold` count stays 0, because `--account` supplies no follower count and a relative
+threshold cannot be met without one — that is correct behaviour, not a failure.
+
+If this still returns zero items, **stop and report**: the actor's input contract has drifted
+again and the fix is not a one-liner.
+
+- [ ] **Step 3: Commit**
+
+Stage `03_automation/sync_trends.ts` and commit with this message:
+
+```
+трендвотч: тянуть рилсы рабочим способом, а не возвращать ноль
+
+directUrls + resultsType=reels вместо usernames + posts. Правка давно
+жила в 02_services/trendwatch/lib/apify.ts с комментарием «старый
+паттерн часто возвращал ноль видео», но до скрипта, который гоняет
+Action, так и не доехала.
+```
+
+---
+
 ### Task 7: Watchlist CLI
 
 Promoting, adding and switching accounts was a button in the undeployed web UI. This is its replacement.
