@@ -24,6 +24,8 @@ const STRINGS = {
   betsSaved:        { ru: 'Ставки приняты',           en: 'Bets accepted' },
   betsClosed:       { ru: 'Ставки закрыты',           en: 'Betting closed' },
   clearAll:         { ru: 'Сбросить',                 en: 'Clear' },
+  allIn:            { ru: 'ВСЁ',                      en: 'ALL' },
+  betweenWines:     { ru: 'Разливаем следующее вино…', en: 'Pouring the next wine…' },
   hint:             { ru: 'Подсказка',                en: 'Hint' },
   roundOf:          { ru: 'Вино',                     en: 'Wine' },
   youWon:           { ru: 'Выигрыш',                  en: 'Won' },

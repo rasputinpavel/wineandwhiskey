@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Chip, ChipStack } from './Chip'
 import { ChipPicker } from './ChipPicker'
+import { usePrefersReducedMotion } from '@/lib/motion'
 import { pick, t } from '@/lib/i18n'
 import type { CategoryDef, Lang, OptionSet } from '@/lib/types'
 import type { BetLine } from '@/lib/bets'
@@ -15,17 +17,38 @@ type Props = {
 }
 
 const AUTOSAVE_MS = 600
+const FLIGHT_MS = 420
+
+type Flight = { id: number; value: number; from: { x: number; y: number }; to: { x: number; y: number } }
 
 export function BetBoard({ wineId, options, categories, chips, lang, onSave }: Props) {
   // slip is keyed "category:option" so a hedge inside one category is natural.
+  // This is the exact same shape and the exact same semantics as before the
+  // chip visuals: it still holds one number per key, it is still what
+  // `lines`/`onSave` are built from, and nothing below gates on an animation.
   const [slip, setSlip] = useState<Record<string, number>>({})
   const [denom, setDenom] = useState(10)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const reducedMotion = usePrefersReducedMotion()
+  const [flights, setFlights] = useState<Flight[]>([])
+  const flightSeq = useRef(0)
+  const flightTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  const pickerRefs = useRef<Record<number, HTMLButtonElement | null>>({})
+  const optionRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
   // A new wine is a clean table.
-  useEffect(() => { setSlip({}); setStatus('idle'); setError(null) }, [wineId])
+  useEffect(() => { setSlip({}); setStatus('idle'); setError(null); setFlights([]) }, [wineId])
+
+  // Flight timeouts outlive nothing: if the board unmounts (round closes,
+  // countdown hits zero) while a chip is mid-air, don't call setState on a
+  // dead component.
+  useEffect(() => () => {
+    flightTimers.current.forEach(id => clearTimeout(id))
+    flightTimers.current.clear()
+  }, [])
 
   const staked = useMemo(() => Object.values(slip).reduce((s, n) => s + n, 0), [slip])
   const available = chips - staked
@@ -60,7 +83,36 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
     const amount = Math.min(denom, available)
     if (amount <= 0) { setError('errBank'); return }
     setError(null)
+    // The slip updates synchronously, right here, before any animation or
+    // vibration below even starts. A chip in flight is decoration on top of
+    // a stake that is already on the table -- a second tap mid-animation
+    // just adds another chip and starts a second, independent flight.
     setSlip(prev => ({ ...prev, [key]: (prev[key] ?? 0) + amount }))
+
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(10) } catch { /* not every browser supports it */ }
+    }
+
+    if (!reducedMotion) {
+      const fromEl = pickerRefs.current[denom]
+      const toEl = optionRefs.current[key]
+      if (fromEl && toEl) {
+        const fromRect = fromEl.getBoundingClientRect()
+        const toRect = toEl.getBoundingClientRect()
+        const id = ++flightSeq.current
+        setFlights(prev => [...prev, {
+          id,
+          value: amount,
+          from: { x: fromRect.left + fromRect.width / 2, y: fromRect.top + fromRect.height / 2 },
+          to:   { x: toRect.right - 10, y: toRect.top + 2 },
+        }])
+        const tid = setTimeout(() => {
+          setFlights(prev => prev.filter(fl => fl.id !== id))
+          flightTimers.current.delete(tid)
+        }, FLIGHT_MS + 60)
+        flightTimers.current.add(tid)
+      }
+    }
   }
 
   function clearOne(category: string, option: string) {
@@ -75,7 +127,13 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
   return (
     <div className="pb-32">
       <div className="sticky top-0 z-10 -mx-4 mb-4 bg-deep-black/95 px-4 py-3 backdrop-blur">
-        <ChipPicker value={denom} available={available} onChange={setDenom} />
+        <ChipPicker
+          value={denom}
+          available={available}
+          onChange={setDenom}
+          lang={lang}
+          registerRef={(d, el) => { pickerRefs.current[d] = el }}
+        />
       </div>
 
       <div className="space-y-6">
@@ -97,6 +155,7 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
                   return (
                     <button
                       key={opt.value}
+                      ref={el => { optionRefs.current[key] = el }}
                       onClick={() => add(cat.key, opt.value)}
                       onContextMenu={e => { e.preventDefault(); clearOne(cat.key, opt.value) }}
                       className={[
@@ -110,9 +169,9 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
                       {on > 0 && (
                         <span
                           onClick={e => { e.stopPropagation(); clearOne(cat.key, opt.value) }}
-                          className="absolute -right-1 -top-1 flex h-7 min-w-7 items-center justify-center rounded-full bg-amber-gold px-1 font-display text-sm tabular-nums text-deep-black"
+                          className="absolute -right-1 -top-1 z-10"
                         >
-                          {on}
+                          <ChipStack amount={on} size={20} maxChips={4} />
                         </span>
                       )}
                     </button>
@@ -123,6 +182,10 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
           )
         })}
       </div>
+
+      {/* Flying chips: purely cosmetic overlay, fixed to the viewport so it
+          floats above the board regardless of scroll. Never read by onSave. */}
+      {flights.map(f => <FlyingChip key={f.id} value={f.value} from={f.from} to={f.to} />)}
 
       <div className="fixed inset-x-0 bottom-0 border-t border-pale-stone/20 bg-deep-black/95 px-4 py-3 backdrop-blur">
         <div className="mb-2 flex justify-between text-sm">
@@ -145,6 +208,39 @@ export function BetBoard({ wineId, options, categories, chips, lang, onSave }: P
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** A chip that travels from the picker to the option the guest tapped, then
+ *  disappears -- the real stack (above) is already showing the new total by
+ *  the time this lands, so there is nothing for this to get wrong. */
+function FlyingChip({ value, from, to }: { value: number; from: { x: number; y: number }; to: { x: number; y: number } }) {
+  const [arrived, setArrived] = useState(false)
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setArrived(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        left: from.x - 16,
+        top: from.y - 16,
+        zIndex: 50,
+        pointerEvents: 'none',
+        transform: arrived ? `translate(${dx}px, ${dy}px) scale(0.5)` : 'translate(0, 0) scale(1)',
+        opacity: arrived ? 0 : 1,
+        transition: `transform ${FLIGHT_MS}ms cubic-bezier(.2,.8,.2,1), opacity ${FLIGHT_MS}ms ease-in`,
+      }}
+    >
+      <Chip value={value} size={32} />
     </div>
   )
 }
