@@ -81,6 +81,14 @@ type Post = {
   url: string
 }
 
+// Actor-polling logic like the loop below also lives in 03_automation/lib/apify.ts
+// (pollApify — default deadline 120s), in 02_services/trendwatch/lib/apify.ts, and
+// privately inside discover_trend_accounts.ts. We are deliberately NOT unifying
+// these four copies right now — when the next actor-input drift needs fixing,
+// check all four. If you do unify them later: this one allows 300s (5 minutes),
+// not pollApify's 120s default, because reel scraping is slower than the other
+// actor calls — a naive merge onto the shared 120s default would silently start
+// timing out slower accounts.
 async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
   const res = await fetch(`${BASE}/acts/apify~instagram-scraper/runs`, {
     method: 'POST',
@@ -129,7 +137,10 @@ function telegramTarget(): { token: string; chatId: string } {
   return { token: BARRYMORE_BOT_TOKEN, chatId: BARRYMORE_CHAT_ID }
 }
 
-async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; delivered: number } | null> {
+// `stale` (reels found but all outside the 14-day notify window) is the one
+// path where a stored hit is never mentioned anywhere — worth surfacing in
+// the heartbeat, so the caller gets the count back instead of a bare null.
+async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; delivered: number } | { stale: number }> {
   const fresh = reels.filter(r => isFreshForDigest(r.publishedAt))
   if (fresh.length === 0) {
     console.log(
@@ -137,7 +148,7 @@ async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; del
         ? '📭 No new reels — sending heartbeat instead'
         : `📭 ${reels.length} new reel(s), none published in the notify window — sending heartbeat instead`,
     )
-    return null
+    return { stale: reels.length }
   }
 
   const { token, chatId } = telegramTarget()
@@ -183,21 +194,37 @@ async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; del
 // months. This line exists purely so the absence of a message means
 // something: if it fails to send, the run must not claim success either
 // (see the caller, which turns a false return into a failure).
-async function sendHeartbeat(accountsChecked: number, reelsSeen: number): Promise<boolean> {
+async function sendHeartbeat(accountsChecked: number, reelsSeen: number, staleHits: number): Promise<boolean> {
   const { token, chatId } = telegramTarget()
+  const staleNote = staleHits > 0 ? ` (${staleHits} вне окна)` : ''
   const ok = await sendMessage(
     token, chatId,
-    `🫧 Проверено аккаунтов: ${accountsChecked} · рилсов просмотрено: ${reelsSeen} · залётов нет`,
+    `🫧 Проверено аккаунтов: ${accountsChecked} · рилсов просмотрено: ${reelsSeen} · залётов нет${staleNote}`,
   )
   console.log(ok ? '🫧 Heartbeat sent' : '✗ Heartbeat failed to send')
   return ok
 }
 
-async function reportFailures(failures: Array<{ username: string; message: string }>, total: number): Promise<void> {
+// 'account' = a real per-account scrape/insert error (label is an Instagram
+// username, rendered with @). 'system' = a data-quality problem not tied to
+// any one account (e.g. the all-zero-reels guard). 'delivery' = a Telegram
+// send that itself failed (digest or heartbeat) — see main, which skips
+// reportFailures entirely when every failure is 'delivery', since sending a
+// report over the channel that just failed would only fail again.
+type Failure = { kind: 'account' | 'system' | 'delivery'; label: string; message: string }
+
+async function reportFailures(failures: Failure[], totalAccounts: number): Promise<void> {
   const { token, chatId } = telegramTarget()
+  const accountFailures = failures.filter(f => f.kind === 'account')
+  const otherFailures    = failures.filter(f => f.kind !== 'account')
+
+  const headerParts: string[] = []
+  if (accountFailures.length > 0) headerParts.push(`${accountFailures.length} из ${totalAccounts} аккаунтов`)
+  if (otherFailures.length > 0)   headerParts.push(`${otherFailures.length} проблем${otherFailures.length === 1 ? 'а' : 'ы'}`)
+
   const lines = [
-    `⚠️ <b>Синк трендов упал: ${failures.length} из ${total} аккаунтов</b>`,
-    ...failures.map(f => `• @${f.username} — ${f.message}`),
+    `⚠️ <b>Синк трендов упал: ${headerParts.join(' + ')}</b>`,
+    ...failures.map(f => f.kind === 'account' ? `• @${f.label} — ${f.message}` : `• ${f.label} — ${f.message}`),
   ]
   await sendMessage(token, chatId, lines.join('\n'))
 }
@@ -242,7 +269,7 @@ async function main() {
   console.log(`Monitoring ${accounts.length} account${accounts.length !== 1 ? 's' : ''}:\n`)
 
   const newReelNotifications: DigestReel[] = []
-  const failures: Array<{ username: string; message: string }> = []
+  const failures: Failure[] = []
   let totalNew = 0
   let totalReelsSeen = 0
 
@@ -326,7 +353,7 @@ async function main() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`  ✗ Failed: ${message}`)
-      failures.push({ username: account.username, message })
+      failures.push({ kind: 'account', label: account.username, message })
     }
 
     await sleep(2000)
@@ -347,7 +374,8 @@ async function main() {
   // reddens the run whenever that one account happens to be quiet.
   if (!isDryRun && failures.length === 0 && totalReelsSeen === 0) {
     failures.push({
-      username: 'all-accounts',
+      kind: 'system',
+      label: 'all-accounts',
       message: `zero reels across all ${accounts.length} account(s) — Apify input format has likely drifted again (see scrapeAccount)`,
     })
   }
@@ -359,30 +387,50 @@ async function main() {
   // that let this job run broken for five months unnoticed.
   if (!isDryRun) {
     const digestResult = await sendDigest(newReelNotifications)
-    if (digestResult === null) {
-      const delivered = await sendHeartbeat(accounts.length, totalReelsSeen)
+    if ('stale' in digestResult) {
+      const delivered = await sendHeartbeat(accounts.length, totalReelsSeen, digestResult.stale)
       if (!delivered) {
         failures.push({
-          username: 'heartbeat',
+          kind: 'delivery',
+          label: 'heartbeat',
           message: 'daily heartbeat failed to send — bot credentials or the Telegram API are likely broken',
         })
       }
-    } else if (digestResult.delivered === 0) {
+    } else if (digestResult.delivered < digestResult.attempted) {
+      // Any shortfall, not just zero: a header-only digest (header lands, every
+      // photo/text message after it fails) still reads as "📈 Залетело за
+      // сутки: 5" followed by nothing — worse than silence, since it looks
+      // complete. Delivered < attempted catches that, not just total failure.
       failures.push({
-        username: 'digest',
-        message: `0 of ${digestResult.attempted} Telegram message(s) delivered — bot credentials or the Telegram API are likely broken`,
+        kind: 'delivery',
+        label: 'digest',
+        message: `${digestResult.delivered} of ${digestResult.attempted} Telegram message(s) delivered — bot credentials or the Telegram API are likely broken`,
       })
     }
   }
 
   if (failures.length > 0) {
-    if (!isDryRun) await reportFailures(failures, accounts.length)
-    console.error(`\n✗ ${failures.length} of ${accounts.length} account(s) failed`)
-    // process.exitCode (not process.exit) so stdout — including the per-account
-    // "✗ Failed:" lines just logged — actually flushes before Node exits. In CI,
-    // stdout is a pipe and writes to it are async; process.exit() does not wait
-    // for pending writes, so the lines that matter most were the ones at risk
-    // of being cut off.
+    // Skip the report when every failure is a delivery failure: that would
+    // send it over the exact Telegram channel that just failed — guaranteed
+    // to fail again, for the cost of another 15-second timeout. The non-zero
+    // exit and the red Action remain the signal in that case.
+    const allDeliveryFailures = failures.every(f => f.kind === 'delivery')
+    if (!isDryRun && !allDeliveryFailures) await reportFailures(failures, accounts.length)
+
+    const accountFailureCount = failures.filter(f => f.kind === 'account').length
+    const otherFailureCount   = failures.length - accountFailureCount
+    const summaryParts: string[] = []
+    if (accountFailureCount > 0) summaryParts.push(`${accountFailureCount} of ${accounts.length} account(s) failed`)
+    if (otherFailureCount > 0)   summaryParts.push(`${otherFailureCount} other issue(s)`)
+    console.error(`\n✗ ${summaryParts.join(', ')}`)
+
+    // process.exitCode (not process.exit): process.exit() tears the process
+    // down immediately, which is harmless on POSIX — pipe writes are
+    // synchronous there, so the console lines just logged would have arrived
+    // either way — but it IS a genuine truncation risk on Windows, where pipe
+    // writes are async. process.exitCode lets Node finish its event loop and
+    // flush normally on every platform instead of relying on an OS-specific
+    // guarantee.
     process.exitCode = 1
     return
   }
