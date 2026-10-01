@@ -6,6 +6,11 @@
  *   npm run trends
  *   npm run trends -- --dry-run
  *   npm run trends -- --account wineshopexample
+ *
+ * --dry-run is NOT free: it suppresses database writes and all Telegram
+ * traffic, but still scrapes every active account through Apify — currently
+ * 10 accounts × 10 results = 100 billed results. Only --account <name> is
+ * cheap (it also forces --dry-run), and even that still costs ten.
  */
 
 import dotenv from 'dotenv'
@@ -16,11 +21,15 @@ import {
   isFreshForDigest,
   isHit,
   multiple,
+  VIEWS_MULTIPLE,
+  VIEWS_FLOOR,
   formatHeader,
   formatListLine,
   formatReelCaption,
+  formatFailureReport,
   pickDigestReels,
   type DigestReel,
+  type Failure,
 } from './lib/trends'
 import { sendMessage, sendPhotoFromUrl } from './lib/telegram'
 
@@ -111,6 +120,7 @@ async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
   while (Date.now() < deadline) {
     await sleep(10_000)
     const s = await fetch(`${BASE}/actor-runs/${run.id}`, { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } })
+    if (!s.ok) throw new Error(`Apify status poll failed: ${await s.text()}`)
     const { data } = await s.json() as { data: { status: string } }
     if (data.status === 'SUCCEEDED') { succeeded = true; break }
     if (data.status === 'FAILED' || data.status === 'ABORTED') throw new Error(`Apify run ${data.status}`)
@@ -205,28 +215,15 @@ async function sendHeartbeat(accountsChecked: number, reelsSeen: number, staleHi
   return ok
 }
 
-// 'account' = a real per-account scrape/insert error (label is an Instagram
-// username, rendered with @). 'system' = a data-quality problem not tied to
-// any one account (e.g. the all-zero-reels guard). 'delivery' = a Telegram
-// send that itself failed (digest or heartbeat) — see main, which skips
-// reportFailures entirely when every failure is 'delivery', since sending a
-// report over the channel that just failed would only fail again.
-type Failure = { kind: 'account' | 'system' | 'delivery'; label: string; message: string }
-
+// Formatting (escaping, length-bounding, the account-vs-problem wording) lives
+// in lib/trends.ts as formatFailureReport — it's a pure function over data
+// wearing an I/O coat, and it needs the same test coverage as the digest
+// formatters: this message fires exactly when something has already gone
+// wrong, so an unescaped `<html>` from a CDN error page or a message over
+// Telegram's 4096-char limit would cost the alert itself.
 async function reportFailures(failures: Failure[], totalAccounts: number): Promise<void> {
   const { token, chatId } = telegramTarget()
-  const accountFailures = failures.filter(f => f.kind === 'account')
-  const otherFailures    = failures.filter(f => f.kind !== 'account')
-
-  const headerParts: string[] = []
-  if (accountFailures.length > 0) headerParts.push(`${accountFailures.length} из ${totalAccounts} аккаунтов`)
-  if (otherFailures.length > 0)   headerParts.push(`${otherFailures.length} проблем${otherFailures.length === 1 ? 'а' : 'ы'}`)
-
-  const lines = [
-    `⚠️ <b>Синк трендов упал: ${headerParts.join(' + ')}</b>`,
-    ...failures.map(f => f.kind === 'account' ? `• @${f.label} — ${f.message}` : `• ${f.label} — ${f.message}`),
-  ]
-  await sendMessage(token, chatId, lines.join('\n'))
+  await sendMessage(token, chatId, formatFailureReport(failures, totalAccounts))
 }
 
 async function main() {
@@ -280,9 +277,24 @@ async function main() {
       const posts = await scrapeAccount(account.username)
       totalReelsSeen += posts.length
       const followers = account.followers_count ?? 0
+
+      // A real active account with no followers_count scrapes every day for nothing:
+      // multiple() is always 0 for it, so isHit() can never be true — silent, green,
+      // and a permanent waste of Apify budget. --account's synthetic test row is
+      // exempt: its followers_count is always null by construction (we don't look it
+      // up for a one-off smoke test), which is not the same problem.
+      if (!forceAccount && followers === 0) {
+        console.error(`  ⚠ @${account.username} has no followers_count — the relative threshold can never be met, this account can never produce a hit`)
+        failures.push({
+          kind: 'system',
+          label: account.username,
+          message: `followers_count is null/zero — the ${VIEWS_MULTIPLE}× relative threshold can never be met without it`,
+        })
+      }
+
       const highReach = posts.filter(p => isHit(p.videoPlayCount ?? 0, followers))
 
-      console.log(`  ${posts.length} Reels found, ${highReach.length} above threshold (≥5× подписчиков и ≥50K)`)
+      console.log(`  ${posts.length} Reels found, ${highReach.length} above threshold (≥${VIEWS_MULTIPLE}× подписчиков и ≥${VIEWS_FLOOR / 1000}K)`)
 
       for (const post of highReach) {
         const instagramId = post.shortCode

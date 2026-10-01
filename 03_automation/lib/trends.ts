@@ -181,3 +181,75 @@ export function formatListLine(reel: DigestReel): string {
   return `• @${escapeHtml(reel.username)} — <b>${formatViews(reel.views)}</b>${mLabel ? `, ${mLabel}` : ''} — ` +
     `<a href="${escapeHtml(reel.url)}">рилс</a>`
 }
+
+/**
+ * 'account' = a real per-account scrape/insert error (label is an Instagram
+ * username, rendered with @). 'system' = a data-quality problem not tied to
+ * any one account (e.g. the all-zero-reels guard). 'delivery' = a Telegram
+ * send that itself failed (digest or heartbeat) — the caller in sync_trends.ts
+ * skips sending a report at all when every failure is 'delivery', since that
+ * would go out over the exact channel that just failed.
+ */
+export type Failure = { kind: 'account' | 'system' | 'delivery'; label: string; message: string }
+
+/** Telegram's hard limit for a text message (distinct from the 1024 photo-caption limit above). */
+export const TELEGRAM_TEXT_LIMIT = 4096
+
+/**
+ * Per-failure message budget before the whole report gets capped. `message`
+ * here is error text from Supabase/Apify, not something we control — an
+ * upstream 502 can hand back an HTML error page as the "JSON" body, so
+ * `err.message` is genuinely user-hostile input as far as this formatter is
+ * concerned, same as a reel caption from Instagram.
+ */
+const FAILURE_MESSAGE_LIMIT = 300
+
+/**
+ * Builds the HTML text for the "the run failed" Telegram alert. This is the
+ * one message in the whole pipeline that fires *because* something already
+ * went wrong — which is exactly when an unescaped `<html>` from a CDN error
+ * page, or a run of failures blowing past 4096 characters, would make
+ * Telegram reject the alert itself (400 `Unsupported start tag "html"`, or a
+ * flat length rejection) and leave the operator with nothing but a red
+ * Action. Escaping and length-bounding this one is not optional the way it
+ * might be for friendlier strings.
+ */
+export function formatFailureReport(failures: Failure[], totalAccounts: number): string {
+  const accountFailures = failures.filter(f => f.kind === 'account')
+  const otherFailures    = failures.filter(f => f.kind !== 'account')
+
+  const headerParts: string[] = []
+  if (accountFailures.length > 0) headerParts.push(`${accountFailures.length} из ${totalAccounts} аккаунтов`)
+  if (otherFailures.length > 0)   headerParts.push(`${otherFailures.length} проблем${otherFailures.length === 1 ? 'а' : 'ы'}`)
+
+  const header = `⚠️ <b>Синк трендов упал: ${headerParts.join(' + ')}</b>`
+
+  const lines = failures.map(f => {
+    const label   = escapeHtml(f.label)
+    const message = truncateEscaped(escapeHtml(f.message), FAILURE_MESSAGE_LIMIT)
+    return f.kind === 'account' ? `• @${label} — ${message}` : `• ${label} — ${message}`
+  })
+
+  // Telegram rejects the ENTIRE message over TELEGRAM_TEXT_LIMIT characters — a batch
+  // of ten verbose failures must not cost the whole alert. Keep whole lines (never
+  // truncate mid-failure, that's what FAILURE_MESSAGE_LIMIT is for) and count the
+  // rest, same spirit as pickDigestReels' `omitted`.
+  const kept: string[] = []
+  let used = header.length
+  for (const line of lines) {
+    if (used + 1 + line.length > TELEGRAM_TEXT_LIMIT) break   // +1 for the joining newline
+    kept.push(line)
+    used += 1 + line.length
+  }
+
+  const omitted = lines.length - kept.length
+  if (omitted > 0) {
+    const tail = `…и ещё ${omitted}`
+    // Not mathematically guaranteed — if the lines right at the edge of the
+    // limit left no room at all, drop the tail rather than ever exceed the
+    // limit ourselves.
+    if (used + 1 + tail.length <= TELEGRAM_TEXT_LIMIT) kept.push(tail)
+  }
+
+  return [header, ...kept].join('\n')
+}

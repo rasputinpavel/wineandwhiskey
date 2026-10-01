@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   isHit, isFreshForDigest, multiple, pickDigestReels, type DigestReel,
   formatHeader, formatListLine, formatReelCaption, formatViews, TELEGRAM_CAPTION_LIMIT,
+  formatFailureReport, type Failure, TELEGRAM_TEXT_LIMIT,
 } from './trends'
 
 describe('multiple', () => {
@@ -247,5 +248,99 @@ describe('formatReelCaption — whitespace-only caption', () => {
     const whitespace = formatReelCaption(reel({ caption: '   ' }))
     const nullCaption = formatReelCaption(reel({ caption: null }))
     expect(whitespace).toBe(nullCaption)
+  })
+})
+
+describe('formatFailureReport', () => {
+  it('escapes HTML in a failure message — the actual shape of an Apify/Supabase 502', () => {
+    const failures: Failure[] = [
+      { kind: 'account', label: 'shop', message: `Unexpected token '<', "<html><head><title>502 Bad Gateway` },
+    ]
+    const report = formatFailureReport(failures, 10)
+    expect(report).toContain('&lt;html&gt;')
+    expect(report).not.toContain('<html>')
+  })
+
+  it('escapes HTML in the label too', () => {
+    const failures: Failure[] = [
+      { kind: 'system', label: '<script>evil', message: 'boom' },
+    ]
+    const report = formatFailureReport(failures, 10)
+    expect(report).toContain('&lt;script&gt;evil')
+  })
+
+  it('prefixes an account failure with @ and leaves system/delivery failures unprefixed', () => {
+    const failures: Failure[] = [
+      { kind: 'account',  label: 'wineshop', message: 'timeout' },
+      { kind: 'system',   label: 'all-accounts', message: 'zero reels' },
+      { kind: 'delivery', label: 'digest', message: '0 of 6 delivered' },
+    ]
+    const report = formatFailureReport(failures, 10)
+    expect(report).toContain('• @wineshop — timeout')
+    expect(report).toContain('• all-accounts — zero reels')
+    expect(report).toContain('• digest — 0 of 6 delivered')
+    expect(report).not.toContain('@all-accounts')
+    expect(report).not.toContain('@digest')
+  })
+
+  it('counts accounts and other problems separately in the header', () => {
+    const failures: Failure[] = [
+      { kind: 'account', label: 'shop1', message: 'x' },
+      { kind: 'account', label: 'shop2', message: 'x' },
+      { kind: 'system',  label: 'all-accounts', message: 'y' },
+    ]
+    const report = formatFailureReport(failures, 10)
+    const header = report.split('\n')[0]
+    expect(header).toContain('2 из 10 аккаунтов')
+    expect(header).toContain('1 проблема')
+  })
+
+  it('omits the account clause entirely when every failure is synthetic', () => {
+    const failures: Failure[] = [
+      { kind: 'delivery', label: 'heartbeat', message: 'failed to send' },
+    ]
+    const report = formatFailureReport(failures, 10)
+    const header = report.split('\n')[0]
+    expect(header).not.toContain('аккаунтов')
+    expect(header).toContain('1 проблема')
+  })
+
+  it('stays at or under the Telegram text limit for ten verbose failures', () => {
+    const failures: Failure[] = Array.from({ length: 10 }, (_, i) => ({
+      kind: 'account' as const,
+      label: `shop${i}`,
+      message: 'Apify dataset fetch failed: '.repeat(80), // ~2240 chars each, raw
+    }))
+    const report = formatFailureReport(failures, 10)
+    expect(report.length).toBeLessThanOrEqual(TELEGRAM_TEXT_LIMIT)
+  })
+
+  it('never cuts a single message mid-HTML-entity even when capping its own length', () => {
+    const failures: Failure[] = [
+      { kind: 'account', label: 'shop', message: '<html>&'.repeat(200) },
+    ]
+    const report = formatFailureReport(failures, 10)
+    expect(report).not.toMatch(/&[a-z]*…/)
+    expect(report.length).toBeLessThanOrEqual(TELEGRAM_TEXT_LIMIT)
+  })
+
+  it('drops whole surplus lines in favour of a count once per-message capping alone is not enough', () => {
+    // 20 failures at the per-message cap (~300 chars each) land well past 4096 even
+    // after truncation — this is the branch that drops entire lines, distinct from
+    // the single-message truncation covered above.
+    const failures: Failure[] = Array.from({ length: 20 }, (_, i) => ({
+      kind: 'account' as const,
+      label: `shop${i}`,
+      message: 'x'.repeat(300),
+    }))
+    const report = formatFailureReport(failures, 20)
+    expect(report.length).toBeLessThanOrEqual(TELEGRAM_TEXT_LIMIT)
+    expect(report).toMatch(/…и ещё \d+/)
+    // Whatever lines did make it in must be whole — no line is a truncated
+    // fragment of a 300-char message cut short of its own cap.
+    for (const line of report.split('\n').slice(1)) {
+      if (line.startsWith('…и ещё')) continue
+      expect(line).toMatch(/^• @shop\d+ — x+$/)
+    }
   })
 })
