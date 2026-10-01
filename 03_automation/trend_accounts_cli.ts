@@ -61,10 +61,12 @@ async function list(): Promise<void> {
   console.log()
 }
 
-async function add(usernames: string[]): Promise<void> {
+/** Returns the number of usernames that failed, so main() can set the exit code. */
+async function add(usernames: string[]): Promise<number> {
   const token = process.env.APIFY_TOKEN
   if (!token) throw new Error('APIFY_TOKEN is not set — needed to read the follower count')
 
+  let failures = 0
   for (const raw of usernames) {
     const username = raw.replace(/^@/, '').trim()
     if (username === '') continue
@@ -84,6 +86,7 @@ async function add(usernames: string[]): Promise<void> {
     const profile = await getProfile(token, username)
     if (!profile) {
       console.error(`  ✗ @${username} — profile not found, skipped`)
+      failures++
       continue
     }
 
@@ -94,12 +97,15 @@ async function add(usernames: string[]): Promise<void> {
       category:        'manual',
       is_active:       false,
     })
-    if (error) console.error(`  ✗ @${username} — ${error.message}`)
+    if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
     else console.log(`  + @${username} (${profile.followersCount.toLocaleString()} followers), inactive`)
   }
+  return failures
 }
 
-async function setActive(usernames: string[], isActive: boolean): Promise<void> {
+/** Returns the number of usernames that failed, so main() can set the exit code. */
+async function setActive(usernames: string[], isActive: boolean): Promise<number> {
+  let failures = 0
   for (const raw of usernames) {
     const username = raw.replace(/^@/, '').trim()
     if (username === '') continue
@@ -108,22 +114,40 @@ async function setActive(usernames: string[], isActive: boolean): Promise<void> 
       .update({ is_active: isActive })
       .eq('username', username)
       .select('username')
-    if (error) console.error(`  ✗ @${username} — ${error.message}`)
-    else if (!data?.length) console.error(`  ✗ @${username} — not in the list (add it first)`)
+    if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
+    else if (!data?.length) { console.error(`  ✗ @${username} — not in the list (add it first)`); failures++ }
     else console.log(`  ${isActive ? '✓ on ' : '· off'} @${username}`)
   }
+  return failures
 }
+
+const USAGE = `Usage:
+  npm run trends:accounts -- --list
+  npm run trends:accounts -- --add lucialoveswine marcelopinowine
+  npm run trends:accounts -- --on fabiopicchiquintovizio vinoteca_mendoza
+  npm run trends:accounts -- --off ingvildtennfjord`
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
 
-  if (args.includes('--list') || args.length === 0) {
+  if (args.length === 0 || args.includes('--list')) {
     await list()
     return
   }
-  if (args.includes('--add'))  await add(valuesAfter(args, '--add'))
-  if (args.includes('--on'))   await setActive(valuesAfter(args, '--on'), true)
-  if (args.includes('--off'))  await setActive(valuesAfter(args, '--off'), false)
+
+  const recognised = ['--add', '--on', '--off'].some(f => args.includes(f))
+  if (!recognised) {
+    console.error(`Unrecognised arguments: ${args.join(' ')}\n\n${USAGE}`)
+    process.exitCode = 1
+    return
+  }
+
+  let failures = 0
+  if (args.includes('--add'))  failures += await add(valuesAfter(args, '--add'))
+  if (args.includes('--on'))   failures += await setActive(valuesAfter(args, '--on'), true)
+  if (args.includes('--off'))  failures += await setActive(valuesAfter(args, '--off'), false)
+
+  if (failures > 0) process.exitCode = 1
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
