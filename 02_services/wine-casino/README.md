@@ -44,24 +44,43 @@ npm test
 
 ## Rules that look arbitrary and are not
 
-- **A blind guess must never pay.** Every category's button count is `>=` its
-  payout multiplier — betting `A` chips on a uniform guess across `n` buttons
-  returns `A*(m-n)/n`, so `m > n` makes ignorance profitable. That's why Region
-  has 8 buttons at x8 and Vintage has 10 at x10, not fewer. `lib/options.ts`
-  states the invariant and a test in `options.test.ts` enforces it — retuning
+- **A blind guess must never pay — but only categories with a button count to
+  protect.** Every `choice` category's button count is `>=` its payout
+  multiplier — betting `A` chips on a uniform guess across `n` buttons returns
+  `A*(m-n)/n`, so `m > n` makes ignorance profitable. That's why Vintage widened
+  to 16 buttons at x16, not fewer. `lib/options.ts` states the invariant and a
+  test in `options.test.ts` enforces it for every `choice` category — retuning
   the numbers without re-checking the test will break the game economically,
-  not just cosmetically.
+  not just cosmetically. Country and region are `open` (free text against the
+  dictionaries in `lib/wine-data.ts`, see `lib/bets.ts`) and sit outside this
+  invariant entirely: there is no board to make small, and a dictionary of
+  dozens of entries is unprofitable to blind-guess against almost by
+  construction. They used to be `choice` categories with a board, and the
+  region board was the reason they changed — it was always built from the
+  wine's own true country's regions, so a guest who recognised even one region
+  name won Country for free. A real game had country options
+  Греция/Грузия/Германия/Болгария/Португалия/Молдавия next to a region board
+  that was all eight Moldovan regions.
 - **Hints are free information, so the expensive categories don't get them
   first.** `lib/hints.ts`'s generator list runs cheapest-category-first, with
-  vintage last on purpose: a ±1 year hint cuts a ten-button board to three,
+  vintage last on purpose: a ±1 year hint cuts a sixteen-button board to three,
   which made "ignore the wine, wait for the year hint, shove everything" the
   best strategy when it was tried earlier.
 - **Questions we can't ask fairly are not asked.** A grape outside our pool on
   a bottle with no recorded colour gets no colour hint (a hardcoded fallback
-  once called Kisi, a Georgian amber grape, red). An unrecognised country gets
-  no Old/New World category. A wine from the current vintage year gets no
-  vintage category at all, because the option window can only be built one
-  legal way and the answer would always be the last button — a free x10.
+  once called Kisi, a Georgian amber grape, red) — and, for the same reason,
+  its decoy pool on the betting board falls back to the correct grape's own
+  group before ever widening to every grape we know (a colourless Sauvignon
+  Blanc used to get five red decoys and one white option). An unrecognised
+  country gets no Old/New World category. A wine from the current vintage year
+  gets no vintage category at all, because the option window can only be built
+  one legal way and the answer would always be the last button — a free x16.
+- **Style is a fact, not a bet.** `WineFacts.style` and `STYLE_OPTIONS` still
+  exist — the admin form still records it and the reveal still shows it — but
+  it is no longer in `DEFAULT_CATEGORIES`. `'style'` survives as a
+  `CategoryKey` and `buildOptions` still knows how to build its board, purely
+  so a game created before this change keeps settling the way it always did
+  (see "games already created" below).
 - **A busted guest is staked 10 chips** (`rescue_chips`, editable per game),
   and the phone says so ("Казино дарит вам фишки на следующий кон" / "The house
   stakes you for the next round"). Without that message the balance jumps from

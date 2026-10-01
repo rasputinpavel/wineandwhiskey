@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { buildOptions, OPTION_COUNTS } from './options'
 import { DEFAULT_CATEGORIES } from './categories'
+import { GRAPES } from './wine-data'
 import type { CategoryKey, WineFacts } from './types'
 
+// Categories that still render as a button board. Country and region are free
+// entry now (see categories.ts) and never produce an `options` entry — see the
+// "open categories" block near the bottom of this file. Style survives here
+// only because buildOptions still has to build its board for a game created
+// before style left the betting ladder (see options.ts's comment on why).
+const BOARD: CategoryKey[] = ['style', 'world', 'grape', 'vintage']
 const ALL: CategoryKey[] = ['style', 'world', 'country', 'grape', 'region', 'vintage']
 
 const chianti: WineFacts = {
@@ -26,45 +33,68 @@ function seeded(seed: number) {
 }
 
 describe('buildOptions', () => {
-  it('always includes the correct answer in every category', () => {
-    const o = buildOptions(chianti, ALL, seeded(1))
+  it('always includes the correct answer in every board category', () => {
+    const o = buildOptions(chianti, BOARD, seeded(1))
     expect(o.style!.map(x => x.value)).toContain('dry')
     expect(o.world!.map(x => x.value)).toContain('old')
-    expect(o.country!.map(x => x.value)).toContain('italy')
     expect(o.grape!.map(x => x.value)).toContain('sangiovese')
-    expect(o.region!.map(x => x.value)).toContain('toscana')
     expect(o.vintage!.map(x => x.value)).toContain('2019')
   })
 
   it('never exceeds the configured option count', () => {
-    const o = buildOptions(chianti, ALL, seeded(2))
-    for (const key of ALL) {
-      expect(o[key]!.length).toBeLessThanOrEqual(OPTION_COUNTS[key])
+    const o = buildOptions(chianti, BOARD, seeded(2))
+    for (const key of ['world', 'grape', 'vintage'] as const) {
+      expect(o[key]!.length).toBeLessThanOrEqual(OPTION_COUNTS[key]!)
     }
   })
 
   it('never repeats an option inside a category', () => {
-    const o = buildOptions(chianti, ALL, seeded(3))
-    for (const key of ALL) {
+    const o = buildOptions(chianti, BOARD, seeded(3))
+    for (const key of BOARD) {
       const values = o[key]!.map(x => x.value)
       expect(new Set(values).size).toBe(values.length)
     }
   })
 
   it('offers only red grapes as decoys for a red wine', () => {
-    const o = buildOptions(chianti, ALL, seeded(4))
+    const o = buildOptions(chianti, BOARD, seeded(4))
     expect(o.grape!.map(x => x.value)).not.toContain('chardonnay')
     expect(o.grape!.map(x => x.value)).not.toContain('riesling')
   })
 
   it('offers only white grapes as decoys for a white wine', () => {
     const riesling: WineFacts = { ...chianti, grape: 'Riesling', color: 'white', country: 'Germany', region: 'Mosel' }
-    const o = buildOptions(riesling, ALL, seeded(5))
+    const o = buildOptions(riesling, BOARD, seeded(5))
     expect(o.grape!.map(x => x.value)).not.toContain('merlot')
   })
 
+  it('derives the grape decoy pool from the correct grape when the bottle colour is blank', () => {
+    // A hand-entered wine with no recorded colour used to fall back to the
+    // whole grape pool — a Sauvignon Blanc could get five red decoys and one
+    // white option, giving the answer away without tasting. The pool must come
+    // from the correct grape's own group (known from our table) instead.
+    const noColor: WineFacts = { ...chianti, grape: 'Sauvignon Blanc', color: null, country: 'France', region: 'Bordeaux' }
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const o = buildOptions(noColor, BOARD, seeded(seed))
+      expect(o.grape!.map(x => x.value)).toContain('sauvignon blanc')
+      for (const value of o.grape!.map(x => x.value)) {
+        const g = GRAPES.find(x => x.value === value)
+        expect(g?.group).not.toBe('red')
+      }
+    }
+  })
+
+  it('still widens to the whole pool when neither the bottle nor our table knows the colour', () => {
+    // Kisi is outside our GRAPES table and, with no bottle colour either,
+    // genuinely unknown — the old behaviour (fall back to everything) is the
+    // only honest option left once the grape's own group cannot be read.
+    const kisi: WineFacts = { ...chianti, grape: 'Kisi', color: null, country: 'Georgia', region: 'Kakheti' }
+    const o = buildOptions(kisi, BOARD, seeded(6))
+    expect(o.grape!.length).toBe(OPTION_COUNTS.grape)
+  })
+
   it('gives vintage options in ascending order around the true year', () => {
-    const o = buildOptions(chianti, ALL, seeded(6))
+    const o = buildOptions(chianti, BOARD, seeded(6))
     const years = o.vintage!.map(x => Number(x.value))
     expect(years).toEqual([...years].sort((a, b) => a - b))
     expect(years).toContain(2019)
@@ -74,30 +104,45 @@ describe('buildOptions', () => {
   it('does not put the true vintage in the same slot every time', () => {
     const positions = new Set(
       [1, 2, 3, 4, 5, 6, 7, 8].map(seed => {
-        const o = buildOptions(chianti, ALL, seeded(seed))
+        const o = buildOptions(chianti, BOARD, seeded(seed))
         return o.vintage!.findIndex(x => x.value === '2019')
       }),
     )
     expect(positions.size).toBeGreaterThan(1)
   })
 
-  it('never makes a blind guess profitable: every multiplier fits its button count', () => {
+  it('never makes a blind guess profitable: every choice category’s multiplier fits its button count', () => {
     // Betting A chips on a uniform guess returns A*(m - n)/n, so m > n pays
     // ignorance better than knowledge. This invariant is the whole reason
-    // region has 8 buttons and vintage has 10.
-    for (const cat of DEFAULT_CATEGORIES) {
-      expect(cat.multiplier).toBeLessThanOrEqual(OPTION_COUNTS[cat.key])
+    // the ladder's option counts are what they are. It only applies to
+    // `choice` categories — `open` categories have no button count to check
+    // against (and no board at all), see the test below.
+    for (const cat of DEFAULT_CATEGORIES.filter(c => c.input === 'choice')) {
+      expect(cat.multiplier).toBeLessThanOrEqual(OPTION_COUNTS[cat.key]!)
+    }
+  })
+
+  it('never assigns a button count to an open category, and never gives it buttons when it is live', () => {
+    // The point of this test is to stop someone silently making an open
+    // category behave like a sized board again (and, with it, ignorance
+    // profitable): country and region must stay free-text, forever. They are
+    // still "live" for this wine — an empty array, not an absent key, see the
+    // "open categories" block below for what absence vs. `[]` means.
+    for (const cat of DEFAULT_CATEGORIES.filter(c => c.input === 'open')) {
+      expect(OPTION_COUNTS[cat.key]).toBeUndefined()
+      const o = buildOptions(chianti, [cat.key], seeded(42))
+      expect(o[cat.key]).toEqual([])
     }
   })
 
   it('treats an off-canon style as missing instead of posting an unwinnable board', () => {
     const offDry: WineFacts = { ...chianti, style: 'off-dry' }
-    expect(buildOptions(offDry, ALL, seeded(11)).style).toBeUndefined()
+    expect(buildOptions(offDry, BOARD, seeded(11)).style).toBeUndefined()
   })
 
   it('never offers a vintage that has not happened yet', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const o = buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(seed), 2026)
+      const o = buildOptions({ ...chianti, vintage: 2025 }, BOARD, seeded(seed), 2026)
       for (const opt of o.vintage!) {
         expect(Number(opt.value)).toBeLessThanOrEqual(2026)
       }
@@ -108,30 +153,87 @@ describe('buildOptions', () => {
   it('skips the vintage category for a wine from the current year', () => {
     // Only one legal window exists for a current-year wine, so the answer would
     // always sit on the last button. A year older and the window can move again.
-    expect(buildOptions({ ...chianti, vintage: 2026 }, ALL, seeded(3), 2026).vintage).toBeUndefined()
-    expect(buildOptions({ ...chianti, vintage: 2025 }, ALL, seeded(3), 2026).vintage)
-      .toHaveLength(OPTION_COUNTS.vintage)
+    expect(buildOptions({ ...chianti, vintage: 2026 }, BOARD, seeded(3), 2026).vintage).toBeUndefined()
+    expect(buildOptions({ ...chianti, vintage: 2025 }, BOARD, seeded(3), 2026).vintage)
+      .toHaveLength(OPTION_COUNTS.vintage!)
   })
 
   it('skips a category whose fact is missing', () => {
-    const noRegion: WineFacts = { ...chianti, region: null, vintage: null }
-    const o = buildOptions(noRegion, ALL, seeded(7))
-    expect(o.region).toBeUndefined()
+    const noGrape: WineFacts = { ...chianti, grape: null, vintage: null }
+    const o = buildOptions(noGrape, BOARD, seeded(7))
+    expect(o.grape).toBeUndefined()
     expect(o.vintage).toBeUndefined()
-    expect(o.country).toBeDefined()
+    expect(o.world).toBeDefined()
   })
 
   it('skips a category the game has turned off', () => {
-    const o = buildOptions(chianti, ['style', 'country'], seeded(8))
+    const o = buildOptions(chianti, ['style', 'world'], seeded(8))
     expect(o.grape).toBeUndefined()
     expect(o.vintage).toBeUndefined()
     expect(o.style).toBeDefined()
-    expect(o.country).toBeDefined()
+    expect(o.world).toBeDefined()
   })
 
   it('treats orange wine as white for grape decoys and still fills the board', () => {
     const orange: WineFacts = { ...chianti, grape: 'Rkatsiteli', color: 'orange', country: 'Georgia', region: 'Kakheti' }
-    const o = buildOptions(orange, ALL, seeded(9))
+    const o = buildOptions(orange, BOARD, seeded(9))
     expect(o.grape!.length).toBe(OPTION_COUNTS.grape)
+  })
+
+  it('still builds a style board for a game that still runs it (pre-ladder-change categories)', () => {
+    // Style left the default ladder, but buildOptions must keep knowing how to
+    // build its board — existing games store their own categories array and
+    // keep working (see README and categories.ts).
+    const o = buildOptions(chianti, ['style'], seeded(1))
+    expect(o.style!.map(x => x.value)).toContain('dry')
+    expect(o.style!.length).toBe(4)
+  })
+})
+
+describe('buildOptions — open categories (country, region)', () => {
+  // The three-way signal `options[key]` carries for an open category:
+  //   absent      -> not asked for this wine
+  //   []          -> asked, answered by typing (no board)
+  //   [opt, ...]  -> a `choice` category's button board (unrelated to this file)
+  // An open category's own key is NEVER a non-empty array — that would put a
+  // board back under a category with no button-count invariant to protect it.
+
+  it('marks a recognised country as open (an empty board) rather than building buttons', () => {
+    const o = buildOptions(chianti, ALL, seeded(10))
+    expect(o.country).toEqual([])
+  })
+
+  it('marks a recognised region as open (an empty board) rather than building buttons', () => {
+    const o = buildOptions(chianti, ALL, seeded(10))
+    expect(o.region).toEqual([])
+  })
+
+  it('asks no country question at all when the country is not one we know', () => {
+    const unknown: WineFacts = { ...chianti, country: 'Freedonia' }
+    expect(buildOptions(unknown, ALL, seeded(10)).country).toBeUndefined()
+  })
+
+  it('asks no region question at all when the region is not one we know', () => {
+    const unknown: WineFacts = { ...chianti, region: 'Narnia' }
+    expect(buildOptions(unknown, ALL, seeded(10)).region).toBeUndefined()
+  })
+
+  it('still recognises a region typed or stored with its accent folded differently', () => {
+    const accented: WineFacts = { ...chianti, country: 'Spain', region: 'Rías Baixas' }
+    expect(buildOptions(accented, ALL, seeded(10)).region).toEqual([])
+  })
+
+  it('omits country and region entirely when the game has turned them off, even though both facts are recognised', () => {
+    const o = buildOptions(chianti, ['style', 'world'], seeded(8))
+    expect(o.country).toBeUndefined()
+    expect(o.region).toBeUndefined()
+  })
+
+  it('still builds everything else normally alongside a live open category', () => {
+    const o = buildOptions(chianti, ALL, seeded(10))
+    expect(o.style).toBeDefined()
+    expect(o.world).toBeDefined()
+    expect(o.grape).toBeDefined()
+    expect(o.vintage).toBeDefined()
   })
 })

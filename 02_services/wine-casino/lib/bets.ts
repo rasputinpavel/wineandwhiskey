@@ -1,7 +1,14 @@
 import { canon } from './text'
+import { isKnownCountry, isKnownRegion } from './wine-data'
 import type { CategoryKey, Option, RoundStatus } from './types'
 
 export type BetLine = { category: CategoryKey; option: string; amount: number }
+
+// Country and region are `open` categories (see lib/categories.ts): there is
+// no button board for them, so a typed guess is checked against our own
+// dictionaries (isKnownCountry/isKnownRegion, lib/wine-data.ts) instead.
+// Everything else still has a board and is checked against it below, exactly
+// as before.
 
 export type BetError =
   | 'wrong_game'
@@ -38,17 +45,35 @@ export function validateBetSlip(input: {
   for (const line of input.slip) {
     if (!input.activeCategories.includes(line.category)) return { ok: false, error: 'unknown_category' }
 
-    // Compared through the same canon() that settleRound uses to decide whether
-    // a bet won. Two different notions of "the same string" in the two halves of
-    // the money path is how you end up accepting a bet you then score as wrong.
-    const board = input.options[line.category] ?? []
-    if (!board.some(o => canon(o.value) === canon(line.option))) {
-      return { ok: false, error: 'unknown_option' }
+    const value = canon(line.option)
+    let recognised: boolean
+
+    if (line.category === 'country' || line.category === 'region') {
+      // An open category still needs a per-wine "is this even being asked"
+      // check: buildOptions only sets this key (to `[]`, never to a board —
+      // see options.ts) when the fact was recognised for THIS wine. A wine
+      // whose country/region we couldn't recognise never sets the key at all,
+      // and betting on it is exactly like betting on a category the game
+      // switched off, not like a wrong guess at a live one.
+      if (input.options[line.category] === undefined) return { ok: false, error: 'unknown_category' }
+      recognised = line.category === 'country' ? isKnownCountry(line.option) : isKnownRegion(line.option)
+    } else {
+      // Compared through the same canon() that settleRound uses to decide
+      // whether a bet won. Two different notions of "the same string" in the
+      // two halves of the money path is how you end up accepting a bet you
+      // then score as wrong.
+      recognised = (input.options[line.category] ?? []).some(o => canon(o.value) === value)
     }
+    if (!recognised) return { ok: false, error: 'unknown_option' }
 
     if (!Number.isInteger(line.amount) || line.amount < 1) return { ok: false, error: 'bad_amount' }
 
-    const key = `${line.category}:${line.option}`
+    // Keyed by the canonical value, not the raw text: a choice category can only
+    // ever send one spelling (the board's), but an open category's guest can
+    // type "Chile" and "CHILE" as two slip lines that mean the same bet. Keying
+    // on the raw string would let that through as two separate stakes on one
+    // answer — the same money-path bug the comparison above exists to avoid.
+    const key = `${line.category}:${value}`
     if (seen.has(key)) return { ok: false, error: 'duplicate_bet' }
     seen.add(key)
 

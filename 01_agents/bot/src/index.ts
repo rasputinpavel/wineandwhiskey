@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: "../.env.local" });
 
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, InputFile } from "grammy";
 import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
@@ -32,6 +32,15 @@ import {
   parseWriteoffText, parseWriteoffPhoto, parseWriteoffPhotoMulti, matchCatalog, findVariant,
   insertWriteoff, listPending, closeWriteoff,
 } from "./writeoff.js";
+import {
+  requestSlice, requestRefine, rememberSlice, recallSlice, parsePriceCaption,
+  PriceSliceError, type SliceItem,
+} from "./price-slice.js";
+import {
+  buildSliceCsv, formatSliceMessage, sliceFileName, bangkokIsoDate,
+  type SliceRow,
+} from "./price-slice-format.js";
+import { describeError } from "./errors.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -51,6 +60,21 @@ function nowInThailand(): string {
 
 function todayInThailand(): string {
   return bangkokNow().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+// Report a failed step into the chat instead of only into the Railway log.
+// Staff can read the log; we cannot ask them to. `what` names the step that
+// broke ("обработка фото · распознавание"), so a Telegram download failure and
+// a Claude failure stop looking like the same message. Falls back to a new
+// message because the wait message may already be deleted by the time we fail.
+async function reportFailure(ctx: any, msgId: number, what: string, e: unknown): Promise<void> {
+  console.error(`${what} failed:`, e);
+  const text = `⚠️ Ошибка: ${what}\n${describeError(e, [process.env.TELEGRAM_BOT_TOKEN, process.env.ANTHROPIC_API_KEY])}`;
+  try {
+    await ctx.api.editMessageText(ctx.chat.id, msgId, text);
+  } catch {
+    try { await ctx.reply(text); } catch (sendErr) { console.error("reportFailure send failed:", sendErr); }
+  }
 }
 
 const SYSTEM_PROMPT = `Ты — умный помощник для управления винным магазином Wine & Whiskey в Таиланде.
@@ -83,6 +107,127 @@ const pendingWeight = new Map<number, { variantId: string; itemName: string }>()
 // A group-photo write-off in progress: the confirmed items, held in memory
 // because N variant_ids don't fit in callback data. Restart loses it (rare).
 const pendingGroup = new Map<number, GroupItem[]>();
+
+// Прайс-срез. pendingPriceSlice: ждём файл после /price. Текстовое доуточнение
+// принимаем ТОЛЬКО как reply на сообщение со срезом — иначе перехватим расходы.
+const pendingPriceSlice = new Map<number, { query: string }>();
+
+// Файл уже скачан на попытке распознать PO — держим его, чтобы кнопка
+// «Это прайс-лист» не качала заново.
+const pendingPriceFile = new Map<number, { base64: string; mimeType: string; filename: string }>();
+
+const SLICE_CHAT_LIMIT = 10;
+const SLICE_ASK = "Что нужно из этого прайса? Например: «все шардоне до 600».";
+
+// Общий финал для первого среза и доуточнения: список в чат + CSV-вложение.
+async function sendSlice(ctx: any, waitMsgId: number, opts: {
+  supplier: string;
+  priceListDate: string | null;
+  rows: SliceRow[];
+  totalItems: number;
+  matched: number;
+  degraded: string[];
+  query: string;
+  items?: SliceItem[];
+}): Promise<void> {
+  const chatId = ctx.chat.id;
+  const text = formatSliceMessage({
+    supplier: opts.supplier,
+    priceListDate: opts.priceListDate,
+    rows: opts.rows,
+    totalItems: opts.totalItems,
+    matched: opts.matched,
+    degraded: opts.degraded,
+    limit: SLICE_CHAT_LIMIT,
+  });
+
+  const edited = await ctx.api.editMessageText(chatId, waitMsgId, text, { parse_mode: "HTML" });
+  const messageId = typeof edited === "object" && edited !== null && "message_id" in edited
+    ? (edited.message_id as number)
+    : waitMsgId;
+
+  if (opts.matched > 0) {
+    const csv = buildSliceCsv(opts.rows);
+    const name = sliceFileName(opts.query, opts.supplier, bangkokIsoDate());
+    await ctx.replyWithDocument(new InputFile(Buffer.from(csv, "utf8"), name), {
+      reply_parameters: { message_id: messageId },
+    });
+  }
+
+  if (opts.items) {
+    rememberSlice(chatId, { items: opts.items, supplier: opts.supplier, messageId });
+  }
+}
+
+// Один путь для файла из любого входа: /price, подпись «прайс…», кнопка.
+//
+// Файл качаем ВНУТРИ try: в боте нет bot.catch, поэтому исключение из
+// downloadTelegramFile (например, файл больше 20 МБ — телеграм его не отдаёт)
+// иначе стало бы необработанным отказом, и пользователь остался бы с
+// «Читаю прайс...» навсегда.
+async function runPriceSlice(
+  ctx: any,
+  fetchFile: () => Promise<{ base64: string; mimeType: string; filename: string }>,
+  query: string,
+): Promise<void> {
+  const waitMsg = await ctx.reply("Читаю прайс... Большой файл — до десяти минут, подожди.");
+  try {
+    const file = await fetchFile();
+    const res = await requestSlice({ ...file, query });
+    await sendSlice(ctx, waitMsg.message_id, {
+      supplier: res.supplier_name,
+      priceListDate: res.price_list_date,
+      rows: res.rows,
+      totalItems: res.total_items,
+      matched: res.matched,
+      degraded: res.degraded,
+      query,
+      items: res.items,
+    });
+  } catch (e) {
+    if (e instanceof PriceSliceError && e.status === 422) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Не смог прочитать это как прайс-лист. Если это PO поставщика — пришли его без подписи.");
+      return;
+    }
+    if (e instanceof PriceSliceError && e.status === 400) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Не понял запрос. Например: «все шардоне до 600».");
+      return;
+    }
+    if (e instanceof PriceSliceError && (e.status === 502 || e.status === 503 || e.status === 504)) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Портал сейчас недоступен — обновляется или не справился с этим файлом. Попробуй ещё раз через пару минут.");
+      return;
+    }
+    if (e instanceof PriceSliceError && e.status === 413) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Файл слишком большой. Пришли прайс поменьше 20 МБ.");
+      return;
+    }
+    await reportFailure(ctx, waitMsg.message_id, "разбор прайса", e);
+  }
+}
+
+// Доуточнение по уже разобранным позициям — без повторного парсинга файла.
+async function runPriceRefine(ctx: any, cached: { items: SliceItem[]; supplier: string }, query: string): Promise<void> {
+  const waitMsg = await ctx.reply("Пересчитываю срез...");
+  try {
+    const res = await requestRefine(cached.items, query);
+    await sendSlice(ctx, waitMsg.message_id, {
+      supplier: cached.supplier, priceListDate: null, rows: res.rows,
+      totalItems: res.total_items, matched: res.matched, degraded: res.degraded,
+      query, items: cached.items,
+    });
+  } catch (e) {
+    if (e instanceof PriceSliceError && e.status === 400) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Не понял уточнение. Например: «только Францию» или «до 600».");
+      return;
+    }
+    await reportFailure(ctx, waitMsg.message_id, "доуточнение среза", e);
+  }
+}
 
 // PO confirmation holds NO in-memory state: the scan is uploaded now, its path
 // travels in the callback data, and the fields are read back from the card text
@@ -433,7 +578,7 @@ bot.command("briefing", async (ctx) => {
       await ctx.api.editMessageText(ctx.chat.id, msg.message_id, plain);
     }
   } catch (e) {
-    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "Не удалось сгенерировать брифинг.");
+    await reportFailure(ctx, msg.message_id, "утренний брифинг", e);
   }
 });
 
@@ -448,7 +593,7 @@ bot.command("stock", async (ctx) => {
     const result = await getLowStock(5);
     await ctx.api.editMessageText(ctx.chat.id, msg.message_id, result, { parse_mode: "HTML" });
   } catch (e) {
-    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "Ошибка при загрузке данных.");
+    await reportFailure(ctx, msg.message_id, "остатки (Loyverse)", e);
   }
 });
 
@@ -459,7 +604,7 @@ bot.command("sales", async (ctx) => {
     const result = await getSales(today, today);
     await ctx.api.editMessageText(ctx.chat.id, msg.message_id, result, { parse_mode: "HTML" });
   } catch (e) {
-    await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "Ошибка при загрузке продаж.");
+    await reportFailure(ctx, msg.message_id, "продажи (Loyverse)", e);
   }
 });
 
@@ -493,15 +638,56 @@ function isGroupChat(type: string): boolean {
   return type === "group" || type === "supergroup";
 }
 
+// Прайс-срез. Команда латиницей не из вредности: Telegram разбирает как
+// bot_command только [a-zA-Z0-9_], «/прайс» командой просто не станет.
+// Второй вход — подпись к файлу, начинающаяся со слова «прайс».
+bot.command("price", async (ctx) => {
+  const chatId = ctx.chat.id;
+  const query = (ctx.match ?? "").toString().trim();
+
+  // Есть тёплый кэш и есть запрос — это доуточнение, файл не нужен.
+  const cached = recallSlice(chatId);
+  if (query !== "" && cached) {
+    await runPriceRefine(ctx, cached, query);
+    return;
+  }
+
+  pendingPriceSlice.set(chatId, { query });
+  await ctx.reply(query === ""
+    ? "Пришли файл прайса (PDF, Excel или фото) — подпиши, что нужно. Например: «все шардоне до 600»."
+    : `Жду файл прайса. Запрос: «${query}».`);
+});
+
 bot.on("message:photo", async (ctx) => {
   const chatId  = ctx.chat.id;
   const caption = ctx.message.caption?.trim();
   const photos  = ctx.message.photo;
   const fileId  = photos[photos.length - 1].file_id; // largest size
 
+  // Фото прайса (сняли лист на телефон) — уходит в срез, а не в расходы.
+  const photoSliceState = pendingPriceSlice.get(chatId);
+  const photoCaptionQuery = parsePriceCaption(caption);
+  if (photoSliceState || photoCaptionQuery !== null) {
+    pendingPriceSlice.delete(chatId);
+    const query = photoCaptionQuery ?? photoSliceState?.query ?? "";
+    if (query === "") {
+      pendingPriceSlice.set(chatId, { query: "" });
+      await ctx.reply(SLICE_ASK);
+      return;
+    }
+    await runPriceSlice(ctx, async () => {
+      const file = await downloadTelegramFile(process.env.TELEGRAM_BOT_TOKEN!, fileId, "image/jpeg");
+      return { ...file, filename: "pricelist.jpg" };
+    }, query);
+    return;
+  }
+
   const waitMsg = await ctx.reply("Читаю документ...");
+  // Which step we are on, so a failure names itself in the chat.
+  let stage = "обработка фото · скачивание из Telegram";
   try {
     const photo = await downloadTelegramPhoto(process.env.TELEGRAM_BOT_TOKEN!, fileId);
+    stage = "обработка фото · распознавание";
 
     // A captioned photo is an explicit expense entry (existing convention: photo
     // + caption = расход). A supplier PO scan arrives as a plain photo, so we only
@@ -520,6 +706,7 @@ bot.on("message:photo", async (ctx) => {
       }
       const extracted = await extractExpenseFromPhoto(photo.base64, photo.mimeType, caption);
       await ctx.api.deleteMessage(chatId, waitMsg.message_id);
+      stage = "обработка фото · карточка расхода";
       if (extracted) {
         await startExpenseFlow(chatId, extracted);
       } else {
@@ -540,8 +727,7 @@ bot.on("message:photo", async (ctx) => {
     pendingPhotos.set(chatId, photo);
     await ctx.api.editMessageText(chatId, waitMsg.message_id, "📷 Фото получено. Напиши пояснение (на что потратили и сумму, если не видно):");
   } catch (e) {
-    console.error(e);
-    await ctx.api.editMessageText(chatId, waitMsg.message_id, "Ошибка при обработке фото.");
+    await reportFailure(ctx, waitMsg.message_id, stage, e);
   }
 });
 
@@ -554,6 +740,27 @@ bot.on("message:document", async (ctx) => {
   const chatId = ctx.chat.id;
   const doc    = ctx.message.document;
   const mime   = doc.mime_type ?? "";
+
+  // Прайс-срез перехватывает файл раньше PO-сканера: либо мы его ждём после
+  // /price, либо подпись начинается со слова «прайс». Проверка стоит ДО
+  // PO_DOC_MIMES, иначе Excel-прайс отсеялся бы здесь же.
+  const docSliceState = pendingPriceSlice.get(chatId);
+  const docCaptionQuery = parsePriceCaption(ctx.message.caption);
+  if (docSliceState || docCaptionQuery !== null) {
+    pendingPriceSlice.delete(chatId);
+    const query = docCaptionQuery ?? docSliceState?.query ?? "";
+    if (query === "") {
+      pendingPriceSlice.set(chatId, { query: "" });
+      await ctx.reply(SLICE_ASK);
+      return;
+    }
+    await runPriceSlice(ctx, async () => {
+      const file = await downloadTelegramFile(process.env.TELEGRAM_BOT_TOKEN!, doc.file_id, mime);
+      return { ...file, filename: doc.file_name ?? "pricelist" };
+    }, query);
+    return;
+  }
+
   if (!PO_DOC_MIMES.has(mime)) return; // not a PO-shaped document — ignore
 
   const waitMsg = await ctx.reply("Читаю документ...");
@@ -568,13 +775,16 @@ bot.on("message:document", async (ctx) => {
       return;
     }
 
+    // Файл уже скачан — если это прайс, кнопка пустит его в срез без повторной
+    // отправки.
+    pendingPriceFile.set(chatId, { base64: file.base64, mimeType: scanMime, filename: doc.file_name ?? "pricelist" });
     await ctx.api.editMessageText(
       chatId, waitMsg.message_id,
       "Не распознал это как PO поставщика. Если это расход — напиши сумму текстом: «856 интернет».",
+      { reply_markup: new InlineKeyboard().text("Это прайс-лист →", "pslice:use") },
     );
   } catch (e) {
-    console.error(e);
-    await ctx.api.editMessageText(chatId, waitMsg.message_id, "Ошибка при обработке документа.");
+    await reportFailure(ctx, waitMsg.message_id, "обработка документа", e);
   }
 });
 
@@ -582,6 +792,23 @@ bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text   = ctx.message.text;
   if (text.startsWith("/")) return;
+
+  // Доуточнение среза: ТОЛЬКО reply на сообщение со срезом. Любой другой текст
+  // уходит дальше, в расходы и списания, как и раньше.
+  const sliceCache = recallSlice(chatId);
+  if (sliceCache && ctx.message.reply_to_message?.message_id === sliceCache.messageId) {
+    await runPriceRefine(ctx, sliceCache, text);
+    return;
+  }
+
+  // Ответ на вопрос «что нужно из прайса?» для файла, пойманного кнопкой.
+  const heldFile = pendingPriceFile.get(chatId);
+  if (heldFile && pendingPriceSlice.get(chatId)?.query === "") {
+    pendingPriceSlice.delete(chatId);
+    pendingPriceFile.delete(chatId);
+    await runPriceSlice(ctx, async () => heldFile, text);
+    return;
+  }
 
   const pw = pendingWeight.get(chatId);
   if (pw) {
@@ -612,8 +839,7 @@ bot.on("message:text", async (ctx) => {
         else if (items.length === 1) await startWriteoffFlow(chatId, items[0]);
         else await startGroupWriteoffFlow(chatId, items);
       } catch (e) {
-        console.error(e);
-        await ctx.api.editMessageText(chatId, wmsg.message_id, "Ошибка при распознавании списания.");
+        await reportFailure(ctx, wmsg.message_id, "распознавание списания по фото", e);
       }
       return;
     }
@@ -627,8 +853,7 @@ bot.on("message:text", async (ctx) => {
         await ctx.reply("Не смог распознать сумму. Напиши расход текстом: «856 интернет»");
       }
     } catch (e) {
-      console.error(e);
-      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при обработке фото.");
+      await reportFailure(ctx, msg.message_id, "обработка фото · распознавание", e);
     }
     return;
   }
@@ -644,8 +869,7 @@ bot.on("message:text", async (ctx) => {
       if (extracted) await startWriteoffFlow(chatId, extracted);
       else await ctx.reply("Не понял, что списать. Напиши: «спиши 2 просекко».");
     } catch (e) {
-      console.error(e);
-      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при распознавании списания.");
+      await reportFailure(ctx, msg.message_id, "распознавание списания", e);
     }
     return;
   }
@@ -663,8 +887,7 @@ bot.on("message:text", async (ctx) => {
         await ctx.reply("Не смог распознать расход. Попробуй формат: «856 интернет»");
       }
     } catch (e) {
-      console.error(e);
-      await ctx.api.editMessageText(chatId, msg.message_id, "Ошибка при распознавании.");
+      await reportFailure(ctx, msg.message_id, "распознавание расхода", e);
     }
     return;
   }
@@ -903,6 +1126,20 @@ async function handleWriteoffCallback(ctx: any, chatId: number, data: string): P
 
   await ctx.answerCallbackQuery();
 }
+
+// Регистрируется ДО общего обработчика: тот отвечает и выходит на незнакомом
+// префиксе, так что «pslice:use» до него бы не дошёл.
+bot.callbackQuery("pslice:use", async (ctx) => {
+  const chatId = ctx.chat?.id;
+  await ctx.answerCallbackQuery();
+  if (!chatId) return;
+  if (!pendingPriceFile.has(chatId)) {
+    await ctx.reply("Файл уже не в памяти — пришли его заново с подписью «прайс: все шардоне».");
+    return;
+  }
+  pendingPriceSlice.set(chatId, { query: "" });
+  await ctx.reply(SLICE_ASK);
+});
 
 bot.on("callback_query:data", async (ctx) => {
   const chatId = ctx.chat?.id;

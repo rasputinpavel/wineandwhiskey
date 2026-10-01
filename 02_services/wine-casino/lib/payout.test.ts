@@ -24,8 +24,8 @@ describe('settleRound', () => {
   it('pays the stake times the category multiplier on a correct bet', () => {
     const r = run([{ playerId: 'p1', category: 'country', option: 'italy', amount: 10 }], [{ id: 'p1', chips: 100 }])
     expect(r.bets[0].isCorrect).toBe(true)
-    expect(r.bets[0].payout).toBe(40)                 // 10 x4
-    expect(r.players[0].chipsAfter).toBe(130)         // 100 - 10 + 40
+    expect(r.bets[0].payout).toBe(100)                // 10 x10
+    expect(r.players[0].chipsAfter).toBe(190)         // 100 - 10 + 100
   })
 
   it('burns the stake on a wrong bet', () => {
@@ -41,8 +41,17 @@ describe('settleRound', () => {
   })
 
   it('rounds a fractional multiplier to the nearest chip', () => {
-    // style pays x1.5; 5 chips -> 7.5 -> 8.
-    const r = run([{ playerId: 'p1', category: 'style', option: 'dry', amount: 5 }], [{ id: 'p1', chips: 50 }])
+    // Every multiplier in the live ladder is a whole number, but settleRound's
+    // rounding is generic — it must not depend on that. A bespoke fractional
+    // category here (x1.5, mirroring the old 'style' multiplier retired from
+    // the ladder) exercises Math.round on its own: 5 chips -> 7.5 -> 8.
+    const r = settleRound({
+      bets: [{ id: 'b1', playerId: 'p1', category: 'style', option: 'dry', amount: 5 }],
+      answers,
+      categories: [{ key: 'style', multiplier: 1.5, input: 'choice', ru: 'Стиль', en: 'Style' }],
+      players: [{ id: 'p1', chips: 50 }],
+      rescueChips: 10,
+    })
     expect(r.bets[0].payout).toBe(8)
     expect(r.players[0].chipsAfter).toBe(53)
   })
@@ -145,7 +154,7 @@ describe('settleRound', () => {
       bets: [
         { id: 'b1', playerId: 'p1', category: 'country', option: 'italy', amount: 10 },
         { id: 'b2', playerId: 'p2', category: 'world', option: 'new', amount: 20 },
-        { id: 'b3', playerId: 'p1', category: 'style', option: 'dry', amount: 4 },
+        { id: 'b3', playerId: 'p1', category: 'vintage', option: '2019', amount: 4 },
       ],
       answers,
       categories: DEFAULT_CATEGORIES,

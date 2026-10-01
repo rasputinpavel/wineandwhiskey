@@ -38,18 +38,32 @@ describe('worldOf', () => {
 })
 
 describe('DEFAULT_CATEGORIES', () => {
-  it('pays more for harder questions, vintage highest', () => {
+  it('pays more for harder questions, in the owner-ruled order: world < grape < country < region < vintage', () => {
     const byKey = Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.key, c.multiplier]))
-    expect(byKey.style).toBeLessThan(byKey.world)
-    expect(byKey.world).toBeLessThan(byKey.country)
-    expect(byKey.country).toBeLessThan(byKey.grape)
-    expect(byKey.grape).toBeLessThan(byKey.region)
+    expect(byKey.world).toBeLessThan(byKey.grape)
+    expect(byKey.grape).toBeLessThan(byKey.country)
+    expect(byKey.country).toBeLessThan(byKey.region)
     expect(byKey.region).toBeLessThan(byKey.vintage)
   })
 
   it('has no duplicate keys', () => {
     const keys = DEFAULT_CATEGORIES.map(c => c.key)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('no longer runs style as a betting category', () => {
+    // Style stays a fact on the wine (STYLE_OPTIONS below, WineFacts.style) and
+    // is shown at the reveal, but nobody bets on it any more.
+    expect(DEFAULT_CATEGORIES.some(c => c.key === 'style')).toBe(false)
+  })
+
+  it('marks country and region as open entry, everything else as a button choice', () => {
+    const byKey = Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.key, c.input]))
+    expect(byKey.world).toBe('choice')
+    expect(byKey.grape).toBe('choice')
+    expect(byKey.vintage).toBe('choice')
+    expect(byKey.country).toBe('open')
+    expect(byKey.region).toBe('open')
   })
 })
 
