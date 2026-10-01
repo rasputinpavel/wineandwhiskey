@@ -39,7 +39,6 @@ const FOLDER_ACC = '1afS7_bS-IKkBdfOjEHCLz7SRIoW8lD8N'
 const REPO        = 'https://github.com/rasputinpavel/wineandwhiskey'
 const REPO_SF     = 'https://github.com/rasputinpavel/phuket-sip-reserve'
 const STOREFRONT  = 'https://phuket-sip-reserve.lovable.app'
-const TRENDWATCH  = 'https://trendwatch-production.up.railway.app'
 
 const sheetEmbed  = (id: string, gid?: number) => `https://docs.google.com/spreadsheets/d/${id}/edit?usp=sharing&rm=embedded&widget=true${gid != null ? `&gid=${gid}#gid=${gid}` : ''}`
 const sheetEdit   = (id: string, gid?: number) => `https://docs.google.com/spreadsheets/d/${id}/edit${gid != null ? `#gid=${gid}` : ''}`
@@ -239,11 +238,13 @@ export const SECTIONS: Section[] = [
         embed: { kind: 'iframe', src: STOREFRONT, openHref: STOREFRONT },
       },
       {
-        slug: 'trendwatch', name: 'Trendwatch', icon: '📡', status: 'building',
-        description: 'Скан Reels конкурентов, AI-разбор, Runway-бриф для ремейка.',
+        slug: 'trendwatch', name: 'Trendwatch', icon: '📡', status: 'planned',
+        // Code lives in 02_services/trendwatch but was never deployed, and the
+        // trendwatch-production.up.railway.app domain has since been claimed by
+        // an unrelated project — so this tile must not link out anywhere.
+        description: 'Скан Reels конкурентов, AI-разбор, Runway-бриф для ремейка. Код готов, сервис ещё не развёрнут.',
         route: m('trendwatch'),
-        embed: { kind: 'external', href: TRENDWATCH,
-          mirrors: [{ label: 'Repo', href: `${REPO}/tree/main/02_services/trendwatch` }] },
+        embed: { kind: 'builtin', component: 'placeholder' },
       },
       {
         slug: 'pricelist', name: 'Price Lists', icon: '🧾', status: 'building',
