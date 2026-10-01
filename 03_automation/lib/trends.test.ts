@@ -99,6 +99,26 @@ describe('pickDigestReels', () => {
     expect(picked.omitted).toBe(0)
   })
 
+  it('fills the photo group before listing, at 10 and at 11 hits', () => {
+    const hits = (n: number) => Array.from({ length: n }, (_, i) =>
+      reel({ username: `shop${i}`, followers: 1_000, views: 60_000 + i * 1_000 }))
+
+    const ten = pickDigestReels(hits(10))
+    expect([ten.photos.length, ten.listed.length, ten.omitted]).toEqual([5, 5, 0])
+
+    const eleven = pickDigestReels(hits(11))
+    expect([eleven.photos.length, eleven.listed.length, eleven.omitted]).toEqual([5, 5, 1])
+  })
+
+  it('does not reorder the array it was given', () => {
+    const input = [
+      reel({ username: 'big', followers: 500_000, views: 3_000_000 }),
+      reel({ username: 'small', followers: 4_000, views: 600_000 }),
+    ]
+    pickDigestReels(input)
+    expect(input.map(r => r.username)).toEqual(['big', 'small'])
+  })
+
   it('returns empty groups for no hits', () => {
     expect(pickDigestReels([])).toEqual({ photos: [], listed: [], omitted: 0 })
   })
