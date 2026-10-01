@@ -1,6 +1,8 @@
 /**
- * Pure decision logic for the trend digest. No network, no database — so it can
- * be unit-tested and so sync_trends.ts holds nothing but I/O.
+ * Decision logic and Telegram message formatting for the trend digest, kept
+ * dependency-free (no network, no database) so it can be unit-tested and so
+ * sync_trends.ts holds nothing but I/O. The formatting half also owns the
+ * Russian copy, Telegram's HTML-subset dialect and its length limits.
  */
 
 /** A reel must beat its own account by this factor. */
@@ -78,11 +80,16 @@ const MONTHS_RU = [
 ]
 
 export function formatViews(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  // 999_500 and up round to "1.0M" anyway — gate here so the K branch never
+  // rounds a value past its own ceiling into e.g. "1000K".
+  if (n >= 999_500) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${Math.round(n / 1_000)}K`
   return String(n)
 }
 
+// `null` and `0` both render as "unknown duration" (empty string) here — that's
+// intentional, not an oversight. Above an hour this renders as pure minutes
+// (3661 -> '61:01'), which is fine for reels and not worth an hours field.
 function formatDuration(seconds: number | null): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return ''
   const whole = Math.round(seconds)
@@ -97,7 +104,9 @@ function formatDateRu(iso: string | null): string {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // Also used to escape the href attribute value (see below), so the quote
+  // must be escaped too, not just the three HTML-body special characters.
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function firstCaptionLine(caption: string | null): string {
@@ -106,23 +115,41 @@ function firstCaptionLine(caption: string | null): string {
 }
 
 /**
- * Truncate already-escaped HTML without leaving half an entity behind
- * (`&amp` with no semicolon renders as literal text in Telegram).
+ * Truncate already-escaped HTML without leaving half an entity or half a
+ * surrogate pair behind (`&amp` with no semicolon renders as literal text in
+ * Telegram; a lone high surrogate is not valid UTF-8 and Telegram's API
+ * rejects the whole send with a 400). Order matters: strip the surrogate
+ * before the entity, since an entity never contains a surrogate but a cut
+ * could land right between the two cleanups.
  */
 function truncateEscaped(escaped: string, max: number): string {
   if (escaped.length <= max) return escaped
-  return escaped.slice(0, max - 1).replace(/&[a-z]{0,5};?$/i, '').trimEnd() + '…'
+  return escaped.slice(0, max - 1)
+    .replace(/[\uD800-\uDBFF]$/, '')   // never leave half a surrogate pair
+    .replace(/&[a-z]{0,5};?$/i, '')    // never leave half an entity
+    .trimEnd() + '…'
 }
 
 export function formatHeader(count: number): string {
   return `📈 <b>Залетело за сутки: ${count}</b>`
 }
 
+/**
+ * The "×× от своей нормы" / ", ××" label, shared by the caption and the list
+ * line. The `< 2` gate is only reachable when followers is missing or zero —
+ * `isHit()` already requires the multiple to be >= 5 before a reel ever
+ * reaches these formatters — but it is kept here so neither caller has to
+ * special-case a followers-unknown reel on its own.
+ */
+function multipleLabel(m: number): string {
+  return m >= 2 ? `${Math.round(m)}×` : ''
+}
+
 export function formatReelCaption(reel: DigestReel): string {
-  const m = multiple(reel.views, reel.followers)
+  const mLabel = multipleLabel(multiple(reel.views, reel.followers))
   const head =
     `@${escapeHtml(reel.username)} · <b>${formatViews(reel.views)} просмотров</b>` +
-    (m >= 2 ? ` · ${Math.round(m)}× от своей нормы` : '')
+    (mLabel ? ` · ${mLabel} от своей нормы` : '')
 
   const meta = [formatDuration(reel.durationS), formatDateRu(reel.publishedAt)]
     .filter(part => part !== '')
@@ -135,7 +162,8 @@ export function formatReelCaption(reel: DigestReel): string {
   const quote = escapeHtml(firstCaptionLine(reel.caption))
   if (quote === '') return withoutQuote
 
-  // «», the quote's own newline, and the ellipsis all have to fit too.
+  // «» plus the quote's own newline cost 3 characters; truncateEscaped itself
+  // reserves the 4th by capping at `max - 1` before appending the ellipsis.
   const budget = TELEGRAM_CAPTION_LIMIT - withoutQuote.length - 4
   if (budget < 20) return withoutQuote
 
@@ -143,8 +171,7 @@ export function formatReelCaption(reel: DigestReel): string {
 }
 
 export function formatListLine(reel: DigestReel): string {
-  const m = multiple(reel.views, reel.followers)
-  const mult = m >= 2 ? `, ${Math.round(m)}×` : ''
-  return `• @${escapeHtml(reel.username)} — <b>${formatViews(reel.views)}</b>${mult} — ` +
+  const mLabel = multipleLabel(multiple(reel.views, reel.followers))
+  return `• @${escapeHtml(reel.username)} — <b>${formatViews(reel.views)}</b>${mLabel ? `, ${mLabel}` : ''} — ` +
     `<a href="${escapeHtml(reel.url)}">рилс</a>`
 }

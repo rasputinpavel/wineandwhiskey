@@ -186,3 +186,52 @@ describe('formatListLine', () => {
     )
   })
 })
+
+describe('formatReelCaption — astral-plane truncation safety', () => {
+  it('never leaves a lone high surrogate right before the ellipsis', () => {
+    const caption = formatReelCaption(reel({ caption: '🍷'.repeat(600) }))
+    expect(caption.length).toBeLessThanOrEqual(TELEGRAM_CAPTION_LIMIT)
+    expect(caption).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+  })
+})
+
+describe('formatListLine — hostile URL', () => {
+  it('escapes quotes and ampersands in the href without breaking the tag', () => {
+    const line = formatListLine(reel({ url: 'https://ig.com/r/"evil"&x=1' }))
+    expect(line).toContain('&quot;')
+    expect(line).toContain('&amp;')
+    expect(line.endsWith('</a>')).toBe(true)
+  })
+})
+
+describe('formatViews — K/M boundary', () => {
+  it('does not round 999_999 up into "1000K"', () => {
+    expect(formatViews(999_999)).toBe('1.0M')
+  })
+
+  it('keeps 999_499 as a K value', () => {
+    expect(formatViews(999_499)).toBe('999K')
+  })
+})
+
+describe('formatReelCaption — empty meta line', () => {
+  it('drops the meta line but keeps head, quote and link as three lines', () => {
+    const caption = formatReelCaption(reel({ durationS: null, publishedAt: null }))
+    expect(caption.split('\n')).toHaveLength(3)
+  })
+})
+
+describe('formatReelCaption — quote dropped under a tight budget', () => {
+  it('omits the quote line entirely when there is no room left for it', () => {
+    const longUrl = 'https://www.instagram.com/reel/' + 'A'.repeat(950) + '/'
+    const caption = formatReelCaption(reel({ url: longUrl, caption: 'should not appear' }))
+    expect(caption).not.toContain('«')
+  })
+})
+
+describe('formatReelCaption — whitespace-only caption', () => {
+  it('takes the empty-caption path and drops the quote line, same as a null caption', () => {
+    const caption = formatReelCaption(reel({ caption: '   ' }))
+    expect(caption.split('\n')).toHaveLength(3)
+  })
+})
