@@ -77,7 +77,9 @@ Was a tiny Express webhook for the Google-Sheets "Пересчитать мат�
 Read-only Next.js app reading `v_sku_breakdown` + `public.wine_items` with name-normalization joins. Has its own `railway.json`, `.gitignore`, `.env.example`. **0 files are tracked in git** — so it cannot deploy through the push-to-main pipeline until committed.
 
 ### 02_services/trendwatch — reels/creative tool (built, not deployed)
-Tracked in git (58 files) with a `railway.json`, but not deployed (needs `TRENDWATCH_SECRET`/`PASSWORD`, `RUNWAY_API_TOKEN`, a Storage bucket). Registry status `building`; portal links to a Railway host that likely 404s. Does not touch Loyverse/Flow.
+Tracked in git (58 files) with a `railway.json`, but not deployed (needs `TRENDWATCH_SECRET`/`PASSWORD`, `RUNWAY_API_TOKEN`, a Storage bucket). Does not touch Loyverse/Flow. The portal tile is **parked** (`status: 'planned'`, builtin placeholder, no outbound link): the host it used to link, `trendwatch-production.up.railway.app`, was never our deployment and now serves an unrelated third party's app.
+
+**The feature itself lives without the service.** Trend collection runs from `.github/workflows/sync-trends.yml` → `03_automation/sync_trends.ts`, and its only output is a Telegram digest through Barrymore (see `docs/superpowers/specs/2026-10-01-trendwatch-reels-digest-design.md`). The watchlist is maintained by `npm run trends:accounts`. So this service's remaining exclusive capabilities are Claude frame-by-frame analysis, brief generation and Runway video — none of which is in use.
 
 ### 01_agents/bot — Chip & Dale, staff ops bot (live)
 grammY + Anthropic agent loop on Railway. Tools hit Loyverse REST directly and the shared Supabase `purchase_orders` tables; writes expenses to Google Sheets; posts a cron morning briefing. Its `getSales` sums all `SALE` receipts with **no B2B/refund/cancel handling**, so its numbers differ from the dashboards. Contains a dead third Loyverse client (`src/loyverse.ts`).
