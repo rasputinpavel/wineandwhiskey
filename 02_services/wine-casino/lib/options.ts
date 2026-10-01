@@ -1,5 +1,5 @@
 import { STYLE_OPTIONS, WORLD_OPTIONS, worldOf } from './categories'
-import { GRAPES, grapeGroup, grapeOption } from './wine-data'
+import { GRAPES, grapeGroup, grapeOption, isKnownCountry, isKnownRegion } from './wine-data'
 import type { CategoryKey, Option, OptionSet, WineFacts } from './types'
 
 // How many buttons a guest sees per `choice` category. Fixed across
@@ -75,13 +75,22 @@ export function buildOptions(
   if (on('world') && worldOf(facts.country)) out.world = [...WORLD_OPTIONS]
 
   // Country and region are free entry now (see categories.ts): the guest types
-  // a guess and picks from suggestions client-side, so there is deliberately
-  // no board built here at all — `out.country` / `out.region` are never set.
+  // a guess and picks from suggestions client-side, so there is never a button
+  // board to build. But `options` is also how the rest of the system (the UI,
+  // validateBetSlip) learns whether this wine asks the question at all — an
+  // absent key must mean "not asked", so an *open* category that IS in play
+  // needs its own, different signal. It gets one: an empty array. `[]` reads
+  // as "open category, no buttons, but live"; absence reads as "not live".
+  //
   // A region board built from one country's own regions used to give the
   // country away for free (every option on it was the same country), and a
   // country board drawn from our decoy pool told the same story from the
-  // other side. validateBetSlip (lib/bets.ts) checks a typed guess against
-  // our dictionaries instead of a board.
+  // other side — that is the whole reason these moved off a board. We still
+  // only ask the question when it can be asked fairly: an admin-typed country
+  // or region outside our dictionaries is exactly the same "we don't know, so
+  // we don't ask" case as an off-canon style or an unrecognised world country.
+  if (on('country') && facts.country && isKnownCountry(facts.country)) out.country = []
+  if (on('region') && facts.region && isKnownRegion(facts.region)) out.region = []
 
   if (on('grape') && facts.grape) {
     const correct = grapeOption(facts.grape, facts.color)

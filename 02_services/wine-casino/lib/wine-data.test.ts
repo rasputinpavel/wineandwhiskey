@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { ALL_REGIONS, COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
+import {
+  ALL_REGIONS, COUNTRIES, GRAPES,
+  countryOption, grapeGroup, grapeOption, isKnownCountry, isKnownRegion, regionsFor,
+} from './wine-data'
 
 describe('the dictionaries themselves', () => {
   it('keeps every value canonical, because answers are matched by trim().toLowerCase()', () => {
@@ -23,14 +26,41 @@ describe('the dictionaries themselves', () => {
 })
 
 describe('ALL_REGIONS', () => {
-  it('contains regions from more than one country, lowercased', () => {
+  it('contains regions from more than one country, canon-folded', () => {
     expect(ALL_REGIONS.has('toscana')).toBe(true)
     expect(ALL_REGIONS.has('mendoza')).toBe(true)
     expect(ALL_REGIONS.has('kakheti')).toBe(true)
   })
 
+  it('folds accents the same way canon() does, so an accented name is findable without one', () => {
+    expect(ALL_REGIONS.has('rias baixas')).toBe(true)
+  })
+
   it('does not contain a name we do not catalogue', () => {
     expect(ALL_REGIONS.has('narnia')).toBe(false)
+  })
+})
+
+describe('isKnownCountry', () => {
+  it('recognises a country we stock regardless of case, padding or accent folding', () => {
+    expect(isKnownCountry('Italy')).toBe(true)
+    expect(isKnownCountry('  ITALY ')).toBe(true)
+  })
+
+  it('rejects a country we do not stock', () => {
+    expect(isKnownCountry('Freedonia')).toBe(false)
+  })
+})
+
+describe('isKnownRegion', () => {
+  it('recognises a region we catalogue regardless of case or accent', () => {
+    expect(isKnownRegion('Toscana')).toBe(true)
+    expect(isKnownRegion('rias baixas')).toBe(true)
+    expect(isKnownRegion('Rías Baixas')).toBe(true)
+  })
+
+  it('rejects a region we do not catalogue', () => {
+    expect(isKnownRegion('Narnia')).toBe(false)
   })
 })
 

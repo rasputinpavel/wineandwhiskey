@@ -1,21 +1,14 @@
 import { canon } from './text'
-import { ALL_REGIONS, COUNTRIES } from './wine-data'
+import { isKnownCountry, isKnownRegion } from './wine-data'
 import type { CategoryKey, Option, RoundStatus } from './types'
 
 export type BetLine = { category: CategoryKey; option: string; amount: number }
 
 // Country and region are `open` categories (see lib/categories.ts): there is
-// no board for them (lib/options.ts builds none), so a typed guess is checked
-// against our own dictionaries instead. Everything else still has a button
-// board and is checked against it below, exactly as before.
-//
-// Both sets are canon()-folded once at module load, matching the fold applied
-// to every incoming guess — the same rule lib/text.ts states for the rest of
-// the money path: the two sides of a comparison must agree on what "the same
-// string" means, or a typed answer that matches an entry by eye fails to match
-// it by code (an accent, a stray space, a different case).
-const COUNTRY_VALUES = new Set(COUNTRIES.map(c => canon(c.value)))
-const REGION_VALUES = new Set(Array.from(ALL_REGIONS, canon))
+// no button board for them, so a typed guess is checked against our own
+// dictionaries (isKnownCountry/isKnownRegion, lib/wine-data.ts) instead.
+// Everything else still has a board and is checked against it below, exactly
+// as before.
 
 export type BetError =
   | 'wrong_game'
@@ -52,14 +45,25 @@ export function validateBetSlip(input: {
   for (const line of input.slip) {
     if (!input.activeCategories.includes(line.category)) return { ok: false, error: 'unknown_category' }
 
-    // Compared through the same canon() that settleRound uses to decide whether
-    // a bet won. Two different notions of "the same string" in the two halves of
-    // the money path is how you end up accepting a bet you then score as wrong.
     const value = canon(line.option)
-    const recognised =
-      line.category === 'country' ? COUNTRY_VALUES.has(value) :
-      line.category === 'region'  ? REGION_VALUES.has(value) :
-      (input.options[line.category] ?? []).some(o => canon(o.value) === value)
+    let recognised: boolean
+
+    if (line.category === 'country' || line.category === 'region') {
+      // An open category still needs a per-wine "is this even being asked"
+      // check: buildOptions only sets this key (to `[]`, never to a board —
+      // see options.ts) when the fact was recognised for THIS wine. A wine
+      // whose country/region we couldn't recognise never sets the key at all,
+      // and betting on it is exactly like betting on a category the game
+      // switched off, not like a wrong guess at a live one.
+      if (input.options[line.category] === undefined) return { ok: false, error: 'unknown_category' }
+      recognised = line.category === 'country' ? isKnownCountry(line.option) : isKnownRegion(line.option)
+    } else {
+      // Compared through the same canon() that settleRound uses to decide
+      // whether a bet won. Two different notions of "the same string" in the
+      // two halves of the money path is how you end up accepting a bet you
+      // then score as wrong.
+      recognised = (input.options[line.category] ?? []).some(o => canon(o.value) === value)
+    }
     if (!recognised) return { ok: false, error: 'unknown_option' }
 
     if (!Number.isInteger(line.amount) || line.amount < 1) return { ok: false, error: 'bad_amount' }

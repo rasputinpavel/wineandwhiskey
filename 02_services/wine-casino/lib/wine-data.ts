@@ -1,3 +1,4 @@
+import { canon } from './text'
 import type { Option, WineColor } from './types'
 
 // Distractor pools. These do not have to be exhaustive — they have to be
@@ -203,17 +204,33 @@ export function regionsFor(country: string | null): Option[] {
   return names.map(n => ({ value: n.toLowerCase(), ru: n, en: n }))
 }
 
-/** Every region name across every country we catalogue, lowercased. Region
- *  has no button board any more (it is free entry — see categories.ts), so
- *  lib/bets.ts checks a typed guess against this set instead of a board.
- *  Names are not accent-folded here; comparisons fold through canon() at the
- *  call site, the same rule every other comparison on the money path follows
- *  (see lib/text.ts). Duplicate names across countries (more than one
- *  "Tokaj") simply collapse in the Set — we only need "is this a region we
- *  know", not which country it belongs to. */
+/** Every region name across every country we catalogue, canon()-folded (the
+ *  same fold every comparison on the money path uses, see lib/text.ts — an
+ *  accented name like "Rías Baixas" is stored here without its accent so a
+ *  plain-typed guess still matches it). Region has no button board any more
+ *  (it is free entry — see categories.ts), so lib/bets.ts and
+ *  isKnownRegion() below check a typed guess against this set instead of a
+ *  board. Duplicate names across countries (more than one "Tokaj") simply
+ *  collapse in the Set — we only need "is this a region we know", not which
+ *  country it belongs to. */
 export const ALL_REGIONS: ReadonlySet<string> = new Set(
-  Object.values(REGIONS).flatMap(names => names.map(n => n.trim().toLowerCase())),
+  Object.values(REGIONS).flatMap(names => names.map(canon)),
 )
+
+/** Is this a country our dictionary recognises? Used to decide whether the
+ *  `country` category can be asked at all for a wine (lib/options.ts,
+ *  lib/prepare-wine.ts) and, at bet time, whether a typed guess is legitimate
+ *  (lib/bets.ts) — one predicate, three call sites, so the three cannot drift
+ *  out of step with each other. */
+export function isKnownCountry(country: string): boolean {
+  const key = canon(country)
+  return COUNTRIES.some(c => c.value === key)
+}
+
+/** Same idea as isKnownCountry, for region. */
+export function isKnownRegion(region: string): boolean {
+  return ALL_REGIONS.has(canon(region))
+}
 
 export function countryOption(country: string): Option {
   const key = country.trim().toLowerCase()

@@ -5,7 +5,10 @@ import type { CategoryKey, Option } from './types'
 
 // 'grape' stands in for a generic board (`choice`) category below — country and
 // region moved to free entry (`open`) and get their own describe block further
-// down, since they are no longer checked against a board at all.
+// down. Their `[]` here is the real shape buildOptions hands this wine when
+// the country/region was recognised: open, but no board (see options.ts) —
+// not to be confused with the key being absent entirely, which means the
+// category was not recognised for this wine and is not being asked at all.
 const options: Partial<Record<CategoryKey, Option[]>> = {
   grape: [
     { value: 'sangiovese', ru: 'Sangiovese', en: 'Sangiovese' },
@@ -15,6 +18,8 @@ const options: Partial<Record<CategoryKey, Option[]>> = {
     { value: 'old', ru: 'Старый Свет', en: 'Old World' },
     { value: 'new', ru: 'Новый Свет',  en: 'New World' },
   ],
+  country: [],
+  region: [],
 }
 
 const active: CategoryKey[] = ['world', 'grape', 'country', 'region']
@@ -105,9 +110,10 @@ describe('validateBetSlip', () => {
 
 describe('validateBetSlip — open categories (country, region)', () => {
   // Country and region have no board at all (lib/options.ts builds none for
-  // them), so `options.country` / `options.region` are absent here on purpose
-  // — that is the real shape the server hands validateBetSlip for these
-  // categories once a wine is prepared under the new ladder.
+  // them) — `options.country` / `options.region` are `[]` in the shared
+  // fixture above, the shape buildOptions hands a wine whose country/region
+  // it recognised. See the dedicated block further down for what happens when
+  // that key is absent instead.
 
   it('accepts a country we recognise even though there is no board for it', () => {
     expect(check([{ category: 'country', option: 'Chile', amount: 10 }])).toEqual({ ok: true, total: 10 })
@@ -143,5 +149,35 @@ describe('validateBetSlip — open categories (country, region)', () => {
       { category: 'country', option: 'Chile', amount: 5 },
       { category: 'country', option: 'CHILE', amount: 5 },
     ])).toEqual({ ok: false, error: 'duplicate_bet' })
+  })
+})
+
+describe('validateBetSlip — a wine that never asked the open question', () => {
+  // buildOptions omits `country`/`region` entirely (no key, not `[]`) when the
+  // fact was not recognised for that particular wine (options.ts). Betting on
+  // it is exactly like betting on a category the game switched off — the
+  // dictionary is irrelevant, because this wine never asked.
+  const { country: _country, region: _region, ...noOpenBoards } = options
+
+  function checkNoOpen(slip: BetLine[]) {
+    return validateBetSlip({
+      roundStatus: 'betting',
+      activeCategories: active,
+      options: noOpenBoards,
+      playerChips: 100,
+      slip,
+      playerGameId: 'g1',
+      wineGameId: 'g1',
+    })
+  }
+
+  it('rejects a country bet on a wine whose options has no country key, even for a real dictionary country', () => {
+    expect(checkNoOpen([{ category: 'country', option: 'Chile', amount: 10 }]))
+      .toEqual({ ok: false, error: 'unknown_category' })
+  })
+
+  it('rejects a region bet the same way', () => {
+    expect(checkNoOpen([{ category: 'region', option: 'Toscana', amount: 10 }]))
+      .toEqual({ ok: false, error: 'unknown_category' })
   })
 })

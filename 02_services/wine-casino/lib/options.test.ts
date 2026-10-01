@@ -122,14 +122,16 @@ describe('buildOptions', () => {
     }
   })
 
-  it('never builds a board — or assigns a button count — for an open category', () => {
+  it('never assigns a button count to an open category, and never gives it buttons when it is live', () => {
     // The point of this test is to stop someone silently making an open
     // category behave like a sized board again (and, with it, ignorance
-    // profitable): country and region must stay free-text, forever.
+    // profitable): country and region must stay free-text, forever. They are
+    // still "live" for this wine — an empty array, not an absent key, see the
+    // "open categories" block below for what absence vs. `[]` means.
     for (const cat of DEFAULT_CATEGORIES.filter(c => c.input === 'open')) {
       expect(OPTION_COUNTS[cat.key]).toBeUndefined()
       const o = buildOptions(chianti, [cat.key], seeded(42))
-      expect(o[cat.key]).toBeUndefined()
+      expect(o[cat.key]).toEqual([])
     }
   })
 
@@ -189,11 +191,46 @@ describe('buildOptions', () => {
 })
 
 describe('buildOptions — open categories (country, region)', () => {
-  it('never produces a country or region board, even when the fact is present and the category is active', () => {
+  // The three-way signal `options[key]` carries for an open category:
+  //   absent      -> not asked for this wine
+  //   []          -> asked, answered by typing (no board)
+  //   [opt, ...]  -> a `choice` category's button board (unrelated to this file)
+  // An open category's own key is NEVER a non-empty array — that would put a
+  // board back under a category with no button-count invariant to protect it.
+
+  it('marks a recognised country as open (an empty board) rather than building buttons', () => {
     const o = buildOptions(chianti, ALL, seeded(10))
+    expect(o.country).toEqual([])
+  })
+
+  it('marks a recognised region as open (an empty board) rather than building buttons', () => {
+    const o = buildOptions(chianti, ALL, seeded(10))
+    expect(o.region).toEqual([])
+  })
+
+  it('asks no country question at all when the country is not one we know', () => {
+    const unknown: WineFacts = { ...chianti, country: 'Freedonia' }
+    expect(buildOptions(unknown, ALL, seeded(10)).country).toBeUndefined()
+  })
+
+  it('asks no region question at all when the region is not one we know', () => {
+    const unknown: WineFacts = { ...chianti, region: 'Narnia' }
+    expect(buildOptions(unknown, ALL, seeded(10)).region).toBeUndefined()
+  })
+
+  it('still recognises a region typed or stored with its accent folded differently', () => {
+    const accented: WineFacts = { ...chianti, country: 'Spain', region: 'Rías Baixas' }
+    expect(buildOptions(accented, ALL, seeded(10)).region).toEqual([])
+  })
+
+  it('omits country and region entirely when the game has turned them off, even though both facts are recognised', () => {
+    const o = buildOptions(chianti, ['style', 'world'], seeded(8))
     expect(o.country).toBeUndefined()
     expect(o.region).toBeUndefined()
-    // Everything else on a full category list still builds normally.
+  })
+
+  it('still builds everything else normally alongside a live open category', () => {
+    const o = buildOptions(chianti, ALL, seeded(10))
     expect(o.style).toBeDefined()
     expect(o.world).toBeDefined()
     expect(o.grape).toBeDefined()
