@@ -58,10 +58,24 @@ export async function getDataset<T>(token: string, datasetId: string): Promise<T
   return await res.json() as T[]
 }
 
+/** The validated shape a caller can trust: a real profile with a usable follower count. */
 export type ApifyProfile = {
   username:       string
   fullName:       string | null
   followersCount: number
+}
+
+/**
+ * What a dataset item actually looks like. Every field is optional because an
+ * item is not always a profile: for a not-found, private or otherwise
+ * unreachable account the actor instead emits an error record —
+ * `{ username, url, error, errorDescription }` with no `followersCount` at
+ * all — and it still lands at `items[0]`, same as a real profile would.
+ */
+type ApifyProfileItem = {
+  username?:       unknown
+  fullName?:       unknown
+  followersCount?: unknown
 }
 
 export async function getProfile(token: string, username: string): Promise<ApifyProfile | null> {
@@ -69,6 +83,18 @@ export async function getProfile(token: string, username: string): Promise<Apify
     usernames: [username],
   })
   await pollApify(token, runId, 60_000)
-  const items = await getDataset<ApifyProfile>(token, datasetId)
-  return items[0] ?? null
+  const items = await getDataset<ApifyProfileItem>(token, datasetId)
+  const item = items[0]
+  if (!item) return null
+
+  // Vouch for the shape before handing it out: an error record (or any other
+  // malformed item) must come back as `null`, not as a profile with a hole in it.
+  if (typeof item.username !== 'string' || item.username === '') return null
+  if (typeof item.followersCount !== 'number' || !Number.isFinite(item.followersCount)) return null
+
+  return {
+    username:       item.username,
+    fullName:       typeof item.fullName === 'string' ? item.fullName : null,
+    followersCount: item.followersCount,
+  }
 }

@@ -71,34 +71,43 @@ async function add(usernames: string[]): Promise<number> {
     const username = raw.replace(/^@/, '').trim()
     if (username === '') continue
 
-    const { data: existing } = await supabase
-      .from('trend_accounts')
-      .select('username')
-      .eq('username', username)
-      .maybeSingle()
-    if (existing) {
-      console.log(`  = @${username} already in the list`)
-      continue
-    }
+    // One bad username — a network blip, a profile Apify can't resolve, an
+    // unexpected throw from any step below — must not cost the rest of the
+    // batch, especially after earlier usernames have already made paid calls
+    // and been inserted.
+    try {
+      const { data: existing } = await supabase
+        .from('trend_accounts')
+        .select('username')
+        .eq('username', username)
+        .maybeSingle()
+      if (existing) {
+        console.log(`  = @${username} already in the list`)
+        continue
+      }
 
-    // Fetch the profile once: without followers_count the multiple is 0 and the
-    // account could never produce a digest entry.
-    const profile = await getProfile(token, username)
-    if (!profile) {
-      console.error(`  ✗ @${username} — profile not found, skipped`)
+      // Fetch the profile once: without followers_count the multiple is 0 and the
+      // account could never produce a digest entry.
+      const profile = await getProfile(token, username)
+      if (!profile) {
+        console.error(`  ✗ @${username} — profile not found, skipped`)
+        failures++
+        continue
+      }
+
+      const { error } = await supabase.from('trend_accounts').insert({
+        username,
+        display_name:    profile.fullName,
+        followers_count: profile.followersCount,
+        category:        'manual',
+        is_active:       false,
+      })
+      if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
+      else console.log(`  + @${username} (${profile.followersCount.toLocaleString()} followers), inactive`)
+    } catch (err) {
+      console.error(`  ✗ @${username} — ${err instanceof Error ? err.message : String(err)}`)
       failures++
-      continue
     }
-
-    const { error } = await supabase.from('trend_accounts').insert({
-      username,
-      display_name:    profile.fullName,
-      followers_count: profile.followersCount,
-      category:        'manual',
-      is_active:       false,
-    })
-    if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
-    else console.log(`  + @${username} (${profile.followersCount.toLocaleString()} followers), inactive`)
   }
   return failures
 }
@@ -109,14 +118,21 @@ async function setActive(usernames: string[], isActive: boolean): Promise<number
   for (const raw of usernames) {
     const username = raw.replace(/^@/, '').trim()
     if (username === '') continue
-    const { data, error } = await supabase
-      .from('trend_accounts')
-      .update({ is_active: isActive })
-      .eq('username', username)
-      .select('username')
-    if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
-    else if (!data?.length) { console.error(`  ✗ @${username} — not in the list (add it first)`); failures++ }
-    else console.log(`  ${isActive ? '✓ on ' : '· off'} @${username}`)
+    // Same reasoning as add(): a thrown error from one username's update must
+    // not abandon the rest of the --on/--off list.
+    try {
+      const { data, error } = await supabase
+        .from('trend_accounts')
+        .update({ is_active: isActive })
+        .eq('username', username)
+        .select('username')
+      if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++ }
+      else if (!data?.length) { console.error(`  ✗ @${username} — not in the list (add it first)`); failures++ }
+      else console.log(`  ${isActive ? '✓ on ' : '· off'} @${username}`)
+    } catch (err) {
+      console.error(`  ✗ @${username} — ${err instanceof Error ? err.message : String(err)}`)
+      failures++
+    }
   }
   return failures
 }
