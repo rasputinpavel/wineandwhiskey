@@ -10,6 +10,11 @@
  *   npm run trends:accounts -- --add lucialoveswine marcelopinowine
  *   npm run trends:accounts -- --on fabiopicchiquintovizio vinoteca_mendoza
  *   npm run trends:accounts -- --off ingvildtennfjord
+ *   npm run trends:accounts -- --refresh bodegagoulart_oficial
+ *
+ * --refresh is NOT free: it makes one Apify profile scrape per username to
+ * re-read its current followers_count. Run it on accounts you suspect have
+ * drifted, not as a routine sweep.
  */
 
 import dotenv from 'dotenv'
@@ -137,11 +142,75 @@ async function setActive(usernames: string[], isActive: boolean): Promise<number
   return failures
 }
 
+/** Returns the number of usernames that failed, so main() can set the exit code. */
+async function refresh(usernames: string[]): Promise<number> {
+  const token = process.env.APIFY_TOKEN
+  if (!token) throw new Error('APIFY_TOKEN is not set — needed to read the follower count')
+
+  let failures = 0
+  for (const raw of usernames) {
+    const username = raw.replace(/^@/, '').trim()
+    if (username === '') continue
+
+    // Same per-username isolation as add()/setActive(): one bad profile must
+    // not abort the rest of the batch. The lookup happens before the paid
+    // Apify call so a username that isn't tracked never costs money.
+    try {
+      const { data: existing, error: lookupError } = await supabase
+        .from('trend_accounts')
+        .select('username, followers_count')
+        .eq('username', username)
+        .maybeSingle()
+      if (lookupError) { console.error(`  ✗ @${username} — ${lookupError.message}`); failures++; continue }
+      if (!existing) {
+        console.error(`  ✗ @${username} — not in the list (add it first)`)
+        failures++
+        continue
+      }
+
+      const profile = await getProfile(token, username)
+      if (!profile) {
+        // A handle that stopped resolving keeps its last known count rather
+        // than being overwritten with null and becoming unusable.
+        console.error(`  ✗ @${username} — profile not found, skipped`)
+        failures++
+        continue
+      }
+
+      const before = existing.followers_count as number | null
+      const after = profile.followersCount
+
+      const { error } = await supabase
+        .from('trend_accounts')
+        .update({
+          followers_count: after,
+          ...(profile.fullName ? { display_name: profile.fullName } : {}),
+        })
+        .eq('username', username)
+      if (error) { console.error(`  ✗ @${username} — ${error.message}`); failures++; continue }
+
+      if (before == null || before <= 0) {
+        console.log(`  ↻ @${username} неизвестно → ${after.toLocaleString()}`)
+      } else if (before === after) {
+        console.log(`  ↻ @${username} ${after.toLocaleString()} (без изменений)`)
+      } else {
+        const pct = Math.round(((after - before) / before) * 100)
+        console.log(`  ↻ @${username} ${before.toLocaleString()} → ${after.toLocaleString()} (${pct >= 0 ? '+' : ''}${pct}%)`)
+      }
+    } catch (err) {
+      console.error(`  ✗ @${username} — ${err instanceof Error ? err.message : String(err)}`)
+      failures++
+    }
+  }
+  return failures
+}
+
 const USAGE = `Usage:
   npm run trends:accounts -- --list
   npm run trends:accounts -- --add lucialoveswine marcelopinowine
   npm run trends:accounts -- --on fabiopicchiquintovizio vinoteca_mendoza
-  npm run trends:accounts -- --off ingvildtennfjord`
+  npm run trends:accounts -- --off ingvildtennfjord
+  npm run trends:accounts -- --refresh bodegagoulart_oficial`
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
@@ -151,7 +220,7 @@ async function main(): Promise<void> {
     return
   }
 
-  const recognised = ['--add', '--on', '--off'].some(f => args.includes(f))
+  const recognised = ['--add', '--on', '--off', '--refresh'].some(f => args.includes(f))
   if (!recognised) {
     console.error(`Unrecognised arguments: ${args.join(' ')}\n\n${USAGE}`)
     process.exitCode = 1
@@ -159,9 +228,10 @@ async function main(): Promise<void> {
   }
 
   let failures = 0
-  if (args.includes('--add'))  failures += await add(valuesAfter(args, '--add'))
-  if (args.includes('--on'))   failures += await setActive(valuesAfter(args, '--on'), true)
-  if (args.includes('--off'))  failures += await setActive(valuesAfter(args, '--off'), false)
+  if (args.includes('--add'))     failures += await add(valuesAfter(args, '--add'))
+  if (args.includes('--on'))      failures += await setActive(valuesAfter(args, '--on'), true)
+  if (args.includes('--off'))     failures += await setActive(valuesAfter(args, '--off'), false)
+  if (args.includes('--refresh')) failures += await refresh(valuesAfter(args, '--refresh'))
 
   if (failures > 0) process.exitCode = 1
 }
