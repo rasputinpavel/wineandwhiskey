@@ -132,7 +132,11 @@ function telegramTarget(): { token: string; chatId: string } {
 async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; delivered: number } | null> {
   const fresh = reels.filter(r => isFreshForDigest(r.publishedAt))
   if (fresh.length === 0) {
-    console.log(`📭 ${reels.length} new reel(s), none published in the notify window — no digest`)
+    console.log(
+      reels.length === 0
+        ? '📭 No new reels — sending heartbeat instead'
+        : `📭 ${reels.length} new reel(s), none published in the notify window — sending heartbeat instead`,
+    )
     return null
   }
 
@@ -172,6 +176,21 @@ async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; del
 
   console.log(`📩 Digest: ${delivered}/${attempted} message(s) delivered (${photos.length} with thumbnails, ${listed.length} listed, ${omitted} omitted)`)
   return { attempted, delivered }
+}
+
+// A silent chat is ambiguous between "quiet day" and "the job never ran" —
+// the same ambiguity that let a dead APIFY_TOKEN go unnoticed for five
+// months. This line exists purely so the absence of a message means
+// something: if it fails to send, the run must not claim success either
+// (see the caller, which turns a false return into a failure).
+async function sendHeartbeat(accountsChecked: number, reelsSeen: number): Promise<boolean> {
+  const { token, chatId } = telegramTarget()
+  const ok = await sendMessage(
+    token, chatId,
+    `🫧 Проверено аккаунтов: ${accountsChecked} · рилсов просмотрено: ${reelsSeen} · залётов нет`,
+  )
+  console.log(ok ? '🫧 Heartbeat sent' : '✗ Heartbeat failed to send')
+  return ok
 }
 
 async function reportFailures(failures: Array<{ username: string; message: string }>, total: number): Promise<void> {
@@ -320,7 +339,13 @@ async function main() {
   // is broken — most likely the Apify actor input (directUrls/resultsType)
   // has drifted again, the same way `usernames`+`posts` silently returned
   // nothing for five months. Make that loud instead of a clean "0 new reels".
-  if (failures.length === 0 && totalReelsSeen === 0) {
+  //
+  // This is an aggregate-only heuristic and must not run on a dry run: ten
+  // accounts at zero means the input drifted, but one quiet account means
+  // nothing at all. `--account` is forced into --dry-run specifically so it
+  // stays a useful one-off smoke test of the scrape path, not something that
+  // reddens the run whenever that one account happens to be quiet.
+  if (!isDryRun && failures.length === 0 && totalReelsSeen === 0) {
     failures.push({
       username: 'all-accounts',
       message: `zero reels across all ${accounts.length} account(s) — Apify input format has likely drifted again (see scrapeAccount)`,
@@ -328,10 +353,21 @@ async function main() {
   }
 
   // Send what we have BEFORE failing: a non-zero exit must never cost us a
-  // digest that is already assembled.
-  if (!isDryRun && newReelNotifications.length > 0) {
+  // digest that is already assembled. Always attempt something on a real run
+  // — a digest when there's fresh news, a heartbeat otherwise — per
+  // sendHeartbeat's comment above: silence here is exactly the kind of gap
+  // that let this job run broken for five months unnoticed.
+  if (!isDryRun) {
     const digestResult = await sendDigest(newReelNotifications)
-    if (digestResult && digestResult.delivered === 0) {
+    if (digestResult === null) {
+      const delivered = await sendHeartbeat(accounts.length, totalReelsSeen)
+      if (!delivered) {
+        failures.push({
+          username: 'heartbeat',
+          message: 'daily heartbeat failed to send — bot credentials or the Telegram API are likely broken',
+        })
+      }
+    } else if (digestResult.delivered === 0) {
       failures.push({
         username: 'digest',
         message: `0 of ${digestResult.attempted} Telegram message(s) delivered — bot credentials or the Telegram API are likely broken`,
