@@ -54,6 +54,11 @@ describe('isFreshForDigest', () => {
     expect(isFreshForDigest('2026-10-01T11:00:00Z', now)).toBe(true)
   })
 
+  it('still notifies a reel published exactly 14 days ago', () => {
+    // The window is inclusive on purpose — pin it so `<=` cannot quietly become `<`
+    expect(isFreshForDigest('2026-09-17T09:00:00Z', now)).toBe(true)
+  })
+
   it('skips a missing or unparseable date', () => {
     expect(isFreshForDigest(null, now)).toBe(false)
     expect(isFreshForDigest('не дата', now)).toBe(false)
