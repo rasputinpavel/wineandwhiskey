@@ -9,7 +9,8 @@ import { guardPriceApi } from '../_auth'
 // в базе — это другой путь, портальный /m/price/upload.
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300   // большой PDF через Vision идёт минутами
+// Замерено: 9,5-МБ PDF Enoteca (50 страниц через Vision) разбирается 6 мин.
+export const maxDuration = 600
 
 const MAX_BYTES = 20 * 1024 * 1024   // предел Telegram getFile
 

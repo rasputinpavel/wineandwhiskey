@@ -29,7 +29,9 @@ export class PriceSliceError extends Error {
   constructor(message: string, readonly status?: number) { super(message); }
 }
 
-const TIMEOUT_MS = 300_000;   // большой PDF через Vision идёт минутами
+// Замерено на настоящем прайсе: 9,5-МБ PDF в 50 страниц через Vision
+// разбирается 6 минут. 300 с, как было сначала, обрывали такой файл.
+const TIMEOUT_MS = 600_000;
 
 function portalUrl(path: string): string {
   const base = process.env.MISSION_CONTROL_URL;
