@@ -119,3 +119,24 @@ export function recallSlice(chatId: number): SliceCacheEntry | null {
 export function forgetSlice(chatId: number): void {
   cache.delete(chatId);
 }
+
+// ─── Разбор подписи к файлу ─────────────────────────────────────────────────
+
+// Телеграм НЕ разбирает команды в подписях к файлам (это документировано в
+// самой grammY), поэтому «/price все шардоне» подписью к PDF командой не
+// станет — ловим его здесь наравне со словом «прайс».
+//
+// Границу слова даёт явный просмотр вперёд, а не \b: в JS \b считает словом
+// только ASCII, поэтому /^прайс\b/ после кириллицы не срабатывает НИКОГДА.
+const PRICE_TRIGGER = /^(?:\/price(?:@\w+)?|прайс)(?=$|[\s:,.\-–—])[\s:,.\-–—]*/i;
+
+/**
+ * Подпись к файлу → запрос к прайсу.
+ * `null` — это не прайс-срез, файл должен уйти дальше (в PO-сканер).
+ * `""` — срез запрошен, но без запроса: бот спросит, что нужно.
+ */
+export function parsePriceCaption(caption: string | undefined): string | null {
+  const text = (caption ?? "").trim();
+  if (text === "" || !PRICE_TRIGGER.test(text)) return null;
+  return text.replace(PRICE_TRIGGER, "").trim();
+}

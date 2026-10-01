@@ -33,7 +33,7 @@ import {
   insertWriteoff, listPending, closeWriteoff,
 } from "./writeoff.js";
 import {
-  requestSlice, requestRefine, rememberSlice, recallSlice,
+  requestSlice, requestRefine, rememberSlice, recallSlice, parsePriceCaption,
   PriceSliceError, type SliceItem,
 } from "./price-slice.js";
 import {
@@ -195,6 +195,11 @@ async function runPriceSlice(
         "Не понял запрос. Например: «все шардоне до 600».");
       return;
     }
+    if (e instanceof PriceSliceError && (e.status === 502 || e.status === 503 || e.status === 504)) {
+      await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
+        "Портал сейчас недоступен — обновляется или не справился с этим файлом. Попробуй ещё раз через пару минут.");
+      return;
+    }
     if (e instanceof PriceSliceError && e.status === 413) {
       await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id,
         "Файл слишком большой. Пришли прайс поменьше 20 МБ.");
@@ -223,9 +228,6 @@ async function runPriceRefine(ctx: any, cached: { items: SliceItem[]; supplier: 
     await reportFailure(ctx, waitMsg.message_id, "доуточнение среза", e);
   }
 }
-
-// Подпись к файлу вида «прайс: все шардоне» — второй вход в срез.
-const PRICE_CAPTION = /^прайс\b[\s:,-]*/i;
 
 // PO confirmation holds NO in-memory state: the scan is uploaded now, its path
 // travels in the callback data, and the fields are read back from the card text
@@ -664,12 +666,10 @@ bot.on("message:photo", async (ctx) => {
 
   // Фото прайса (сняли лист на телефон) — уходит в срез, а не в расходы.
   const photoSliceState = pendingPriceSlice.get(chatId);
-  const photoAsksSlice = PRICE_CAPTION.test(caption ?? "");
-  if (photoSliceState || photoAsksSlice) {
+  const photoCaptionQuery = parsePriceCaption(caption);
+  if (photoSliceState || photoCaptionQuery !== null) {
     pendingPriceSlice.delete(chatId);
-    const query = photoAsksSlice
-      ? (caption ?? "").replace(PRICE_CAPTION, "").trim()
-      : photoSliceState?.query ?? "";
+    const query = photoCaptionQuery ?? photoSliceState?.query ?? "";
     if (query === "") {
       pendingPriceSlice.set(chatId, { query: "" });
       await ctx.reply(SLICE_ASK);
@@ -745,13 +745,10 @@ bot.on("message:document", async (ctx) => {
   // /price, либо подпись начинается со слова «прайс». Проверка стоит ДО
   // PO_DOC_MIMES, иначе Excel-прайс отсеялся бы здесь же.
   const docSliceState = pendingPriceSlice.get(chatId);
-  const docCaption = ctx.message.caption?.trim() ?? "";
-  const docAsksSlice = PRICE_CAPTION.test(docCaption);
-  if (docSliceState || docAsksSlice) {
+  const docCaptionQuery = parsePriceCaption(ctx.message.caption);
+  if (docSliceState || docCaptionQuery !== null) {
     pendingPriceSlice.delete(chatId);
-    const query = docAsksSlice
-      ? docCaption.replace(PRICE_CAPTION, "").trim()
-      : docSliceState?.query ?? "";
+    const query = docCaptionQuery ?? docSliceState?.query ?? "";
     if (query === "") {
       pendingPriceSlice.set(chatId, { query: "" });
       await ctx.reply(SLICE_ASK);
