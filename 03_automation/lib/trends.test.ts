@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isHit, isFreshForDigest, multiple } from './trends'
+import { isHit, isFreshForDigest, multiple, pickDigestReels, type DigestReel } from './trends'
 
 describe('multiple', () => {
   it('is views divided by followers', () => {
@@ -62,5 +62,44 @@ describe('isFreshForDigest', () => {
   it('skips a missing or unparseable date', () => {
     expect(isFreshForDigest(null, now)).toBe(false)
     expect(isFreshForDigest('не дата', now)).toBe(false)
+  })
+})
+
+function reel(over: Partial<DigestReel> = {}): DigestReel {
+  return {
+    username: 'shop',
+    views: 100_000,
+    followers: 10_000,
+    url: 'https://www.instagram.com/reel/AAA/',
+    publishedAt: '2026-09-28T10:00:00Z',
+    durationS: 30,
+    caption: 'caption',
+    thumbnailUrl: 'https://cdn.example/thumb.jpg',
+    ...over,
+  }
+}
+
+describe('pickDigestReels', () => {
+  it('splits 12 hits into 5 photos, 5 list lines and a remainder', () => {
+    const hits = Array.from({ length: 12 }, (_, i) =>
+      reel({ username: `shop${i}`, followers: 1_000, views: 60_000 + i * 1_000 }),
+    )
+    const picked = pickDigestReels(hits)
+    expect(picked.photos).toHaveLength(5)
+    expect(picked.listed).toHaveLength(5)
+    expect(picked.omitted).toBe(2)
+  })
+
+  it('orders by multiple, not by raw views', () => {
+    const big = reel({ username: 'big', followers: 500_000, views: 3_000_000 })   // 6x
+    const small = reel({ username: 'small', followers: 4_000, views: 600_000 })   // 150x
+    const picked = pickDigestReels([big, small])
+    expect(picked.photos.map(r => r.username)).toEqual(['small', 'big'])
+    expect(picked.listed).toEqual([])
+    expect(picked.omitted).toBe(0)
+  })
+
+  it('returns empty groups for no hits', () => {
+    expect(pickDigestReels([])).toEqual({ photos: [], listed: [], omitted: 0 })
   })
 })
