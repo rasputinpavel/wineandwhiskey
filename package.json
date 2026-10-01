@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "test": "vitest run",
     "dashboard": "tsx 03_automation/sync_dashboard.ts",
     "matrix": "tsx 03_automation/wine_matrix.ts",
     "orders": "tsx 03_automation/scrape_purchase_orders.ts",
@@ -29,12 +30,15 @@
     "reconcile": "tsx 03_automation/reconcile.ts"
   },
   "dependencies": {
-    "@ww/shared": "*",
     "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/supabase-js": "^2.45.0",
+    "@ww/shared": "*",
     "dotenv": "^16.4.0",
     "playwright": "^1.45.0",
     "tsx": "^4.19.0",
     "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }
