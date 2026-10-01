@@ -476,7 +476,8 @@ async function main() {
         followers_count:        c.followers,
         avg_reel_views:         c.avgViews,
         relevance_score:        c.score,
-        is_active:              false,
+        // is_active is owned by trend_accounts_cli.ts and must not be reset on re-discovery.
+        // The column's default (false) ensures new rows arrive inactive.
         // v2
         median_reel_views:      c.medianViews,
         top3_avg_views:         c.top3Views,
