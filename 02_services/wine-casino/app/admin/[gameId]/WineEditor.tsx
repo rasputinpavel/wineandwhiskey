@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { COUNTRIES, GRAPES, regionsFor } from '@/lib/wine-data'
+import { COUNTRIES, regionsFor } from '@/lib/wine-data'
+import { CountryField, GrapeField } from './WineCombobox'
 import type { Hint, WineColor } from '@/lib/types'
 
 export type EditableWine = {
@@ -73,17 +74,17 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
 
       <div className="grid grid-cols-2 gap-2">
         <input className={`${field} col-span-2`} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name" />
-        <input
-          className={field} list={`dl-countries-${wine.id}`} value={form.country ?? ''}
-          onChange={e => set('country', e.target.value || null)} placeholder="Country"
+        <CountryField
+          id={`country-${wine.id}`} className={field} value={form.country ?? ''}
+          onChange={v => set('country', v || null)} placeholder="Country"
         />
         <input
           className={field} list={`dl-regions-${wine.id}`} value={form.region ?? ''}
           onChange={e => set('region', e.target.value || null)} placeholder="Region"
         />
-        <input
-          className={field} list={`dl-grapes-${wine.id}`} value={form.grape ?? ''}
-          onChange={e => set('grape', e.target.value || null)} placeholder="Grape"
+        <GrapeField
+          id={`grape-${wine.id}`} className={field} value={form.grape ?? ''}
+          onChange={v => set('grape', v || null)} placeholder="Grape"
         />
         <input
           className={field} type="number" value={form.vintage ?? ''}
@@ -115,15 +116,11 @@ export function WineEditor({ gameId, wine, onSaved }: Props) {
           but a value we do not recognise silently drops its category from the
           board, and the admin deserves to know why the question vanished.
 
-          The ids carry the wine id because every bottle on the page renders its
+          The id carries the wine id because every bottle on the page renders its
           own editor: with a shared id the browser binds every `list=` to the
-          first datalist it meets, so wine #2 offered wine #1's regions. */}
-      <datalist id={`dl-countries-${wine.id}`}>
-        {COUNTRIES.map(c => <option key={c.value} value={c.en} />)}
-      </datalist>
-      <datalist id={`dl-grapes-${wine.id}`}>
-        {GRAPES.map(g => <option key={g.value} value={g.en} />)}
-      </datalist>
+          first datalist it meets, so wine #2 offered wine #1's regions. Country
+          and grape moved to the comboboxes above, which carry the wine id the
+          same way. */}
       <datalist id={`dl-regions-${wine.id}`}>
         {regionsFor(form.country).map(r => <option key={r.value} value={r.ru} />)}
       </datalist>
