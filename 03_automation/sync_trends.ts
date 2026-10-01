@@ -65,7 +65,14 @@ async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
   const res = await fetch(`${BASE}/acts/apify~instagram-scraper/runs`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usernames: [username], resultsType: 'posts', resultsLimit: maxPosts }),
+    // directUrls + resultsType=reels, ported from 02_services/trendwatch/lib/apify.ts:75.
+    // The older `usernames` + `resultsType: 'posts'` input returns zero videos for most
+    // accounts, which is why this job collected nothing even on the days it ran.
+    body: JSON.stringify({
+      directUrls:   [`https://www.instagram.com/${username}/reels/`],
+      resultsType:  'reels',
+      resultsLimit: maxPosts,
+    }),
   })
   if (!res.ok) throw new Error(`Apify start failed: ${await res.text()}`)
 
@@ -84,7 +91,8 @@ async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
     headers: { Authorization: `Bearer ${APIFY_TOKEN}` },
   })
   const items = await d.json() as Post[]
-  return items.filter(p => p.type === 'Video')
+  console.log(`  ${items.length} items from Apify, ${items.filter(p => p.videoPlayCount != null).length} with a view count`)
+  return items.filter(p => p.videoPlayCount != null)
 }
 
 function telegramTarget(): { token: string; chatId: string } | null {
