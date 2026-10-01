@@ -17,6 +17,7 @@ dotenv.config({ path: '.env.local' })
 
 import { createClient } from '@supabase/supabase-js'
 import { getProfile } from './lib/apify'
+import { valuesAfter } from './lib/args'
 import { multiple } from './lib/trends'
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!)
@@ -111,12 +112,6 @@ async function setActive(usernames: string[], isActive: boolean): Promise<void> 
     else if (!data?.length) console.error(`  ✗ @${username} — not in the list (add it first)`)
     else console.log(`  ${isActive ? '✓ on ' : '· off'} @${username}`)
   }
-}
-
-function valuesAfter(args: string[], flag: string): string[] {
-  const i = args.indexOf(flag)
-  if (i === -1) return []
-  return args.slice(i + 1).filter(a => !a.startsWith('--'))
 }
 
 async function main(): Promise<void> {
