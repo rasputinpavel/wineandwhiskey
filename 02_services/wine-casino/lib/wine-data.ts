@@ -203,6 +203,18 @@ export function regionsFor(country: string | null): Option[] {
   return names.map(n => ({ value: n.toLowerCase(), ru: n, en: n }))
 }
 
+/** Every region name across every country we catalogue, lowercased. Region
+ *  has no button board any more (it is free entry — see categories.ts), so
+ *  lib/bets.ts checks a typed guess against this set instead of a board.
+ *  Names are not accent-folded here; comparisons fold through canon() at the
+ *  call site, the same rule every other comparison on the money path follows
+ *  (see lib/text.ts). Duplicate names across countries (more than one
+ *  "Tokaj") simply collapse in the Set — we only need "is this a region we
+ *  know", not which country it belongs to. */
+export const ALL_REGIONS: ReadonlySet<string> = new Set(
+  Object.values(REGIONS).flatMap(names => names.map(n => n.trim().toLowerCase())),
+)
+
 export function countryOption(country: string): Option {
   const key = country.trim().toLowerCase()
   return COUNTRIES.find(c => c.value === key) ?? { value: key, ru: country, en: country }

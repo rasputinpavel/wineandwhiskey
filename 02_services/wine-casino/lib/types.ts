@@ -9,9 +9,16 @@ export type WineColor   = 'red' | 'white' | 'rose' | 'sparkling' | 'orange'
 
 export type CategoryKey = 'style' | 'world' | 'country' | 'region' | 'grape' | 'vintage'
 
+/** `choice` = a fixed button board (see OPTION_COUNTS / buildOptions).
+ *  `open` = free text from the guest, matched against a dictionary instead of
+ *  a board (see lib/wine-data.ts and lib/bets.ts) — country and region, which
+ *  would otherwise need a board built from decoys that give the answer away. */
+export type CategoryInput = 'choice' | 'open'
+
 export type CategoryDef = {
   key: CategoryKey
   multiplier: number
+  input: CategoryInput
   ru: string
   en: string
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
+import { ALL_REGIONS, COUNTRIES, GRAPES, countryOption, grapeGroup, grapeOption, regionsFor } from './wine-data'
 
 describe('the dictionaries themselves', () => {
   it('keeps every value canonical, because answers are matched by trim().toLowerCase()', () => {
@@ -13,9 +13,24 @@ describe('the dictionaries themselves', () => {
     expect(new Set(GRAPES.map(g => g.value)).size).toBe(GRAPES.length)
   })
 
-  it('has enough grapes of each colour to fill a six-button board', () => {
-    expect(GRAPES.filter(g => g.group === 'red').length).toBeGreaterThanOrEqual(6)
-    expect(GRAPES.filter(g => g.group === 'white').length).toBeGreaterThanOrEqual(6)
+  it('has enough grapes of each colour to fill a twelve-button board', () => {
+    // OPTION_COUNTS.grape is 12 (lib/options.ts) — fewer than this per colour
+    // and the grape board would have to borrow from the other colour, which is
+    // exactly the leak the colour-scoping exists to close.
+    expect(GRAPES.filter(g => g.group === 'red').length).toBeGreaterThanOrEqual(12)
+    expect(GRAPES.filter(g => g.group === 'white').length).toBeGreaterThanOrEqual(12)
+  })
+})
+
+describe('ALL_REGIONS', () => {
+  it('contains regions from more than one country, lowercased', () => {
+    expect(ALL_REGIONS.has('toscana')).toBe(true)
+    expect(ALL_REGIONS.has('mendoza')).toBe(true)
+    expect(ALL_REGIONS.has('kakheti')).toBe(true)
+  })
+
+  it('does not contain a name we do not catalogue', () => {
+    expect(ALL_REGIONS.has('narnia')).toBe(false)
   })
 })
 
