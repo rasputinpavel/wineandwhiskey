@@ -29,5 +29,4 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BARRYMORE_BOT_TOKEN:  ${{ secrets.BARRYMORE_BOT_TOKEN }}
           BARRYMORE_CHAT_ID:    ${{ secrets.BARRYMORE_CHAT_ID }}
-          TRENDWATCH_URL:       ${{ secrets.TRENDWATCH_URL }}
         run: npm run trends
