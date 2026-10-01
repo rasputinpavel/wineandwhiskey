@@ -36,9 +36,29 @@ function requireEnv(name: string): string {
   return value
 }
 
-const SUPABASE_URL  = requireEnv('SUPABASE_URL')
-const SUPABASE_KEY  = requireEnv('SUPABASE_SERVICE_KEY')
-const APIFY_TOKEN   = requireEnv('APIFY_TOKEN')
+// Same contract as requireEnv, for a value that may come from either of two
+// legacy-named variables (BARRYMORE_OWNER_CHAT_ID preferred, BARRYMORE_CHAT_ID
+// as a fallback) — exits unless at least one is set.
+function requireAnyEnv(names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name]
+    if (value) return value
+  }
+  console.error(
+    `✗ None of ${names.join(' / ')} is set. In CI they come from GitHub secrets; locally from .env.local. ` +
+    `Refusing to run — a silent no-op here went unnoticed for five months.`,
+  )
+  process.exit(1)
+}
+
+const SUPABASE_URL        = requireEnv('SUPABASE_URL')
+const SUPABASE_KEY        = requireEnv('SUPABASE_SERVICE_KEY')
+const APIFY_TOKEN         = requireEnv('APIFY_TOKEN')
+// The digest is this script's only product. Without these, a run spends Apify
+// credit, writes rows nobody reads, and still exits 0 — exactly as fatal as a
+// missing APIFY_TOKEN, just further downstream.
+const BARRYMORE_BOT_TOKEN = requireEnv('BARRYMORE_BOT_TOKEN')
+const BARRYMORE_CHAT_ID   = requireAnyEnv(['BARRYMORE_OWNER_CHAT_ID', 'BARRYMORE_CHAT_ID'])
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 const BASE = 'https://api.apify.com/v2'
@@ -79,86 +99,103 @@ async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
   const { data: run } = await res.json() as { data: { id: string; defaultDatasetId: string } }
 
   const deadline = Date.now() + 5 * 60_000
+  let succeeded = false
   while (Date.now() < deadline) {
     await sleep(10_000)
     const s = await fetch(`${BASE}/actor-runs/${run.id}`, { headers: { Authorization: `Bearer ${APIFY_TOKEN}` } })
     const { data } = await s.json() as { data: { status: string } }
-    if (data.status === 'SUCCEEDED') break
+    if (data.status === 'SUCCEEDED') { succeeded = true; break }
     if (data.status === 'FAILED' || data.status === 'ABORTED') throw new Error(`Apify run ${data.status}`)
   }
+  // Falling through here means the run was still RUNNING at the deadline — without
+  // this throw we'd go fetch the dataset of a still-running actor and treat a
+  // partial or empty result as complete, which reads in the log exactly like a
+  // quiet account.
+  if (!succeeded) throw new Error(`Apify run ${run.id} timed out after 5 minutes`)
 
   const d = await fetch(`${BASE}/datasets/${run.defaultDatasetId}/items?clean=true`, {
     headers: { Authorization: `Bearer ${APIFY_TOKEN}` },
   })
+  if (!d.ok) throw new Error(`Apify dataset fetch failed: ${await d.text()}`)
   const items = await d.json() as Post[]
   console.log(`  ${items.length} items from Apify, ${items.filter(p => p.videoPlayCount != null).length} with a view count`)
   return items.filter(p => p.videoPlayCount != null)
 }
 
-function telegramTarget(): { token: string; chatId: string } | null {
-  const token  = process.env.BARRYMORE_BOT_TOKEN
-  const chatId = process.env.BARRYMORE_OWNER_CHAT_ID ?? process.env.BARRYMORE_CHAT_ID
-  if (!token || !chatId) {
-    console.error('  ⚠ BARRYMORE_BOT_TOKEN / BARRYMORE_CHAT_ID not set — digest not sent')
-    return null
-  }
-  return { token, chatId }
+// BARRYMORE_BOT_TOKEN / BARRYMORE_CHAT_ID are required at module load (see
+// requireEnv above), so this never has to report "not configured" — it just
+// hands back the resolved pair.
+function telegramTarget(): { token: string; chatId: string } {
+  return { token: BARRYMORE_BOT_TOKEN, chatId: BARRYMORE_CHAT_ID }
 }
 
-async function sendDigest(reels: DigestReel[]): Promise<void> {
+async function sendDigest(reels: DigestReel[]): Promise<{ attempted: number; delivered: number } | null> {
   const fresh = reels.filter(r => isFreshForDigest(r.publishedAt))
   if (fresh.length === 0) {
     console.log(`📭 ${reels.length} new reel(s), none published in the notify window — no digest`)
-    return
+    return null
   }
 
-  const target = telegramTarget()
-  if (!target) return
-  const { token, chatId } = target
-
+  const { token, chatId } = telegramTarget()
   const { photos, listed, omitted } = pickDigestReels(fresh)
 
-  await sendMessage(token, chatId, formatHeader(fresh.length))
+  let attempted = 0
+  let delivered = 0
+
+  attempted++
+  if (await sendMessage(token, chatId, formatHeader(fresh.length))) delivered++
 
   for (const reel of photos) {
     const caption = formatReelCaption(reel)
-    const sent = reel.thumbnailUrl
+    attempted++
+    let sent = reel.thumbnailUrl
       ? await sendPhotoFromUrl(token, chatId, reel.thumbnailUrl, caption)
       : false
     // No thumbnail, or Instagram refused it — the reel still deserves a message.
     // Deliberate trade: formatReelCaption budgets for Telegram's 1024-char photo
     // caption limit, so on this sendMessage fallback (4096-char limit) we leave
     // up to ~3000 chars of possible quote on the table. One string serves both
-    // paths; the quote is a teaser, not the content — flagged in review.
-    if (!sent) await sendMessage(token, chatId, caption)
+    // paths; the quote is a teaser, not the content — flagged in review. Note
+    // this fallback does NOT help on a parse error (malformed HTML): the same
+    // string is retried and fails the same way, which is why delivery is still
+    // counted truthfully below rather than assumed.
+    if (!sent) sent = await sendMessage(token, chatId, caption)
+    if (sent) delivered++
   }
 
   if (listed.length > 0 || omitted > 0) {
     const tail = [...listed.map(formatListLine)]
     if (omitted > 0) tail.push(`…и ещё ${omitted} — порог прошли, в дайджест не влезли`)
-    await sendMessage(token, chatId, tail.join('\n'))
+    attempted++
+    if (await sendMessage(token, chatId, tail.join('\n'))) delivered++
   }
 
-  console.log(`📩 Digest sent: ${photos.length} with thumbnails, ${listed.length} listed, ${omitted} omitted`)
+  console.log(`📩 Digest: ${delivered}/${attempted} message(s) delivered (${photos.length} with thumbnails, ${listed.length} listed, ${omitted} omitted)`)
+  return { attempted, delivered }
 }
 
 async function reportFailures(failures: Array<{ username: string; message: string }>, total: number): Promise<void> {
-  const target = telegramTarget()
-  if (!target) return
+  const { token, chatId } = telegramTarget()
   const lines = [
     `⚠️ <b>Синк трендов упал: ${failures.length} из ${total} аккаунтов</b>`,
     ...failures.map(f => `• @${f.username} — ${f.message}`),
   ]
-  await sendMessage(target.token, target.chatId, lines.join('\n'))
+  await sendMessage(token, chatId, lines.join('\n'))
 }
 
 async function main() {
   const args = process.argv.slice(2)
-  const isDryRun = args.includes('--dry-run')
   const forceAccount = args.find(a => a.startsWith('--account='))?.split('=')[1]
     || (args.includes('--account') ? args[args.indexOf('--account') + 1] : null)
+  // A forced single account gets id: 'test', which is not a real uuid — it would
+  // fail unchecked against the last_reel_at update. Forcing dry-run sidesteps
+  // that write entirely instead of papering over it.
+  const isDryRun = args.includes('--dry-run') || forceAccount !== null
 
   console.log(`\n📡 Trend sync ${isDryRun ? '[DRY RUN] ' : ''}started at ${new Date().toISOString()}\n`)
+  if (forceAccount && !args.includes('--dry-run')) {
+    console.log('  (--account forces --dry-run — nothing will be written)\n')
+  }
 
   let accounts: Array<{ id: string; username: string; followers_count: number | null }>
 
@@ -175,7 +212,11 @@ async function main() {
   }
 
   if (!accounts.length) {
-    console.log('No active accounts. Add and activate accounts at /accounts.')
+    // This is the single most likely misconfiguration to recur — the table has
+    // held exactly one irrelevant row for months without anyone noticing. Make
+    // it loud instead of a quiet, successful no-op.
+    console.error('✗ No active accounts in trend_accounts — nothing to scrape. Activate some with: npm run trends:accounts -- --on <username>')
+    process.exitCode = 1
     return
   }
 
@@ -184,12 +225,14 @@ async function main() {
   const newReelNotifications: DigestReel[] = []
   const failures: Array<{ username: string; message: string }> = []
   let totalNew = 0
+  let totalReelsSeen = 0
 
   for (const account of accounts) {
     console.log(`@${account.username}`)
 
     try {
       const posts = await scrapeAccount(account.username)
+      totalReelsSeen += posts.length
       const followers = account.followers_count ?? 0
       const highReach = posts.filter(p => isHit(p.videoPlayCount ?? 0, followers))
 
@@ -197,41 +240,51 @@ async function main() {
 
       for (const post of highReach) {
         const instagramId = post.shortCode
+        const reelUrl      = post.url || `https://www.instagram.com/reel/${instagramId}/`
+        const views        = post.videoPlayCount ?? 0
 
-        const { data: existing } = await supabase
-          .from('trend_reels')
-          .select('id')
-          .eq('instagram_id', instagramId)
-          .single()
-
-        if (existing) continue
-
-        const reelUrl     = post.url || `https://www.instagram.com/reel/${instagramId}/`
-        const views       = post.videoPlayCount ?? 0
-
-        if (!isDryRun) {
-          await supabase.from('trend_reels').insert({
-            account_id:           account.id,
-            instagram_id:         instagramId,
-            url:                  reelUrl,
-            views_count:          views,
-            likes_count:          post.likesCount,
-            comments_count:       post.commentsCount,
-            caption:              post.caption,
-            hashtags:             post.hashtags,
-            thumbnail_url:        post.displayUrl,
-            video_url:            post.videoUrl,
-            duration_s:           post.videoDuration,
-            published_at:         post.timestamp,
-            status:               'new',
-            trigger_type:         'both',
-            views_at_capture:     views,
-            followers_at_capture: followers,
-            ratio_at_capture:     followers > 0 ? parseFloat(multiple(views, followers).toFixed(2)) : null,
-          })
+        const row = {
+          account_id:           account.id,
+          instagram_id:         instagramId,
+          url:                  reelUrl,
+          views_count:          views,
+          likes_count:          post.likesCount,
+          comments_count:       post.commentsCount,
+          caption:              post.caption,
+          hashtags:             post.hashtags,
+          thumbnail_url:        post.displayUrl,
+          video_url:            post.videoUrl,
+          duration_s:           post.videoDuration,
+          published_at:         post.timestamp,
+          status:               'new',
+          trigger_type:         'both',
+          views_at_capture:     views,
+          followers_at_capture: followers,
+          ratio_at_capture:     followers > 0 ? parseFloat(multiple(views, followers).toFixed(2)) : null,
         }
 
-        console.log(`  + NEW: ${reelUrl} (${(post.videoPlayCount ?? 0).toLocaleString()} views)`)
+        // Let the unique index on instagram_id decide. The old pattern asked first
+        // with .single(), where a FAILED query is indistinguishable from "not seen
+        // before" — so a broken connection (rotated key, RLS change, renamed
+        // column) re-announced the same reels every morning instead of erroring.
+        if (isDryRun) {
+          const { data: existing, error } = await supabase
+            .from('trend_reels')
+            .select('id')
+            .eq('instagram_id', instagramId)
+            .maybeSingle()
+          if (error) throw new Error(`lookup ${instagramId}: ${error.message}`)
+          if (existing) continue
+        } else {
+          const { data: inserted, error } = await supabase
+            .from('trend_reels')
+            .upsert(row, { onConflict: 'instagram_id', ignoreDuplicates: true })
+            .select('id')
+          if (error) throw new Error(`insert ${instagramId}: ${error.message}`)
+          if (!inserted?.length) continue   // we already had this one
+        }
+
+        console.log(`  + NEW: ${reelUrl} (${views.toLocaleString()} views)`)
         newReelNotifications.push({
           username:     account.username,
           views:        post.videoPlayCount ?? 0,
@@ -262,19 +315,46 @@ async function main() {
 
   console.log(`\nNew reels: ${totalNew}`)
 
+  // Ten quiet wine accounts on the same morning is not a thing. Zero reels
+  // across every account with no per-account errors means the scrape itself
+  // is broken — most likely the Apify actor input (directUrls/resultsType)
+  // has drifted again, the same way `usernames`+`posts` silently returned
+  // nothing for five months. Make that loud instead of a clean "0 new reels".
+  if (failures.length === 0 && totalReelsSeen === 0) {
+    failures.push({
+      username: 'all-accounts',
+      message: `zero reels across all ${accounts.length} account(s) — Apify input format has likely drifted again (see scrapeAccount)`,
+    })
+  }
+
   // Send what we have BEFORE failing: a non-zero exit must never cost us a
   // digest that is already assembled.
   if (!isDryRun && newReelNotifications.length > 0) {
-    await sendDigest(newReelNotifications)
+    const digestResult = await sendDigest(newReelNotifications)
+    if (digestResult && digestResult.delivered === 0) {
+      failures.push({
+        username: 'digest',
+        message: `0 of ${digestResult.attempted} Telegram message(s) delivered — bot credentials or the Telegram API are likely broken`,
+      })
+    }
   }
 
   if (failures.length > 0) {
     if (!isDryRun) await reportFailures(failures, accounts.length)
     console.error(`\n✗ ${failures.length} of ${accounts.length} account(s) failed`)
-    process.exit(1)
+    // process.exitCode (not process.exit) so stdout — including the per-account
+    // "✗ Failed:" lines just logged — actually flushes before Node exits. In CI,
+    // stdout is a pipe and writes to it are async; process.exit() does not wait
+    // for pending writes, so the lines that matter most were the ones at risk
+    // of being cut off.
+    process.exitCode = 1
+    return
   }
 
   console.log('✅ Done.')
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+main().catch(e => {
+  console.error(e)
+  process.exitCode = 1
+})
