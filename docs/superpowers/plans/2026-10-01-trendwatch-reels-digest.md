@@ -1014,6 +1014,33 @@ Action, так и не доехала.
 
 ---
 
+### Task 6c: Daily heartbeat, and keep the smoke test consequence-free
+
+Added 2026-10-01 after review. Two small changes to `03_automation/sync_trends.ts`.
+
+**1. A quiet day sends one line.** The user chose a daily heartbeat over weekly or nothing. When
+there is nothing to send — no new reels, or new reels none of which fall inside the 14-day notify
+window — send `🫧 Проверено аккаунтов: N · рилсов просмотрено: M · залётов нет` instead of staying
+silent. Count a failed heartbeat as a failure, exactly like an undelivered digest: the point of
+the line is that its absence means something, so it has to actually arrive. Keep it gated on
+`!isDryRun` like every other Telegram call.
+
+**2. The all-zero-reels guard must not fire on a dry run.** It currently reddens
+`npm run trends -- --dry-run --account <name>` whenever that one account happens to be quiet,
+which makes the smoke test unusable for debugging. Gate it on `!isDryRun`. It stays a heuristic:
+ten accounts returning nothing on the same morning means the Apify input drifted, but one quiet
+account means nothing — worth a comment saying so.
+
+**Files:**
+- Modify: `03_automation/sync_trends.ts`
+
+- [ ] **Step 1:** Implement both changes.
+- [ ] **Step 2:** `npm test` — expect 31 passing, unchanged.
+- [ ] **Step 3:** `APIFY_TOKEN= npm run trends -- --dry-run` — expect the fail-fast message and exit 1.
+- [ ] **Step 4:** Stage `03_automation/sync_trends.ts` and commit with a Russian message recording why the heartbeat exists: silence used to mean both "nothing viral" and "everything broke".
+
+---
+
 ### Task 7: Watchlist CLI
 
 Promoting, adding and switching accounts was a button in the undeployed web UI. This is its replacement.

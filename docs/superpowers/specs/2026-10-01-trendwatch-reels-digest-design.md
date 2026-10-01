@@ -124,6 +124,15 @@ Then the **top 5 by multiple**, each as its own `sendPhoto` with the reel's thum
 - All links to the trendwatch service are removed from bot messages, and `TRENDWATCH_URL` is
   dropped from the workflow env — there is no service to link to.
 
+**Quiet days send one line** (decided 2026-10-01, replacing this spec's original "nothing new →
+no message"): `🫧 Проверено аккаунтов: N · рилсов просмотрено: M · залётов нет`. Review pointed
+out that silence was ambiguous in exactly the way that cost five months — an empty chat meant
+either "nothing went viral" or "the job stopped running, the workflow broke, the schedule was
+skipped". A per-account failure now reddens the run and sends a notice, but a job that never
+starts cannot report anything, and GitHub's scheduled cron does occasionally skip. One line a
+day makes the absence of a message meaningful on its own. If the heartbeat itself fails to
+deliver, that counts as a failure like any other.
+
 ## 7. Watchlist maintenance without a UI
 
 New script `03_automation/trend_accounts_cli.ts`, wired as `npm run trends:accounts`:
