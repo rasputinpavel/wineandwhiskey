@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { isHit, isFreshForDigest, multiple, pickDigestReels, type DigestReel } from './trends'
+import {
+  isHit, isFreshForDigest, multiple, pickDigestReels, type DigestReel,
+  formatHeader, formatListLine, formatReelCaption, formatViews, TELEGRAM_CAPTION_LIMIT,
+} from './trends'
 
 describe('multiple', () => {
   it('is views divided by followers', () => {
@@ -121,5 +124,65 @@ describe('pickDigestReels', () => {
 
   it('returns empty groups for no hits', () => {
     expect(pickDigestReels([])).toEqual({ photos: [], listed: [], omitted: 0 })
+  })
+})
+
+describe('formatViews', () => {
+  it('renders millions, thousands and small numbers', () => {
+    expect(formatViews(2_114_943)).toBe('2.1M')
+    expect(formatViews(611_417)).toBe('611K')
+    expect(formatViews(950)).toBe('950')
+  })
+})
+
+describe('formatHeader', () => {
+  it('counts the reels being sent', () => {
+    expect(formatHeader(3)).toBe('📈 <b>Залетело за сутки: 3</b>')
+  })
+})
+
+describe('formatReelCaption', () => {
+  it('puts account, views, multiple, length, date, quote and link in order', () => {
+    const caption = formatReelCaption(reel({
+      username:    'fabiopicchiquintovizio',
+      followers:   4_015,
+      views:       611_417,
+      durationS:   42,
+      publishedAt: '2026-04-12T08:30:00Z',
+      caption:     'Questo vino costa 8 euro\nsecond line ignored',
+      url:         'https://www.instagram.com/reel/XYZ/',
+    }))
+    expect(caption).toBe(
+      '@fabiopicchiquintovizio · <b>611K просмотров</b> · 152× от своей нормы\n' +
+      '0:42 · 12 апреля\n' +
+      '«Questo vino costa 8 euro»\n' +
+      '<a href="https://www.instagram.com/reel/XYZ/">смотреть рилс →</a>',
+    )
+  })
+
+  it('escapes HTML in the quoted caption', () => {
+    const caption = formatReelCaption(reel({ caption: 'Bordeaux <b>&</b> Rioja' }))
+    expect(caption).toContain('«Bordeaux &lt;b&gt;&amp;&lt;/b&gt; Rioja»')
+  })
+
+  it('omits the quote line entirely when the caption is empty', () => {
+    const caption = formatReelCaption(reel({ caption: null }))
+    expect(caption).not.toContain('«')
+  })
+
+  it('stays inside the Telegram caption limit and never cuts an HTML entity', () => {
+    const caption = formatReelCaption(reel({ caption: 'A & '.repeat(600) }))
+    expect(caption.length).toBeLessThanOrEqual(TELEGRAM_CAPTION_LIMIT)
+    expect(caption).toContain('…»')
+    expect(caption).not.toMatch(/&[a-z]*…/)
+    expect(caption.endsWith('</a>')).toBe(true)
+  })
+})
+
+describe('formatListLine', () => {
+  it('is one line with account, views, multiple and link', () => {
+    expect(formatListLine(reel({ username: 'shop', followers: 1_000, views: 60_000 }))).toBe(
+      '• @shop — <b>60K</b>, 60× — <a href="https://www.instagram.com/reel/AAA/">рилс</a>',
+    )
   })
 })

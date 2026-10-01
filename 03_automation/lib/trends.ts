@@ -68,3 +68,83 @@ export function pickDigestReels(reels: DigestReel[]): DigestSelection {
     omitted: Math.max(0, sorted.length - DIGEST_MAX_NOTIFIED),
   }
 }
+
+/** Telegram's hard limit for a photo caption. */
+export const TELEGRAM_CAPTION_LIMIT = 1024
+
+const MONTHS_RU = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+]
+
+export function formatViews(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
+  return String(n)
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return ''
+  const whole = Math.round(seconds)
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
+function formatDateRu(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getUTCDate()} ${MONTHS_RU[d.getUTCMonth()]}`
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function firstCaptionLine(caption: string | null): string {
+  if (!caption) return ''
+  return caption.split('\n').find(line => line.trim() !== '')?.trim() ?? ''
+}
+
+/**
+ * Truncate already-escaped HTML without leaving half an entity behind
+ * (`&amp` with no semicolon renders as literal text in Telegram).
+ */
+function truncateEscaped(escaped: string, max: number): string {
+  if (escaped.length <= max) return escaped
+  return escaped.slice(0, max - 1).replace(/&[a-z]{0,5};?$/i, '').trimEnd() + '…'
+}
+
+export function formatHeader(count: number): string {
+  return `📈 <b>Залетело за сутки: ${count}</b>`
+}
+
+export function formatReelCaption(reel: DigestReel): string {
+  const m = multiple(reel.views, reel.followers)
+  const head =
+    `@${escapeHtml(reel.username)} · <b>${formatViews(reel.views)} просмотров</b>` +
+    (m >= 2 ? ` · ${Math.round(m)}× от своей нормы` : '')
+
+  const meta = [formatDuration(reel.durationS), formatDateRu(reel.publishedAt)]
+    .filter(part => part !== '')
+    .join(' · ')
+
+  const link = `<a href="${escapeHtml(reel.url)}">смотреть рилс →</a>`
+  const lines = meta === '' ? [head] : [head, meta]
+  const withoutQuote = [...lines, link].join('\n')
+
+  const quote = escapeHtml(firstCaptionLine(reel.caption))
+  if (quote === '') return withoutQuote
+
+  // «», the quote's own newline, and the ellipsis all have to fit too.
+  const budget = TELEGRAM_CAPTION_LIMIT - withoutQuote.length - 4
+  if (budget < 20) return withoutQuote
+
+  return [...lines, `«${truncateEscaped(quote, budget)}»`, link].join('\n')
+}
+
+export function formatListLine(reel: DigestReel): string {
+  const m = multiple(reel.views, reel.followers)
+  const mult = m >= 2 ? `, ${Math.round(m)}×` : ''
+  return `• @${escapeHtml(reel.username)} — <b>${formatViews(reel.views)}</b>${mult} — ` +
+    `<a href="${escapeHtml(reel.url)}">рилс</a>`
+}
