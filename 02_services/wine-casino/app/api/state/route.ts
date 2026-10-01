@@ -23,20 +23,23 @@ export async function GET(req: Request) {
   const game = gameId ? await db.getGame(gameId) : pin ? await db.getGameByPin(pin) : null
   if (!game) return NextResponse.json({ error: 'game_not_found' }, { status: 404 })
 
-  await tickHints(game)
-
-  const [state, players] = await Promise.all([
+  // Every phone in the room walks this path every few seconds, and each hop to
+  // Supabase costs about 190ms. These three are independent, so they go
+  // together rather than one after another.
+  const [state0, players, proved] = await Promise.all([
     db.getRoundState(game.id),
     db.listPlayers(game.id),
+    playerId && playerToken ? verifyPlayer(playerId, playerToken) : Promise.resolve(false),
   ])
+
+  // Reuses the row above instead of reading it again, and usually decides from
+  // the clock alone that no hint is due, which costs nothing.
+  const { state } = await tickHints(game, state0)
 
   // A player's own slip is private: the PIN is public, so identity has to be
   // proved, not asserted. Unverified callers still get the public projection
   // and the leaderboard — that is what the TV and the lobby need.
-  const claimed = playerId && playerToken && (await verifyPlayer(playerId, playerToken))
-    ? players.find(p => p.id === playerId) ?? null
-    : null
-  const me = claimed
+  const me = proved ? players.find(p => p.id === playerId) ?? null : null
   const myBets = me && state?.wine_id
     ? await db.listBetsForPlayerWine(me.id, state.wine_id)
     : []

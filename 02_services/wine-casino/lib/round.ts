@@ -1,6 +1,7 @@
 import 'server-only'
 import * as db from './db'
 import { settleRound } from './payout'
+import { hintTimes } from './hints'
 import type { PlacedBet } from './payout'
 import type { Hint } from './types'
 
@@ -83,24 +84,42 @@ export async function startRound(game: db.GameRow): Promise<db.WineRow> {
  * two seconds — the host's browser is the clock. Nothing else ticks, so a
  * closed host panel simply means no new hints, never a stuck round.
  */
-export async function tickHints(game: db.GameRow): Promise<Hint[]> {
-  const state = await db.getRoundState(game.id)
+export async function tickHints(
+  game: db.GameRow,
+  prefetched?: db.RoundStateRow | null,
+): Promise<{ hints: Hint[]; state: db.RoundStateRow | null }> {
+  // `/api/state` has already loaded the row; re-reading it here cost a round
+  // trip on every guest's poll for nothing.
+  const state = prefetched !== undefined ? prefetched : await db.getRoundState(game.id)
   if (!state || state.round_status !== 'betting' || !state.wine_id || !state.ends_at) {
-    return state?.revealed_hints ?? []
+    return { hints: state?.revealed_hints ?? [], state }
+  }
+
+  const remaining = (new Date(state.ends_at).getTime() - Date.now()) / 1000
+
+  // The schedule is pure: difficulty and round length give the hint times with
+  // no database at all. Only reach for the wine when the clock says another
+  // hint is genuinely due — on the overwhelming majority of ticks it is not,
+  // and this is the hot path every phone in the room walks every few seconds.
+  const dueByClock = hintTimes(game.difficulty, game.round_seconds)
+    .filter(at => remaining <= at).length
+  if (dueByClock <= state.revealed_hints.length) {
+    return { hints: state.revealed_hints, state }
   }
 
   const wine = await db.getWine(state.wine_id)
-  if (!wine) return state.revealed_hints
+  if (!wine) return { hints: state.revealed_hints, state }
 
-  const remaining = (new Date(state.ends_at).getTime() - Date.now()) / 1000
   const due = wine.hints.filter(h => remaining <= h.at)
-  if (due.length === state.revealed_hints.length) return state.revealed_hints
+  if (due.length === state.revealed_hints.length) {
+    return { hints: state.revealed_hints, state }
+  }
 
   // Conditional on the wine we read: a tick that started against the old
   // round must not win a race against Start and paste stale hints onto the
   // new one. See db.appendHintsIfCurrent.
   await db.appendHintsIfCurrent(game.id, wine.id, due)
-  return due
+  return { hints: due, state: { ...state, revealed_hints: due } }
 }
 
 /** Closes betting without revealing anything yet. */

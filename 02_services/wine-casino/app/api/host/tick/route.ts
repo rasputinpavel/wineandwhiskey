@@ -16,6 +16,6 @@ export async function POST(req: Request) {
   const game = await db.getGameByHostToken(body.t)
   if (!game) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
 
-  const hints = await tickHints(game)
+  const { hints } = await tickHints(game)
   return NextResponse.json({ ok: true, hints })
 }
