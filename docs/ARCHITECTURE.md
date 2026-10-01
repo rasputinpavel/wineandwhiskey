@@ -15,7 +15,7 @@ The repo is a single Git repo (`github.com/rasputinpavel/wineandwhiskey`) organi
 | `.inbox/` | Incoming, unprocessed materials (files to triage). Not knowledge, not output. |
 | `01_agents/` | Virtual employees — Telegram bots running on Railway. `bot/` (Chip & Dale, ops) and `barrymore/` (secretary). |
 | `02_services/` | Web services on Railway. `mission-control` (core portal), `price-service`, `trendwatch`, `kiosk`. (`matrix-runner` retired 2026-06-05 — Wine Matrix is native in the portal.) |
-| `03_automation/` | ~40 standalone `.tsx` sync/build scripts run via root `package.json` npm scripts, plus a shared `lib/`. |
+| `03_automation/` | ~40 standalone `.tsx` sync/build scripts run via root `package.json` npm scripts, plus a shared `lib/`. Pure logic belongs in `03_automation/lib/` and is unit-tested with vitest from the repo root (`npm test`) — the harness was added 2026-10-01 with the trend digest and is the only test coverage in this directory. The scripts themselves are not type-checked: `tsx` strips types without checking them and there is no `tsconfig.json` here. |
 | `04_brand/` | Design system, tokens, logo, product images, visual references. |
 | `05_creative/` | Creative output: `social/`, `catalog/`, dated `output/` exports. |
 | `06_knowledge/` | Store knowledge base (`wine/` concepts, regions, styles). |

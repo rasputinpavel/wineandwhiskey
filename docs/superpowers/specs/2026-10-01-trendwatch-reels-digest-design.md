@@ -151,18 +151,38 @@ discovery cannot silently switch accounts on.
 The May harvest is four months old (`freshness_score` was already 0 for most of it), so the
 watchlist is built from a new scan rather than the stored candidates.
 
-1. **Smoke run first:** `npm run discover-accounts -- --hashtags=winestore`. The CLI path has
-   not run since 2026-05-02 — the last successful full scan went through the web API route, so
-   the CLI may have rotted. One hashtag is cheap proof.
-2. **Full run:** `npm run discover-accounts` — the configured 14 hashtags in 5 clusters
-   (retail, venue, style, authority, adjacent). Roughly 40 minutes.
-3. The CLI upserts its top 30 candidates with `is_active = false` (unlike the UI route, it
-   writes straight to `trend_accounts` — no acceptance step needed).
-4. **Pick ~10 and activate them**, biased toward small accounts with high multiples, since
-   their formats are reproducible by a shop: the May run's shape was
-   `fabiopicchiquintovizio` 4K→611K (152×), `aleksandarskorchev` 2.4K→283K (120×),
-   `vinoteca_mendoza` 3.7K→275K (74×), plus one or two large accounts as format teachers.
-   The fresh scan's numbers decide the actual list.
+**What happened instead: hashtag discovery is dead at the source.** The smoke run
+(`npm run discover-accounts -- --hashtags=winestore`) returned **1 reel**, from an unrelated
+furniture account. A second probe on `#wine` — one of the largest tags on the platform —
+returned **3 reels**. Both against `resultsLimit: 60`, and the code is correct: it uses the same
+`directUrls: explore/tags/<tag>` + `resultsType: 'reels'` pattern as the service. Instagram has
+simply stopped serving hashtag browse pages to the scraper; the 2026-05-27 run that found 55
+candidates from 14 hashtags is not reproducible. **The full 14-hashtag scan was therefore not
+run** — it would have cost 40 minutes and Apify credit to return nothing.
+
+Account-level scraping is unaffected (`directUrls: /<username>/reels/` returns a full 10 reels),
+so the daily job itself is fine. Only *finding* new accounts is broken.
+
+**So the watchlist is curated by hand**, seeded from the Claude verdicts stored in the
+2026-05-27 `discover_jobs.candidates` JSON. That vetting judged content format and
+reproducibility, which does not go stale in four months; what *was* stale were the follower
+counts, and `npm run trends:accounts -- --add <username>` fetches today's number per account, so
+the multiple is computed from fresh data. Two of the chosen handles no longer resolve at all
+(`degustandoexperience.it`, `grinsteadsonthevine` — Apify returns an error record, not a
+profile), which is itself a reason the May metrics could not have been trusted as-is.
+
+**The pilot, activated 2026-10-01** — ten accounts, weighted toward small ones with large
+multiples because their formats are reproducible by a shop, plus a few large accounts as format
+teachers: `fabiopicchiquintovizio` (4,016 followers), `aleksandarskorchev` (2,679),
+`vinoteca_mendoza` (3,724), `cultwinesintl` (10,728), `bodegagoulart_oficial` (22,989),
+`vinhosememe` (23,744), `melindacomelamela` (38,208), `lucialoveswine` (124,193),
+`bernabei.it` (153,927), `laregoladelpiatto` (219,202). One inactive row remains from before
+(`ingvildtennfjord`, admitted by mistake in May, switched off).
+
+Follower refresh now has no automated path: re-running discovery cannot update these numbers,
+so the multiple drifts as accounts grow. `bodegagoulart_oficial` grew 49% in four months
+(15,425 → 22,989), which on the stale number would have inflated its multiple by half. Until
+there is a better route, refreshing means re-reading a profile by hand.
 
 **Budget.** Apify is on STARTER: $29/month of included credit. The actor is pay-per-event and
 its per-result price is not exposed through the API, so the spend is measured, not predicted:

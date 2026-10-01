@@ -505,7 +505,7 @@ async function main() {
   }
 
   console.log(`\n💾 Saved ${inserted} accounts to Supabase (is_active=false, tier assigned).`)
-  console.log('   Tier A accounts are suggested for daily sync — activate at /accounts\n')
+  console.log('   Tier A accounts are suggested for daily sync — activate with: npm run trends:accounts -- --on <username>\n')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
