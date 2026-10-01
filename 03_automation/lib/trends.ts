@@ -18,3 +18,19 @@ export function multiple(views: number, followers: number | null | undefined): n
 export function isHit(views: number, followers: number | null | undefined): boolean {
   return views >= VIEWS_FLOOR && multiple(views, followers) >= VIEWS_MULTIPLE
 }
+
+/** A stored hit is only worth a Telegram message if it is this new. */
+export const NOTIFY_MAX_AGE_DAYS = 14
+
+const MS_PER_DAY = 86_400_000
+
+export function isFreshForDigest(
+  publishedAt: string | Date | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!publishedAt) return false
+  const published = publishedAt instanceof Date ? publishedAt : new Date(publishedAt)
+  if (Number.isNaN(published.getTime())) return false
+  const ageDays = (now.getTime() - published.getTime()) / MS_PER_DAY
+  return ageDays <= NOTIFY_MAX_AGE_DAYS
+}

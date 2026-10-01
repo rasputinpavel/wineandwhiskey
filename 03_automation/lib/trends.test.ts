@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isHit, multiple } from './trends'
+import { isHit, isFreshForDigest, multiple } from './trends'
 
 describe('multiple', () => {
   it('is views divided by followers', () => {
@@ -35,5 +35,27 @@ describe('isHit', () => {
 
   it('never fires when the follower count is unknown', () => {
     expect(isHit(1_000_000, null)).toBe(false)
+  })
+})
+
+describe('isFreshForDigest', () => {
+  const now = new Date('2026-10-01T09:00:00Z')
+
+  it('notifies a reel published 13 days ago', () => {
+    expect(isFreshForDigest('2026-09-18T09:00:00Z', now)).toBe(true)
+  })
+
+  it('skips a reel published 15 days ago', () => {
+    expect(isFreshForDigest('2026-09-16T09:00:00Z', now)).toBe(false)
+  })
+
+  it('treats a future timestamp as fresh rather than dropping it', () => {
+    // Instagram timestamps occasionally land slightly ahead of our clock
+    expect(isFreshForDigest('2026-10-01T11:00:00Z', now)).toBe(true)
+  })
+
+  it('skips a missing or unparseable date', () => {
+    expect(isFreshForDigest(null, now)).toBe(false)
+    expect(isFreshForDigest('не дата', now)).toBe(false)
   })
 })
