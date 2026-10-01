@@ -25,12 +25,15 @@ export const WORLD_OPTIONS: Option[] = [
   { value: 'new', ru: 'Новый Свет',  en: 'New World' },
 ]
 
-// Europe plus the Caucasus and the Levant cradle. Everything else is New World.
+// Europe, the Caucasus, the Levant and North Africa's old wine lands.
+// Everything else (the Americas, Australasia, South Africa, Asia) is New World.
 const OLD_WORLD = new Set([
   'france', 'italy', 'spain', 'portugal', 'germany', 'austria', 'greece',
   'hungary', 'georgia', 'moldova', 'romania', 'bulgaria', 'croatia', 'slovenia',
   'switzerland', 'serbia', 'czechia', 'north macedonia', 'armenia',
   'israel', 'lebanon', 'turkey', 'russia', 'cyprus',
+  'slovakia', 'ukraine', 'bosnia and herzegovina', 'montenegro', 'azerbaijan',
+  'morocco', 'tunisia', 'algeria', 'england', 'luxembourg',
 ])
 
 /**

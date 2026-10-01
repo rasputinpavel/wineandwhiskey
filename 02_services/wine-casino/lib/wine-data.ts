@@ -3,6 +3,10 @@ import type { Option, WineColor } from './types'
 // Distractor pools. These do not have to be exhaustive — they have to be
 // plausible enough that a guest cannot win by elimination. Values are the
 // canonical lowercase key; ru/en are what the phone shows.
+//
+// This is a curated list of wine-PRODUCING countries, not a world atlas: the
+// country board draws its decoys from this table, and a non-wine country
+// among the options is one a guest discards without tasting.
 
 export const COUNTRIES: Option[] = [
   { value: 'france',       ru: 'Франция',      en: 'France' },
@@ -29,6 +33,36 @@ export const COUNTRIES: Option[] = [
   { value: 'cyprus',       ru: 'Кипр',         en: 'Cyprus' },
   // We are in Phuket and Monsoon Valley is on our own shelf.
   { value: 'thailand',     ru: 'Таиланд',      en: 'Thailand' },
+
+  // Added for the real evenings' pours — every one of these genuinely sells
+  // wine somewhere, not just appears on a world map.
+  { value: 'romania',               ru: 'Румыния',              en: 'Romania' },
+  { value: 'croatia',               ru: 'Хорватия',             en: 'Croatia' },
+  { value: 'slovenia',              ru: 'Словения',             en: 'Slovenia' },
+  { value: 'switzerland',           ru: 'Швейцария',            en: 'Switzerland' },
+  { value: 'serbia',                ru: 'Сербия',               en: 'Serbia' },
+  { value: 'czechia',               ru: 'Чехия',                en: 'Czechia' },
+  { value: 'slovakia',              ru: 'Словакия',             en: 'Slovakia' },
+  { value: 'north macedonia',       ru: 'Северная Македония',   en: 'North Macedonia' },
+  { value: 'bosnia and herzegovina',ru: 'Босния и Герцеговина', en: 'Bosnia and Herzegovina' },
+  { value: 'montenegro',            ru: 'Черногория',           en: 'Montenegro' },
+  { value: 'ukraine',               ru: 'Украина',              en: 'Ukraine' },
+  { value: 'armenia',               ru: 'Армения',              en: 'Armenia' },
+  { value: 'azerbaijan',            ru: 'Азербайджан',          en: 'Azerbaijan' },
+  { value: 'turkey',                ru: 'Турция',               en: 'Turkey' },
+  { value: 'morocco',               ru: 'Марокко',              en: 'Morocco' },
+  { value: 'tunisia',               ru: 'Тунис',                en: 'Tunisia' },
+  { value: 'algeria',               ru: 'Алжир',                en: 'Algeria' },
+  { value: 'england',               ru: 'Англия',               en: 'England' },
+  { value: 'luxembourg',            ru: 'Люксембург',           en: 'Luxembourg' },
+  { value: 'brazil',                ru: 'Бразилия',             en: 'Brazil' },
+  { value: 'mexico',                ru: 'Мексика',              en: 'Mexico' },
+  { value: 'canada',                ru: 'Канада',               en: 'Canada' },
+  { value: 'peru',                  ru: 'Перу',                 en: 'Peru' },
+  { value: 'bolivia',               ru: 'Боливия',              en: 'Bolivia' },
+  { value: 'china',                 ru: 'Китай',                en: 'China' },
+  { value: 'japan',                 ru: 'Япония',               en: 'Japan' },
+  { value: 'india',                 ru: 'Индия',                en: 'India' },
 ]
 
 /** Grapes carry a colour group so a red wine never gets Chardonnay as a decoy.
@@ -49,6 +83,23 @@ export const GRAPES: GrapeOption[] = [
   { value: 'grenache',           ru: 'Grenache',           en: 'Grenache',           group: 'red' },
   { value: 'primitivo',          ru: 'Primitivo',          en: 'Primitivo',          group: 'red' },
   { value: 'montepulciano',      ru: 'Montepulciano',      en: 'Montepulciano',      group: 'red' },
+  { value: 'barbera',            ru: 'Barbera',            en: 'Barbera',            group: 'red' },
+  { value: 'corvina',            ru: 'Corvina',            en: 'Corvina',            group: 'red' },
+  { value: "nero d'avola",       ru: "Nero d'Avola",       en: "Nero d'Avola",       group: 'red' },
+  { value: 'aglianico',          ru: 'Aglianico',          en: 'Aglianico',          group: 'red' },
+  { value: 'tannat',             ru: 'Tannat',             en: 'Tannat',             group: 'red' },
+  { value: 'petit verdot',       ru: 'Petit Verdot',       en: 'Petit Verdot',       group: 'red' },
+  { value: 'petite sirah',       ru: 'Petite Sirah',       en: 'Petite Sirah',       group: 'red' },
+  { value: 'mourvedre',          ru: 'Mourvèdre',          en: 'Mourvèdre',          group: 'red' },
+  { value: 'cinsault',           ru: 'Cinsault',           en: 'Cinsault',           group: 'red' },
+  { value: 'gamay',              ru: 'Gamay',              en: 'Gamay',              group: 'red' },
+  { value: 'touriga nacional',   ru: 'Touriga Nacional',   en: 'Touriga Nacional',   group: 'red' },
+  { value: 'zweigelt',           ru: 'Zweigelt',           en: 'Zweigelt',           group: 'red' },
+  { value: 'blaufrankisch',      ru: 'Blaufränkisch',      en: 'Blaufränkisch',      group: 'red' },
+  { value: 'xinomavro',          ru: 'Xinomavro',          en: 'Xinomavro',          group: 'red' },
+  { value: 'agiorgitiko',        ru: 'Agiorgitiko',        en: 'Agiorgitiko',        group: 'red' },
+  { value: 'mencia',             ru: 'Mencía',             en: 'Mencía',             group: 'red' },
+  { value: 'pinotage',           ru: 'Pinotage',           en: 'Pinotage',           group: 'red' },
   { value: 'chardonnay',         ru: 'Chardonnay',         en: 'Chardonnay',         group: 'white' },
   { value: 'sauvignon blanc',    ru: 'Sauvignon Blanc',    en: 'Sauvignon Blanc',    group: 'white' },
   { value: 'riesling',           ru: 'Riesling',           en: 'Riesling',           group: 'white' },
@@ -61,6 +112,23 @@ export const GRAPES: GrapeOption[] = [
   { value: 'verdejo',            ru: 'Verdejo',            en: 'Verdejo',            group: 'white' },
   { value: 'muscat',             ru: 'Muscat',             en: 'Muscat',             group: 'white' },
   { value: 'glera',              ru: 'Glera',              en: 'Glera',              group: 'white' },
+  { value: 'semillon',           ru: 'Sémillon',           en: 'Sémillon',           group: 'white' },
+  { value: 'marsanne',           ru: 'Marsanne',           en: 'Marsanne',           group: 'white' },
+  { value: 'roussanne',          ru: 'Roussanne',          en: 'Roussanne',          group: 'white' },
+  { value: 'gruner veltliner',   ru: 'Grüner Veltliner',   en: 'Grüner Veltliner',   group: 'white' },
+  { value: 'furmint',            ru: 'Furmint',            en: 'Furmint',            group: 'white' },
+  { value: 'assyrtiko',          ru: 'Assyrtiko',          en: 'Assyrtiko',          group: 'white' },
+  { value: 'vermentino',         ru: 'Vermentino',         en: 'Vermentino',         group: 'white' },
+  { value: 'garganega',          ru: 'Garganega',          en: 'Garganega',          group: 'white' },
+  { value: 'trebbiano',          ru: 'Trebbiano',          en: 'Trebbiano',          group: 'white' },
+  { value: 'torrontes',          ru: 'Torrontés',          en: 'Torrontés',          group: 'white' },
+  { value: 'muller-thurgau',     ru: 'Müller-Thurgau',     en: 'Müller-Thurgau',     group: 'white' },
+  { value: 'godello',            ru: 'Godello',            en: 'Godello',            group: 'white' },
+  { value: 'fiano',              ru: 'Fiano',              en: 'Fiano',              group: 'white' },
+  { value: 'falanghina',         ru: 'Falanghina',         en: 'Falanghina',         group: 'white' },
+  { value: 'malvasia',           ru: 'Malvasia',           en: 'Malvasia',           group: 'white' },
+  { value: 'verdicchio',         ru: 'Verdicchio',         en: 'Verdicchio',         group: 'white' },
+  { value: 'moschofilero',       ru: 'Moschofilero',       en: 'Moschofilero',       group: 'white' },
 ]
 
 const REGIONS: Record<string, string[]> = {
@@ -87,6 +155,34 @@ const REGIONS: Record<string, string[]> = {
   bulgaria:      ['Thracian Valley', 'Danubian Plain', 'Struma Valley', 'Rose Valley', 'Black Sea Coast', 'Sakar', 'Melnik', 'Pomorie'],
   cyprus:        ['Limassol', 'Paphos', 'Commandaria', 'Troodos', 'Pitsilia', 'Krasochoria', 'Vouni Panagias', 'Laona'],
   thailand:      ['Hua Hin', 'Khao Yai', 'Chiang Mai', 'Loei', 'Chonburi', 'Nakhon Ratchasima', 'Samut Sakhon', 'Ratchaburi'],
+
+  romania:       ['Dealu Mare', 'Cotnari', 'Murfatlar', 'Târnave', 'Recaș', 'Odobești', 'Drăgășani', 'Dealurile Moldovei'],
+  croatia:       ['Istria', 'Dalmatia', 'Slavonia', 'Plešivica', 'Pelješac', 'Hvar', 'Korčula', 'Konavle'],
+  slovenia:      ['Podravje', 'Posavje', 'Primorska', 'Vipava Valley', 'Goriška Brda', 'Štajerska', 'Dolenjska', 'Bela Krajina'],
+  switzerland:   ['Valais', 'Vaud', 'Geneva', 'Ticino', 'Neuchâtel', 'Graubünden', 'Zürich', 'Schaffhausen'],
+  serbia:        ['Šumadija', 'Negotin', 'Vršac', 'Fruška Gora', 'Župa', 'Timok', 'Pocerina', 'Nišava'],
+  czechia:       ['Moravia', 'Bohemia', 'Znojmo', 'Mikulov', 'Velké Pavlovice', 'Slovácko', 'Mělník', 'Litoměřice'],
+  slovakia:      ['Malokarpatská', 'Južnoslovenská', 'Nitrianska', 'Stredoslovenská', 'Východoslovenská', 'Tokaj', 'Skalický', 'Modranský'],
+  'north macedonia': ['Tikveš', 'Kavadarci', 'Negotino', 'Demir Kapija', 'Veles', 'Gevgelija', 'Valandovo', 'Štip'],
+  'bosnia and herzegovina': ['Mostar', 'Čapljina', 'Stolac', 'Trebinje', 'Ljubuški', 'Čitluk', 'Nevesinje', 'Gacko'],
+  montenegro:    ['Crmnica', 'Podgorica', 'Lake Skadar', 'Ćemovsko Polje', 'Bar', 'Ulcinj', 'Cetinje', 'Nikšić'],
+  ukraine:       ['Odesa', 'Crimea', 'Zakarpattia', 'Kherson', 'Mykolaiv', 'Bessarabia', 'Shabo', 'Koktebel'],
+  armenia:       ['Vayots Dzor', 'Ararat Valley', 'Armavir', 'Aragatsotn', 'Tavush', 'Syunik', 'Areni', 'Yeghegnadzor'],
+  azerbaijan:    ['Ganja-Qazakh', 'Shamkir', 'Tovuz', 'Ismayilli', 'Shaki', 'Gabala', 'Goygol', 'Geychay'],
+  turkey:        ['Thrace', 'Aegean', 'Cappadocia', 'Denizli', 'Elazığ', 'Diyarbakır', 'Nevşehir', 'Marmara'],
+  morocco:       ['Meknès', 'Guerrouane', 'Zaër', 'Zemmour', 'Saïs', 'Gharb', 'Chaouia', 'Berkane'],
+  tunisia:       ['Mornag', 'Kelibia', 'Thibar', 'Côteaux de Tébourba', "Côteaux d'Utique", 'Sidi Salem', 'Bizerte', 'Cap Bon'],
+  algeria:       ['Coteaux de Mascara', 'Monts du Tessala', 'Mascara', 'Médéa', 'Aïn Bessem', 'Zaccar', 'Dahra', 'Coteaux de Tlemcen'],
+  england:       ['Kent', 'Sussex', 'Hampshire', 'Surrey', 'Essex', 'Cornwall', 'Dorset', 'Yorkshire'],
+  luxembourg:    ['Remich', 'Grevenmacher', 'Wormeldange', 'Schengen', 'Wellenstein', 'Stadtbredimus', 'Ehnen', 'Ahn'],
+  brazil:        ['Serra Gaúcha', 'Vale dos Vinhedos', 'Campanha', 'Serra do Sudeste', 'Vale do São Francisco', 'Planalto Catarinense', 'Campos de Cima da Serra', 'Pinto Bandeira'],
+  mexico:        ['Valle de Guadalupe', 'Valle de Parras', 'Querétaro', 'Aguascalientes', 'Coahuila', 'Zacatecas', 'San Luis Potosí', 'Baja California'],
+  canada:        ['Okanagan Valley', 'Niagara Peninsula', 'Prince Edward County', 'Similkameen Valley', 'Fraser Valley', 'Annapolis Valley', 'Lake Erie North Shore', 'Vancouver Island'],
+  peru:          ['Ica', 'Tacna', 'Lima', 'Arequipa', 'Moquegua', 'Cañete', 'Chincha', 'Nazca'],
+  bolivia:       ['Valle de la Concepción', 'Camargo', 'Cinti', 'San Lucas', 'San Jacinto', 'El Valle', 'Uriondo', 'Padcaya'],
+  china:         ['Ningxia', 'Shandong', 'Hebei', 'Xinjiang', 'Shanxi', 'Yunnan', 'Jilin', 'Gansu'],
+  japan:         ['Yamanashi', 'Nagano', 'Yamagata', 'Hokkaido', 'Osaka', 'Niigata', 'Tochigi', 'Iwate'],
+  india:         ['Nashik', 'Nandi Hills', 'Sangli', 'Solapur', 'Hampi Hills', 'Baramati', 'Pune', 'Dindori'],
 }
 
 /** A pool of plausible regions, drawn from the wine's own country. Every
