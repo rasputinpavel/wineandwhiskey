@@ -48,12 +48,31 @@ database; divergences are in the *logic applied on top*, not in storage.
 
 | Service | Path | Purpose | Deploy status | Key entry points |
 |---|---|---|---|---|
-| **mission-control** | `02_services/mission-control` | CORE Next.js App-Router portal (~350 files). Dashboard, Pulse P&L, inventory, price-list manager, customers, sales, suppliers, wine-matrix, promo, reactivation, creative library, product images, brand assets, design system. Server-first (RSC reads Supabase directly). | **Live** on Railway (push to main). | Routes under `app/(portal)/m/*`; `lib/supabase.ts` (schema-scoped clients), `lib/registry.ts` (nav + data-source registry), `lib/dashboard.ts`, `lib/loyverse.ts`, `lib/price/`, `app/api/m/sync/[source]/route.ts` (web Sync-now), `app/api/public/vivino/*`. |
+| **mission-control** | `02_services/mission-control` | CORE Next.js App-Router portal (~350 files). Dashboard, Pulse P&L, inventory, price-list manager, customers, sales, suppliers, wine-matrix, promo, reactivation, creative library, product images, brand assets, design system. Server-first (RSC reads Supabase directly). | **Live** on Railway (push to main). | Routes under `app/(portal)/m/*`; `lib/supabase.ts` (schema-scoped clients), `lib/registry.ts` (nav + data-source registry), `lib/dashboard.ts`, `lib/loyverse.ts`, `lib/price/`, `app/api/m/sync/[source]/route.ts` (web Sync-now), `app/api/public/vivino/*`, `app/api/public/price/slice` (+ `/refine`). |
 | **price-service** | `02_services/price-service` | Next.js price-list manager: parse supplier price lists (17 parsers + Vivino enrichment), serve the **public Vivino lookup API** that the external Lovable storefront consumes. | **Live** on Railway. | `lib/parsers/`, `lib/vivino/`, `app/api/public/vivino/lookup`, `app/api/public/vivino/by-url` (gated by `STOREFRONT_API_KEY` via `x-api-key`). |
 | **trendwatch** | `02_services/trendwatch` | Built reels/creative trend tool (Runway generation). Tracked in git (~58 files). Does NOT read Loyverse/inventory. | **Built, NOT deployed** (last touched 2026-05-02). Registry tile is **parked**: `status: 'planned'` + builtin placeholder, no outbound link (2026-09-28). The old `trendwatch-production.up.railway.app` domain was never ours to begin with — it now serves an unrelated third-party app ("RILT Index"), which is why the tile used to open a stranger's dashboard. To revive: deploy a Railway service, set `TRENDWATCH_SECRET`/`PASSWORD`, `RUNWAY_API_TOKEN`, create the Storage bucket, apply `supabase/migrations/001_trendwatch.sql`, then point the tile at the real host. `lib/registry.test.ts` guards against linking a non-live tile at a `*.up.railway.app` host again. | — |
 | ~~**matrix-runner**~~ | _(removed)_ | **RETIRED 2026-06-05.** Was an Express webhook for the Google-Sheets "Пересчитать матрицу" purchase-matrix button. That Sheet flow is no longer used — the portal's native **Wine Matrix** page (DB-driven: `v_sku_breakdown` + `wine_items` + consignment + PO costs) is the interface now. Service deleted from the repo and Railway. | — |
 | **kiosk** | `02_services/kiosk` | Read-only in-store sommelier display: browse catalog with Vivino enrichment. Strict read-only, 60s cache, graceful degradation when env missing. | **NOT committed to git** (0 tracked files; not gitignored — simply never `git add`-ed). Cannot deploy via push-to-main until committed. | `lib/wines.ts` (reads `inventory.v_sku_breakdown` + `public.wine_items`), `/api/health`. |
 | **wine-casino** | `02_services/wine-casino` | Kahoot-style multiplayer wine-tasting casino for events: guests join by QR/PIN from their phones and bet chips on a blind-poured wine's style, Old/New World, country, grape, region and vintage; a host drives rounds from a control panel and a TV shows the shared screen. 104 passing tests. | **Built, NOT deployed.** Code and docs complete (`02_services/wine-casino/README.md`); needs migration `047_wine_casino.sql` applied by hand, `casino` added to Settings → API → Exposed schemas, and a Railway service created. | `app/host` (control panel — its 2s tick is what reveals hints), `app/screen/[pin]` (TV), `app/play` (guest), `app/admin` (setup; reads `inventory.v_sku_breakdown` for country/grape/colour, region and vintage are hand-typed); schema `casino`, migration lives in `02_services/mission-control/supabase/migrations/` (shared numbered sequence). |
+
+### Public endpoints consumed by the Telegram bot
+
+- `POST /api/public/price/slice` — **price slice** for the "Чип и Дейл" bot. Takes
+  multipart `file` (PDF / Excel / image) + `query` ("все шардоне до 600"), returns the
+  matching rows (producer, name, region, year, price) plus every extracted item so the
+  bot can refine without re-parsing. Reuses `lib/price/extract.ts::extractFromFile`, so a
+  known supplier gets its own parser and an unknown one falls back to Claude — the same
+  accuracy as the portal upload. **Writes nothing to the database**: this is a one-off
+  read, unlike `/m/price/upload`. Guarded by `PRICE_SLICE_SECRET` (bearer / `x-api-key`),
+  like `payables-alerts`.
+- `POST /api/public/price/slice/refine` — re-slices items the bot already holds (JSON
+  `items` + `query`), no file parsing.
+
+Both live under `maxDuration = 600`: a 9.5 MB, 50-page supplier PDF measured 6m11s to
+extract through Claude Vision. `experimental.middlewareClientMaxBodySize` in
+`next.config.ts` is raised to 22 MB for the same reason — the project has middleware, and
+middleware caps request bodies at 10 MB by default, which silently truncated large price
+lists.
 
 ### Service consolidation opportunities
 
