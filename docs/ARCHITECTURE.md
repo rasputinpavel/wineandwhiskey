@@ -54,6 +54,17 @@ Next.js App Router. Server-first: most pages are React Server Components reading
 
 Key reads are well-anchored: **Pulse** and the native **Dashboard** both read the cached `inventory.loyverse_receipt` table (refunds signed −1, cancelled excluded, `is_b2b` precomputed); inventory on-hand reads the single `v_sku_breakdown` view. The **price parser registry** (`lib/price/parsers`) is the most extensible subsystem — one file + one registry entry per supplier.
 
+The price pipeline has **two entrances**. The portal's `/m/price/upload` parses a file and
+**stores** it into `wine_items` with price history. The "Чип и Дейл" bot, through
+`app/api/public/price/slice`, parses a file **once** just to answer a question about it
+("все шардоне") and writes nothing. Both call the same `extractFromFile`, so extraction
+accuracy is identical; only the persistence differs. The slice itself is three steps in
+`lib/price/slice/`: a deterministic field filter (exact, cheap), an LLM pass that adds
+wines whose appellation implies the grape (Chablis → chardonnay, marked `inferred` in the
+output), and an LLM pass that splits producer from wine name — the extracted item has no
+producer field, since price lists merge it into the name. Any LLM step that fails
+degrades the slice and names itself in `degraded[]` instead of failing the request.
+
 Notable couplings/divergences: `lib/sync/loyverse.ts` (the portal's "Sync now" write path) is a hand-copied fork of the automation sync; `lib/customer_match.ts` and `lib/loyverse.ts` each carry their own copy of the B2B pattern list (drifted from canonical); the SKU-detail page re-derives B2B live from Loyverse REST instead of reading the cached column.
 
 ### 02_services/price-service — price list manager (live)
