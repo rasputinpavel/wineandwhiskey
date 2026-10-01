@@ -5,6 +5,16 @@
 
 const API = 'https://api.telegram.org'
 
+// A hung request — Instagram's CDN or Telegram going silent mid-connection,
+// which `fetch` does not time out on its own — must not cost the whole digest
+// by blocking until the CI job's own 30-minute limit kicks in.
+const FETCH_TIMEOUT_MS = 15_000
+
+/** Strip the bot token out of a string before it reaches the logs. */
+function redact(token: string, text: string): string {
+  return text.replaceAll(token, '[token]')
+}
+
 export async function sendMessage(token: string, chatId: string, html: string): Promise<boolean> {
   try {
     const res = await fetch(`${API}/bot${token}/sendMessage`, {
@@ -16,11 +26,12 @@ export async function sendMessage(token: string, chatId: string, html: string): 
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
       }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
-    if (!res.ok) console.error(`  ✗ sendMessage ${res.status}: ${await res.text()}`)
+    if (!res.ok) console.error(`  ✗ sendMessage ${res.status}: ${redact(token, await res.text())}`)
     return res.ok
   } catch (err) {
-    console.error('  ✗ sendMessage failed:', err)
+    console.error('  ✗ sendMessage failed:', redact(token, String(err)))
     return false
   }
 }
@@ -36,7 +47,7 @@ export async function sendPhotoFromUrl(
   html:     string,
 ): Promise<boolean> {
   try {
-    const img = await fetch(photoUrl)
+    const img = await fetch(photoUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
     if (!img.ok) {
       console.error(`  ✗ thumbnail ${img.status} for ${photoUrl}`)
       return false
@@ -47,11 +58,15 @@ export async function sendPhotoFromUrl(
     form.append('parse_mode', 'HTML')
     form.append('photo', await img.blob(), 'thumb.jpg')
 
-    const res = await fetch(`${API}/bot${token}/sendPhoto`, { method: 'POST', body: form })
-    if (!res.ok) console.error(`  ✗ sendPhoto ${res.status}: ${await res.text()}`)
+    const res = await fetch(`${API}/bot${token}/sendPhoto`, {
+      method: 'POST',
+      body:   form,
+      signal:  AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
+    if (!res.ok) console.error(`  ✗ sendPhoto ${res.status}: ${redact(token, await res.text())}`)
     return res.ok
   } catch (err) {
-    console.error('  ✗ sendPhoto failed:', err)
+    console.error('  ✗ sendPhoto failed:', redact(token, String(err)))
     return false
   }
 }
