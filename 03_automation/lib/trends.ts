@@ -103,10 +103,14 @@ function formatDateRu(iso: string | null): string {
   return `${d.getUTCDate()} ${MONTHS_RU[d.getUTCMonth()]}`
 }
 
+// Also used to escape the href attribute value (see below), so the quote is
+// escaped too, not just the three HTML-body special characters. Single-pass
+// map form, so there is no replace ordering for a future edit to get wrong
+// (chained replaces would corrupt "&amp;quot;" if the quote pass ever ran
+// before the ampersand pass) — same pattern as
+// 02_services/mission-control/lib/pricelist/template.ts.
 function escapeHtml(s: string): string {
-  // Also used to escape the href attribute value (see below), so the quote
-  // must be escaped too, not just the three HTML-body special characters.
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 }
 
 function firstCaptionLine(caption: string | null): string {
@@ -118,15 +122,17 @@ function firstCaptionLine(caption: string | null): string {
  * Truncate already-escaped HTML without leaving half an entity or half a
  * surrogate pair behind (`&amp` with no semicolon renders as literal text in
  * Telegram; a lone high surrogate is not valid UTF-8 and Telegram's API
- * rejects the whole send with a 400). Order matters: strip the surrogate
- * before the entity, since an entity never contains a surrogate but a cut
- * could land right between the two cleanups.
+ * rejects the whole send with a 400). Order matters: strip the entity
+ * *before* the surrogate. Stripping the entity can itself re-expose a lone
+ * high surrogate that sat just before it (e.g. a cut landing on
+ * "...\uD83C&am"), so the surrogate check has to run last to see the string
+ * as it actually ends up, not as it looked before the entity was removed.
  */
 function truncateEscaped(escaped: string, max: number): string {
   if (escaped.length <= max) return escaped
   return escaped.slice(0, max - 1)
-    .replace(/[\uD800-\uDBFF]$/, '')   // never leave half a surrogate pair
     .replace(/&[a-z]{0,5};?$/i, '')    // never leave half an entity
+    .replace(/[\uD800-\uDBFF]$/, '')   // never leave half a surrogate pair
     .trimEnd() + '…'
 }
 

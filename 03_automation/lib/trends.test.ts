@@ -188,10 +188,17 @@ describe('formatListLine', () => {
 })
 
 describe('formatReelCaption — astral-plane truncation safety', () => {
-  it('never leaves a lone high surrogate right before the ellipsis', () => {
-    const caption = formatReelCaption(reel({ caption: '🍷'.repeat(600) }))
-    expect(caption.length).toBeLessThanOrEqual(TELEGRAM_CAPTION_LIMIT)
-    expect(caption).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+  it('never leaves a lone high surrogate right before the ellipsis, at either cut parity', () => {
+    // The cut index (budget - 1) lands on an even or odd offset depending on
+    // what else is on the line; a fixture that only hits one parity could
+    // pass by luck after an unrelated one-character copy edit elsewhere in
+    // the message. Padding by one character flips the parity, so testing
+    // both pins the bug regardless of where the cut actually falls.
+    for (const emoji of ['🍷'.repeat(600), 'x' + '🍷'.repeat(600)]) {
+      const caption = formatReelCaption(reel({ caption: emoji }))
+      expect(caption.length).toBeLessThanOrEqual(TELEGRAM_CAPTION_LIMIT)
+      expect(caption).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    }
   })
 })
 
@@ -217,21 +224,28 @@ describe('formatViews — K/M boundary', () => {
 describe('formatReelCaption — empty meta line', () => {
   it('drops the meta line but keeps head, quote and link as three lines', () => {
     const caption = formatReelCaption(reel({ durationS: null, publishedAt: null }))
-    expect(caption.split('\n')).toHaveLength(3)
+    const lines = caption.split('\n')
+    expect(lines).toHaveLength(3)
+    expect(lines[1]).toContain('«')
   })
 })
 
 describe('formatReelCaption — quote dropped under a tight budget', () => {
-  it('omits the quote line entirely when there is no room left for it', () => {
-    const longUrl = 'https://www.instagram.com/reel/' + 'A'.repeat(950) + '/'
+  it('omits the quote line through the budget check itself, in a message that is still sendable', () => {
+    // 868 'A's puts the budget just under 20 (the floor) while the caption
+    // without its quote still fits under TELEGRAM_CAPTION_LIMIT — pinning the
+    // branch itself, not a case that would be rejected by Telegram anyway.
+    const longUrl = 'https://www.instagram.com/reel/' + 'A'.repeat(868) + '/'
     const caption = formatReelCaption(reel({ url: longUrl, caption: 'should not appear' }))
+    expect(caption.length).toBeLessThanOrEqual(TELEGRAM_CAPTION_LIMIT)
     expect(caption).not.toContain('«')
   })
 })
 
 describe('formatReelCaption — whitespace-only caption', () => {
-  it('takes the empty-caption path and drops the quote line, same as a null caption', () => {
-    const caption = formatReelCaption(reel({ caption: '   ' }))
-    expect(caption.split('\n')).toHaveLength(3)
+  it('produces exactly the same output as a null caption, despite taking a different code path to get there', () => {
+    const whitespace = formatReelCaption(reel({ caption: '   ' }))
+    const nullCaption = formatReelCaption(reel({ caption: null }))
+    expect(whitespace).toBe(nullCaption)
   })
 })
