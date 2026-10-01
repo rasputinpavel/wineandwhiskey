@@ -89,10 +89,16 @@ isHit(views, followers) = views >= 5 * followers AND views >= 50_000
   entire back catalogue of hits into the chat on day one.
 
 **Known drift:** the multiple is computed from `trend_accounts.followers_count`, which is
-written when an account is added and refreshed by the monthly discovery run (§8). Between
-refreshes the number ages, and a growing account's multiple reads high. Accepted — the
-alternative is a profile scrape per account per day, which triples the cost for a metric that
-only needs to be roughly right.
+written when an account is added and only changes when somebody refreshes it. Between refreshes
+the number ages, and a **growing** account's multiple reads high — so routine posts start
+clearing a threshold they should not. This is not hypothetical: `bodegagoulart_oficial` grew 49%
+in four months (15,425 → 22,989).
+
+Refreshing is `npm run trends:accounts -- --refresh <username…>`, which re-reads the profile.
+It is a manual act on purpose: the alternative is a profile scrape per account per day, which
+roughly doubles the bill for a metric that only needs to be approximately right. Note this used
+to be the monthly discovery run's job — that run is no longer usable (§8), which is why the CLI
+has the command.
 
 ## 6. Digest shape
 
@@ -239,7 +245,9 @@ Apify, Telegram and Supabase calls stay thin wrappers and are not tested.
 - **Daily hashtag scanning instead of a watchlist.** Would catch viral wine reels from any
   author and never go stale, but the "×above its own norm" metric needs the author's follower
   count, which means a profile scrape per author per day. More cost, more noise (ads, off-topic
-  posts). The monthly discovery run already covers list refresh.
+  posts). This was written expecting the monthly discovery run to keep the list fresh; that run
+  turned out to be dead (§8), so hashtag scanning is not an alternative we rejected — it is one
+  that is no longer available in either shape.
 - **Moving the job into the Barrymore bot on Railway.** The bot already holds the secrets and
   could offer an on-demand `/trends`. Rejected for now: a GitHub Action's log is easier to
   debug than a Node cron inside a long-running bot, and the Action already exists.

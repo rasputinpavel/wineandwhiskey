@@ -542,7 +542,7 @@ export function formatListLine(reel: DigestReel): string {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS — 21 tests.
+Expected: PASS — the suite grew past this number as the branch went on; the final count is 44.
 
 If the `152×` assertion fails, check the rounding: 611_417 / 4_015 = 152.28, and `Math.round` gives 152.
 
@@ -915,7 +915,7 @@ with:
 - [ ] **Step 9: Verify the whole suite and the dry run**
 
 Run: `npm test`
-Expected: PASS — 21 tests, unchanged.
+Expected: PASS — unchanged by this task (the final branch count is 44).
 
 Run: `npm run trends -- --dry-run --account fabiopicchiquintovizio`
 Expected: it scrapes one account and prints `N Reels found, M above threshold (≥5× подписчиков и ≥50K)`. With `--account` the follower count is null, so `M` is 0 — that is correct behaviour, not a bug (see Task 1's last test). No Telegram message is sent in a dry run.
@@ -1402,24 +1402,19 @@ GitHub — без них синк падал каждое утро с token-not-
 
 Operational, not code. Nothing above produces a useful digest until real accounts are active.
 
-- [ ] **Step 1: Smoke-test the discovery path on one hashtag**
+- [x] **Step 1: Smoke-test the discovery path on one hashtag** — done 2026-10-01, and it is how we learned the path is dead.
 
-The CLI discovery path has not run since 2026-05-02 — the last successful full scan went through the web API route, so the actor input may have drifted.
+Ran: `npm run discover-accounts -- --hashtags=winestore` → **1 reel**, from an unrelated furniture account. A second probe on `#wine`, one of the largest tags on the platform → **3 reels**. Both against `resultsLimit: 60`, with correct code (same `directUrls: explore/tags/<tag>` + `resultsType: 'reels'` pattern the service uses). Instagram no longer serves hashtag browse pages to the scraper.
 
-Run: `npm run discover-accounts -- --hashtags=winestore`
-Expected: it scans one hashtag, scores a handful of profiles through Claude, and upserts candidates. If Apify rejects the actor input, fix that before spending on the full run.
+- [x] **Step 2: ~~Run the full scan~~ — deliberately NOT run.**
 
-- [ ] **Step 2: Run the full scan**
+Fourteen hashtags would have cost roughly 40 minutes and up to 840 billed Apify results to return what the two probes above returned. **Do not run `npm run discover-accounts` expecting accounts out of it.** Spec §8 records the measurement.
 
-Run: `npm run discover-accounts`
-Expected: 14 hashtags across 5 clusters, roughly 40 minutes, a `Tier breakdown: 🔴 A=… 🟡 B=… ⚪ C=…` summary, and up to 30 candidates saved inactive.
+- [x] **Step 3: Build the watchlist by hand instead** — done 2026-10-01.
 
-- [ ] **Step 3: Review what it found**
+The Claude verdicts from the 2026-05-27 run are still in `discover_jobs.candidates`; they judged content format and reproducibility, which does not go stale. What *was* stale were the follower counts, so each account went in with `npm run trends:accounts -- --add <username>`, which reads today's number. Two of the chosen handles no longer resolve at all (`degustandoexperience.it`, `grinsteadsonthevine` — Apify returns an error record), which is itself a reason the May metrics could not be trusted as-is.
 
-Run: `npm run trends:accounts -- --list`
-Read the `mult` column. Pick about 10, weighted toward small accounts with high multiples — their formats are reproducible by a shop, whereas a 400K-follower account at 1× is just reach. The May scan's shape was `fabiopicchiquintovizio` 4K→611K (152×), `aleksandarskorchev` 2.4K→283K (120×), `vinoteca_mendoza` 3.7K→275K (74×).
-
-- [ ] **Step 4: Activate them**
+- [x] **Step 4: Activate them** — done 2026-10-01: ten active, listed in spec §8.
 
 ```bash
 npm run trends:accounts -- --on <username1> <username2> ... <username10>
@@ -1438,12 +1433,14 @@ gh run list --workflow=sync-trends.yml --limit 1
 
 Expected: green, and either a digest in the chat or an honest "none in the notify window". A red run now means something real — read its log.
 
-- [ ] **Step 6: Put the monthly refresh in the calendar**
+- [ ] **Step 6: Put the follower refresh in the calendar**
 
-The multiple is computed from `followers_count`, which only changes when discovery runs. Once a
-month, run `npm run discover-accounts` again: it re-scores and updates follower counts, adds new
-candidates inactive, and (after Task 8) leaves the active list alone. Skip it and a growing
-account's multiple drifts upward, letting routine posts through the threshold.
+The multiple is computed from `followers_count`, which only changes when somebody refreshes it.
+Since the discovery run that used to do this is dead (Steps 1–2), the tool is
+`npm run trends:accounts -- --refresh <username…>`. Run it over the active list every month or
+two. Skip it and a **growing** account's multiple drifts upward, letting routine posts through
+the threshold — `bodegagoulart_oficial` grew 49% in four months, which would have inflated its
+multiple by half.
 
 - [ ] **Step 7: Measure the spend before widening**
 
@@ -1487,7 +1484,7 @@ git commit -m "docs: трендвотч-дайджест и тесты для 03
 
 ## Done when
 
-- `npm test` passes from the repo root (21 tests).
+- `npm test` passes from the repo root (44 tests).
 - `APIFY_TOKEN= npm run trends -- --dry-run` exits non-zero with a named variable instead of `✅ Done`.
 - `gh secret list` shows all six secrets.
 - `npm run trends:accounts -- --list` shows about 10 active wine accounts.
