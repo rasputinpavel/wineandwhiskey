@@ -12,12 +12,36 @@ import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
 import { createClient } from '@supabase/supabase-js'
+import {
+  isFreshForDigest,
+  isHit,
+  multiple,
+  formatHeader,
+  formatListLine,
+  formatReelCaption,
+  pickDigestReels,
+  type DigestReel,
+} from './lib/trends'
+import { sendMessage, sendPhotoFromUrl } from './lib/telegram'
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!)
-const APIFY_TOKEN = process.env.APIFY_TOKEN!
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    console.error(
+      `✗ ${name} is not set. In CI it comes from a GitHub secret; locally from .env.local. ` +
+      `Refusing to run — a silent no-op here went unnoticed for five months.`,
+    )
+    process.exit(1)
+  }
+  return value
+}
+
+const SUPABASE_URL  = requireEnv('SUPABASE_URL')
+const SUPABASE_KEY  = requireEnv('SUPABASE_SERVICE_KEY')
+const APIFY_TOKEN   = requireEnv('APIFY_TOKEN')
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 const BASE = 'https://api.apify.com/v2'
-const VIEWS_ABSOLUTE  = 15_000  // catch niche accounts
-const VIEWS_RELATIVE  = 1.5     // views/followers ratio
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -37,7 +61,7 @@ type Post = {
   url: string
 }
 
-async function scrapeAccount(username: string, maxPosts = 30): Promise<Post[]> {
+async function scrapeAccount(username: string, maxPosts = 10): Promise<Post[]> {
   const res = await fetch(`${BASE}/acts/apify~instagram-scraper/runs`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${APIFY_TOKEN}`, 'Content-Type': 'application/json' },
@@ -63,35 +87,61 @@ async function scrapeAccount(username: string, maxPosts = 30): Promise<Post[]> {
   return items.filter(p => p.type === 'Video')
 }
 
-async function notifyBarrymore(newReels: Array<{ username: string; views: number; url: string }>) {
-  const token = process.env.BARRYMORE_BOT_TOKEN
+function telegramTarget(): { token: string; chatId: string } | null {
+  const token  = process.env.BARRYMORE_BOT_TOKEN
   const chatId = process.env.BARRYMORE_OWNER_CHAT_ID ?? process.env.BARRYMORE_CHAT_ID
-  const serviceUrl = process.env.TRENDWATCH_URL || 'https://trendwatch.railway.app'
+  if (!token || !chatId) {
+    console.error('  ⚠ BARRYMORE_BOT_TOKEN / BARRYMORE_CHAT_ID not set — digest not sent')
+    return null
+  }
+  return { token, chatId }
+}
 
-  if (!token || !chatId || !newReels.length) return
-
-  function fmt(n: number) {
-    return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(0)}K` : String(n)
+async function sendDigest(reels: DigestReel[]): Promise<void> {
+  const fresh = reels.filter(r => isFreshForDigest(r.publishedAt))
+  if (fresh.length === 0) {
+    console.log(`📭 ${reels.length} new reel(s), none published in the notify window — no digest`)
+    return
   }
 
-  const lines = newReels.slice(0, 3).map((r, i) =>
-    `${i + 1}. @${r.username} — <b>${fmt(r.views)} views</b>\n   <a href="${r.url}">смотреть рилс</a>`
-  )
+  const target = telegramTarget()
+  if (!target) return
+  const { token, chatId } = target
 
-  const total = newReels.length
-  const text = [
-    `📈 <b>Новые тренды</b>: найдено ${total} рилс${total === 1 ? '' : 'ов'} >50K просмотров`,
-    '',
-    ...lines,
-    '',
-    `<a href="${serviceUrl}/discover">Открыть тренд-вотчинг →</a>`,
-  ].join('\n')
+  const { photos, listed, omitted } = pickDigestReels(fresh)
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-  })
+  await sendMessage(token, chatId, formatHeader(fresh.length))
+
+  for (const reel of photos) {
+    const caption = formatReelCaption(reel)
+    const sent = reel.thumbnailUrl
+      ? await sendPhotoFromUrl(token, chatId, reel.thumbnailUrl, caption)
+      : false
+    // No thumbnail, or Instagram refused it — the reel still deserves a message.
+    // Deliberate trade: formatReelCaption budgets for Telegram's 1024-char photo
+    // caption limit, so on this sendMessage fallback (4096-char limit) we leave
+    // up to ~3000 chars of possible quote on the table. One string serves both
+    // paths; the quote is a teaser, not the content — flagged in review.
+    if (!sent) await sendMessage(token, chatId, caption)
+  }
+
+  if (listed.length > 0 || omitted > 0) {
+    const tail = [...listed.map(formatListLine)]
+    if (omitted > 0) tail.push(`…и ещё ${omitted} — порог прошли, в дайджест не влезли`)
+    await sendMessage(token, chatId, tail.join('\n'))
+  }
+
+  console.log(`📩 Digest sent: ${photos.length} with thumbnails, ${listed.length} listed, ${omitted} omitted`)
+}
+
+async function reportFailures(failures: Array<{ username: string; message: string }>, total: number): Promise<void> {
+  const target = telegramTarget()
+  if (!target) return
+  const lines = [
+    `⚠️ <b>Синк трендов упал: ${failures.length} из ${total} аккаунтов</b>`,
+    ...failures.map(f => `• @${f.username} — ${f.message}`),
+  ]
+  await sendMessage(target.token, target.chatId, lines.join('\n'))
 }
 
 async function main() {
@@ -123,7 +173,8 @@ async function main() {
 
   console.log(`Monitoring ${accounts.length} account${accounts.length !== 1 ? 's' : ''}:\n`)
 
-  const newReelNotifications: Array<{ username: string; views: number; url: string }> = []
+  const newReelNotifications: DigestReel[] = []
+  const failures: Array<{ username: string; message: string }> = []
   let totalNew = 0
 
   for (const account of accounts) {
@@ -132,14 +183,9 @@ async function main() {
     try {
       const posts = await scrapeAccount(account.username)
       const followers = account.followers_count ?? 0
-      const highReach = posts.filter(p => {
-        const v = p.videoPlayCount ?? 0
-        const absoluteHit  = v >= VIEWS_ABSOLUTE
-        const relativeHit  = followers > 0 && v / followers >= VIEWS_RELATIVE
-        return absoluteHit || relativeHit
-      })
+      const highReach = posts.filter(p => isHit(p.videoPlayCount ?? 0, followers))
 
-      console.log(`  ${posts.length} Reels found, ${highReach.length} above threshold (≥${(VIEWS_ABSOLUTE/1000).toFixed(0)}K or ≥${VIEWS_RELATIVE}x ratio)`)
+      console.log(`  ${posts.length} Reels found, ${highReach.length} above threshold (≥5× подписчиков и ≥50K)`)
 
       for (const post of highReach) {
         const instagramId = post.shortCode
@@ -154,9 +200,6 @@ async function main() {
 
         const reelUrl     = post.url || `https://www.instagram.com/reel/${instagramId}/`
         const views       = post.videoPlayCount ?? 0
-        const absoluteHit = views >= VIEWS_ABSOLUTE
-        const relativeHit = followers > 0 && views / followers >= VIEWS_RELATIVE
-        const triggerType = absoluteHit && relativeHit ? 'both' : absoluteHit ? 'absolute' : 'relative'
 
         if (!isDryRun) {
           await supabase.from('trend_reels').insert({
@@ -173,18 +216,23 @@ async function main() {
             duration_s:           post.videoDuration,
             published_at:         post.timestamp,
             status:               'new',
-            trigger_type:         triggerType,
+            trigger_type:         'both',
             views_at_capture:     views,
             followers_at_capture: followers,
-            ratio_at_capture:     followers > 0 ? parseFloat((views / followers).toFixed(2)) : null,
+            ratio_at_capture:     followers > 0 ? parseFloat(multiple(views, followers).toFixed(2)) : null,
           })
         }
 
         console.log(`  + NEW: ${reelUrl} (${(post.videoPlayCount ?? 0).toLocaleString()} views)`)
         newReelNotifications.push({
-          username: account.username,
-          views: post.videoPlayCount ?? 0,
-          url: reelUrl,
+          username:     account.username,
+          views:        post.videoPlayCount ?? 0,
+          followers,
+          url:          reelUrl,
+          publishedAt:  post.timestamp ?? null,
+          durationS:    post.videoDuration ?? null,
+          caption:      post.caption ?? null,
+          thumbnailUrl: post.displayUrl ?? null,
         })
         totalNew++
       }
@@ -196,18 +244,29 @@ async function main() {
           .eq('id', account.id)
       }
     } catch (err) {
-      console.error(`  ✗ Failed:`, err)
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`  ✗ Failed: ${message}`)
+      failures.push({ username: account.username, message })
     }
 
     await sleep(2000)
   }
 
-  console.log(`\n✅ Done. New reels: ${totalNew}`)
+  console.log(`\nNew reels: ${totalNew}`)
 
+  // Send what we have BEFORE failing: a non-zero exit must never cost us a
+  // digest that is already assembled.
   if (!isDryRun && newReelNotifications.length > 0) {
-    await notifyBarrymore(newReelNotifications)
-    console.log('📩 Barrymore notified')
+    await sendDigest(newReelNotifications)
   }
+
+  if (failures.length > 0) {
+    if (!isDryRun) await reportFailures(failures, accounts.length)
+    console.error(`\n✗ ${failures.length} of ${accounts.length} account(s) failed`)
+    process.exit(1)
+  }
+
+  console.log('✅ Done.')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
