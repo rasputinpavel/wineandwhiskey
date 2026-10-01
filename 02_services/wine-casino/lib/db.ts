@@ -205,8 +205,13 @@ export async function listBetsForWine(wineId: string): Promise<BetRow[]> {
 }
 
 export async function listBetsForPlayerWine(playerId: string, wineId: string): Promise<BetRow[]> {
+  // Ordered because the reveal plays a guest's bets back one at a time: without
+  // it they resolve in whatever order PostgREST happened to return, which reads
+  // as random rather than as a recap of what they did.
   return unwrap(
-    await sbCasino.from('bet').select('*').eq('player_id', playerId).eq('wine_id', wineId),
+    await sbCasino.from('bet').select('*')
+      .eq('player_id', playerId).eq('wine_id', wineId)
+      .order('created_at'),
   )
 }
 
