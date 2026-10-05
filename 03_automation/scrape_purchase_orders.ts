@@ -57,6 +57,10 @@ const sbInventory = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "in
 const SUPPLIER_OVERRIDES: Record<string, string> = {
   PO3000: "IWS", // filed under "IWS (don't use)" duplicate — should be IWS
   PO3001: "IWS", // filed under "IWS (don't use)" duplicate — should be IWS
+  // Loyverse holds two cards for the same cigar supplier; the consignment
+  // settlement invoice was filed under the short spelling, which split the
+  // company into a second (regular) row in the portal's Suppliers list.
+  PO3056: "Cigar Empire Company Limited", // filed under "CIGAR EMPIRE Co.Ltd"
 };
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
