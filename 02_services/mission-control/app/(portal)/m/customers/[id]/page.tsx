@@ -4,6 +4,7 @@ import { SchemaError } from '@/components/modules/inventory/SchemaError'
 import { SortHeader, parseSort, parseDir, cmpBy, type SortDir } from '@/components/shell/SortHeader'
 import { DataFreshness } from '@/components/shell/DataFreshness'
 import { InvoiceExcludeCell } from '@/components/modules/customers/InvoiceExcludeCell'
+import { ConsignmentExemptCell } from '@/components/modules/customers/ConsignmentExemptCell'
 import { CustomerLoyverseCell } from '@/components/modules/customers/CustomerLoyverseCell'
 import { DeliveryRowActions } from '@/components/modules/customers/DeliveryRowActions'
 import { AttachReceiptButton } from '@/components/modules/customers/AttachReceiptButton'
@@ -91,7 +92,7 @@ export default async function CustomerDetail({
             )}
           </nav>
 
-          {tab === 'invoices'   && <InvoicesPanel   customerId={id} termsDays={c.payment_terms_days ?? 0} sp={sp} />}
+          {tab === 'invoices'   && <InvoicesPanel   customerId={id} termsDays={c.payment_terms_days ?? 0} isConsignment={!!c.is_consignment} sp={sp} />}
           {tab === 'loyverse'   && <LoyverseSalesPanel loyverseId={c.loyverse_customer_id} customerId={c.id} customerName={c.flowaccount_name} sp={sp} />}
           {tab === 'deliveries' && c.is_consignment && <DeliveriesPanel customerId={id} sp={sp} />}
           {tab === 'balance'    && c.is_consignment && <BalancePanel    customerId={id} sp={sp} />}
@@ -120,13 +121,23 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 }
 
 // ─── Invoices panel (mirror of FA) ──────────────────────────────────────
-async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string; termsDays: number; sp: SearchParams }) {
-  const { data, error } = await sbInventory
+async function InvoicesPanel({ customerId, termsDays, isConsignment, sp }: { customerId: string; termsDays: number; isConsignment: boolean; sp: SearchParams }) {
+  // consignment_exempt приезжает с миграцией 048 — до её применения колонки
+  // нет, и страница не должна из-за этого падать.
+  const COLS = 'id, number, issued_at, due_at, status, total, detail_url, excluded'
+  const withExempt = await sbInventory
     .from('flowaccount_invoice')
-    .select('id, number, issued_at, due_at, status, total, detail_url, excluded')
+    .select(`${COLS}, consignment_exempt`)
     .eq('customer_id', customerId)
     .limit(200)
-  if (error) return <SchemaError error={error.message} />
+  const hasExemptColumn = !withExempt.error
+  const res = hasExemptColumn ? withExempt : await sbInventory
+    .from('flowaccount_invoice')
+    .select(COLS)
+    .eq('customer_id', customerId)
+    .limit(200)
+  if (res.error) return <SchemaError error={res.error.message} />
+  const data = res.data as unknown as Array<Record<string, unknown>> | null
   // ВАЖНО: r.due_at от FlowAccount часто приходит пустой строкой '' (не null),
   // поэтому используем || а не ?? — иначе computedDue остаётся '' и Due
   // отрисовывается как «—».
@@ -135,6 +146,46 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
     computedDue: r.due_at || (termsDays > 0 && r.issued_at ? addDays(r.issued_at, termsDays) : null),
   }))
   if (rows.length === 0) return <div className="text-sm text-graphite">Инвойсов нет.</div>
+
+  // Сигнал «это продажа поверх полки»: инвойс выставляет больше бутылок какого-то
+  // SKU, чем вообще привозили на эту локацию по накладным. Именно так выглядел
+  // Fine Cusine INV202609290001 — 6 Nude Saperavi против 2 привезённых, — и
+  // именно такой инвойс молча съедает баланс, пока его никто не пометил.
+  const overShelf = new Set<string>()
+  if (isConsignment) {
+    const { data: loc } = await sbInventory
+      .from('consignment_location').select('id').eq('customer_id', customerId).maybeSingle()
+    if (loc) {
+      const { data: notes } = await sbInventory
+        .from('delivery_note').select('id')
+        .eq('location_id', (loc as { id: string }).id)
+        .in('status', ['draft', 'issued', 'delivered'])
+      const noteIds = ((notes ?? []) as Array<{ id: string }>).map(n => n.id)
+      const delivered = new Map<string, number>()
+      if (noteIds.length) {
+        const { data: dls } = await sbInventory
+          .from('delivery_note_line').select('sku_id, qty').in('note_id', noteIds)
+        for (const l of (dls ?? []) as Array<{ sku_id: string; qty: number }>) {
+          delivered.set(l.sku_id, (delivered.get(l.sku_id) ?? 0) + Number(l.qty))
+        }
+      }
+      const { data: ils } = await sbInventory
+        .from('flowaccount_invoice_line').select('invoice_id, sku_id, qty')
+        .in('invoice_id', rows.map(r => r.id as string))
+      const perInvoice = new Map<string, Map<string, number>>()
+      for (const l of (ils ?? []) as Array<{ invoice_id: string; sku_id: string | null; qty: number }>) {
+        if (!l.sku_id) continue
+        const bySku = perInvoice.get(l.invoice_id) ?? new Map<string, number>()
+        bySku.set(l.sku_id, (bySku.get(l.sku_id) ?? 0) + Number(l.qty))
+        perInvoice.set(l.invoice_id, bySku)
+      }
+      for (const [invoiceId, bySku] of perInvoice) {
+        for (const [skuId, qty] of bySku) {
+          if (qty > (delivered.get(skuId) ?? 0)) { overShelf.add(invoiceId); break }
+        }
+      }
+    }
+  }
 
   const sort = parseSort(sp.sort, ['number','issued_at','due_at','status','total'] as const, 'issued_at')
   const dir: SortDir = parseDir(sp.dir, 'desc')
@@ -155,6 +206,9 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
             <SortHeader col="status"    label="Status" sort={sort} dir={dir} sp={sp} keep={['tab']} />
             <SortHeader col="total"     label="Total"  sort={sort} dir={dir} sp={sp} keep={['tab']} align="right" />
             <th className="text-left py-2 px-4 font-medium text-graphite text-[11px]">Excluded</th>
+            {isConsignment && hasExemptColumn && (
+              <th className="text-left py-2 px-4 font-medium text-graphite text-[11px]">Shelf</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -170,6 +224,15 @@ async function InvoicesPanel({ customerId, termsDays, sp }: { customerId: string
               <td className="py-2 px-4">{r.status}</td>
               <td className="py-2 px-4 text-right tabular-nums">฿{Number(r.total).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
               <td className="py-2 px-4"><InvoiceExcludeCell invoiceId={r.id} initial={r.excluded ?? false} /></td>
+              {isConsignment && hasExemptColumn && (
+                <td className="py-2 px-4">
+                  <ConsignmentExemptCell
+                    invoiceId={r.id}
+                    initial={r.consignment_exempt ?? false}
+                    overShelf={overShelf.has(r.id)}
+                  />
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
