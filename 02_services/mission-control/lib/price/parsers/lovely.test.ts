@@ -42,3 +42,57 @@ describe('catalogDate', () => {
     expect(catalogDate('catalog.pdf', null)).toBeNull()
   })
 })
+
+import { matchType } from './lovely'
+
+describe('matchType', () => {
+  it('reads wine colour codes', () => {
+    expect(matchType("R           Blason d'Issan - Margaux")).toEqual({
+      type: { category: 'wine', wineType: 'red', spiritType: null, note: null },
+      rest: "Blason d'Issan - Margaux",
+    })
+    expect(matchType('W    Some White')?.type.wineType).toBe('white')
+    expect(matchType('RO   Some Rose')?.type.wineType).toBe('rose')
+    expect(matchType('SP   Some Sparkling')?.type.wineType).toBe('sparkling')
+  })
+
+  it('treats champagne as sparkling', () => {
+    expect(matchType("CP     Canard Duchene Champagne 'Cuvee Leonie' Brut")?.type)
+      .toEqual({ category: 'wine', wineType: 'sparkling', spiritType: null, note: 'Champagne' })
+  })
+
+  it('prefers the two-word code over its first word', () => {
+    const m = matchType('CP RO Goutorbe-Bouillot Champagne Rose Brut')
+    expect(m?.type.wineType).toBe('sparkling')
+    expect(m?.type.note).toContain('Rosé')
+    expect(m?.rest).toBe('Goutorbe-Bouillot Champagne Rose Brut')
+  })
+
+  it('keeps dessert and fortified codes as wine with no colour', () => {
+    expect(matchType('DW   Tokaji Aszu')?.type)
+      .toEqual({ category: 'wine', wineType: null, spiritType: null, note: 'Dessert wine' })
+    expect(matchType('FW   Some Port')?.type.category).toBe('wine')
+  })
+
+  it('reads spirits words glued to the product name', () => {
+    expect(matchType('Armagnac Gelas, Bas Armagnac 8 Ans')).toEqual({
+      type: { category: 'spirits', wineType: null, spiritType: 'armagnac', note: null },
+      rest: 'Gelas, Bas Armagnac 8 Ans',
+    })
+    expect(matchType('Eau-de-Vie Gelas, Vielle Eau De Vie De Prune')?.type.spiritType)
+      .toBe('eau-de-vie')
+    expect(matchType('Rhum     Arhumatic Punch Au Rhum')?.type.spiritType).toBe('rum')
+    expect(matchType('Ceylon   Ceylon Arrack')?.type.spiritType).toBe('arrack')
+  })
+
+  it('keeps sherry and vermouth as wine, not spirits', () => {
+    expect(matchType('Sherry   Lustau Amontillado')?.type)
+      .toEqual({ category: 'wine', wineType: null, spiritType: null, note: 'Sherry' })
+    expect(matchType('Vermouth Some Vermouth')?.type.category).toBe('wine')
+  })
+
+  it('returns null when nothing in the vocabulary matches', () => {
+    expect(matchType('Domaine Philippe Cheron, Chambolle-Musigny')).toBeNull()
+    expect(matchType('')).toBeNull()
+  })
+})

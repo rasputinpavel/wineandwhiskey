@@ -97,3 +97,72 @@ export function catalogDate(filename: string, modDate: Date | null): string | nu
   const d = String(modDate.getUTCDate()).padStart(2, '0')
   return `${modDate.getUTCFullYear()}-${m}-${d}`
 }
+
+// ─── The Type column ───────────────────────────────────────────────────────
+
+export type TypeInfo = {
+  category: ExtractedItem['category']
+  wineType: ExtractedItem['wine_type']
+  spiritType: string | null
+  note: string | null
+}
+
+const wine = (wineType: TypeInfo['wineType'], note: string | null = null): TypeInfo =>
+  ({ category: 'wine', wineType, spiritType: null, note })
+
+const spirit = (spiritType: string): TypeInfo =>
+  ({ category: 'spirits', wineType: null, spiritType, note: null })
+
+// Sparkling rosé codes land under 'sparkling' — the word Rosé is already in every
+// such product name, and the price browser is more useful with them grouped there.
+const TYPES: Record<string, TypeInfo> = {
+  'CP RO': wine('sparkling', 'Champagne, Rosé'),
+  'SP RO': wine('sparkling', 'Rosé'),
+  'RO SP': wine('sparkling', 'Rosé'),
+  'R':  wine('red'),
+  'W':  wine('white'),
+  'RO': wine('rose'),
+  'SP': wine('sparkling'),
+  'CP': wine('sparkling', 'Champagne'),
+  'DW': wine(null, 'Dessert wine'),
+  'FW': wine(null, 'Fortified wine'),
+  'SW': wine(null, 'Sweet wine'),
+  // Fortified and aromatised wines stay wine — routing Lustau's sherries into
+  // spirits would misfile them in the browser.
+  'Sherry':     wine(null, 'Sherry'),
+  'Vermouth':   wine(null, 'Vermouth'),
+  'Fortified':  wine(null, 'Fortified wine'),
+  'Whisky':     spirit('whisky'),
+  'Rum':        spirit('rum'),
+  'Rhum':       spirit('rum'),
+  'Gin':        spirit('gin'),
+  'Vodka':      spirit('vodka'),
+  'Brandy':     spirit('brandy'),
+  'Cognac':     spirit('cognac'),
+  'Armagnac':   spirit('armagnac'),
+  'Calvados':   spirit('calvados'),
+  'Eau-de-Vie': spirit('eau-de-vie'),
+  'Liqueur':    spirit('liqueur'),
+  'Aperitif':   spirit('aperitif'),
+  'Ceylon':     spirit('arrack'),   // "Ceylon Arrack"
+}
+
+// Longest key first so "CP RO" wins over "CP" and "Rhum" is never read as "R".
+const TYPE_KEYS = Object.keys(TYPES).sort((a, b) => b.length - a.length)
+
+// Splits the left-hand text of a row into its Type cell and the product name.
+// Returns null when the text starts with something outside the vocabulary — that
+// is a parser bug to surface, not a row to drop silently.
+export function matchType(left: string): { type: TypeInfo; rest: string } | null {
+  const text = left.trim()
+  if (!text) return null
+  for (const key of TYPE_KEYS) {
+    if (!text.startsWith(key)) continue
+    const rest = text.slice(key.length)
+    // The key must be a whole cell, not the start of a longer word: "RO" must not
+    // match "ROSSO", "R" must not match "Realm".
+    if (rest && !/^[\s]/.test(rest)) continue
+    return { type: TYPES[key], rest: rest.trim() }
+  }
+  return null
+}
