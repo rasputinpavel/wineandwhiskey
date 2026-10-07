@@ -347,3 +347,45 @@ describe('columnAnchors — positive beverage gate', () => {
     expect(accepted).toHaveLength(20)   // 24 tables less the 4 accessory ones
   })
 })
+
+describe('catalogDate — month matching', () => {
+  const SEP = new Date('2026-09-01T00:00:00Z')
+
+  it('does not take a word that merely starts with a month prefix', () => {
+    // Janhom is another supplier in this repo, so a co-import filename is real.
+    expect(catalogDate('Decanter-top-100.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Novelties.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Junmai-sake-list.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Marlborough.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Janhom price.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Marchesi-di-Barolo.pdf', SEP)).toBe('2026-09-01')
+  })
+
+  it('looks only at the basename, never at the directories above it', () => {
+    expect(catalogDate('/Users/me/Nov-drafts/catalog.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('/archive/2026-11/catalog.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('C:\\lists\\Dec\\catalog.pdf', SEP)).toBe('2026-09-01')
+  })
+
+  it('still reads abbreviations and full month names', () => {
+    expect(catalogDate('Lovely Wines Catalog_Sep Claudio.pdf', SEP)).toBe('2026-09-01')
+    expect(catalogDate('Lovely Wines November.pdf', SEP)).toBe('2026-11-01')
+    expect(catalogDate('lovely-may.pdf', SEP)).toBe('2026-05-01')
+    expect(catalogDate('lovely-sept.pdf', SEP)).toBe('2026-09-01')
+  })
+
+  it('picks the year that puts the labelled month nearest the ModDate', () => {
+    // A January catalog mailed in late December belongs to the coming January,
+    // not to the January eleven months past.
+    expect(catalogDate('lovely-Jan.pdf', new Date('2026-12-28T00:00:00Z'))).toBe('2027-01-01')
+    expect(catalogDate('lovely-Dec.pdf', new Date('2027-01-05T00:00:00Z'))).toBe('2026-12-01')
+    expect(catalogDate('lovely-Sep.pdf', SEP)).toBe('2026-09-01')
+  })
+
+  it('reads the ModDate in the catalog\u2019s own timezone', () => {
+    // The PDF is stamped 2026-09-01 00:30 Bangkok. Formatted in UTC — which is
+    // what Railway containers run on — that is 31 August, the wrong month for a
+    // price list whose freshness decides which catalog is current.
+    expect(catalogDate('catalog.pdf', new Date('2026-08-31T17:30:00Z'))).toBe('2026-09-01')
+  })
+})

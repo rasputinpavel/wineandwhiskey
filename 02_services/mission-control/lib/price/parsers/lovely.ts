@@ -81,28 +81,65 @@ export function toIntPrice(cell: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+// Month labels as a closed alternation with real boundaries on both sides. A
+// prefix pattern like /\b(jan|feb|…)[a-z]*\b/ fires on any word that merely
+// starts with those three letters, and the catalog world is full of them:
+// Decanter → December, Novelties → November, Junmai → June,
+// Marlborough → March, Marchesi → March, Janhom → January (Janhom is another
+// supplier in this repo, so a co-import filename is not hypothetical).
+const MONTH_RE =
+  /(?<![a-z])(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])/i
+
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 }
 
+// The supplier is in Bangkok and so are we, so a ModDate instant is read as the
+// Bangkok day it fell on. Neither getUTC* nor the server's local clock will do:
+// a PDF stamped 2026-09-01 00:30 Bangkok is 2026-08-31 in UTC (which is what
+// Railway containers run on) and in any timezone west of +07:00 — and August is
+// the wrong month for a September price list.
+const CATALOG_TZ = 'Asia/Bangkok'
+
+function ymdInCatalogTz(d: Date): { year: number; month: number; day: number } {
+  const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CATALOG_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d).split('-').map(Number)
+  return { year, month, day }
+}
+
 // The catalog prints no date anywhere in its text layer, so derive one: an
-// explicit YYYY-MM in the filename wins, then a month name in the filename with
-// the year from the PDF's ModDate, then ModDate itself.
+// explicit YYYY-MM in the filename wins, then a month name in the filename
+// resolved against the PDF's ModDate, then ModDate itself.
 export function catalogDate(filename: string, modDate: Date | null): string | null {
-  const iso = filename.match(/(20\d{2})[-_.](0[1-9]|1[0-2])/)
+  // Only the basename: a directory called `Nov-drafts/` or `archive/2026-11/`
+  // says nothing about which month this particular catalog is.
+  const base = filename.split(/[/\\]/).pop() ?? filename
+
+  const iso = base.match(/(20\d{2})[-_.](0[1-9]|1[0-2])/)
   if (iso) return `${iso[1]}-${iso[2]}-01`
 
-  const word = filename.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i)
+  const word = base.match(MONTH_RE)
   if (word && modDate) {
-    const month = String(MONTHS[word[1].toLowerCase()]).padStart(2, '0')
-    return `${modDate.getUTCFullYear()}-${month}-01`
+    const month = MONTHS[word[1].slice(0, 3).toLowerCase()]
+    const stamp = ymdInCatalogTz(modDate)
+    // The filename names a month but not a year, so choose the year that puts
+    // that month closest to when the file was stamped: a January catalog mailed
+    // in late December is next January's, not last January's.
+    const target = stamp.year * 12 + stamp.month
+    let best = stamp.year
+    let bestDist = Infinity
+    for (const year of [stamp.year - 1, stamp.year, stamp.year + 1]) {
+      const dist = Math.abs(year * 12 + month - target)
+      if (dist < bestDist) { best = year; bestDist = dist }
+    }
+    return `${best}-${String(month).padStart(2, '0')}-01`
   }
 
   if (!modDate) return null
-  const m = String(modDate.getUTCMonth() + 1).padStart(2, '0')
-  const d = String(modDate.getUTCDate()).padStart(2, '0')
-  return `${modDate.getUTCFullYear()}-${m}-${d}`
+  const { year, month, day } = ymdInCatalogTz(modDate)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 // ─── The Type column ───────────────────────────────────────────────────────
