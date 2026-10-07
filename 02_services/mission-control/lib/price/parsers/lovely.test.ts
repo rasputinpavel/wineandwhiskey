@@ -839,3 +839,55 @@ describe('the centring rule — a cell alone on its line serves its neighbours',
     expect(shape(items, "'Vina Arana'")).toEqual(['750ml/2017/2757'])
   })
 })
+
+describe('a name wrapped around its type code is one product, not two', () => {
+  it('joins the halves of a Realm Cellars name and files no junk position', () => {
+    const items = parseCatalogText(page('REALM CELLARS'))
+    expect(shapeOf(items, "Realm Cellars ‘Houyi Vineyard’ Napa Valley, Cabernet Sauvignon"))
+      .toEqual(['750ml/2021/16360', '750ml/2022/12800'])
+    // Emitting the continuation on its own would file a wine called
+    // "Cabernet Sauvignon" at 12,800.
+    expect(items.filter(i => i.name === 'Cabernet Sauvignon')).toEqual([])
+    expect(shapeOf(items, 'Realm Estate, Moonracer'))
+      .toEqual(['750ml/2021/20100', '750ml/2022/12800'])
+  })
+
+  it('joins a Yangarra name over its grape list', () => {
+    const items = parseCatalogText(page('YANGARRA ESTATE VINEYARD'))
+    expect([...new Set(items.filter(i => i.name.includes("'GSM'")).map(i => i.name))])
+      .toEqual(["Yangarra Estae Vineyard 'GSM' (Grenache/ Shiraz/ Mourvèdre)"])
+    expect(items.some(i => i.name.startsWith('(Grenache'))).toBe(false)
+  })
+
+  it('joins a Cantina Tollo name over its appellation', () => {
+    const items = parseCatalogText(page('CANTINA TOLLO'))
+    expect([...new Set(items.filter(i => i.name.includes('Pinot Grigio')).map(i => i.name))])
+      .toEqual(["Cantina Tollo 'Rocca Ventosa' Pinot Grigio Terre di Chieti IGP"])
+  })
+
+  it('joins a name split mid-word and keeps each cluster its own', () => {
+    const items = parseCatalogText(page('DOMAINE COMTESSE DE CHERISEY'))
+    expect(shapeOf(items, "Comtesse de Cherisey, Meursault-Blagny, 1er Cru 'La Genelotte'"))
+      .toEqual(['750ml/2018/7245'])
+    expect(shapeOf(items, "Comtesse de Cherisey, Meursault 'Bois de Blagny'"))
+      .toEqual(['750ml/2018/7245', '750ml/2019/7575', '750ml/2020/10280', '750ml/2021/10280'])
+    // Eight lines, vintages and prices on alternating ones.
+    expect(shapeOf(items, "Comtesse de Cherisey, Puligny-Montrachet, 1er Cru 'Hameau de Blagny'"))
+      .toEqual(['750ml/2018/7750', '750ml/2019/8100', '750ml/2020/11000', '750ml/2021/11000'])
+    expect(shapeOf(items, "Comtesse de Cherisey, Puligny-Montrachet, 1er Cru 'Les Chalumaux"))
+      .toEqual(['750ml/2018/7245', '750ml/2019/7665', '750ml/2020/10280'])
+  })
+
+  it('does not turn a producer paragraph into a wine', () => {
+    // A paragraph wraps out past the Size column and into the cell area; a name
+    // fragment stops before it. Get that backwards and a sentence becomes a
+    // phantom position with a price.
+    for (const marker of ['YANGARRA ESTATE VINEYARD', 'REALM CELLARS', 'MAISON GELAS',
+                          'DOMAINE COMTESSE DE CHERISEY', 'GIUSEPPE CORTESE']) {
+      for (const item of parseCatalogText(page(marker))) {
+        expect(item.name, marker).not.toMatch(/\b(is|are|the|and|with)\b/)
+        expect(item.name.length, `${marker}: ${item.name}`).toBeLessThan(90)
+      }
+    }
+  })
+})
