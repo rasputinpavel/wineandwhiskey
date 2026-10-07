@@ -436,3 +436,405 @@ export function splitStockPrefix(left: string): { stock: string; rest: string } 
   if (!m) return { stock: '', rest: left }
   return { stock: m[1], rest: left.slice(m[0].length).trim() }
 }
+
+// ─── Page context: banners and producer prose ──────────────────────────────
+
+// Typographic hyphens. The catalog prints ENTRE‑DEUX‑MERS with U+2011, so a
+// matcher restricted to ASCII '-' misses that banner outright and leaks its
+// region into the next producer's rows. Normalised only for lookups; the region
+// text itself keeps the characters the catalog printed.
+const FANCY_DASHES = /[‐‑‒–—]/g
+
+const normBanner = (text: string) =>
+  text.replace(FANCY_DASHES, '-').replace(/\s+/g, ' ').trim().toUpperCase()
+
+// A banner is a line that has letters and no lower case. That single test
+// covers page banners, region sub-banners and the brand separators printed
+// inside a table (TORRE DE OÑA — RIOJA ALAVESA), and unlike /[a-z]/ it is not
+// fooled by accents: 'Côte' is not upper case, 'CÔTE' is.
+const isBannerText = (text: string) => /\p{L}/u.test(text) && text === text.toUpperCase()
+
+// ARGENTINA → Argentina; CÔTE DE NUITS, BURGUNDY → Côte De Nuits, Burgundy.
+const titleCase = (text: string) =>
+  text.toLowerCase().replace(/(^|[\s\-‐-—/(,.])(\p{L})/gu, (_, sep, ch) => sep + ch.toUpperCase())
+
+// Page banners that name a style rather than a place: CHAMPAGNE, PROSECCO and
+// CAVA are printed where a country would be, so they are mapped to one.
+const BANNER_COUNTRY: Record<string, string> = {
+  'CHAMPAGNE': 'France',
+  'FRENCE SPARKLING': 'France',   // the catalog's own spelling
+  'FRENCH SPARKLING': 'France',
+  'PROSECCO': 'Italy',
+  'CAVA': 'Spain',
+  'SPANISH CAVA': 'Spain',
+  'ITALIAN': 'Italy',
+  'USA': 'USA',
+  'UNITED STATES': 'USA',
+  'SCOTLAND': 'United Kingdom',
+}
+
+// Page banners that set a category instead of a place. On these pages the place
+// comes from the sub-banner (DOMINICAN REPUBLIC, JEREZ, SPAIN).
+const CATEGORY_BANNERS = new Set(['SPIRITS', 'ACCESSORIES', 'DESSERT WINE', 'FORTIFIED WINE', 'SWEET WINE'])
+
+// Consulted only to tell a country sub-banner from a region one on those
+// category pages, where both shapes occur (SRI LANKA, but also TOKAJI under
+// HUNGARY DESSERT WINE). On a country-bannered page the sub-banner is always
+// the region, so no list is needed there.
+const COUNTRIES = new Set([
+  'FRANCE', 'ITALY', 'ITALIAN', 'SPAIN', 'USA', 'UNITED STATES', 'ARGENTINA', 'AUSTRALIA',
+  'CHILE', 'GERMANY', 'NEW ZEALAND', 'AUSTRIA', 'SOUTH AFRICA', 'HUNGARY', 'SWITZERLAND',
+  'UNITED KINGDOM', 'SCOTLAND', 'DOMINICAN REPUBLIC', 'SRI LANKA', 'PORTUGAL', 'GREECE',
+  'JAPAN', 'MEXICO', 'CUBA', 'LEBANON', 'ISRAEL', 'GEORGIA', 'MOLDOVA',
+])
+
+const countryOf = (norm: string) => BANNER_COUNTRY[norm] ?? titleCase(norm)
+
+type Context = {
+  category: string | null     // the category page banner, where the page has one
+  country: string | null
+  region: string | null
+  prose: string[]             // producer paragraph being collected
+}
+
+// Indent decides which kind of banner this is: page banners are centred
+// (indent > 30) and region sub-banners sit near the left margin.
+function applyBanner(ctx: Context, text: string, indent: number): void {
+  const norm = normBanner(text)
+  ctx.prose = []
+
+  if (indent > 30) {
+    if (CATEGORY_BANNERS.has(norm)) { ctx.category = norm; ctx.region = null; return }
+    ctx.category = null
+    ctx.country = countryOf(norm)
+    ctx.region = null
+    return
+  }
+
+  if (!ctx.category) { ctx.region = text.replace(/\s+/g, ' ').trim() && titleCase(text.trim()); return }
+
+  // A category page: the sub-banner carries the place, sometimes with the
+  // category word glued on (AUSTRIA DESSERT WINE), sometimes as "region,
+  // country" (JEREZ, SPAIN).
+  const place = norm.replace(/\s*(DESSERT|FORTIFIED|SWEET)\s+WINE$/, '').trim()
+  const parts = place.split(/\s*,\s*/)
+  if (parts.length > 1 && COUNTRIES.has(parts[parts.length - 1])) {
+    ctx.country = countryOf(parts[parts.length - 1])
+    ctx.region = titleCase(parts.slice(0, -1).join(', '))
+  } else if (COUNTRIES.has(place)) {
+    ctx.country = countryOf(place)
+    ctx.region = null
+  } else {
+    // Not a country we know (TOKAJI): a region under whatever country the
+    // previous sub-banner established.
+    ctx.region = titleCase(place)
+  }
+}
+
+// ─── What a line carries, beyond what readRow reports ──────────────────────
+
+// readRow is deliberately blind to these two: both are about meaning rather
+// than geometry, and its Row type is pinned by its own tests.
+export type PriceCell =
+  | { kind: 'num'; value: number }
+  | { kind: 'pending' }     // the catalog prints the word: a real position, no price yet
+  | { kind: 'none' }        // no price cell on this line at all
+
+// "pending" is a price here — 51 rows print it instead of a number. It must be
+// told apart from an empty price cell, or a vintage row priced "pending"
+// silently borrows the price of the row it is centred against.
+const PENDING_RE = /pending/i
+
+// Two rows in the September 2026 file print the thousands separator as a dot:
+// 1.970 (Giuseppe Cortese, Barbera d'Alba) and 1.020 (Muga Reserva 375ml). The
+// catalog never prices with decimals, so inside the price column a dot is a
+// separator. Read and warned about rather than dropped — but only as a whole
+// token, because the unbounded regex used to read "1.020" as 20.
+const DOT_PRICE_RE = /(?<![\d.,])(\d{1,3})\.(\d{3})(?![\d.,])/
+
+type LineCells = {
+  line: number
+  left: string            // Type cell + name, stock prefix still attached
+  size: string
+  vintage: string
+  price: PriceCell
+  remark: string
+}
+
+function readCells(line: string, lineNo: number, a: Anchors): LineCells {
+  const row = readRow(line, a)
+
+  let price: PriceCell = { kind: 'none' }
+  let priceEnd = 0
+  if (row.price) {
+    const value = toIntPrice(row.price)
+    if (value !== null) {
+      price = { kind: 'num', value }
+      priceEnd = line.indexOf(row.price) + row.price.length
+    }
+  } else {
+    const dotted = near(line, DOT_PRICE_RE, a.price, a)
+    if (dotted) {
+      price = { kind: 'num', value: parseInt(dotted[1] + dotted[2], 10) }
+      priceEnd = dotted.index + dotted[0].length
+      console.warn(`[lovely] price ${JSON.stringify(dotted[0])} read as ${price.value} — a dot where the catalog otherwise prints a comma: ${JSON.stringify(line.trim().slice(0, 90))}`)
+    } else {
+      const word = near(line, PENDING_RE, a.price, a)
+      if (word) { price = { kind: 'pending' }; priceEnd = word.index + word[0].length }
+    }
+  }
+
+  // readRow only reports what trails the price, so a row that has a critic
+  // score but no price loses it (Yangarra High Sands prints "100 JS" and no
+  // price at all). Reading from the Remark anchor recovers those, clamped past
+  // the price token so it can never bite into a number.
+  const remark = row.remark || (a.remark === null
+    ? ''
+    : line.slice(Math.max(a.remark - 2, priceEnd)).trim())
+
+  return { line: lineNo, left: row.left, size: row.size, vintage: row.vintage, price, remark }
+}
+
+const hasCells = (c: LineCells) => Boolean(c.size) || Boolean(c.vintage) || c.price.kind !== 'none'
+
+// A Remark cell printed alone on its line: a critic score ("91 WS", "96+ RP",
+// "87WE 93JS", "95 RP, 94 JS") or, rarely, a bare stock state.
+const RATING_RE = /^\d{2,3}\+?\s*[A-Z]{2}(?:[\s,/]+\d{2,3}\+?\s*[A-Z]{2})*$/
+
+// ─── Products ──────────────────────────────────────────────────────────────
+
+type Product = {
+  nameParts: string[]
+  type: TypeInfo | null
+  // True when the type code was printed alone on its line. That is the signal
+  // that the product name is wrapped *around* the code line, and so the only
+  // case in which a second name fragment continues this product instead of
+  // starting a new one.
+  codeAlone: boolean
+  own: LineCells[]        // rows printed on this product's own lines
+  ownLines: number[]
+  above: LineCells[]      // centred rows assigned from the gap above
+  below: LineCells[]      //                     ... and from the gap below
+  ownRemark: boolean      // this product printed a Remark cell of its own
+  remarks: string[]
+  stock: string[]
+  prose: string
+  country: string | null
+  region: string | null
+}
+
+const newProduct = (ctx: Context, prose: string): Product => ({
+  nameParts: [], type: null, codeAlone: false, own: [], ownLines: [],
+  above: [], below: [], ownRemark: false, remarks: [], stock: [], prose,
+  country: ctx.country, region: ctx.region,
+})
+
+// ─── The core: catalog text → items ────────────────────────────────────────
+
+export function parseCatalogText(text: string): ExtractedItem[] {
+  const items: ExtractedItem[] = []
+  const ctx: Context = { category: null, country: null, region: null, prose: [] }
+
+  for (const pageText of text.split('\f')) {
+    const lines = pageText.split('\n')
+
+    let anchors: Anchors | null = null
+    let skipping = false              // inside a table we refuse (glassware)
+    let products: Product[] = []
+    let gaps: LineCells[][] = [[]]    // gaps[k]: centred rows printed before products[k]
+    let cur: Product | null = null
+    let prevLine = -99                // last line that fed `cur`, for adjacency
+    let blockProse = ''
+    let heldRemarks: string[] = []    // ratings printed before their product
+    let heldStock: string[] = []
+
+    const open = (): Product => {
+      const p = newProduct(ctx, blockProse)
+      p.remarks.push(...heldRemarks)
+      p.stock.push(...heldStock)
+      heldRemarks = []
+      heldStock = []
+      products.push(p)
+      if (!gaps[products.length]) gaps[products.length] = []
+      cur = p
+      return p
+    }
+
+    const flush = (): void => {
+      if (products.length) emitBlock(products, gaps, items)
+      products = []
+      gaps = [[]]
+      cur = null
+      prevLine = -99
+      heldRemarks = []
+      heldStock = []
+      anchors = null
+      skipping = false
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      if (HEADER_RE.test(line)) {
+        flush()
+        anchors = columnAnchors(line)
+        skipping = anchors === null
+        blockProse = ctx.prose.join(' ').replace(/\s+/g, ' ').trim()
+        ctx.prose = []
+        continue
+      }
+
+      const bare = line.trim()
+      const indent = line.length - line.trimStart().length
+
+      // ── outside a table ──────────────────────────────────────────────────
+      if (anchors === null) {
+        if (!bare) continue
+        if (isBannerText(bare)) applyBanner(ctx, bare, indent)
+        else if (!skipping) ctx.prose.push(bare)
+        continue
+      }
+
+      // ── inside a beverage table ──────────────────────────────────────────
+      if (!bare) continue
+
+      const cells = readCells(line, i, anchors)
+      // The stock remark comes off before anything looks at the Type cell:
+      // otherwise "stock   Chateau Cos d'Estournel" is an unknown Type cell and
+      // the row is dropped.
+      const { stock, rest } = splitStockPrefix(cells.left)
+      const leftEnd = rest ? line.indexOf(rest) + rest.length : 0
+
+      if (!rest) {
+        // Nothing on the left: a centred cell row, or a torn stock fragment.
+        if (stock) {
+          if (cur) { cur.stock.push(stock); prevLine = i } else heldStock.push(stock)
+        }
+        if (hasCells(cells)) gaps[products.length] = (gaps[products.length] ?? []).concat(cells)
+        continue
+      }
+
+      const cell = classifyTypeCell(rest)
+
+      if (cell.kind === 'matched') {
+        const continuesCode: boolean = cell.rest === '' && cur !== null && cur.type === null && i === prevLine + 1
+        const p: Product = continuesCode ? cur! : open()
+        p.type = cell.type
+        if (cell.rest === '') p.codeAlone = true
+        if (cell.rest) p.nameParts.push(cell.rest)
+        if (stock) p.stock.push(stock)
+        p.ownLines.push(i)
+        if (hasCells(cells)) p.own.push(cells)
+        if (cells.remark) { p.remarks.push(cells.remark); p.ownRemark = true }
+        cur = p
+        prevLine = i
+        continue
+      }
+
+      if (cell.kind === 'unknown') { matchType(rest); continue }
+
+      // No Type cell: a rating alone on the line, a banner, the tail of a
+      // wrapped product name, or producer prose.
+      if (!hasCells(cells) && RATING_RE.test(rest)) {
+        // Ratings are typeset centred on their product, so one can sit above
+        // the name row and another below it. The row above takes it when that
+        // row printed no Remark of its own; otherwise it belongs to the next.
+        const prev = products[products.length - 1]
+        if (prev && !prev.ownRemark) prev.remarks.push(rest)
+        else heldRemarks.push(rest)
+        continue
+      }
+
+      if (isBannerText(rest)) {
+        // A region banner ends the table. A brand separator printed at column 0
+        // (LA RIOJA ALTA, S.A. — RIOJA) only interrupts it.
+        if (indent > 5) { flush(); applyBanner(ctx, bare, indent) }
+        else { cur = null; prevLine = -99 }
+        continue
+      }
+
+      // Producer prose runs out past the Size column and into the cell area; a
+      // wrapped name fragment stops before it. That is the whole difference
+      // between a paragraph and half a product name.
+      if (leftEnd >= anchors.size) { cur = null; prevLine = -99; continue }
+
+      const continues: boolean = cur !== null && i === prevLine + 1 &&
+        (cur.nameParts.length === 0 || cur.codeAlone)
+      const p: Product = continues ? cur! : open()
+      p.nameParts.push(rest)
+      if (stock) p.stock.push(stock)
+      p.ownLines.push(i)
+      if (hasCells(cells)) p.own.push(cells)
+      if (cells.remark) { p.remarks.push(cells.remark); p.ownRemark = true }
+      cur = p
+      prevLine = i
+    }
+
+    flush()
+  }
+
+  return items
+}
+
+// ─── Turning one producer's table into items ───────────────────────────────
+
+function emitBlock(products: Product[], gaps: LineCells[][], out: ExtractedItem[]): void {
+  for (const p of products) out.push(...positionsOf(p))
+}
+
+function positionsOf(p: Product): ExtractedItem[] {
+  const name = p.nameParts.join(' ').replace(/\s+/g, ' ').trim()
+  if (!p.type) {
+    if (name) console.warn(`[lovely] no Type cell ever arrived for ${JSON.stringify(name)} — position dropped`)
+    return []
+  }
+  if (name.length < 4) {
+    console.warn(`[lovely] product name too short to be real: ${JSON.stringify(name)} — position dropped`)
+    return []
+  }
+
+  const rows = [...p.above, ...p.own, ...p.below]
+  const sizes = rows.map(r => r.size).filter(Boolean)
+  const years = rows.map(r => r.vintage).filter(Boolean)
+  const prices = rows.map(r => r.price).filter(c => c.kind !== 'none')
+  const remarks = [...p.remarks, ...p.above.map(r => r.remark), ...p.below.map(r => r.remark)].filter(Boolean)
+
+  const n = Math.max(1, sizes.length, years.length, prices.length)
+  // A column printed once serves every row of the cluster — that is the centring
+  // rule seen from the column's side. More than one and they pair positionally.
+  const at = <T,>(list: T[], i: number): T | null =>
+    list.length === 0 ? null : list.length === 1 ? list[0] : (list[i] ?? null)
+
+  const description = [
+    p.type.note,
+    p.stock.join(' ').replace(/\s+/g, ' ').trim(),
+    ...remarks,
+    p.prose,
+  ].filter(Boolean).join(' · ') || null
+
+  const items: ExtractedItem[] = []
+  const seen = new Set<string>()
+  for (let i = 0; i < n; i++) {
+    const year = at(years, i)
+    const price = at(prices, i)
+    const volume = at(sizes, i)
+    const key = `${volume}|${year}|${price?.kind === 'num' ? price.value : null}`
+    if (seen.has(key)) continue      // the text layer prints some rows twice
+    seen.add(key)
+    items.push({
+      name,
+      country: p.country,
+      region: p.region,
+      grape_variety: null,
+      price: price && price.kind === 'num' ? price.value : null,
+      year: year && year !== 'NV' ? parseInt(year, 10) : null,
+      volume,
+      description,
+      category: p.type.category,
+      wine_type: p.type.wineType,
+      spirit_type: p.type.spiritType,
+      supplier_sku: null,
+    })
+  }
+  return items
+}

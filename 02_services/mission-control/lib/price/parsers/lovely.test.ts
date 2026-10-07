@@ -692,3 +692,57 @@ describe('splitStockPrefix', () => {
     expect(splitStockPrefix('')).toEqual({ stock: '', rest: '' })
   })
 })
+
+import { parseCatalogText } from './lovely'
+import type { ExtractedItem } from '../claude'
+
+// Finds the one position whose name contains every fragment given. Throws when
+// that is not exactly one position, so a renamed product fails as itself.
+function one(items: ExtractedItem[], ...fragments: string[]): ExtractedItem {
+  const hits = items.filter(i => fragments.every(f => i.name.includes(f)))
+  if (hits.length !== 1) {
+    throw new Error(`${hits.length} positions match ${JSON.stringify(fragments)}: ${JSON.stringify(hits.map(h => h.name))}`)
+  }
+  return hits[0]
+}
+
+describe('parseCatalogText — tables, banners and whole data rows', () => {
+  it('yields nothing at all from the glassware and ashtray page', () => {
+    const items = parseCatalogText(page('ZALTO GLASPERFEKTION'))
+    expect(items).toEqual([])
+  })
+
+  it('reads the spirits page whose Type words are glued to the product name', () => {
+    const items = parseCatalogText(page('MAISON GELAS'))
+    expect(items).toHaveLength(27)
+
+    const barcelo = one(items, 'Ron Barcelo Blanco Anejado')
+    expect(barcelo).toMatchObject({
+      price: 1300, volume: '700ml', category: 'spirits', spirit_type: 'rum',
+      country: 'Dominican Republic', year: null, wine_type: null,
+      grape_variety: null, supplier_sku: null,
+    })
+
+    expect(one(items, 'Bas Armagnac 8 Ans'))
+      .toMatchObject({ price: 3125, spirit_type: 'armagnac', country: 'France' })
+    expect(one(items, 'Bas Armagnac 60 Ans').price).toBe(41960)
+  })
+
+  it('takes the country from the page banner and the region from the sub-banner', () => {
+    const items = parseCatalogText(page('CHATEAU HAUT POUGNAN'))
+    const pougnan = one(items, 'Chateau Haut Pougnan Sauvignon')
+    expect(pougnan).toMatchObject({
+      country: 'France', region: 'Entre-Deux-Mers, Bordeaux',
+      wine_type: 'white', category: 'wine', year: 2021, price: 1170,
+    })
+    // The U+2011 banner one producer earlier must not leak into this one, and
+    // must itself be read: an ASCII-only matcher drops it silently.
+    expect(one(items, 'Chateau La Loubiere').region).toBe('Entre‑Deux‑Mers, Bordeaux')
+  })
+
+  it('carries the producer paragraph into the description', () => {
+    const items = parseCatalogText(page('MAISON GELAS'))
+    expect(one(items, 'Bas Armagnac 8 Ans').description)
+      .toContain('Gelas Bas-Armagnac is celebrated')
+  })
+})
