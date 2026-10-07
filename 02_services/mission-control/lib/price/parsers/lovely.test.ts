@@ -389,3 +389,59 @@ describe('catalogDate — month matching', () => {
     expect(catalogDate('catalog.pdf', new Date('2026-08-31T17:30:00Z'))).toBe('2026-09-01')
   })
 })
+
+import { vi } from 'vitest'
+import { classifyTypeCell } from './lovely'
+
+describe('classifyTypeCell', () => {
+  it('matches the known vocabulary', () => {
+    expect(classifyTypeCell('R   Some Red')).toMatchObject({ kind: 'matched', rest: 'Some Red' })
+    expect(classifyTypeCell('Armagnac Gelas, Bas Armagnac 8 Ans'))
+      .toMatchObject({ kind: 'matched', rest: 'Gelas, Bas Armagnac 8 Ans' })
+  })
+
+  it('calls prose and product names what they are: no Type cell', () => {
+    expect(classifyTypeCell('Domaine Philippe Cheron, Chambolle-Musigny')).toEqual({ kind: 'none' })
+    expect(classifyTypeCell('')).toEqual({ kind: 'none' })
+    expect(classifyTypeCell('Javelier-Laurin, Bourgogne Pinot Noir')).toEqual({ kind: 'none' })
+  })
+
+  it('reports a Type cell it does not know, rather than shrugging', () => {
+    // A Tequila or Sake section next month must not vanish without a word.
+    expect(classifyTypeCell('Tequila   Patron Silver')).toEqual({ kind: 'unknown', token: 'Tequila' })
+    expect(classifyTypeCell('Mezcal    Del Maguey Vida')).toEqual({ kind: 'unknown', token: 'Mezcal' })
+    expect(classifyTypeCell('Sake      Dassai 23')).toEqual({ kind: 'unknown', token: 'Sake' })
+    expect(classifyTypeCell('Port      Taylor 10 Year Old')).toEqual({ kind: 'unknown', token: 'Port' })
+  })
+
+  it('reports a known word in unexpected case instead of silently accepting it', () => {
+    expect(classifyTypeCell('RUM        Ron Barcelo Blanco')).toEqual({ kind: 'unknown', token: 'RUM' })
+    expect(classifyTypeCell('whisky     Some Whisky')).toEqual({ kind: 'unknown', token: 'whisky' })
+  })
+})
+
+describe('matchType — loud about what it cannot read', () => {
+  it('warns on an unrecognised Type cell and still fails closed', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(matchType('Tequila   Patron Silver')).toBeNull()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('[lovely]')
+    expect(warn.mock.calls[0][0]).toContain('Tequila')
+    warn.mockRestore()
+  })
+
+  it('stays quiet on prose', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(matchType('Domaine Philippe Cheron, Chambolle-Musigny')).toBeNull()
+    expect(matchType('')).toBeNull()
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('stays quiet and returns the match on a known Type cell', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(matchType('CP     Paul Bara Champagne')?.type.wineType).toBe('sparkling')
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})

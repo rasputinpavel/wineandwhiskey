@@ -194,19 +194,59 @@ const TYPES: Record<string, TypeInfo> = {
 // Longest key first so "CP RO" wins over "CP" and "Rhum" is never read as "R".
 const TYPE_KEYS = Object.keys(TYPES).sort((a, b) => b.length - a.length)
 
-// Splits the left-hand text of a row into its Type cell and the product name.
-// Returns null when the text starts with something outside the vocabulary — that
-// is a parser bug to surface, not a row to drop silently.
-export function matchType(left: string): { type: TypeInfo; rest: string } | null {
+
+// A leading word that occupies a Type-cell-shaped slot: alphabetic, short, and
+// followed by the column gap. Used only to tell an unknown Type cell apart from
+// prose, never to accept one.
+const TYPE_SHAPED_RE = /^([A-Za-z][A-Za-z-]{1,11})(?:\s{2,}|\s*$)/
+
+export type TypeCell =
+  | { kind: 'matched'; type: TypeInfo; rest: string }
+  | { kind: 'unknown'; token: string }
+  | { kind: 'none' }
+
+// Splits the left-hand text of a row into its Type cell and the product name,
+// and — crucially — distinguishes "there is no Type cell here" (prose, a bare
+// product name) from "there is one and I do not know this word".
+//
+// Those two were one `null` before, which meant a Tequila, Mezcal, Sake or Port
+// section appearing next month would be dropped without a trace, and so would a
+// `RUM` that the supplier simply typed in capitals. A casing variant is reported
+// rather than quietly accepted: failing closed on an unreadable Type cell is
+// right, failing closed *silently* is not.
+//
+// Limitation worth knowing: the shape test needs two or more spaces after the
+// word, because the glued single-space form ("Armagnac Gelas, …") is
+// indistinguishable from a product name that starts with a capitalised word. Every
+// unknown single-word Type in this catalog's column widths prints with a wide gap.
+export function classifyTypeCell(left: string): TypeCell {
   const text = left.trim()
-  if (!text) return null
+  if (!text) return { kind: 'none' }
+
   for (const key of TYPE_KEYS) {
     if (!text.startsWith(key)) continue
     const rest = text.slice(key.length)
     // The key must be a whole cell, not the start of a longer word: "RO" must not
     // match "ROSSO", "R" must not match "Realm".
     if (rest && !/^[\s]/.test(rest)) continue
-    return { type: TYPES[key], rest: rest.trim() }
+    return { kind: 'matched', type: TYPES[key], rest: rest.trim() }
+  }
+
+  // A vocabulary word in unexpected case ("RUM", "whisky") lands here along with
+  // genuinely new ones like Tequila — reported either way, never guessed at.
+  const shaped = text.match(TYPE_SHAPED_RE)
+  if (shaped) return { kind: 'unknown', token: shaped[1] }
+
+  return { kind: 'none' }
+}
+
+// Thin wrapper keeping the original shape for callers that only care whether the
+// row could be read, and making an unreadable Type cell audible on the way past.
+export function matchType(left: string): { type: TypeInfo; rest: string } | null {
+  const cell = classifyTypeCell(left)
+  if (cell.kind === 'matched') return { type: cell.type, rest: cell.rest }
+  if (cell.kind === 'unknown') {
+    console.warn(`[lovely] unrecognised Type cell ${JSON.stringify(cell.token)} — row skipped: ${JSON.stringify(left.trim().slice(0, 80))}`)
   }
   return null
 }
