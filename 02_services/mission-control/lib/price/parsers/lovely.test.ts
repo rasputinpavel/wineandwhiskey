@@ -231,3 +231,46 @@ describe('cell token boundaries', () => {
     expect(readRow(line, a).size).not.toBe('2000ml')
   })
 })
+
+// Real Javelier-Laurin header, fixture page 31. Its Remark column sits exactly 8
+// characters right of Price — within the old flat window of 8.
+const JAVELIER_HDR =
+  '  Type                                      JAVELIER-LAURIN                                       Size       Alc%         Vintage     Price   Remark'
+
+describe('per-table search window', () => {
+  it('does not read a critic score printed at the Remark anchor as the price', () => {
+    const a = columnAnchors(JAVELIER_HDR)!
+    expect(a.remark! - a.price).toBe(8)       // the geometry that broke the flat window
+    const scoreOnly = ' '.repeat(a.remark!) + '91 WS'
+    expect(readRow(scoreOnly, a).price).toBe('')
+  })
+
+  it('still reads every real price in the tightest tables', () => {
+    const a = columnAnchors(JAVELIER_HDR)!
+    const row = readRow('out of stock    Javelier-Laurin, Bourgogne Pinot Noir                                            750ml       13.0         2020       1,500', a)
+    expect(row.price).toBe('1,500')
+    expect(row.vintage).toBe('2020')
+    expect(row.size).toBe('750ml')
+  })
+
+  it('keeps the full 8 characters where the neighbouring column is far away', () => {
+    // Size cells print as much as 8 characters left of their label and Size has no
+    // column to its left, so that leeway must survive the clamp.
+    const a = columnAnchors(CANARD_HDR)!
+    const line = ' '.repeat(a.size - 8) + '1500ml' + ' '.repeat(a.price - (a.size - 8) - 6) + '5,520'
+    expect(readRow(line, a).size).toBe('1500ml')
+  })
+
+  it('picks the candidate nearest the anchor when two sit inside the window', () => {
+    const a = columnAnchors(CANARD_HDR)!
+    // '1,111' starts 3 left of the Price anchor, '2,222' starts 2 right of it.
+    const line = ' '.repeat(a.price - 3) + '1,111 2,222'
+    expect(line.indexOf('2,222') - a.price).toBe(3)
+    expect(readRow(line, a).price).toBe('1,111')
+    // ...and mirrored, so the test cannot pass by preferring the left-most match.
+    const line2 = ' '.repeat(a.price - 7) + '1,111' + ' '.repeat(5) + '2,222'
+    expect(a.price - line2.indexOf('1,111')).toBe(7)
+    expect(line2.indexOf('2,222') - a.price).toBe(3)
+    expect(readRow(line2, a).price).toBe('2,222')
+  })
+})

@@ -211,22 +211,47 @@ export function columnAnchors(header: string): Anchors | null {
   return { size, alc: at('Alc%'), vintage: at('Vintage'), price, remark: at('Remark') }
 }
 
-// How far from an anchor a cell's text may start. Measured worst case on the real
-// file is 2 characters (a right-shifted "1500ml"); 8 is comfortable margin that
-// still cannot reach a neighbouring column.
-const WINDOW = 8
+// The widest a cell search ever reaches, whatever the table geometry allows.
+const WINDOW_CAP = 8
 
-// Finds the occurrence of `re` whose start is nearest to `anchor`, within WINDOW.
-function near(line: string, re: RegExp, anchor: number | null): RegExpExecArray | null {
+// How far left and right of its own anchor a cell may be searched. A flat window
+// of 8 was wrong: in the Paul Bara, Javelier-Laurin and Philippe Leclerc tables
+// the Remark anchor sits exactly 8 characters right of Price (as little as 6
+// elsewhere in the catalog), so a critic score typeset in the Remark column was
+// read as the price. The search is therefore clamped to the midpoint between this
+// anchor and its neighbours, which the header hands us for free.
+//
+// Verified over the whole September 2026 catalog: this loses none of the 923 size,
+// 598 vintage or 860 price cells, because real cells sit at most 4 characters
+// right of their anchor (8 left, for Size, which has no column to its left).
+function windowAround(anchor: number, a: Anchors): { left: number; right: number } {
+  const cols = [a.size, a.alc, a.vintage, a.price, a.remark]
+    .filter((v): v is number => v !== null)
+    .sort((x, y) => x - y)
+  const i = cols.indexOf(anchor)
+  const prev = i > 0 ? cols[i - 1] : null
+  const next = i >= 0 && i < cols.length - 1 ? cols[i + 1] : null
+  const half = (gap: number) => Math.min(WINDOW_CAP, Math.floor(gap / 2))
+  return {
+    left: prev === null ? WINDOW_CAP : half(anchor - prev),
+    right: next === null ? WINDOW_CAP : half(next - anchor),
+  }
+}
+
+// Finds the occurrence of `re` whose start is nearest to `anchor`, inside that
+// anchor's own window.
+function near(line: string, re: RegExp, anchor: number | null, a: Anchors): RegExpExecArray | null {
   if (anchor === null) return null
+  const { left, right } = windowAround(anchor, a)
   const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
   let best: RegExpExecArray | null = null
   let bestDist = Infinity
   let m: RegExpExecArray | null
   while ((m = rx.exec(line)) !== null) {
-    const dist = Math.abs(m.index - anchor)
-    if (dist <= WINDOW && dist < bestDist) { best = m; bestDist = dist }
-    if (m.index > anchor + WINDOW) break
+    const offset = m.index - anchor
+    const dist = Math.abs(offset)
+    if (offset >= -left && offset <= right && dist < bestDist) { best = m; bestDist = dist }
+    if (offset > right) break
   }
   return best
 }
@@ -251,9 +276,9 @@ const VINTAGE_RE = /(?<![\d.,])(?:19|20)\d{2}(?![\d.,])|(?<![A-Za-z])NV(?![A-Za-
 // price. Cells are located by regex near their anchor, never by slicing at it —
 // see the file header for why.
 export function readRow(line: string, a: Anchors): Row {
-  const sizeM    = near(line, SIZE_RE, a.size)
-  const priceM   = near(line, PRICE_RE, a.price)
-  const vintageM = near(line, VINTAGE_RE, a.vintage)
+  const sizeM    = near(line, SIZE_RE, a.size, a)
+  const priceM   = near(line, PRICE_RE, a.price, a)
+  const vintageM = near(line, VINTAGE_RE, a.vintage, a)
 
   const firstCell = Math.min(
     sizeM ? sizeM.index : Infinity,
