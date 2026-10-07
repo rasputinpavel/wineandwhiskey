@@ -27,7 +27,8 @@ price-bearing lines are affected.
 
 ## Scope
 
-**In:** wine and spirits — ~886 positions.
+**In:** wine and spirits — ~1,262 positions (see the audit table; each vintage of a
+wine is its own position with its own price).
 **Out:** glassware and the cigar ashtray (23 positions, the `ACCESSORIES` pages).
 They are not beverages; they have nothing to do in the price browser or in Vivino
 enrichment, and every other parser behaves the same way.
@@ -71,10 +72,19 @@ Canonical `supplier_name`: `Lovely Wines Company Limited`.
 `price_list_date` is not printed anywhere in the catalog — a `grep` over the whole
 text layer finds no date at all. So it is derived, in this order:
 
-1. a month name or `YYYY-MM` in the filename (`..._Sep Claudio.pdf` → `2026-09-01`),
-   with the year taken from the PDF's ModDate when the filename omits it;
-2. the PDF ModDate (`2026-09-01` for this file);
-3. `null`.
+1. a `YYYY-MM` in the filename;
+2. a month name in the filename (`..._Sep Claudio.pdf` → September), paired with
+   whichever year places that month **nearest** the PDF's ModDate — not ModDate's own
+   year, or a January catalog mailed in late December dates to the January just gone;
+3. the PDF ModDate itself (`2026-09-01T10:10:30Z` for this file);
+4. `null`.
+
+The filename is reduced to its basename first and months are matched as a closed
+list with word boundaries: a prefix match on `/jan|feb|…/` reads `Decanter` as
+December, `Novelties` as November and `Janhom` — another supplier in this repo — as
+January. Dates are formatted in `Asia/Bangkok`, where both the supplier and the shop
+are; formatting in UTC (as Railway containers do) turns a ModDate of 2026-09-01 00:30
+Bangkok into 2026-08-31, the wrong month for a price list.
 
 A wrong or missing date is not a blocker — the date is editable in the price list
 screen — but it decides which catalog freshness marks current, so it is worth
@@ -82,11 +92,12 @@ getting right automatically.
 
 ### Parsing approach: deterministic, zero LLM calls
 
-Measured on the real file before choosing: 946 of 947 size cells land within ±6
-characters of their table header's `Size` column. The layout is a genuine
-character-aligned table, so column slicing is reliable and prices come out exact.
-An LLM pass would cost ~25 calls per upload and could misread a digit; there is
-nothing it would buy here. Grape variety is the one field the tables do not carry,
+Measured on the real file before choosing: every one of the 923 size cells, 598
+vintage cells and 860 price cells sits within a few characters of its header's
+column — real offsets are −8..+1 for sizes, −1..+5 for vintages and −4..+4 for
+prices. The layout is a genuine character-aligned table, so the values can be located
+exactly and prices come out to the baht. An LLM pass would cost ~25 calls per upload
+and could misread a digit; there is nothing it would buy here. Grape variety is the one field the tables do not carry,
 and Vivino enrichment already fills it.
 
 Algorithm:
@@ -111,12 +122,18 @@ Algorithm:
    blocklist it does not depend on guessing next month's column labels. Labels are
    matched as whole tokens: `indexOf('Price')` also finds the `Price` inside
    `Price/Pcs`.
-5. **Cells are found by regex inside a window of ±8 characters around each anchor,
-   not by slicing the line at the anchor.** Measured on the real file: variant size
-   cells print up to 2 characters left of the `Size` label (`1500ml` at column 75
-   under a label at 77), so a hard slice cuts `1500ml` into `15` + `00ml` and the
-   fragment lands in the product name. This is the single most common way a naive
-   implementation corrupts this catalog.
+5. **Cells are found by regex near each anchor, never by slicing the line at it.**
+   Variant size cells print up to 8 characters left of the `Size` label, so a hard
+   slice cuts `1500ml` into `15` + `00ml` and the fragment lands in the product name.
+   This is the most common way a naive implementation corrupts this catalog.
+
+   The search window is **clamped per table** to half the distance to the neighbouring
+   anchor, capped at 8. A flat ±8 is not safe: in three real tables the `Remark`
+   anchor sits only 6 to 8 characters from `Price`, so a critic score printed at the
+   `Remark` anchor is read as the price — `91 WS` becomes ฿91. Token boundaries matter
+   as much as the window: without them `102000` matches as `02000` and the ABV `37.50`
+   as `50`, and a located price that is the same match as the located vintage must be
+   discarded.
 
 ### The one rule behind every layout trap
 
@@ -135,7 +152,8 @@ more shapes, all the same rule wearing a different hat:
   The variant row has **no size of its own and must inherit it from the name row**,
   or the position lands in the database with `volume: null`;
 - **a price centred between vintage rows** — several vintages sharing one price
-  (Yangarra `'GSM'`: 2017 and 2021 at 2,120, 2015 pending);
+  (Yangarra `'GSM'`: 2017 and 2021 at ฿2,120). This is the catalog's house style,
+  not an exception: 213 products price two, three or four vintages off one number;
 - **a name wrapped over two lines with the type code between the halves** — the
   continuation line carries its own vintage and price (Realm Cellars
   `'Houyi Vineyard'`, Comtesse de Cherisey `'La Genelotte'`). 42 such lines. Treating
@@ -147,12 +165,24 @@ more shapes, all the same rule wearing a different hat:
 
 Implement the general rule once rather than five special cases.
 
-**Where the rule runs out.** In about 20–25 clusters the text layer genuinely does
-not record which year goes with which price: Yangarra prints three vintages against
-two price values, and Comtesse de Cherisey prints `2018 / 7,245` twice. The parser
-pairs them positionally and **the coverage audit prints every cluster where vintages
-outnumber prices**, as a short list to check by eye against the PDF. Identical
-(vintage, price) pairs within one cluster are deduplicated.
+**How a cluster's boundaries are found.** `pdftotext -layout` flattens the vertical
+gaps that separate one product from the next: a 5pt gap inside a cluster and a 14pt
+gap between products both arrive as a single newline. So the grouping is reconstructed
+from what the cells themselves say — a column is printed once per row or once per
+group of rows, so 4 vintages against 4, 2 or 1 prices is regular while 4 against 3 is
+not, and a product's extra rows are centred on its own row. Solving those two
+constraints across a table reproduces every printed cluster; the PDF's own word
+coordinates confirm it (within the Yangarra `'GSM'` cluster the gaps are 5.3pt, and
+the gap before the next product's first row is 14.1pt).
+
+**Where the rule runs out.** Of 214 clusters in the catalog, 213 are of the form
+"these N vintages all cost X" and carry no ambiguity at all. Exactly **one** is
+genuinely ambiguous — Domaine J.A. Ferret, Pouilly-Fuissé Cuvée Hors Classe
+`'Tournant De Pouilly'` (page 36), four vintages against two prices. The audit prints
+every cluster where vintages outnumber prices so that one can be checked by eye.
+Identical (volume, vintage, price) triples within one product are deduplicated as a
+safety net, though with the clusters read correctly nothing in this catalog triggers
+it.
 
 ### Line roles inside a table block
 
@@ -192,11 +222,16 @@ against the real file:
 
 Two further details the real file forces:
 
-- **`pending` is a price** — 51 rows print the word instead of a number. They are
-  real positions with no price yet, so `price` is `null` and the row is still
-  emitted. "Zero positions without a price" was therefore never an achievable
-  target; the right target is "no position without a price except where the catalog
-  prints `pending`".
+- **`pending` is a price** — the catalog prints the word instead of a number on 57
+  positions. They are real positions with no price yet, so `price` is `null` and the
+  row is still emitted. "Zero positions without a price" was therefore never an
+  achievable target. Two further oddities account for the rest of the 59 priceless
+  positions: Giuseppe Cortese `'Scapulin'` has an empty Price cell, and Dumol Meteor
+  Vineyard prints `4,.395`, which is not a number any rule should guess at.
+- **Three prices use a dot as the thousands separator** — `1.970`, `1.020` and
+  `5.330`. The catalog never prices with decimals, so in the price cell
+  `\d{1,3}\.\d{3}` is a separator and is read as such, with a warning naming the
+  row. Read without boundaries, `1.020` yields 20 — a ฿1,020 bottle imported at ฿20.
 - **Banner text uses typographic hyphens** (`ENTRE‑DEUX‑MERS`, U+2011). A banner
   matcher restricted to ASCII `-` silently drops those banners and leaks their region
   into the next producer's rows.
@@ -265,12 +300,13 @@ Targets, with the numbers measured on the September file:
 
 | Check | Target |
 |---|---|
-| positions parsed | ~886 (909 priced lines − 23 glassware) |
-| positions with no price | only where the catalog prints `pending` — 51 |
+| positions parsed | ~1,262. Each vintage is its own position with its own price, which the earlier estimate of ~886 missed: it counted lines carrying a size, and vintage rows carry a vintage and a price but no size |
+| positions with no price | 59 — 57 `pending`, one empty cell, one printed `4,.395` |
 | positions with no country | 0 |
 | positions with no category | 0 — a row that kept a pending type means a code line was lost |
 | `stock`, `ml` or a leading digit inside a name | 0 |
-| ambiguous clusters (vintages outnumber prices) | printed as a list to check by eye, ~20–25 |
+| ambiguous clusters (vintages outnumber prices) | printed as a list; 214 total, of which 213 are "N vintages share one price" and exactly 1 needs an eye |
+| names beginning with a digit | exactly 1 — `30&40 Double Jus (Aperitive de Normandie)` is a real product |
 
 Two numeric traps the audit must also cover, both found by code review of the first
 implementation and both one character from firing on real data: a critic score read
