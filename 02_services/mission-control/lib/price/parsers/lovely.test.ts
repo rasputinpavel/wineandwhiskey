@@ -746,3 +746,96 @@ describe('parseCatalogText — tables, banners and whole data rows', () => {
       .toContain('Gelas Bas-Armagnac is celebrated')
   })
 })
+
+// A compact view of one product's positions: volume / year / price.
+function shape(items: ExtractedItem[], ...fragments: string[]): string[] {
+  return items
+    .filter(i => fragments.every(f => i.name.includes(f)))
+    .map(i => `${i.volume ?? '-'}/${i.year ?? '-'}/${i.price ?? '-'}`)
+}
+
+// The same, for a name that is a prefix of another product's name.
+function shapeOf(items: ExtractedItem[], name: string): string[] {
+  return items
+    .filter(i => i.name === name)
+    .map(i => `${i.volume ?? '-'}/${i.year ?? '-'}/${i.price ?? '-'}`)
+}
+
+describe('the centring rule — a cell alone on its line serves its neighbours', () => {
+  it('gives a name row centred between size rows both of its sizes', () => {
+    const items = parseCatalogText(page('CANARD-DUCHÊNE'))
+    expect(shape(items, "'Cuvee Leonie' Brut", 'Rose')).toEqual(['750ml/-/3000'])
+    expect(shapeOf(items, "Canard Duchene Champagne 'Cuvee Leonie' Brut").sort())
+      .toEqual(['1500ml/-/5520', '750ml/-/2710'])
+    expect(one(items, 'Canard-Duchene Champagne Brut').year).toBe(2015)
+    expect(one(items, "'P.181'").year).toBeNull()
+    expect(items).toHaveLength(16)
+    for (const i of items) {
+      expect(i, i.name).toMatchObject({ category: 'wine', wine_type: 'sparkling', country: 'France' })
+    }
+  })
+
+  it('never lets a row that has its own size and price absorb a neighbour', () => {
+    // Goutorbe-Bouillot: the 750ml / 2,010 row belongs to 'Reflets De Riviere'
+    // above it, whose own line carries neither a size nor a price. Hand it to
+    // 'Le Ru Des Charmes' below instead and that wine lands in the database at
+    // 2,010 when it really costs 2,570 — a plausible wrong price.
+    const items = parseCatalogText(page('GOUTORBE-BOUILLOT'))
+    expect(shape(items, "'Le Ru Des Charmes'")).toEqual(['750ml/-/2570'])
+    expect(shape(items, "'Reflets De Riviere'").sort()).toEqual(['375ml/-/1440', '750ml/-/2010'])
+  })
+
+  it('lets a vintage-variant row inherit the size from its name row', () => {
+    // Without inheritance both of these land with volume: null.
+    const items = parseCatalogText(page('ALDRIDGE'))
+    expect(shape(items, "'Twynham' Chardonnay")).toEqual(['750ml/2024/590', '750ml/2025/-'])
+    expect(shape(items, "'Rams Head'")).toEqual(['750ml/2023/590', '750ml/2024/-'])
+  })
+
+  it('spreads a single price over the vintages centred against it', () => {
+    const tollo = parseCatalogText(page('CANTINA TOLLO'))
+    expect(shape(tollo, "'Rocca Ventosa' Pinot Grigio"))
+      .toEqual(['750ml/2023/840', '750ml/2024/840', '750ml/2025/840'])
+
+    const yangarra = parseCatalogText(page('YANGARRA ESTATE VINEYARD'))
+    expect(shape(yangarra, "'GSM'")).toEqual(['750ml/2017/2120', '750ml/2021/2120'])
+  })
+
+  it('pairs sizes, vintages and prices positionally when each is printed', () => {
+    const muga = parseCatalogText(page('MUGA'))
+    expect(shapeOf(muga, 'Muga Rose')).toEqual(['1500ml/2021/2320', '3000ml/2022/4770'])
+    expect(shapeOf(muga, 'Muga Rose, Rioja DOC')).toEqual(['750ml/2023/1075'])
+    expect(shape(muga, "'Prado Enea'"))
+      .toEqual(['750ml/2011/3730', '750ml/2014/4260', '750ml/2016/4350'])
+    expect(shape(muga, "'Conde De Haro' Cava Brut Reserva")).toEqual(['750ml/2021/1270'])
+    expect(shapeOf(muga, "Muga Conde De Haro Cava Brut 'Rose’"))
+      .toEqual(['750ml/2021/1375', '750ml/2022/1375'])
+  })
+
+  it('keeps a complete row from stealing the cluster of the row below it', () => {
+    // Giuseppe Cortese prints three vintages around the 500ml Recioto's own
+    // 2018, and the Barbaresco rows either side of Rabaja carry everything of
+    // their own. Both shapes come out of the same rule.
+    const items = parseCatalogText(page('GIUSEPPE CORTESE'))
+    expect(shape(items, 'Barbaresco, Rabaja')).toEqual(['750ml/2017/4105', '750ml/2019/4105'])
+    expect(shape(items, 'Barbaresco Reserva')).toEqual(['750ml/2013/6920'])
+    expect(shape(items, 'Langhe, Nebbiolo')).toEqual(['750ml/2022/1580'])
+
+    const bussola = parseCatalogText(page('BUSSOLA TOMMASO'))
+    expect(shape(bussola, "'Recioto' Della Valpolicella Classico TB").sort())
+      .toEqual(['500ml/2017/3320', '500ml/2018/3320', '500ml/2019/-', '750ml/2008/5685'])
+    expect(shape(bussola, 'Valpolicella Ripasso')).toEqual(['750ml/2019/1640', '750ml/2020/-'])
+  })
+
+  it('keeps every row of a five-row cluster with its own product', () => {
+    const items = parseCatalogText(page('LA RIOJA ALTA'))
+    expect(shape(items, "'Gran Reserva 904'"))
+      .toEqual(['750ml/2015/4770', '750ml/2016/4770', '1500ml/2015/9540', '1500ml/2016/9540'])
+    expect(shape(items, "'Gran Reserva 890'"))
+      .toEqual(['750ml/2010/10500', '750ml/2011/10500', '1500ml/2010/21000'])
+    expect(shape(items, "'El Camino'")).toEqual(['750ml/2021/6400'])
+    expect(shape(items, "'Vina Ardanza'"))
+      .toEqual(['375ml/2019/1210', '750ml/2019/2500', '750ml/2020/2500'])
+    expect(shape(items, "'Vina Arana'")).toEqual(['750ml/2017/2757'])
+  })
+})

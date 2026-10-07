@@ -699,16 +699,36 @@ export function parseCatalogText(text: string): ExtractedItem[] {
       if (!bare) continue
 
       const cells = readCells(line, i, anchors)
+
+      // readRow stops the left-hand text at the first cell it located, so on a
+      // row with no size, vintage or price at all — a name row centred between
+      // its vintage rows — the Alc% and Remark columns come back as part of the
+      // name ("...'Cuvee Leonie' Brut 14.5"). A product name can never reach the
+      // Size column, because anything that does is producer prose, so that is
+      // where the name is cut.
+      const raw = cells.left
+      const rawStart = raw ? line.indexOf(raw) : 0
+      const leftEnd = rawStart + raw.length
+      const inCellArea = Boolean(raw) && rawStart >= anchors.size
       // The stock remark comes off before anything looks at the Type cell:
       // otherwise "stock   Chateau Cos d'Estournel" is an unknown Type cell and
       // the row is dropped.
-      const { stock, rest } = splitStockPrefix(cells.left)
-      const leftEnd = rest ? line.indexOf(rest) + rest.length : 0
+      const { stock, rest } = splitStockPrefix(
+        inCellArea ? '' : raw.slice(0, Math.max(0, anchors.size - rawStart)).trimEnd())
 
       if (!rest) {
-        // Nothing on the left: a centred cell row, or a torn stock fragment.
+        // Nothing to the left of the cells: a centred cell row, a torn stock
+        // fragment, or a Remark cell printed alone on its line.
         if (stock) {
           if (cur) { cur.stock.push(stock); prevLine = i } else heldStock.push(stock)
+        } else if (!hasCells(cells) && cells.remark && RATING_RE.test(cells.remark)) {
+          // Ratings are typeset centred on their product, so one can sit above
+          // the name row and another below it. The row above takes it when that
+          // row printed no Remark of its own; otherwise it belongs to the next.
+          const prev = products[products.length - 1]
+          if (prev && !prev.ownRemark) prev.remarks.push(cells.remark)
+          else heldRemarks.push(cells.remark)
+          continue
         }
         if (hasCells(cells)) gaps[products.length] = (gaps[products.length] ?? []).concat(cells)
         continue
@@ -733,18 +753,7 @@ export function parseCatalogText(text: string): ExtractedItem[] {
 
       if (cell.kind === 'unknown') { matchType(rest); continue }
 
-      // No Type cell: a rating alone on the line, a banner, the tail of a
-      // wrapped product name, or producer prose.
-      if (!hasCells(cells) && RATING_RE.test(rest)) {
-        // Ratings are typeset centred on their product, so one can sit above
-        // the name row and another below it. The row above takes it when that
-        // row printed no Remark of its own; otherwise it belongs to the next.
-        const prev = products[products.length - 1]
-        if (prev && !prev.ownRemark) prev.remarks.push(rest)
-        else heldRemarks.push(rest)
-        continue
-      }
-
+      // No Type cell: a banner, the tail of a wrapped product name, or prose.
       if (isBannerText(rest)) {
         // A region banner ends the table. A brand separator printed at column 0
         // (LA RIOJA ALTA, S.A. — RIOJA) only interrupts it.
@@ -779,8 +788,105 @@ export function parseCatalogText(text: string): ExtractedItem[] {
 // ─── Turning one producer's table into items ───────────────────────────────
 
 function emitBlock(products: Product[], gaps: LineCells[][], out: ExtractedItem[]): void {
+  assignCentredRows(products, gaps)
   for (const p of products) out.push(...positionsOf(p))
 }
+
+// ─── The centring rule, solved once for the whole table ────────────────────
+//
+// A cell typeset alone on its line is vertically centred and belongs to the
+// adjacent rows that lack that cell. In the text layer the vertical gaps that
+// say so are gone — a 5pt gap inside a cluster and a 14pt gap between products
+// both come out as one newline — so the grouping has to be reconstructed from
+// what the cells themselves say. Two things say it, and they are the whole rule:
+//
+//   1. a product's columns line up. Four vintages are printed against four
+//      prices, or against exactly one price that serves them all. A split that
+//      leaves three prices against four vintages is the wrong split.
+//   2. a product's extra rows are centred on its own row, so they come as
+//      evenly above and below as the count allows.
+//
+// Those two, in that order, reproduce the printed clusters everywhere they were
+// checked against the PDF's own coordinates — including the cases that look like
+// exceptions from the text alone: Goutorbe-Bouillot, where the row above is the
+// one that lacks a size and price; Bussola's Recioto, where the row below
+// already has both and still owns the cluster; and the Comtesse de Chérisey
+// tables, where vintages and prices alternate across eight lines.
+//
+// Line distance is the last word only, for the handful of gaps where neither
+// says anything.
+
+type Cost = [mismatch: number, balance: number, distance: number]
+
+const addCost = (a: Cost, b: Cost): Cost => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+const cheaper = (a: Cost, b: Cost) => (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) < 0
+
+function clusterCost(p: Product, above: LineCells[], below: LineCells[]): Cost {
+  const rows = [...above, ...p.own, ...below]
+  const lengths = [
+    rows.filter(r => r.size).length,
+    rows.filter(r => r.vintage).length,
+    rows.filter(r => r.price.kind !== 'none').length,
+  ]
+  const most = Math.max(...lengths)
+  // A column printed once is broadcast over the cluster and an empty one is
+  // simply absent; only a column with several values has to match the others.
+  const mismatch = lengths.reduce((sum, len) => sum + (len > 1 && len < most ? most - len : 0), 0)
+
+  const lines = p.ownLines.length ? p.ownLines : [rows[0]?.line ?? 0]
+  const distance = [...above, ...below]
+    .reduce((sum, r) => sum + Math.min(...lines.map(l => Math.abs(r.line - l))), 0)
+
+  return [mismatch, Math.abs(above.length - below.length), distance]
+}
+
+// Exact: the gap between two products can only be split one way per product, so
+// the choices chain and a left-to-right pass over them finds the best whole-table
+// grouping. Tables have a handful of products and gaps of a few rows.
+function assignCentredRows(products: Product[], gaps: LineCells[][]): void {
+  const n = products.length
+  const g: LineCells[][] = []
+  for (let k = 0; k <= n; k++) g[k] = gaps[k] ?? []
+
+  if (n === 0) {
+    const stray = g.reduce((sum, rows) => sum + rows.length, 0)
+    if (stray) console.warn(`[lovely] ${stray} centred cell rows in a table with no product rows — dropped`)
+    return
+  }
+
+  // state[s] = best way to reach "s rows of the next gap given to this product"
+  type State = { cost: Cost; splits: number[] } | undefined
+  let layer: State[] = [{ cost: [0, 0, 0], splits: [0] }]
+
+  for (let i = 0; i < n; i++) {
+    const last = i === n - 1
+    const next: State[] = []
+    for (let taken = layer.length - 1; taken >= 0; taken--) {
+      const state = layer[taken]
+      if (!state) continue
+      const above = g[i].slice(taken)
+      // The gap after the last product has nobody else to go to.
+      const choices = last ? [g[i + 1].length] : countDown(g[i + 1].length)
+      for (const give of choices) {
+        const cost = addCost(state.cost, clusterCost(products[i], above, g[i + 1].slice(0, give)))
+        if (!next[give] || cheaper(cost, next[give]!.cost)) {
+          next[give] = { cost, splits: [...state.splits, give] }
+        }
+      }
+    }
+    layer = next
+  }
+
+  const splits = layer.find(Boolean)!.splits
+  for (let i = 0; i < n; i++) {
+    products[i].above = g[i].slice(splits[i])
+    products[i].below = g[i + 1].slice(0, splits[i + 1])
+  }
+}
+
+// [k, k-1, ..., 0] — descending so that a tie hands the row to the product
+// above, which is the side the catalog's own remark rule prefers too.
+const countDown = (k: number) => Array.from({ length: k + 1 }, (_, i) => k - i)
 
 function positionsOf(p: Product): ExtractedItem[] {
   const name = p.nameParts.join(' ').replace(/\s+/g, ' ').trim()
