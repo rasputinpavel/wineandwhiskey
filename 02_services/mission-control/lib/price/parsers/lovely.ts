@@ -7,25 +7,33 @@
 //
 //   Type   <BRAND>   Size   Alc%   [Vintage]   Price   Remark
 //
-// Glassware tables print Packing / Price/Pcs instead and are skipped — they are
-// not beverages.
+// Glassware and the cigar ashtray are not beverages and are skipped. They are
+// recognised by the absence of an Alc% column, not by a blocklist of their column
+// names: of the 262 table headers in the September 2026 file exactly 4 have no
+// Alc%, and they are precisely those 4 tables.
 //
-// Why deterministic: measured on the September 2026 file, 946 of 947 size cells
-// land within ±6 characters of their header's Size column, so the tables are
-// genuinely character-aligned. An LLM pass would cost ~25 calls per upload and
-// could misread a digit. Grape variety is the one field the tables never carry,
-// and Vivino enrichment already fills it.
+// Why deterministic: measured on the September 2026 file, every one of the 923
+// size cells, 598 vintages and 860 prices sits within a few characters of its
+// header's column, so the tables are genuinely character-aligned. An LLM pass
+// would cost ~25 calls per upload and could misread a digit. Grape variety is the
+// one field the tables never carry, and Vivino enrichment already fills it.
 //
-// Three typesetting traps, all verified against the real file:
+// Four typesetting traps, all verified against the real file:
 //   1. Multi-size items put the product name vertically centred BETWEEN its
 //      size/price rows, so the name line has neither a size nor a price.
-//   2. Size cells can print up to 2 characters left of the Size label, so a hard
+//   2. Size cells print as much as 8 characters left of the Size label, so a hard
 //      slice at the label cuts "1500ml" into "15" + "00ml" and the fragment ends
 //      up inside the product name. Cells are therefore found by regex near the
-//      anchor, not by slicing.
+//      anchor, not by slicing — and each search is clamped to the midpoint
+//      between its own column and its neighbours, because the Remark column can
+//      sit as close as 6 characters right of Price.
 //   3. When a row carries a stock remark, pdftotext splits it: the type code sits
 //      alone on one line and "low stock" / "out of stock" is rendered at the far
 //      left edge, before the product name.
+//   4. Numbers that abut other numbers. A price is only ever a whole token: the
+//      catalog contains ABVs like "37.50", a price mistyped as "1.020", and
+//      vintages that sit inside the price column's reach. Every cell regex is
+//      bounded on both sides and a vintage is never accepted as a price.
 //
 // Prices are RETAIL and VAT-exclusive ("NOTE : Prices are Vat Exclusive"); our
 // purchase price is about 20% lower. We store the printed number verbatim, like
