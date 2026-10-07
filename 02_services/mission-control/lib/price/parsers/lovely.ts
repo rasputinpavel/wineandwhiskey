@@ -231,9 +231,20 @@ function near(line: string, re: RegExp, anchor: number | null): RegExpExecArray 
   return best
 }
 
-const SIZE_RE    = /\d{2,4}\s?(?:ml|ML|cl|CL|L)\b/
-const PRICE_RE   = /\d{1,3}(?:,\d{3})+|\d{2,5}(?=\s|$)/
-const VINTAGE_RE = /(?:19|20)\d{2}|NV/
+// Every cell regex is bounded on BOTH sides against digits, dots and commas, so
+// a match can only ever be a whole number as typeset. Without the left boundary:
+//   "102000"  yielded the price "02000"
+//   "37.50"   (a real ABV in the Ron Barceló table) yielded the price "50"
+//   "1.020"   (a real price on page 48, mistyped with a dot) yielded "020", i.e.
+//             a THB 1,020 bottle imported at THB 20
+//   "12000ml" yielded the size "2000ml"
+// A price with a decimal part does not occur in this catalog, so the dot form is
+// refused outright rather than truncated: no price is recoverable, a wrong one is
+// not. Litre sizes are deliberately unsupported — every one of the 923 size cells
+// in the September 2026 file is in ml.
+const SIZE_RE    = /(?<![\d.,])\d{2,4}\s?(?:ml|ML|cl|CL|L)\b/
+const PRICE_RE   = /(?<![\d.,])(?:\d{1,3}(?:,\d{3})+|\d{2,5})(?![\d.,])/
+const VINTAGE_RE = /(?<![\d.,])(?:19|20)\d{2}(?![\d.,])|(?<![A-Za-z])NV(?![A-Za-z])/
 
 // Reads one line of a table against that table's anchors. Everything left of the
 // first located cell is the left-hand text; the remark is whatever trails the

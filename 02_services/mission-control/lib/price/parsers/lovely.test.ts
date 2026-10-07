@@ -194,3 +194,40 @@ describe('toIntPrice — thousands grammar, not merely shape', () => {
     expect(toIntPrice('900')).toBe(900)
   })
 })
+
+// Real header and row from page 48 of the September 2026 catalog. The supplier
+// mistyped this price with a dot — "1.020" where every other row uses a comma.
+const MUGA_HDR =
+  '   Type                               MUGA                                  Size         Alc%        Vintage         Price        Remark'
+const MUGA_DOT_ROW =
+  '                                                                           375ml                      2021           1.020'
+
+describe('cell token boundaries', () => {
+  it('refuses a price whose thousands separator is a dot rather than truncating it', () => {
+    // Without a left boundary the old regex matched the "020" of "1.020" and the
+    // row went into the database at THB 20 instead of 1,020.
+    const row = readRow(MUGA_DOT_ROW, columnAnchors(MUGA_HDR)!)
+    expect(row.price).toBe('')
+    expect(row.size).toBe('375ml')
+    expect(row.vintage).toBe('2021')
+  })
+
+  it('never reads a price out of the middle of a longer number', () => {
+    const a = columnAnchors(CANARD_HDR)!
+    const line = ' CP     Something                                                          750ml            12.0           2015          102000'
+    expect(readRow(line, a).price).not.toBe('02000')
+  })
+
+  it('never reads a price out of an ABV figure', () => {
+    // Ron Barceló really prints 37.50 and 38.00 in the Alc% column.
+    const a = columnAnchors(GELAS_HDR)!
+    const alcOnly = '  Rum        Ron Barcelo Blanco Anejado                                                       700ml         37.50'
+    expect(readRow(alcOnly, a).price).toBe('')
+  })
+
+  it('never reads a size out of the middle of a longer number', () => {
+    const a = columnAnchors(CANARD_HDR)!
+    const line = '                                                                          12000ml                                         2,710'
+    expect(readRow(line, a).size).not.toBe('2000ml')
+  })
+})
