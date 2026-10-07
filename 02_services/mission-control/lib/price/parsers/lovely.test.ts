@@ -391,6 +391,7 @@ describe('catalogDate — month matching', () => {
 })
 
 import { vi } from 'vitest'
+import type { TypeInfo } from './lovely'
 import { classifyTypeCell } from './lovely'
 
 describe('classifyTypeCell', () => {
@@ -445,3 +446,145 @@ describe('matchType — loud about what it cannot read', () => {
     warn.mockRestore()
   })
 })
+
+// ─── Golden table over the committed fixture ───────────────────────────────
+//
+// Every product row of the five fixture pages, with the cells each one must
+// yield. The expected values were read off the raw pdftotext output — token
+// positions inspected line by line — not captured from this parser's own
+// output, which would only have enshrined whatever it did at the time.
+//
+// This is a broad regression net, not a substitute for the targeted cases above.
+// Checked by mutation: reintroducing the flat search window, the unbounded price
+// regex, the vintage-as-price bug or the unbounded size regex leaves all 70 rows
+// here unchanged, because these five pages happen not to print the geometry that
+// triggers any of them. The row that actually breaks on a dotted price lives on
+// page 48 and is pinned by its own test, with its real header, further up.
+//
+// `type: ''` marks a line that genuinely carries no Type cell: a bottle-size
+// variant row, or a row whose type code pdftotext put on a line of its own
+// above it (the stock-remark shape). Row assembly, not cell reading, is what
+// later reunites those with their code and strips the stock prefix off `name`.
+
+type GoldenRow = {
+  line: number; type: string; name: string
+  size: string; vintage: string; price: string; remark: string
+}
+
+const GOLDEN: GoldenRow[] = [
+  { line:  66, type: ""                  , name: "", size: "750ml", vintage: "", price: "2,710", remark: "" },
+  { line:  68, type: ""                  , name: "", size: "1500ml", vintage: "", price: "5,520", remark: "" },
+  { line:  69, type: "wine/sparkling"    , name: "Canard-Duchene Champagne Brut", size: "750ml", vintage: "2015", price: "2,900", remark: "" },
+  { line:  70, type: "wine/sparkling"    , name: "Canard Duchene Champagne Extra Brut 'P.181'", size: "750ml", vintage: "NV", price: "3,460", remark: "88 WE" },
+  { line:  71, type: "wine/sparkling"    , name: "Canard Duchene Champagne 'Cuvee Leonie' Brut Rose", size: "750ml", vintage: "NV", price: "3,000", remark: "" },
+  { line:  82, type: ""                  , name: "", size: "375ml", vintage: "", price: "1,440", remark: "91 WS" },
+  { line:  84, type: ""                  , name: "", size: "750ml", vintage: "", price: "2,010", remark: "90 JS" },
+  { line:  85, type: "wine/sparkling"    , name: "Goutorbe-Bouillot Champagne 'Le Ru Des Charmes' Rose Brut", size: "750ml", vintage: "NV", price: "2,570", remark: "91 JS" },
+  { line:  96, type: "wine/sparkling"    , name: "Jean-Yves de Carlini Champagne 'Reserve' Grand Cru Brut", size: "750ml", vintage: "NV", price: "2,620", remark: "low stock" },
+  { line:  99, type: "wine/sparkling"    , name: "Jean-Yves de Carlini Champagne 'Rose' Grand Cru Brut", size: "750ml", vintage: "NV", price: "2,670", remark: "low stock" },
+  { line: 111, type: "wine/sparkling"    , name: "Pierre Moncuit Champagne 'Pierre Moncuit-Delos' Grand Cru Brut", size: "750ml", vintage: "NV", price: "2,700", remark: "" },
+  { line: 112, type: "wine/sparkling"    , name: "Pierre Moncuit Champagne 'Rose' Grand Cru Brut", size: "750ml", vintage: "NV", price: "2,880", remark: "" },
+  { line: 123, type: "wine/sparkling"    , name: "Paul Bara Champagne, Grand Cru 'Reserve Brut'", size: "750ml", vintage: "NV", price: "3,040", remark: "" },
+  { line: 125, type: "wine/sparkling"    , name: "Paul Bara Champagne, Grand Cru 'Grand Rose Brut'", size: "750ml", vintage: "NV", price: "3,275", remark: "" },
+  { line: 126, type: "wine/sparkling"    , name: "Paul Bara Champagne, Grand Cru 'Grand Millesime Brut' Grand Cru", size: "750ml", vintage: "2014", price: "5,550", remark: "" },
+  { line: 127, type: "wine/sparkling"    , name: "Paul Bara Champagne, Grand Crus 'Special Club Brut'", size: "750ml", vintage: "2016", price: "4,945", remark: "94 VN" },
+  { line: 136, type: "spirits/rum"       , name: "Ron Barcelo Blanco Anejado", size: "700ml", vintage: "", price: "1,300", remark: "" },
+  { line: 137, type: "spirits/rum"       , name: "Ron Barcelo 'Cream' Crema De Ron", size: "700ml", vintage: "", price: "1,480", remark: "" },
+  { line: 138, type: "spirits/rum"       , name: "Ron Barcelo Gran Anejo", size: "700ml", vintage: "", price: "1,770", remark: "" },
+  { line: 139, type: "spirits/rum"       , name: "Ron Barcelo Imperial", size: "700ml", vintage: "", price: "2,700", remark: "" },
+  { line: 140, type: "spirits/rum"       , name: "Ron Barcelo Imperial Onyx", size: "700ml", vintage: "", price: "2,700", remark: "" },
+  { line: 141, type: "spirits/rum"       , name: "Ron Barcelo Imperial Premium Blend 40 Aniversario", size: "700ml", vintage: "", price: "9,250", remark: "" },
+  { line: 142, type: "spirits/rum"       , name: "Ron Barcelo Organic", size: "700ml", vintage: "", price: "1,700", remark: "" },
+  { line: 143, type: "spirits/rum"       , name: "Ron Barcelo Imperial Mizunara Cask", size: "700ml", vintage: "", price: "3,230", remark: "" },
+  { line: 144, type: "spirits/rum"       , name: "Ron Barcelo Imperial Maple Cask", size: "700ml", vintage: "", price: "2,750", remark: "" },
+  { line: 145, type: "spirits/rum"       , name: "Barcelo Imperial Porto Cask", size: "700ml", vintage: "", price: "2,750", remark: "" },
+  { line: 153, type: "spirits/gin"       , name: "Gelas 'Gin Gelas'", size: "700ml", vintage: "", price: "2,625", remark: "" },
+  { line: 154, type: "spirits/liqueur"   , name: "Gelas 'Liqueur Cordialor'", size: "700ml", vintage: "", price: "2,875", remark: "" },
+  { line: 155, type: "spirits/rum"       , name: "Gelas Rhum 'Double Matured' Panama Old Rum 10 Years Old", size: "700ml", vintage: "", price: "3,750", remark: "" },
+  { line: 156, type: "spirits/eau-de-vie", name: "Gelas, Eau De Vie 'Double Matured' Vielle Prune", size: "700ml", vintage: "", price: "3,750", remark: "" },
+  { line: 157, type: "spirits/eau-de-vie", name: "Gelas, Vielle Eau De Vie De Prune", size: "700ml", vintage: "", price: "3,060", remark: "" },
+  { line: 158, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 12 Ans 'Single Cask' Double Matured", size: "700ml", vintage: "", price: "5,500", remark: "" },
+  { line: 159, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 8 Ans", size: "700ml", vintage: "", price: "3,125", remark: "" },
+  { line: 160, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 18 Ans", size: "700ml", vintage: "", price: "4,375", remark: "" },
+  { line: 161, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 30 Ans", size: "700ml", vintage: "", price: "7,240", remark: "" },
+  { line: 162, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 40 Ans", size: "700ml", vintage: "", price: "9,420", remark: "" },
+  { line: 163, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 50 Ans", size: "700ml", vintage: "", price: "17,280", remark: "" },
+  { line: 164, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac 60 Ans", size: "700ml", vintage: "", price: "41,960", remark: "" },
+  { line: 165, type: "spirits/armagnac"  , name: "Gelas, Bas Armagnac Michel Firino Martell 1982", size: "700ml", vintage: "", price: "13,500", remark: "" },
+  { line: 174, type: "spirits/aperitif"  , name: "30&40 Double Jus (Aperitive de Normandie)", size: "700ml", vintage: "", price: "2,760", remark: "" },
+  { line: 184, type: "spirits/rum"       , name: "Arhumatic Punch Au Rhum", size: "700ml", vintage: "", price: "3,170", remark: "" },
+  { line: 185, type: "spirits/rum"       , name: "Arhumatic Punch Au Rhum 'Raisin'", size: "700ml", vintage: "", price: "2,990", remark: "" },
+  { line: 186, type: "spirits/rum"       , name: "Arhumatic Punch Au Rhum 'Rubus Idaeus'", size: "700ml", vintage: "", price: "3,130", remark: "" },
+  { line: 194, type: "wine/red"          , name: "Chateau Limbourg AOC", size: "750ml", vintage: "2016", price: "1,825", remark: "" },
+  { line: 204, type: "wine/red"          , name: "La Pommeraie de Brown Pessac Leognan Rouge", size: "750ml", vintage: "2017", price: "2,010", remark: "" },
+  { line: 214, type: "wine/red"          , name: "Chateau Trigant Pessac-Leognan", size: "750ml", vintage: "2016", price: "2,140", remark: "" },
+  { line: 224, type: "wine/red"          , name: "Chateau Haut-Vigneau, Pessac-Leognan", size: "750ml", vintage: "2019", price: "1,570", remark: "" },
+  { line: 225, type: "wine/red"          , name: "Chateau Herve-Laroque, Fronsac Bordeaux", size: "750ml", vintage: "2018", price: "1,590", remark: "" },
+  { line: 237, type: ""                  , name: "low stock    Chateau La Pensee Lalande de Pomerol", size: "750ml", vintage: "2020", price: "1,450", remark: "" },
+  { line: 247, type: "wine/red"          , name: "Chateau La Loubiere, Bordeaux Superiur", size: "750ml", vintage: "2020", price: "1,100", remark: "" },
+  { line: 258, type: "wine/white"        , name: "Chateau Haut Pougnan Sauvignon Bordeaux", size: "750ml", vintage: "2021", price: "1,170", remark: "" },
+  { line: 259, type: "wine/red"          , name: "Chateau Haut Pougnan Bordeaux", size: "750ml", vintage: "2020", price: "1,170", remark: "" },
+  { line: 268, type: "wine/red"          , name: "Domaine Philippe Cheron, Chambolle-Musigny Les Quarante Ouvrees", size: "750ml", vintage: "2018", price: "4,160", remark: "" },
+  { line: 269, type: "wine/red"          , name: "Domaine Philippe Cheron, Gevrey-Chambertin 'La Rue Des Mees'", size: "750ml", vintage: "2018", price: "4,160", remark: "" },
+  { line: 270, type: "wine/red"          , name: "Domaine Philippe Cheron, Vosne-Romanee Les Barreaux", size: "750ml", vintage: "2017", price: "4,440", remark: "" },
+  { line: 283, type: ""                  , name: "out of stock    Javelier-Laurin, Bourgogne Pinot Noir", size: "750ml", vintage: "2020", price: "1,500", remark: "" },
+  { line: 285, type: ""                  , name: "low stock       Javelier-Laurin, Gevrey-Chambertin 'Les Champs Chenys'", size: "750ml", vintage: "2019", price: "4,490", remark: "" },
+  { line: 288, type: ""                  , name: "Javelier-Laurin, Gevrey-Chambertin 1er Cru 'Bel Air'", size: "750ml", vintage: "2020", price: "5,900", remark: "" },
+  { line: 291, type: ""                  , name: "Javelier-Laurin, Ruchottes-Chambertin Grand Cru", size: "750ml", vintage: "2017", price: "12,150", remark: "" },
+  { line: 302, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Marsannay Blanc 'Les Champs Perdrix'", size: "750ml", vintage: "2020", price: "3,125", remark: "" },
+  { line: 303, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Bourgogne Pinot Noir", size: "750ml", vintage: "2020", price: "2,475", remark: "" },
+  { line: 304, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Gevrey-Chambertin 'Cuvee Alexis'", size: "750ml", vintage: "2018", price: "4,490", remark: "" },
+  { line: 305, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Gevrey-Chambertin 'Les Crais'", size: "750ml", vintage: "2019", price: "4,000", remark: "" },
+  { line: 306, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Gevrey-Chambertin 1er Cru 'La Petite Chapelle'", size: "750ml", vintage: "2020", price: "8,405", remark: "" },
+  { line: 307, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Gevrey-Chambertin 1er Cru 'Les Chapeaux'", size: "750ml", vintage: "2019", price: "6,540", remark: "" },
+  { line: 308, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Marsannay Les Quenicieres", size: "750ml", vintage: "2019", price: "3,420", remark: "" },
+  { line: 309, type: "wine/red"          , name: "Jean-Michel Guillon & Fils, Morey Saint Denis 1er Cru 'La Riotte'", size: "750ml", vintage: "2020", price: "7,000", remark: "" },
+  { line: 322, type: ""                  , name: "out of stock     Philippe Leclerc, Bourgogne 'Les Bons Batons'", size: "750ml", vintage: "2019", price: "2,320", remark: "" },
+  { line: 323, type: "wine/red"          , name: "Philippe Leclerc, Chambolle-Musigny 'Les Babillaires'", size: "750ml", vintage: "2019", price: "4,200", remark: "" },
+  { line: 324, type: "wine/red"          , name: "Philippe Leclerc, Gevrey-Chambertin 1er Cru 'Les Champeaux'", size: "750ml", vintage: "2019", price: "4,670", remark: "" },
+]
+
+describe('golden table — every product row of the fixture', () => {
+  const lines = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8').split('\n')
+
+  // Walk the fixture the way the parser does and read every line that yields cells.
+  const actual: GoldenRow[] = []
+  let anchors: ReturnType<typeof columnAnchors> = null
+  lines.forEach((line, i) => {
+    if (/^\s*(Type|CODE)\s{2,}/.test(line)) { anchors = columnAnchors(line); return }
+    if (!anchors || !line.trim()) return
+    const row = readRow(line, anchors)
+    if (!row.price && !row.size) return
+    const matched = matchType(row.left)
+    actual.push({
+      line: i + 1,
+      type: matched ? semanticType(matched.type) : '',
+      name: matched ? matched.rest : row.left,
+      size: row.size, vintage: row.vintage, price: row.price, remark: row.remark,
+    })
+  })
+
+  it('finds exactly the rows the fixture prints, and no others', () => {
+    expect(actual.map(r => r.line)).toEqual(GOLDEN.map(r => r.line))
+  })
+
+  it('reads every cell of every row exactly', () => {
+    expect(actual).toEqual(GOLDEN)
+  })
+
+  it('never leaves a price that is not a well-formed number', () => {
+    for (const row of actual) {
+      if (!row.price) continue
+      expect(toIntPrice(row.price), `line ${row.line}`).not.toBeNull()
+      expect(toIntPrice(row.price)!).toBeGreaterThan(100)
+    }
+  })
+})
+
+// Renders a TypeInfo as "category/colour-or-spirit", which is what actually
+// reaches the database. Deliberately not the catalog's own Type key: Rum and Rhum
+// are one and the same TypeInfo by design, so a key cannot be recovered from it.
+function semanticType(type: TypeInfo): string {
+  const tail = type.wineType ?? type.spiritType ?? '-'
+  return `${type.category}/${tail}`
+}
