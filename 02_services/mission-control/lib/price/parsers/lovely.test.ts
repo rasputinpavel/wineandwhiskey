@@ -891,3 +891,70 @@ describe('a name wrapped around its type code is one product, not two', () => {
     }
   })
 })
+
+describe('stock remarks, torn type codes and lone Remark cells', () => {
+  it('keeps the code and the name when a stock remark splits the row', () => {
+    const items = parseCatalogText(page('JAVELIER-LAURIN'))
+    const javelier = items.filter(i => i.name.startsWith('Javelier-Laurin'))
+    expect(javelier.map(i => i.price)).toEqual([1500, 4490, 5900, 12150])
+    for (const i of javelier) {
+      expect(i, i.name).toMatchObject({
+        country: 'France', region: 'Côte De Nuits, Burgundy',
+        category: 'wine', wine_type: 'red', volume: '750ml',
+      })
+      expect(i.name).not.toMatch(/stock|^low|^out/)
+    }
+    expect(one(items, 'Javelier-Laurin, Bourgogne').description).toContain('out of stock')
+    expect(one(items, 'Ruchottes-Chambertin').description).toContain('out of stock')
+    expect(one(items, "'Les Champs Chenys'").description).toContain('low stock')
+  })
+
+  it('reads a row whose stock remark is printed before the name', () => {
+    const items = parseCatalogText(page('CHATEAU LA PENSEE'))
+    const pensee = one(items, 'Chateau La Pensee Lalande de Pomerol')
+    expect(pensee).toMatchObject({ price: 1450, year: 2020, wine_type: 'red', volume: '750ml' })
+    expect(pensee.description).toContain('low stock')
+    expect(pensee.name).toBe('Chateau La Pensee Lalande de Pomerol')
+  })
+
+  it('reassembles a stock remark torn across the type code', () => {
+    // "low R" on one line, "stock   <name>" on the next. Lose the halves and
+    // the type code goes with them, leaving a position with no category.
+    const cos = one(parseCatalogText(page("CHATEAU COS D'ESTOURNEL")), "Cos d'Estournel")
+    expect(cos).toMatchObject({ name: "Chateau Cos d'Estournel Saint-Estephe", wine_type: 'red', price: 9440 })
+    expect(cos.description).toContain('low stock')
+
+    const melka = one(parseCatalogText(page('MELKA')), '(Bordeaux Blend)')
+    expect(melka).toMatchObject({ wine_type: 'red', price: 11030, year: 2017 })
+    expect(melka.description).toContain('low stock')
+  })
+
+  it('gives a product both of the ratings centred around it', () => {
+    const items = parseCatalogText(page('PAUL BARA'))
+    const reserve = one(items, "'Reserve Brut'")
+    expect(reserve.description).toContain('91 WS')
+    expect(reserve.description).toContain('90 VN')
+    // ...and does not hand them to the neighbour below, which prints its own.
+    expect(one(items, "'Grand Rose Brut'").description).not.toMatch(/WS|VN/)
+  })
+
+  it('hands a lone rating to the row below when the row above has its own', () => {
+    const items = parseCatalogText(page("O'SHAUGHNESSY"))
+    const howell = items.filter(i => i.name.includes("'Howell Mountain'"))
+    expect(howell).toHaveLength(2)
+    expect(howell[0].description).toContain('87WE 93JS')
+    const y2017 = items.filter(i => i.name === "O'Shaughnessy Napa Valley Cabernet Sauvignon" && i.year === 2017)
+    expect(y2017).toHaveLength(1)
+    expect(y2017[0].description).toContain('93 JS')
+    expect(y2017[0].description).toContain('90 RP')
+  })
+
+  it('keeps a rating out of the price column', () => {
+    expect(one(parseCatalogText(page('MELKA')), "'Metisse' Jumping Goat").price).toBe(11400)
+    // Prints "100 JS" in the Remark column and no price of its own on that line.
+    const high = parseCatalogText(page('YANGARRA ESTATE VINEYARD'))
+      .filter(i => i.name.includes('High Sands Grenache'))
+    expect(high.map(i => i.price)).toEqual([null, 7760])
+    expect(high[0].description).toContain('100 JS')
+  })
+})
