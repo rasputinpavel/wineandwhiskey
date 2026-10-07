@@ -621,13 +621,16 @@ describe('classifyTypeCell — a lone word is not a Type cell unless it could be
     // skipped. A warning here would mean a real product the parser cannot read.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const fixture = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
-    let inBlock = false
+    let anchors: ReturnType<typeof columnAnchors> = null
     for (const line of fixture.split('\n')) {
-      if (/^\s*(Type|CODE)\s{2,}/.test(line)) { inBlock = columnAnchors(line) !== null; continue }
+      if (/^\s*(Type|CODE)\s{2,}/.test(line)) { anchors = columnAnchors(line); continue }
+      if (!anchors || !line.trim()) continue
       // Assembly strips the stock prefix before it looks at the Type cell, and
-      // so must this mirror: "stock   Chateau Cos d'Estournel" is a row whose
-      // code arrived on the line above, not an unknown Type cell named "stock".
-      if (inBlock && line.trim()) matchType(splitStockPrefix(line.trimStart()).rest)
+      // cuts the left-hand text at the Size column before that. So must this
+      // mirror: "stock   Chateau Cos d'Estournel" is a row whose code arrived on
+      // the line above, and "Menetrieres        13.5" is half a product name,
+      // not an unknown Type cell.
+      matchType(splitStockPrefix(line.slice(0, anchors.size).trim()).rest)
     }
     expect(warn.mock.calls.map(c => c[0])).toEqual([])
     warn.mockRestore()
@@ -1002,7 +1005,7 @@ describe('invariants over every page of the fixture', () => {
   })()
 
   it('parses every page without losing or inventing a table', () => {
-    expect(items).toHaveLength(244)
+    expect(items).toHaveLength(320)
   })
 
   it('never leaves a position without a category or a country', () => {
@@ -1026,10 +1029,10 @@ describe('invariants over every page of the fixture', () => {
   })
 
   it('leaves a price out only where the catalog prints none', () => {
-    // 15 rows print the word "pending"; Giuseppe Cortese's Langhe Bianco
-    // 'Scapulin' prints nothing at all in its Price column.
+    // 16 rows print the word "pending"; Giuseppe Cortese's Langhe Bianco
+    // 'Scapulin' is the one row whose Price column is simply empty.
     const unpriced = items.filter(i => i.price === null)
-    expect(unpriced).toHaveLength(16)
+    expect(unpriced).toHaveLength(17)
     expect(unpriced.filter(i => i.name.includes('Scapulin'))).toHaveLength(1)
   })
 })
@@ -1061,5 +1064,89 @@ describe('ambiguous clusters are named out loud', () => {
     // vintage — nothing about it is ambiguous.
     expect(reported('CANARD-DUCHÊNE')).toEqual([])
     expect(reported('MAISON GELAS')).toEqual([])
+  })
+})
+
+describe('two shapes the full catalog turned up', () => {
+  it('reads the stock fragment glued straight onto the type code', () => {
+    // "lowR" with no space at all, twice in the catalog. Left alone it becomes a
+    // product named "lowR", the code goes with it, and the real row below —
+    // Blason d'Issan at 1,845 — lands with no category and is dropped.
+    const items = parseCatalogText(page('CHÂTEAU D’ISSAN'))
+    const blason = one(items, "Blason d'Issan")
+    expect(blason).toMatchObject({
+      name: "Blason d'Issan - Margaux", price: 1845, year: 2021,
+      volume: '750ml', wine_type: 'red', country: 'France',
+    })
+    expect(blason.description).toContain('low stock')
+  })
+
+  it('ignores a range label printed between two products', () => {
+    // Casas Patronales prints "Reserva" and "Grand Reserva" on their own lines
+    // to head a run of rows. They are neither a product nor a Type cell, so
+    // they must not become a nameless product that takes part in the centring.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const items = parseCatalogText(page('CASAS PATRONALES'))
+    const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('no Type cell ever arrived'))
+    warn.mockRestore()
+
+    expect(said).toEqual([])
+    expect(items.filter(i => /^(Reserva|Grand Reserva)$/.test(i.name))).toEqual([])
+    expect(shapeOf(items, "Casas Patronales 'Reserva' Cabernet Sauvignon"))
+      .toEqual(['750ml/2023/910', '750ml/2024/910'])
+    expect(shapeOf(items, "Casas Patronales 'Gran Reserva' Carmenere"))
+      .toEqual(['750ml/2022/1075', '750ml/2023/1075'])
+    expect(shapeOf(items, 'Casas Patronales Cabernet Sauvignon'))
+      .toEqual(['750ml/2022/620', '750ml/2025/-'])
+  })
+})
+
+describe('a run of wrapped names, one after another', () => {
+  it('closes a wrapped name after its second half instead of swallowing the next', () => {
+    // Buisson prints three wrapped names in a row. A product whose name is
+    // wrapped around its code line has exactly two halves; keep absorbing and
+    // the next product's name joins this one and its own row loses its code.
+    const items = parseCatalogText(page('DOMAINE HENRI & GILLES BUISSON'))
+    expect(shapeOf(items, "Domaine Henri & Gilles Buisson, Saint-Romain 'Sous La Velle'"))
+      .toEqual(['750ml/2022/2990', '750ml/2023/2990'])
+    expect(shapeOf(items, "Domaine Henri & Gilles Buisson, Saint-Romain 'Sous Roche'"))
+      .toEqual(['750ml/2022/2795'])
+    expect(shapeOf(items, "Domaine Henri & Gilles Buisson, Meursault 'Les Vignes de Marguerite'"))
+      .toEqual(['750ml/2023/5330'])
+    expect(items.filter(i => i.name.includes('Saint-Romain') && i.name.includes('Sous'))
+      .map(i => i.name).filter((v, idx, a) => a.indexOf(v) === idx)).toHaveLength(2)
+  })
+
+  it('reads a name row that carries nothing but an Alc% as a name, not as prose', () => {
+    // "Domaine J.A. Ferret, Pouilly-Fuisse,   13.0   2018" — readRow hands back
+    // the Alc% along with the name, which used to push the text past the Size
+    // column and make the row look like a producer paragraph. The name was then
+    // thrown away and the priced row below it dropped for having none.
+    const items = parseCatalogText(page('DOMAINE J.A. FERRET'))
+    expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Tete de Cru 'Clos des Prouges'"))
+      .toEqual(['750ml/2017/2900', '750ml/2018/2900', '750ml/2019/2900', '750ml/2020/2900'])
+    expect(items.filter(i => i.price === 3880 || i.price === 3180).length).toBeGreaterThan(0)
+    for (const i of items) expect(i.name, i.name).not.toMatch(/\b(is|are|the|and|with)\b/)
+  })
+})
+
+describe('a price serves the vintages printed beside it', () => {
+  it('keeps a four-vintage, two-price cluster whole and pairs it by line', () => {
+    // Domaine J.A. Ferret 'Tournant De Pouilly' prints 2018 / 2019-3,630 /
+    // 2020-3,880 / 2021. Counting columns alone makes four vintages against two
+    // prices look like a bad split, so the 2018 row was handed to the producer
+    // above; and pairing the lists by index put 2019 on the 3,880 instead of on
+    // the 3,630 printed on its own line.
+    const items = parseCatalogText(page('DOMAINE J.A. FERRET'))
+    expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Tournant De Pouilly'"))
+      .toEqual(['750ml/2018/3630', '750ml/2019/3630', '750ml/2020/3880', '750ml/2021/3880'])
+    expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Les Menetrieres"))
+      .toEqual(['750ml/2017/3180', '750ml/2019/3880', '750ml/2020/3880'])
+  })
+
+  it('still pairs a cluster whose vintages and prices alternate line by line', () => {
+    const items = parseCatalogText(page('DOMAINE COMTESSE DE CHERISEY'))
+    expect(shapeOf(items, "Comtesse de Cherisey, Puligny-Montrachet, 1er Cru 'Hameau de Blagny'"))
+      .toEqual(['750ml/2018/7750', '750ml/2019/8100', '750ml/2020/11000', '750ml/2021/11000'])
   })
 })

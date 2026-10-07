@@ -429,7 +429,13 @@ export function readRow(line: string, a: Anchors): Row {
 // cell named "stock" and the row is dropped. Matched case-sensitively in lower
 // case: every one of these fragments is printed lower case, while a product
 // name beginning "Low..." (Lowland, Lowe) is not a stock remark.
-const STOCK_PREFIX_RE = /^(out of stock|low stock|out of|low|stock)(?=\s|$)/
+//
+// Twice in the catalog the fragment is glued to the code with no space at all
+// ("lowR"), which is why an upper-case letter also ends the fragment. Left
+// alone, "lowR" becomes a product of its own and takes the code with it, and
+// the row underneath — Blason d'Issan at 1,845 — is dropped for having no
+// category.
+const STOCK_PREFIX_RE = /^(out of stock|low stock|out of|low|stock)(?=\s|$|[A-Z])/
 
 export function splitStockPrefix(left: string): { stock: string; rest: string } {
   const m = STOCK_PREFIX_RE.exec(left)
@@ -611,6 +617,10 @@ type Product = {
   // case in which a second name fragment continues this product instead of
   // starting a new one.
   codeAlone: boolean
+  // A wrapped name has exactly two halves, one either side of the code line.
+  // Once the second has arrived the name is closed: keep absorbing and the next
+  // product's name joins this one, and its own row loses its type code.
+  tailTaken: boolean
   own: LineCells[]        // rows printed on this product's own lines
   ownLines: number[]
   above: LineCells[]      // centred rows assigned from the gap above
@@ -624,7 +634,7 @@ type Product = {
 }
 
 const newProduct = (ctx: Context, prose: string): Product => ({
-  nameParts: [], type: null, codeAlone: false, own: [], ownLines: [],
+  nameParts: [], type: null, codeAlone: false, tailTaken: false, own: [], ownLines: [],
   above: [], below: [], ownRemark: false, remarks: [], stock: [], prose,
   country: ctx.country, region: ctx.region,
 })
@@ -708,13 +718,24 @@ export function parseCatalogText(text: string): ExtractedItem[] {
       // where the name is cut.
       const raw = cells.left
       const rawStart = raw ? line.indexOf(raw) : 0
-      const leftEnd = rawStart + raw.length
       const inCellArea = Boolean(raw) && rawStart >= anchors.size
       // The stock remark comes off before anything looks at the Type cell:
       // otherwise "stock   Chateau Cos d'Estournel" is an unknown Type cell and
       // the row is dropped.
-      const { stock, rest } = splitStockPrefix(
-        inCellArea ? '' : raw.slice(0, Math.max(0, anchors.size - rawStart)).trimEnd())
+      const unstocked = splitStockPrefix(inCellArea ? '' : raw)
+      const stock = unstocked.stock
+      const restStart = unstocked.rest ? line.indexOf(unstocked.rest, rawStart) : rawStart
+      // A product name is one run of words with no wide gap in it; a producer
+      // paragraph is one long run that reaches past the Size column. Measured on
+      // that run and not on the whole left-hand text, because readRow hands back
+      // the Alc% figure as well on a row with no size, vintage or price of its
+      // own — which made "Domaine J.A. Ferret, Pouilly-Fuisse,   13.0" look like
+      // a paragraph, so its name was thrown away and the priced row under it
+      // dropped for having none.
+      const runLength = (unstocked.rest.match(/^\S+(?: \S+)*/) ?? [''])[0].length
+      const looksLikeProse = restStart + runLength >= anchors.size
+      // The name is cut at the Size column, which is what drops that Alc%.
+      const rest = unstocked.rest.slice(0, Math.max(0, anchors.size - restStart)).trimEnd()
 
       if (!rest) {
         // Nothing to the left of the cells: a centred cell row, a torn stock
@@ -740,7 +761,7 @@ export function parseCatalogText(text: string): ExtractedItem[] {
         const continuesCode: boolean = cell.rest === '' && cur !== null && cur.type === null && i === prevLine + 1
         const p: Product = continuesCode ? cur! : open()
         p.type = cell.type
-        if (cell.rest === '') p.codeAlone = true
+        if (cell.rest === '') { p.codeAlone = true; p.tailTaken = false }
         if (cell.rest) p.nameParts.push(cell.rest)
         if (stock) p.stock.push(stock)
         p.ownLines.push(i)
@@ -765,11 +786,12 @@ export function parseCatalogText(text: string): ExtractedItem[] {
       // Producer prose runs out past the Size column and into the cell area; a
       // wrapped name fragment stops before it. That is the whole difference
       // between a paragraph and half a product name.
-      if (leftEnd >= anchors.size) { cur = null; prevLine = -99; continue }
+      if (looksLikeProse) { cur = null; prevLine = -99; continue }
 
       const continues: boolean = cur !== null && i === prevLine + 1 &&
-        (cur.nameParts.length === 0 || cur.codeAlone)
+        (cur.nameParts.length === 0 || (cur.codeAlone && !cur.tailTaken))
       const p: Product = continues ? cur! : open()
+      if (p.codeAlone) p.tailTaken = true
       p.nameParts.push(rest)
       if (stock) p.stock.push(stock)
       p.ownLines.push(i)
@@ -788,8 +810,31 @@ export function parseCatalogText(text: string): ExtractedItem[] {
 // ─── Turning one producer's table into items ───────────────────────────────
 
 function emitBlock(products: Product[], gaps: LineCells[][], out: ExtractedItem[]): void {
-  assignCentredRows(products, gaps)
-  for (const p of products) out.push(...positionsOf(p))
+  const real = dropPhantoms(products, gaps)
+  assignCentredRows(real.products, real.gaps)
+  for (const p of real.products) out.push(...positionsOf(p))
+}
+
+// Some tables head a run of rows with a range label on its own line ("Reserva",
+// "Grand Reserva", "Acrux"), and two producer paragraphs wrap far enough to
+// reach a table block. Both read as a product with a name, no Type cell and no
+// cells of its own — which can never become a position, and so must not take
+// part in the centring either, or it competes for its neighbours' rows. Their
+// gaps are merged, so the rows they sat between go to the products that printed
+// them.
+function dropPhantoms(products: Product[], gaps: LineCells[][]): { products: Product[]; gaps: LineCells[][] } {
+  const keptProducts: Product[] = []
+  const keptGaps: LineCells[][] = [gaps[0] ?? []]
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i]
+    if (p.type === null && p.own.length === 0) {
+      keptGaps[keptGaps.length - 1] = keptGaps[keptGaps.length - 1].concat(gaps[i + 1] ?? [])
+      continue
+    }
+    keptProducts.push(p)
+    keptGaps.push(gaps[i + 1] ?? [])
+  }
+  return { products: keptProducts, gaps: keptGaps }
 }
 
 // ─── The centring rule, solved once for the whole table ────────────────────
@@ -829,9 +874,12 @@ function clusterCost(p: Product, above: LineCells[], below: LineCells[]): Cost {
     rows.filter(r => r.price.kind !== 'none').length,
   ]
   const most = Math.max(...lengths)
-  // A column printed once is broadcast over the cluster and an empty one is
-  // simply absent; only a column with several values has to match the others.
-  const mismatch = lengths.reduce((sum, len) => sum + (len > 1 && len < most ? most - len : 0), 0)
+  // A column may be printed once per row, or once per *group* of rows: a price
+  // centred between two vintage rows serves both, so two prices against four
+  // vintages is as regular as four against four. An empty column is simply
+  // absent. What is irregular is a count that divides into none of it — three
+  // prices against four vintages means a row went to the wrong product.
+  const mismatch = lengths.reduce((sum, len) => sum + (len > 0 && most % len !== 0 ? 1 : 0), 0)
 
   const lines = p.ownLines.length ? p.ownLines : [rows[0]?.line ?? 0]
   const distance = [...above, ...below]
@@ -895,14 +943,14 @@ function positionsOf(p: Product): ExtractedItem[] {
     return []
   }
   if (name.length < 4) {
-    console.warn(`[lovely] product name too short to be real: ${JSON.stringify(name)} — position dropped`)
+    console.warn(`[lovely] product name too short to be real: ${JSON.stringify(name)} — position dropped; rows ${JSON.stringify([...p.above,...p.own,...p.below].map(r=>`${r.line}:${r.size}/${r.vintage}/${JSON.stringify(r.price)}`))}`)
     return []
   }
 
   const rows = [...p.above, ...p.own, ...p.below]
-  const sizes = rows.map(r => r.size).filter(Boolean)
-  const years = rows.map(r => r.vintage).filter(Boolean)
-  const prices = rows.map(r => r.price).filter(c => c.kind !== 'none')
+  const sizes = rows.filter(r => r.size).map(r => ({ line: r.line, value: r.size }))
+  const years = rows.filter(r => r.vintage).map(r => ({ line: r.line, value: r.vintage }))
+  const prices = rows.filter(r => r.price.kind !== 'none').map(r => ({ line: r.line, value: r.price }))
   const remarks = [...p.remarks, ...p.above.map(r => r.remark), ...p.below.map(r => r.remark)].filter(Boolean)
 
   // Where a cluster prints more vintages than prices, the text layer does not
@@ -910,15 +958,12 @@ function positionsOf(p: Product): ExtractedItem[] {
   // vintages against one price value. They are paired positionally and named
   // here, as a short list to check by eye against the PDF.
   if (prices.length >= 1 && years.length > prices.length) {
-    const shown = prices.map(c => (c.kind === 'num' ? String(c.value) : 'pending')).join(', ')
-    console.warn(`[lovely] ambiguous cluster — ${years.length} vintages (${years.join(', ')}) against ${prices.length} prices (${shown}): ${JSON.stringify(name)}`)
+    const shown = prices.map(c => (c.value.kind === 'num' ? String(c.value.value) : 'pending')).join(', ')
+    const listed = years.map(c => c.value).join(', ')
+    console.warn(`[lovely] ambiguous cluster — ${years.length} vintages (${listed}) against ${prices.length} prices (${shown}): ${JSON.stringify(name)}`)
   }
 
   const n = Math.max(1, sizes.length, years.length, prices.length)
-  // A column printed once serves every row of the cluster — that is the centring
-  // rule seen from the column's side. More than one and they pair positionally.
-  const at = <T,>(list: T[], i: number): T | null =>
-    list.length === 0 ? null : list.length === 1 ? list[0] : (list[i] ?? null)
 
   const description = [
     p.type.note,
@@ -927,12 +972,21 @@ function positionsOf(p: Product): ExtractedItem[] {
     p.prose,
   ].filter(Boolean).join(' · ') || null
 
+  // The spine is the column with a value per position; the others are lined up
+  // against it by the lines they were printed on. Vintage wins a tie because it
+  // is the axis the catalog varies most often.
+  const spine = [years, sizes, prices].find(list => list.length === n) ?? []
+  const spineLines = spine.length ? spine.map(c => c.line) : [rows[0]?.line ?? 0]
+  const yearAt = alignToSpine(spineLines, years)
+  const priceAt = alignToSpine(spineLines, prices)
+  const sizeAt = alignToSpine(spineLines, sizes)
+
   const items: ExtractedItem[] = []
   const seen = new Set<string>()
   for (let i = 0; i < n; i++) {
-    const year = at(years, i)
-    const price = at(prices, i)
-    const volume = at(sizes, i)
+    const year = yearAt[i]
+    const price = priceAt[i]
+    const volume = sizeAt[i]
     const key = `${volume}|${year}|${price?.kind === 'num' ? price.value : null}`
     if (seen.has(key)) continue      // the text layer prints some rows twice
     seen.add(key)
@@ -952,4 +1006,44 @@ function positionsOf(p: Product): ExtractedItem[] {
     })
   }
   return items
+}
+
+// Lines up one column's cells against the positions of the spine column.
+//
+// Each cell goes to the spine slot it was printed closest to, keeping the
+// printed order — which is what "paired positionally" has to mean once vintages
+// and prices alternate line by line, as they do in the Comtesse de Chérisey
+// tables. A slot left over then takes the nearest cell of that column, because
+// a cell centred between two rows serves both: that is how one price covers two
+// vintages, and how a bottle size on the name row reaches its vintage rows.
+function alignToSpine<T>(spine: number[], cells: { line: number; value: T }[]): (T | null)[] {
+  const out: (T | null)[] = spine.map(() => null)
+  if (!cells.length) return out
+
+  // Best order-preserving assignment of cells to slots, by total line distance.
+  const INF = Infinity
+  const best: number[][] = []
+  for (let i = 0; i <= spine.length; i++) best.push(new Array(cells.length + 1).fill(INF))
+  for (let i = 0; i <= spine.length; i++) best[i][cells.length] = 0
+  for (let i = spine.length - 1; i >= 0; i--) {
+    for (let j = cells.length - 1; j >= 0; j--) {
+      const skip = best[i + 1][j]
+      const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].line)
+      best[i][j] = Math.min(skip, take)
+    }
+  }
+  let j = 0
+  for (let i = 0; i < spine.length && j < cells.length; i++) {
+    const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].line)
+    if (take <= best[i + 1][j]) { out[i] = cells[j].value; j++ }
+  }
+
+  // Slots no cell was assigned to take the nearest one.
+  for (let i = 0; i < spine.length; i++) {
+    if (out[i] !== null) continue
+    let pick = cells[0]
+    for (const c of cells) if (Math.abs(c.line - spine[i]) < Math.abs(pick.line - spine[i])) pick = c
+    out[i] = pick.value
+  }
+  return out
 }

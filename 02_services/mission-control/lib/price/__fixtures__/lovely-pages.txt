@@ -815,4 +815,285 @@ low R
                                                                                                      2021         20,100         98 JS
      R      Realm Estate, Moonracer                                        750ml         14.6
                                                                                                      2022         12,800         98 WE
+                                                              CHILE
+              MAULE VALLEY
+                                  Casas Patronales captures the authentic character of Chile’s Maule Valley, combining Mediterranean climate,
+                                  diverse terroirs and Andes influence to deliver ripe fruit, fresh acidity and smooth tannins. Expressive, balanced
+                                  and food-friendly, with excellent value.
+
+ Type                          CASAS PATRONALES                                  Size         Alc%        Vintage          Price         Remark
+
+                                                                                                            2022            620
+ R       Casas Patronales Cabernet Sauvignon                                     750ml         13.0
+                                                                                                            2025          pending
+                                                                                                            2024
+ R       Casas Patronales Carmenere                                              750ml         13.0                         620
+                                                                                                            2025
+ R       Casas Patronales, Merlot                                                750ml         13.0         2022            620
+         Reserva
+                                                                                                            2023
+ R       Casas Patronales 'Reserva' Cabernet Sauvignon                           750ml         14.0                         910
+                                                                                                            2024
+ R       Casas Patronales 'Reserva' Merlot                                       750ml         14.0         2022            910
+         Grand Reserva
+ R       Casas Patronales 'Gran Reserva' Cabernet Sauvignon                      750ml         14.0         2023           1,075
+                                                                                                            2022
+ R       Casas Patronales 'Gran Reserva' Carmenere                               750ml         14.5                        1,075
+                                                                                                            2023
+
+
+
+              MAULE VALLEY
+                                  Inspired by Chile’s dramatic volcanic landscape, Villaricca showcases the character of the Maule Valley with ripe
+                                  fruit, fresh acidity and smooth tannins. Approachable, food-friendly and excellent value, it offers an authentic
+                                  taste of Chilean wine.
+
+Type                                VILLARRICA                                  Size         Alc%         Vintage         Price         Remark
+
+                                                                                                             2024
+W        Villarrica, Chardonnay                                                 750ml          13.5                         560
+                                                                                                             2025
+
+                                                                                                             2024
+W        Villarrica, Sauvignon Blanc                                            750ml          12.5                         560
+                                                                                                             2025
+
+                                                                                                             2023
+ R       Villarrica, Cabernet Sauvignon                                         750ml          13.5                         560
+                                                                                                             2025
+
+                                                                                                             2023
+ R       Villarrica, Merlot                                                     750ml          13.5                         560
+                                                                                                             2025
+
+
+               COLCHAGUA VALLEY
+                                  La Playa showcases the distinctive character of Chile’s Colchagua Valley, combining its warm Mediterranean
+                                  climate and cool nights to deliver ripe fruit, fresh acidity and smooth tannins. Family-owned, sustainably grown
+                                  and vegan certified, La Playa offers expressive, approachable and food-friendly wines with excellent value.
+
+ Type                                   LA PLAYA                                 Size        Alc%         Vintage          Price         Remark
+
+                                                                                                            2024
+  W         La Playa 'Reserva' Sauvignon Blanc                                  750ml        12.5                           610          Reserve
+                                                                                                            2025
+
+  W         La Playa 'Gran Reserva' Sauvignon Blanc                             750ml        13.5           2023            860          Reserve
+
+                                                                                                            2024
+  W         La Playa 'Reserva' Chardonnay                                       750ml        12.5                           610          Reserve
+                                                                                                            2025
+
+                                                                                             13.5           2020
+     R      La Playa 'Reserva' Cabernet Sauvignon                               750ml        12.5           2023            610          Reserve
+                                                                                             13.5           2025
+
+                                                                                                            2022
+     R      La Playa 'Reserva' Merlot                                           750ml        14.0                           610          Reserve
+                                                                                                            2024
+                                                            FRANCE
+                 MARGAUX, BORDEAUX
+                                     Château d’Issan is a renowned Third Growth estate in Margaux, producing elegant Cabernet Sauvignon-led
+                                     wines with refined structure, floral complexity, and excellent ageing potential.
+
+  Type                            CHÂTEAU D’ISSAN                                Size           Alc%        Vintage         Price         Remark
+
+lowR
+   stock   Blason d'Issan - Margaux                                              750ml           13.0         2021           1,845
+
+
+                 MARGAUX, BORDEAUX
+                                     Château Ferrière is a Third Growth estate in Margaux, Bordeaux, known for elegant, refined wines that reflect the
+                                     finesse of Margaux terroir. Alongside its Grand Vin, the estate also produces Les Remparts de Ferrière, offering
+                                     an approachable expression of its Grand Cru Classé character with balance and classic Left Bank structure.
+
+  Type                            CHATEAU FERRIERE                                Size          Alc%         Vintage         Price         Remark
+
+                                                                                                              2015
+   R        Chateau Ferriere, Margaux                                            750ml          14.0                         4,160
+                                                                                                              2017
+
+
+                  MARGAUX, BORDEAUX
+                                    Château Marquis de Terme is a Grand Cru Classé estate in Margaux, Bordeaux, known for elegant Cabernet
+                                    Sauvignon-led wines with refined tannins, dark fruit, and subtle oak influence. Combining structure, finesse,
+                                    and ageing potential, the wines reflect the classic character and sophistication of Margaux terroir.
+
+  Type                       CHATEAU MARQUIS DE TERME                               Size         Alc%         Vintage        Price        Remark
+
+                                                                                                                                           94 JS
+    R        Fleur de Marquis de Terme, Margaux                                    750ml          13.0          2021        2,900
+                                                                                                                                           92 RP
+
+
+
+                  MARGAUX, BORDEAUX
+                                      Blason d'Issan is the second wine of Château d’Issan in Margaux, Bordeaux. Crafted from younger vines and
+                                      selected parcels, it offers ripe dark fruit, refined tannins, and classic Margaux elegance, delivering an
+                                      approachable expression of the estate’s Grand Cru Classé character.
+
+  Type                            CHÂTEAU D’ISSAN                                 Size          Alc%         Vintage         Price         Remark
+
+   R        Le Cloitre Du Chateau Prieure-Lichine, Margaux                        750ml           13.0         2021          1,845
+
+
+
+
+                 SAINT - JULIEN, BORDEAUX
+                                     Château Gloria is a renowned estate in Saint-Julien, Bordeaux, founded by Henri Martin through vineyard
+                                     acquisitions from neighboring classified growths. Known for Cabernet Sauvignon-led blends aged in French oak,
+                                     the wines show dark fruit, structure, and classic Left Bank elegance with strong ageing potential.
+
+ Type                              CHATEAU GLORIA                                  Size         Alc%         Vintage         Price        Remark
+
+  R        Esprit De Gloria, Saint Julien                                        750ml           13.5         2018            2,320          93 WE
+
+
+
+                 SAINT - JULIEN, BORDEAUX
+                                     Château Moulin de la Rose is a boutique Saint-Julien estate producing elegant Cabernet Sauvignon-based wines
+                                     with refined structure, dark fruit character, and excellent ageing potential.
+
+   Type                      CHATEAU MOULIN DE LA ROSE                            Size          Alc%         Vintage         Price        Remark
+
+       R        Chateau Moulin de la Rose - St Julien                            750ml            14          2020           2,570
+                                                         FRANCE
+                 CÔTE DE BEAUNE, BURGUNDY
+                                   Domaine Henri & Gilles Buisson is a certified organic and biodynamic estate from Saint-Romain, Burgundy,
+                                   producing terroir-driven wines with minimal intervention. As a family-run domaine, they focus on purity,
+                                   balance, and sustainable viticulture, allowing each climat to express its authentic character.
+  Type                           DOMAINE HENRI & GILLES BUISSON                                     Size    Alc%      Vintage     Price       Remark
+
+                                                                                                                       2022
+   R        Domaine Henri & Gilles Buisson 'Maison' Bourgogne Chardonnay                       750ml         12.5                     1,920
+                                                                                                                       2023
+                                                                                                                       2022
+   R        Domaine Henri & Gilles Buisson, Bourgogne Pinot Noir                               750ml         12.5                     1,920
+                                                                                                                       2023
+            Domaine Henri & Gilles Buisson, Meursault
+   R                                                                                           750ml         13.0      2023           5.330
+            'Les Vignes de Marguerite'
+                                                                                                                       2022
+   R        Domaine Henri & Gilles Buisson, Saint-Romain 'Perriere'                            750ml         12.5                     2,795
+                                                                                                                       2023
+            Domaine Henri & Gilles Buisson, Saint-Romain                                                               2022
+   R                                                                                           750ml       13.0                       2,990
+            'Sous La Velle'                                                                                            2023
+            Domaine Henri & Gilles Buisson, Saint-Romain                                                               2022
+   R                                                                                           750ml       13.0                       2,795
+            'Sous Roche'                                                                                               2320
+   R        Domaine Henri & Gilles Buisson, Beaune 'Les Associes'                              750ml       13.0        2022           2,610
+
+
+                 CÔTE CHALONNAISE, BURGUNDY
+                                   Domaine Meix-Foulot is a respected family estate in Mercurey, Côte Chalonnaise, Burgundy, known for elegant
+                                   Pinot Noir and Chardonnay. With careful vineyard management and traditional winemaking, the wines show
+                                   freshness, balance, and refined structure, offering classic Burgundy character with excellent value.
+
+  Type                           DOMAINE MEIX FOULOT                               Size     Alc%            Vintage           Price       Remark
+
+    R       Domaine Meix Foulot 'Mercurey' Rouge                                  750ml        13.5           2022            2,010
+    R       Domaine Meix Foulot, Mercurey 1er Cru 'Les Saumonts'                  750ml        13.0           2018            2,500
+    R       Domaine Meix Foulot, Mercurey 1er Cru 'Les Veleys'                    750ml        14.0           2019            2,500
+            Domaine Meix Foulot 'Mercurey 1er Cru'                                750ml                                       2,320
+    R                                                                                          13.5           2022
+            Clos du Chateau de Montaigu                                          1500ml                                       5,065
+
+
+                 CÔTE CHALONNAISE, BURGUNDY
+                                   Domaine Michel Briday is a family estate in Côte Chalonnaise, Burgundy, producing expressive Chardonnay and
+                                   Pinot Noir from Rully and Mercurey. Its wines combine freshness, balance and classic Burgundian elegance with
+                                   excellent value and regional character.
+
+ Type                         DOMAINE MICHEL BRIDAY                             Size        Alc%           Vintage        Price           Remark
+
+                                                                                                            2020
+     R        Domaine Michel Briday, Bouzeron Cuvee Axelle (Aligote)           750ml         13.5                         1,480
+                                                                                                            2022
+
+
+                 CÔTE CHALONNAISE, BURGUNDY
+                                   Domaine Laurent Mouton is a family estate in Mercurey, Côte Chalonnaise, Burgundy, known for expressive
+                                   Pinot Noir and Chardonnay. With a focus on terroir and traditional winemaking, the wines show ripe fruit,
+                                   balance, and refined structure, offering an elegant and approachable expression of Burgundy.
+
+ Type                       DOMAINE LAURENT MOUTON                              Size        Alc%           Vintage        Price           Remark
+
+   W        Domaine Laurent Mouton, Givry 'Cuvee Excellence'                   750ml         14.5           2019          1,830
+
+low R
+    stock   Domaine Laurent Mouton, Givry 1er Cru 'La Grande Berge'            750ml         14.0           2018          2,250
+
+   R        Domaine Laurent Mouton, Givry 1er Cru 'Clos Jus'                   750ml         13.5           2018          2,390
+
+   R        Domaine Laurent Mouton, Givry 1er Cru 'Les Grands Pretans'         750ml         14.0           2019          2,390
+                                                    FRANCE
+          MÂCONNAIS, BURGUNDY
+                             Domaine J.A. Ferret is a benchmark estate in Pouilly-Fuissé, Burgundy, renowned for elegant Chardonnay from
+                             limestone-rich vineyards in the Mâconnais. With precise winemaking and a focus on terroir expression, the
+                             wines show freshness, minerality, and balance, offering refined white Burgundy with excellent depth and ageing
+                             potential.
+Type                        DOMAINE J.A. FERRET                                   Size      Alc%         Vintage       Price      Remark
+
+  W     Domaine J.A. Ferret, Pouilly-Fuisse                                   750ml        13.0         2022            2,505
+  W     Domaine J.A. Ferret, Pouilly-Fuisse 'Clos de Jeanne'                  750ml        13.0         2021            2,850
+                                                                                           13.5         2017
+        Domaine J.A. Ferret, Pouilly-Fuisse,                                               13.0         2018
+  W                                                                           750ml                                     2,900
+        Tete de Cru 'Clos des Prouges'                                                     14.5         2019
+                                                                                           13.5         2020
+        Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Les
+  W                                                                           750ml         13.5         2017           3,180
+        Menetrieres
+        Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Les                        14.0         2019
+  W                                                                           750ml                                     3,880
+        Menetrieres                                                                        13.5         2020
+                                                                                                        2018
+        Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe                             13.0         2019            3,630
+  W                                                                           750ml
+        'Tournant De Pouilly'                                                              13.5         2020            3,880
+                                                                                                        2021
+
+
+          BEAUJOLAIS, BURGUNDY
+                             Château Thivin is a historic estate in Beaujolais, renowned for wines from Côte de Brouilly. Farmed sustainably
+                             with old vines, the wines show vibrant red fruit, freshness, and mineral structure, offering depth and ageing
+                             potential beyond typical Beaujolais with a refined, terroir-driven style.
+
+Type                       CHATEAU THIVIN                                 Size           Alc%        Vintage        Price         Remark
+
+  R      Chateau Thivin Cote De Bouilly                                  750ml           13.0         2021          1,690
+
+
+          BEAUJOLAIS, BURGUNDY
+                             Domaine Des Fonds, established in 2010 by Florent and André Berrod, cultivates 17 hectares of vines, averaging
+                             40 years old with some century-old vines. Producer produce red wines from Gamay and white wines from
+                             Chardonnay and Viognier.
+
+Type                     DOMAINE DES FONDS                                Size           Alc%        Vintage        Price         Remark
+
+                                                                                         14.0         2020
+  R     Domaine Des Fonds, Fleurie La Madone                             750ml                                      1,320
+                                                                                         13.0         2021
+
+
+          BEAUJOLAIS, BURGUNDY
+                             Domaine des Verchères is a family estate in Beaujolais, France, known for producing vibrant, fruit-forward
+                             wines from Gamay. With a focus on traditional methods and careful vineyard work, the wines show fresh red
+                             fruit, soft tannins, and bright acidity, offering an elegant and approachable expression of Beaujolais terroir.
+
+ Type                   DOMAINE DES VERCHERES                              Size          Alc%        Vintage        Price         Remark
+
+  W      Domaine Des Vercheres, Bourgogne Chardonnay                      750ml           12.5        2022           1,265
+
+
+
+          BEAUJOLAIS, BURGUNDY
+                             La Closerie des Thorins is an estate in Moulin-à-Vent, Beaujolais, renowned for producing structured, age-
+                             worthy Gamay. Sourced from old vines on granitic soils, the wines show concentration, mineral complexity, and
+                             firm tannins, offering a more powerful and refined expression of Beaujolais with excellent ageing potential.
+
+ Type                   LA CLOSERIE DES THORINS                            Size          Alc%        Vintage        Price         Remark
+
+   R     La Closeries des Thorins, Moulin-A-Vent (Gamay)                  750ml           13.5        2019          1,490
 
