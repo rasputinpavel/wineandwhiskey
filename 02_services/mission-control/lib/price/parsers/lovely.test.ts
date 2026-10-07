@@ -314,3 +314,36 @@ describe('a vintage is never a price', () => {
     expect(row.price).toBe('1,500')
   })
 })
+
+// Aliased so the plain `readFileSync` / `join` names stay free for later tasks.
+import { readFileSync as readFixture } from 'fs'
+import { join as joinPath } from 'path'
+
+describe('columnAnchors — positive beverage gate', () => {
+  it('refuses a reworded accessory header the blocklist would have missed', () => {
+    // The old blocklist looked for the literals Packing / Price/Pcs /
+    // Height/Volume. Reword any of them and glassware walks straight in.
+    expect(columnAnchors('   Type       CIGAR ASHTRAY       Size       Pack      Price/pc')).toBeNull()
+    expect(columnAnchors('   Type       ZALTO GLASS         Size       Qty       Unit Price')).toBeNull()
+  })
+
+  it('requires Alc% — the one column every beverage table has and no accessory table does', () => {
+    expect(columnAnchors('  Type      SOMETHING      Size        Vintage      Price     Remark')).toBeNull()
+    expect(columnAnchors('  Type      SOMETHING      Size        Alc%         Price     Remark')).not.toBeNull()
+  })
+
+  it('does not take the Price anchor out of the middle of Price/Pcs', () => {
+    // 'CIGAR ASHTRAY' prints Size and Price/Pcs; indexOf('Price') happily found
+    // the Price inside Price/Pcs and handed back a bogus anchor.
+    const a = columnAnchors('   Type    CIGAR ASHTRAY    Size    Alc%    Packing    Price/Pcs')
+    expect(a).toBeNull()
+  })
+
+  it('still accepts every beverage header in the fixture', () => {
+    const fixture = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
+    const headers = fixture.split('\n').filter(l => /^\s*(Type|CODE)\s{2,}/.test(l))
+    expect(headers).toHaveLength(24)
+    const accepted = headers.filter(h => columnAnchors(h) !== null)
+    expect(accepted).toHaveLength(20)   // 24 tables less the 4 accessory ones
+  })
+})

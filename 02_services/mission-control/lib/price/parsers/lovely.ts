@@ -178,6 +178,8 @@ export function matchType(left: string): { type: TypeInfo; rest: string } | null
 
 export type Anchors = {
   size: number
+  // Always present in practice — columnAnchors refuses a header without it — but
+  // kept nullable so the window arithmetic treats every column uniformly.
   alc: number | null
   vintage: number | null
   price: number
@@ -194,21 +196,32 @@ export type Row = {
 
 const HEADER_RE = /^\s*(Type|CODE)\s{2,}/
 
-// A header we can parse has Size and Price. Glassware tables carry Packing /
-// Price/Pcs instead — those we refuse, which is how the block gets skipped.
+// A header we can parse has Size, Price and Alc%.
+//
+// Alc% is the gate rather than a blocklist of glassware words: over the 262 table
+// headers in the September 2026 catalog exactly 4 lack an Alc% column, and those 4
+// are precisely the cigar ashtray and the three glassware tables. A blocklist of
+// the literals Packing / Price/Pcs / Height/Volume only holds until the supplier
+// rewords a column, whereas a table of things you drink will always state strength.
+//
+// Labels are matched as whole tokens, not with indexOf: `indexOf('Price')` finds
+// the Price inside `Price/Pcs` and hands back an anchor pointing at a column of
+// per-piece glass prices.
+function labelAt(header: string, label: string): number | null {
+  const m = new RegExp(`(?<![A-Za-z/])${label}(?![A-Za-z/])`).exec(header)
+  return m ? m.index : null
+}
+
 export function columnAnchors(header: string): Anchors | null {
   if (!HEADER_RE.test(header)) return null
-  if (/Packing|Price\/Pcs|Height\/Volume/.test(header)) return null
 
-  const at = (label: string) => {
-    const i = header.indexOf(label)
-    return i === -1 ? null : i
-  }
+  const at = (label: string) => labelAt(header, label)
   const size = at('Size')
   const price = at('Price')
-  if (size === null || price === null) return null
+  const alc = at('Alc%')
+  if (size === null || price === null || alc === null) return null
 
-  return { size, alc: at('Alc%'), vintage: at('Vintage'), price, remark: at('Remark') }
+  return { size, alc, vintage: at('Vintage'), price, remark: at('Remark') }
 }
 
 // The widest a cell search ever reaches, whatever the table geometry allows.
