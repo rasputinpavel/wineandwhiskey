@@ -588,3 +588,50 @@ function semanticType(type: TypeInfo): string {
   const tail = type.wineType ?? type.spiritType ?? '-'
   return `${type.category}/${tail}`
 }
+
+describe('classifyTypeCell — a lone word is not a Type cell unless it could be a code', () => {
+  it('treats page banners as prose, not as unknown Type cells', () => {
+    // Later row assembly runs every line of a block through matchType, and the
+    // catalog is full of lone all-caps banners. Reporting each one as an
+    // unrecognised Type cell would bury the warning that matters in noise.
+    for (const banner of ['SPIRITS', 'CHAMPAGNE', 'FRANCE', 'ARGENTINA', 'DOMINICAN']) {
+      expect(classifyTypeCell(banner), banner).toEqual({ kind: 'none' })
+    }
+  })
+
+  it('still reports a lone token short enough to be a new type code', () => {
+    expect(classifyTypeCell('XX')).toEqual({ kind: 'unknown', token: 'XX' })
+  })
+
+  it('still reports an unknown word that has a product name after it', () => {
+    expect(classifyTypeCell('TEQUILA   Patron Silver')).toEqual({ kind: 'unknown', token: 'TEQUILA' })
+  })
+
+  it('does not warn its way through the whole fixture', () => {
+    // Mirrors what row assembly feeds matchType: every line inside a beverage
+    // table, headers excluded (blocksOf consumes those) and glassware blocks
+    // skipped. A warning here would mean a real product the parser cannot read.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fixture = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
+    let inBlock = false
+    for (const line of fixture.split('\n')) {
+      if (/^\s*(Type|CODE)\s{2,}/.test(line)) { inBlock = columnAnchors(line) !== null; continue }
+      if (inBlock && line.trim()) matchType(line)
+    }
+    expect(warn.mock.calls.map(c => c[0])).toEqual([])
+    warn.mockRestore()
+  })
+})
+
+describe('classifyTypeCell — short all-caps banners are banners', () => {
+  it('ignores region and country banners however short', () => {
+    for (const b of ['LOIRE', 'ITALY', 'SPAIN', 'CHILE', 'USA', 'LODI', 'TORO', 'RHONE', 'MOSEL', 'CAVA', 'PAGO']) {
+      expect(classifyTypeCell(b), b).toEqual({ kind: 'none' })
+    }
+  })
+
+  it('still reports a lone token shaped like one of this catalog’s codes', () => {
+    expect(classifyTypeCell('XX')).toEqual({ kind: 'unknown', token: 'XX' })
+    expect(classifyTypeCell('XY ZW')).toEqual({ kind: 'unknown', token: 'XY ZW' })
+  })
+})

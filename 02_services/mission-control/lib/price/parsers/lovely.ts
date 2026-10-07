@@ -203,10 +203,24 @@ const TYPES: Record<string, TypeInfo> = {
 const TYPE_KEYS = Object.keys(TYPES).sort((a, b) => b.length - a.length)
 
 
-// A leading word that occupies a Type-cell-shaped slot: alphabetic, short, and
-// followed by the column gap. Used only to tell an unknown Type cell apart from
-// prose, never to accept one.
-const TYPE_SHAPED_RE = /^([A-Za-z][A-Za-z-]{1,11})(?:\s{2,}|\s*$)/
+// A leading word that occupies a Type-cell-shaped slot. Used only to tell an
+// unknown Type cell apart from prose, never to accept one.
+//
+// Two shapes count. A word with a product name after it across the column gap is
+// a Type cell whatever it says ("TEQUILA   Patron Silver").
+//
+// A token *alone* on its line is only a candidate if it has the shape of this
+// catalog's type codes — one or two capitals, optionally twice ("R", "CP",
+// "CP RO"). Anything else alone on a line is a page banner: region and country
+// banners print in caps and are as short as LOIRE, ITALY, USA, and row assembly
+// runs every line of a block through here, so admitting them would bury the one
+// warning that matters under dozens that do not.
+const TYPE_WITH_NAME_RE = /^([A-Za-z][A-Za-z-]{1,11})\s{2,}\S/
+const TYPE_ALONE_RE = /^([A-Z]{1,2}(?: [A-Z]{2})?)\s*$/
+
+function typeShapedToken(text: string): string | null {
+  return (text.match(TYPE_WITH_NAME_RE) ?? text.match(TYPE_ALONE_RE))?.[1] ?? null
+}
 
 export type TypeCell =
   | { kind: 'matched'; type: TypeInfo; rest: string }
@@ -242,8 +256,8 @@ export function classifyTypeCell(left: string): TypeCell {
 
   // A vocabulary word in unexpected case ("RUM", "whisky") lands here along with
   // genuinely new ones like Tequila — reported either way, never guessed at.
-  const shaped = text.match(TYPE_SHAPED_RE)
-  if (shaped) return { kind: 'unknown', token: shaped[1] }
+  const token = typeShapedToken(text)
+  if (token) return { kind: 'unknown', token }
 
   return { kind: 'none' }
 }
