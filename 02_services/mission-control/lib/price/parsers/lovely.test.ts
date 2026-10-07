@@ -1008,6 +1008,12 @@ describe('invariants over every page of the fixture', () => {
     expect(items).toHaveLength(320)
   })
 
+  it('lets no glassware through under any name', () => {
+    for (const i of items) {
+      expect(i.name, i.name).not.toMatch(/Zalto|Josephine|Usuhari|Daiginjo|Ashtray|Spittoon/i)
+    }
+  })
+
   it('never leaves a position without a category or a country', () => {
     expect(items.filter(i => !i.category)).toEqual([])
     expect(items.filter(i => !i.country)).toEqual([])
