@@ -340,7 +340,11 @@ describe('columnAnchors — positive beverage gate', () => {
   })
 
   it('still accepts every beverage header in the fixture', () => {
+    // Scoped to the five pages this census was taken over. Task 5 appended six
+    // more pages to the same fixture; the counts below are a census, not a
+    // contract about how many pages the file holds.
     const fixture = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
+      .split('\f').slice(0, 5).join('\f')
     const headers = fixture.split('\n').filter(l => /^\s*(Type|CODE)\s{2,}/.test(l))
     expect(headers).toHaveLength(24)
     const accepted = headers.filter(h => columnAnchors(h) !== null)
@@ -545,7 +549,11 @@ const GOLDEN: GoldenRow[] = [
 ]
 
 describe('golden table — every product row of the fixture', () => {
-  const lines = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8').split('\n')
+  // The first five pages of the fixture, which is what this table was read off.
+  // Task 5 appended six more; they are covered by the assembly tests below.
+  // Slicing the prefix keeps every line number here exactly as measured.
+  const lines = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
+    .split('\f').slice(0, 5).join('\f').split('\n')
 
   // Walk the fixture the way the parser does and read every line that yields cells.
   const actual: GoldenRow[] = []
@@ -616,7 +624,10 @@ describe('classifyTypeCell — a lone word is not a Type cell unless it could be
     let inBlock = false
     for (const line of fixture.split('\n')) {
       if (/^\s*(Type|CODE)\s{2,}/.test(line)) { inBlock = columnAnchors(line) !== null; continue }
-      if (inBlock && line.trim()) matchType(line)
+      // Assembly strips the stock prefix before it looks at the Type cell, and
+      // so must this mirror: "stock   Chateau Cos d'Estournel" is a row whose
+      // code arrived on the line above, not an unknown Type cell named "stock".
+      if (inBlock && line.trim()) matchType(splitStockPrefix(line.trimStart()).rest)
     }
     expect(warn.mock.calls.map(c => c[0])).toEqual([])
     warn.mockRestore()
@@ -633,5 +644,51 @@ describe('classifyTypeCell — short all-caps banners are banners', () => {
   it('still reports a lone token shaped like one of this catalog’s codes', () => {
     expect(classifyTypeCell('XX')).toEqual({ kind: 'unknown', token: 'XX' })
     expect(classifyTypeCell('XY ZW')).toEqual({ kind: 'unknown', token: 'XY ZW' })
+  })
+})
+
+// ─── Task 5: row assembly ──────────────────────────────────────────────────
+//
+// The fixture now holds eleven pages. They are addressed by content, never by
+// position: the next person to append a page must not have to renumber tests.
+
+const FIXTURE = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
+const FIXTURE_PAGES = FIXTURE.split('\f').filter(p => p.trim())
+
+// The page of the fixture that contains `marker`. Throws rather than returning
+// undefined, so a mistyped marker fails as itself instead of as an empty parse.
+function page(marker: string): string {
+  const hits = FIXTURE_PAGES.filter(p => p.includes(marker))
+  if (hits.length !== 1) {
+    throw new Error(`fixture: ${hits.length} pages contain ${JSON.stringify(marker)}, want exactly 1`)
+  }
+  return hits[0]
+}
+
+import { splitStockPrefix } from './lovely'
+
+describe('splitStockPrefix', () => {
+  it('lifts a stock remark off the front of a product name', () => {
+    expect(splitStockPrefix('low stock    Chateau La Pensee Lalande de Pomerol'))
+      .toEqual({ stock: 'low stock', rest: 'Chateau La Pensee Lalande de Pomerol' })
+    expect(splitStockPrefix('out of stock    Javelier-Laurin, Bourgogne Pinot Noir'))
+      .toEqual({ stock: 'out of stock', rest: 'Javelier-Laurin, Bourgogne Pinot Noir' })
+  })
+
+  it('lifts the torn halves the text layer leaves behind', () => {
+    // pdftotext splits "low stock" around the type code: "low R" on one line,
+    // "stock   <name>" on the next. Both halves must come off, or the code is
+    // lost and "stock" becomes an unrecognised Type cell.
+    expect(splitStockPrefix('low R')).toEqual({ stock: 'low', rest: 'R' })
+    expect(splitStockPrefix("stock   Chateau Cos d'Estournel Saint-Estephe"))
+      .toEqual({ stock: 'stock', rest: "Chateau Cos d'Estournel Saint-Estephe" })
+    expect(splitStockPrefix('low stock')).toEqual({ stock: 'low stock', rest: '' })
+    expect(splitStockPrefix('out of stock')).toEqual({ stock: 'out of stock', rest: '' })
+  })
+
+  it('leaves everything else alone', () => {
+    expect(splitStockPrefix("R   Blason d'Issan")).toEqual({ stock: '', rest: "R   Blason d'Issan" })
+    expect(splitStockPrefix('Lowland Single Malt')).toEqual({ stock: '', rest: 'Lowland Single Malt' })
+    expect(splitStockPrefix('')).toEqual({ stock: '', rest: '' })
   })
 })

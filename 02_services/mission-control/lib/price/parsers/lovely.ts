@@ -417,3 +417,22 @@ export function readRow(line: string, a: Anchors): Row {
     remark,
   }
 }
+
+// ─── Row assembly ──────────────────────────────────────────────────────────
+
+// Stock remarks are typeset at the far left edge, before the product name, and
+// pdftotext tears them apart when a type code shares the line: the catalog's
+// "low stock" arrives as "low R" on one line and "stock   <name>" on the next.
+//
+// Both halves are stripped here, before anything looks at the Type cell —
+// otherwise "stock   Chateau Cos d'Estournel" reads as an unrecognised Type
+// cell named "stock" and the row is dropped. Matched case-sensitively in lower
+// case: every one of these fragments is printed lower case, while a product
+// name beginning "Low..." (Lowland, Lowe) is not a stock remark.
+const STOCK_PREFIX_RE = /^(out of stock|low stock|out of|low|stock)(?=\s|$)/
+
+export function splitStockPrefix(left: string): { stock: string; rest: string } {
+  const m = STOCK_PREFIX_RE.exec(left)
+  if (!m) return { stock: '', rest: left }
+  return { stock: m[1], rest: left.slice(m[0].length).trim() }
+}
