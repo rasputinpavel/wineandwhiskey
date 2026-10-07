@@ -271,41 +271,54 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
   //   (a cycle starting in month M is invoiced/paid in M+1)
   // Bounded to current month onward and ≥ handover: never resurrects pre-handover
   // months, never rewrites closed-month P&L from live receipts.
-  const consignAccrualByMonth = new Map<string, number>()
+  // Kept per supplier, not just as a total: the note under the line names who
+  // the money is owed to. There was a single consignment supplier when this was
+  // written, so the note said "Harvest" and quietly covered everyone added since.
+  type ConsignAccrual = { total: number; parts: Array<{ name: string; amount: number; closed: boolean }> }
+  const consignAccrualByMonth = new Map<string, ConsignAccrual>()
   {
     const consignSups = suppliers.filter(su => su.type === 'consignment' && su.id)
     const candidateYms = [...new Set([currentYm, shiftMonth(currentYm, 1)])]
       .filter(ym => ym >= HARVEST_START_YM && consignPoTotal(ym) === 0)
     await Promise.all(candidateYms.map(async ym => {
       const cyclePeriod = shiftMonth(ym, -1)
-      let total = 0
+      const acc: ConsignAccrual = { total: 0, parts: [] }
       for (const su of consignSups) {
         try {
           const r = await computeConsignmentSettlement(su.id!, cyclePeriod)
-          if (r) total += r.grandTotal
+          if (!r) continue
+          acc.total += r.grandTotal
+          // Suppliers with nothing sold this cycle would only pad the note.
+          if (r.grandTotal > 0) acc.parts.push({ name: su.name, amount: r.grandTotal, closed: !!r.closedAt })
         } catch { /* settlement schema missing → treat as no accrual */ }
       }
-      consignAccrualByMonth.set(ym, total)
+      acc.parts.sort((a, b) => b.amount - a.amount)
+      consignAccrualByMonth.set(ym, acc)
     }))
   }
 
   function consignObligationTotal(ym: string): number {
     const po = consignPoTotal(ym)
-    if (po > 0) return po                       // real settlement PO wins
-    return consignAccrualByMonth.get(ym) ?? 0   // else live accrual (0 if none)
+    if (po > 0) return po                             // real settlement PO wins
+    return consignAccrualByMonth.get(ym)?.total ?? 0  // else live accrual (0 if none)
   }
   // Note for months where consignment is absent or still accruing — surfaced so
   // the bottom line isn't misread as final/complete.
-  function harvestNote(ym: string): string | null {
+  function consignmentNote(ym: string): string | null {
     if (consignPoTotal(ym) > 0) return null     // recorded settlement → no note
     const accrual = consignAccrualByMonth.get(ym)
     if (accrual != null) {
-      return accrual > 0
-        ? `Harvest ${fmtThb(accrual)} accrued so far — billing cycle still open, settlement PO not yet raised`
-        : 'Harvest billing cycle still open — no consignment sales yet this cycle'
+      if (accrual.total <= 0) return 'Consignment billing cycle still open — no sales yet this cycle'
+      // Per supplier, because closing the period in the portal and the supplier
+      // raising the invoice are two different events: a closed period is a final
+      // figure waiting on their paperwork, an open one can still move.
+      const breakdown = accrual.parts
+        .map(p => `${p.name} ${fmtThb(p.amount)} (${p.closed ? 'period closed' : 'cycle open'})`)
+        .join(' + ')
+      return `Accrued so far: ${breakdown} — settlement PO not yet raised`
     }
     if (ym < HARVEST_START_YM) return 'Excludes Harvest consignment (pre-handover — previous owner’s liability, pending bank reconciliation)'
-    return 'Harvest settlement PO for this month not recorded yet'
+    return 'Consignment settlement PO for this month not recorded yet'
   }
   // Settlements table reads this for the selected month.
   const consignDebtBySupId = consignObligationBySupId(selectedYm)
@@ -650,7 +663,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
           supplierPayments={selectedSupplierPayments}
           supplierPaymentsRemaining={supplierRemainingProj}
           supplierConsignment={selectedConsignObligation}
-          consignmentNote={harvestNote(selectedYm)}
+          consignmentNote={consignmentNote(selectedYm)}
           gp={selectedGp}
           fixedMtd={selected.fixed}
           monthlyFixedBase={monthlyFixedBase}
@@ -666,7 +679,7 @@ export default async function PulseDashboardPage({ searchParams }: { searchParam
         <NextMonthCard
           monthLabel={nextMonthLabel}
           supplierPaymentsNext={supplierPaymentsNext}
-          consignmentNote={harvestNote(nextMonthYm)}
+          consignmentNote={consignmentNote(nextMonthYm)}
           monthlyFixed={Number.isFinite(minRevenueNext) ? fixedForMonth(minRevenueNext) : monthlyFixed}
           monthlyFixedBase={monthlyFixedBase}
           bufferPct={bufferPct}
