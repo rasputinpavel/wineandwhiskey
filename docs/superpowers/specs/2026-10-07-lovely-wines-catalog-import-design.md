@@ -165,6 +165,16 @@ more shapes, all the same rule wearing a different hat:
 
 Implement the general rule once rather than five special cases.
 
+**What is NOT a rule.** An earlier draft of this design said "a row that already
+carries both its own size and its own price collects nothing", as the way to stop
+Goutorbe-Bouillot's 750ml / ฿2,010 variant being stolen by the next product (which
+really costs ฿2,570). That absolute is false: Bussola's `'Recioto' … TB` 500ml
+carries its own `500ml / 2018 / ฿3,320` **and** owns the `2017 / ฿3,320` row above it
+and `2019 / pending` below (coordinates: 10.6pt and 10.7pt inside the cluster against
+14.1pt and 13.9pt to the neighbours). La Rioja Alta, Muga Reserva and Viña Ardanza
+behave the same way. The Goutorbe case has to fall out of the general grouping —
+column regularity plus centring — not out of a hard-coded exemption.
+
 **How a cluster's boundaries are found.** `pdftotext -layout` flattens the vertical
 gaps that separate one product from the next: a 5pt gap inside a cluster and a 14pt
 gap between products both arrive as a single newline. So the grouping is reconstructed
