@@ -958,3 +958,78 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
     expect(high[0].description).toContain('100 JS')
   })
 })
+
+describe('prices the catalog prints oddly', () => {
+  it('reads a price whose thousands separator is a dot, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cortese = parseCatalogText(page('GIUSEPPE CORTESE'))
+    const muga = parseCatalogText(page('MUGA'))
+    const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('thousands') || m.includes('a dot where'))
+    warn.mockRestore()
+
+    expect(shape(cortese, "Barbera D'Alba Morassina"))
+      .toEqual(['750ml/2018/1970', '750ml/2019/1970'])
+    // Two separate clusters print the same name, so all five rows are listed.
+    expect(shapeOf(muga, 'Muga Reserva, Rioja DOC')).toEqual([
+      '375ml/2021/1020', '375ml/2022/-', '1500ml/2021/3270',
+      '750ml/2021/1610', '750ml/2022/1610',
+    ])
+    expect(said).toHaveLength(2)
+    expect(said.join('\n')).toContain('1.970')
+    expect(said.join('\n')).toContain('1.020')
+  })
+
+  it('keeps "pending" as a position with no price rather than dropping it', () => {
+    const items = parseCatalogText(page('TOLAINI'))
+    expect(one(items, "'Valdisanti'")).toMatchObject({ year: 2022, price: null, volume: '750ml' })
+    // Two sizes and two vintages against one printed price.
+    expect(shape(items, "'Al Passo'")).toEqual(['750ml/2020/1300', '1500ml/2022/1300'])
+  })
+
+  it('files a dessert-wine code as wine with no colour', () => {
+    const monsanto = one(parseCatalogText(page('CASTELLO DI MONSANTO')), "'La Chimera'")
+    expect(monsanto).toMatchObject({ category: 'wine', wine_type: null, price: 3151, volume: '375ml' })
+    expect(monsanto.description).toMatch(/dessert/i)
+  })
+})
+
+describe('invariants over every page of the fixture', () => {
+  const items = (() => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const all = parseCatalogText(FIXTURE)
+    warn.mockRestore()
+    return all
+  })()
+
+  it('parses every page without losing or inventing a table', () => {
+    expect(items).toHaveLength(244)
+  })
+
+  it('never leaves a position without a category or a country', () => {
+    expect(items.filter(i => !i.category)).toEqual([])
+    expect(items.filter(i => !i.country)).toEqual([])
+  })
+
+  it('never leaves a cell fragment inside a product name', () => {
+    for (const i of items) {
+      expect(i.name, i.name).not.toMatch(/\d{2,4}\s?m[lL]\b/)
+      expect(i.name, i.name).not.toMatch(/stock/i)
+      expect(i.name.length, i.name).toBeGreaterThanOrEqual(4)
+    }
+    // One real product is printed with a leading digit, and only one.
+    expect([...new Set(items.filter(i => /^\d/.test(i.name)).map(i => i.name))])
+      .toEqual(['30&40 Double Jus (Aperitive de Normandie)'])
+  })
+
+  it('gives every position a volume', () => {
+    expect(items.filter(i => !i.volume)).toEqual([])
+  })
+
+  it('leaves a price out only where the catalog prints none', () => {
+    // 15 rows print the word "pending"; Giuseppe Cortese's Langhe Bianco
+    // 'Scapulin' prints nothing at all in its Price column.
+    const unpriced = items.filter(i => i.price === null)
+    expect(unpriced).toHaveLength(16)
+    expect(unpriced.filter(i => i.name.includes('Scapulin'))).toHaveLength(1)
+  })
+})
