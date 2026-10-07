@@ -1033,3 +1033,33 @@ describe('invariants over every page of the fixture', () => {
     expect(unpriced.filter(i => i.name.includes('Scapulin'))).toHaveLength(1)
   })
 })
+
+describe('ambiguous clusters are named out loud', () => {
+  // In some clusters the text layer genuinely does not record which year goes
+  // with which price: Yangarra prints two vintages against one price value.
+  // Those are paired positionally and reported, so a human can check them.
+  function reported(marker: string): string[] {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    parseCatalogText(page(marker))
+    const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('ambiguous cluster'))
+    warn.mockRestore()
+    return said
+  }
+
+  it('reports a cluster whose vintages outnumber its prices', () => {
+    const said = reported('YANGARRA ESTATE VINEYARD')
+    const gsm = said.filter(m => m.includes("'GSM'"))
+    expect(gsm).toHaveLength(1)
+    expect(gsm[0]).toContain('2017')
+    expect(gsm[0]).toContain('2021')
+    expect(gsm[0]).toContain('2120')
+    expect(said.filter(m => m.includes('Shiraz,'))).toHaveLength(0)   // one vintage each
+  })
+
+  it('stays quiet when every vintage has a price of its own', () => {
+    // Canard-Duchêne's multi-size wine has two sizes, two prices and one
+    // vintage — nothing about it is ambiguous.
+    expect(reported('CANARD-DUCHÊNE')).toEqual([])
+    expect(reported('MAISON GELAS')).toEqual([])
+  })
+})

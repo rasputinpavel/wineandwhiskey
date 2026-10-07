@@ -905,6 +905,15 @@ function positionsOf(p: Product): ExtractedItem[] {
   const prices = rows.map(r => r.price).filter(c => c.kind !== 'none')
   const remarks = [...p.remarks, ...p.above.map(r => r.remark), ...p.below.map(r => r.remark)].filter(Boolean)
 
+  // Where a cluster prints more vintages than prices, the text layer does not
+  // record which year goes with which price — Yangarra's 'GSM' prints two
+  // vintages against one price value. They are paired positionally and named
+  // here, as a short list to check by eye against the PDF.
+  if (prices.length >= 1 && years.length > prices.length) {
+    const shown = prices.map(c => (c.kind === 'num' ? String(c.value) : 'pending')).join(', ')
+    console.warn(`[lovely] ambiguous cluster — ${years.length} vintages (${years.join(', ')}) against ${prices.length} prices (${shown}): ${JSON.stringify(name)}`)
+  }
+
   const n = Math.max(1, sizes.length, years.length, prices.length)
   // A column printed once serves every row of the cluster — that is the centring
   // rule seen from the column's side. More than one and they pair positionally.
