@@ -340,9 +340,9 @@ describe('columnAnchors — positive beverage gate', () => {
   })
 
   it('still accepts every beverage header in the fixture', () => {
-    // Scoped to the five pages this census was taken over. Task 5 appended six
-    // more pages to the same fixture; the counts below are a census, not a
-    // contract about how many pages the file holds.
+    // Scoped to the five pages this census was taken over. Task 5 kept appending
+    // pages to the same fixture; the counts below are a census of those five, not
+    // a contract about how many pages the file holds.
     const fixture = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
       .split('\f').slice(0, 5).join('\f')
     const headers = fixture.split('\n').filter(l => /^\s*(Type|CODE)\s{2,}/.test(l))
@@ -550,7 +550,7 @@ const GOLDEN: GoldenRow[] = [
 
 describe('golden table — every product row of the fixture', () => {
   // The first five pages of the fixture, which is what this table was read off.
-  // Task 5 appended six more; they are covered by the assembly tests below.
+  // Task 5 appended twelve more; they are covered by the assembly tests below.
   // Slicing the prefix keeps every line number here exactly as measured.
   const lines = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
     .split('\f').slice(0, 5).join('\f').split('\n')
@@ -652,8 +652,9 @@ describe('classifyTypeCell — short all-caps banners are banners', () => {
 
 // ─── Task 5: row assembly ──────────────────────────────────────────────────
 //
-// The fixture now holds eleven pages. They are addressed by content, never by
-// position: the next person to append a page must not have to renumber tests.
+// The fixture holds seventeen pages. They are addressed by content, never by
+// position: the next person to append a page must not have to renumber tests,
+// and several already have been appended since this line was written.
 
 const FIXTURE = readFixture(joinPath(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
 const FIXTURE_PAGES = FIXTURE.split('\f').filter(p => p.trim())
@@ -1005,7 +1006,7 @@ describe('invariants over every page of the fixture', () => {
   })()
 
   it('parses every page without losing or inventing a table', () => {
-    expect(items).toHaveLength(320)
+    expect(items).toHaveLength(343)
   })
 
   it('lets no glassware through under any name', () => {
@@ -1030,15 +1031,19 @@ describe('invariants over every page of the fixture', () => {
       .toEqual(['30&40 Double Jus (Aperitive de Normandie)'])
   })
 
-  it('gives every position a volume', () => {
+  it('gives every position a volume, here and over the whole catalog', () => {
+    // True catalog-wide, not only of the fixture: the last row without a volume
+    // was the Tesseron Extreme Rare Cognac, whose "1,500ml" the size cell now
+    // accepts. Its table is in the fixture, so a regression shows up here.
     expect(items.filter(i => !i.volume)).toEqual([])
   })
 
   it('leaves a price out only where the catalog prints none', () => {
-    // 16 rows print the word "pending"; Giuseppe Cortese's Langhe Bianco
-    // 'Scapulin' is the one row whose Price column is simply empty.
+    // 16 rows print "pending" and two Tesseron Cognacs print "Request for
+    // Quote"; Giuseppe Cortese's Langhe Bianco 'Scapulin' is the one row whose
+    // Price column is simply empty.
     const unpriced = items.filter(i => i.price === null)
-    expect(unpriced).toHaveLength(17)
+    expect(unpriced).toHaveLength(19)
     expect(unpriced.filter(i => i.name.includes('Scapulin'))).toHaveLength(1)
   })
 })
@@ -1154,5 +1159,49 @@ describe('a price serves the vintages printed beside it', () => {
     const items = parseCatalogText(page('DOMAINE COMTESSE DE CHERISEY'))
     expect(shapeOf(items, "Comtesse de Cherisey, Puligny-Montrachet, 1er Cru 'Hameau de Blagny'"))
       .toEqual(['750ml/2018/7750', '750ml/2019/8100', '750ml/2020/11000', '750ml/2021/11000'])
+  })
+})
+
+describe('the one Tesseron table, which prints both oddities at once', () => {
+  const TESSERON_HDR =
+    '   Type                                  TESSERON COGNAC                                      Size         Alc%           Price      Remark'
+  const COMMA_SIZE_ROW =
+    ' Cognac    Tesseron Extreme Rare Cognac Grand Champagne                                      1,500ml        40.0          Request for Quote'
+
+  it('reads a size written with a thousands separator', () => {
+    // The catalog's only comma inside a size cell. Refused, the "1," leaks into
+    // the product name and the bottle lands with volume: null — so this one
+    // 1500ml Cognac would never match the catalog's other 1500ml entries.
+    const row = readRow(COMMA_SIZE_ROW, columnAnchors(TESSERON_HDR)!)
+    expect(row.size).toBe('1500ml')
+    expect(row.left).toBe('Cognac    Tesseron Extreme Rare Cognac Grand Champagne')
+  })
+
+  it('still refuses a size read out of the middle of a longer number', () => {
+    const a = columnAnchors(TESSERON_HDR)!
+    expect(readRow(' '.repeat(a.size - 2) + '12000ml', a).size).not.toBe('2000ml')
+    expect(readRow(' '.repeat(a.size - 2) + '12,000ml', a).size).not.toBe('2,000ml')
+  })
+
+  it('treats "Request for Quote" as a price the catalog has not set', () => {
+    const items = parseCatalogText(page('TESSERON COGNAC'))
+
+    const extreme = one(items, 'Tesseron Extreme Rare')
+    expect(extreme).toMatchObject({
+      name: 'Tesseron Extreme Rare Cognac Grand Champagne',
+      volume: '1500ml', price: null,
+      category: 'spirits', spirit_type: 'cognac', country: 'France',
+    })
+
+    const privee = one(items, 'Collection Privee')
+    expect(privee).toMatchObject({ volume: '700ml', price: null })
+    for (const i of [extreme, privee]) {
+      expect(i.description, i.name).not.toMatch(/Quote/i)
+      expect(i.description, i.name).toContain('Tesseron Cognac is a family-owned')
+    }
+
+    // The rest of the table is priced as printed.
+    expect(one(items, "'Composition'").price).toBe(3650)
+    expect(one(items, "'Experience 01'").price).toBe(79500)
   })
 })

@@ -377,9 +377,15 @@ function near(line: string, re: RegExp, anchor: number | null, a: Anchors): RegE
 //   "12000ml" yielded the size "2000ml"
 // A price with a decimal part does not occur in this catalog, so the dot form is
 // refused outright rather than truncated: no price is recoverable, a wrong one is
-// not. Litre sizes are deliberately unsupported — every one of the 923 size cells
-// in the September 2026 file is in ml.
-const SIZE_RE    = /(?<![\d.,])\d{2,4}\s?(?:ml|ML|cl|CL|L)\b/
+// not.
+//
+// Sizes: every one of the 923 size cells in the September 2026 file is in ml, so
+// litre and centilitre forms are carried only as insurance. One cell prints a
+// thousands separator inside the number — "1,500ml", the Tesseron Extreme Rare
+// Cognac — which the comma form accepts and `readRow` normalises to 1500ml so it
+// matches the catalog's other 1500ml entries. The left boundary still stands
+// against reading "2000ml" out of "12000ml".
+const SIZE_RE    = /(?<![\d.,])(?:\d{1,2},\d{3}|\d{2,4})\s?(?:ml|ML|cl|CL|L)\b/
 const PRICE_RE   = /(?<![\d.,])(?:\d{1,3}(?:,\d{3})+|\d{2,5})(?![\d.,])/
 const VINTAGE_RE = /(?<![\d.,])(?:19|20)\d{2}(?![\d.,])|(?<![A-Za-z])NV(?![A-Za-z])/
 
@@ -411,7 +417,7 @@ export function readRow(line: string, a: Anchors): Row {
 
   return {
     left,
-    size: sizeM ? sizeM[0].replace(/\s+/g, '') : '',
+    size: sizeM ? sizeM[0].replace(/[\s,]/g, '') : '',
     vintage: vintageM ? vintageM[0] : '',
     price: price ? price[0] : '',
     remark,
@@ -546,10 +552,13 @@ export type PriceCell =
   | { kind: 'pending' }     // the catalog prints the word: a real position, no price yet
   | { kind: 'none' }        // no price cell on this line at all
 
-// "pending" is a price here — 51 rows print it instead of a number. It must be
-// told apart from an empty price cell, or a vintage row priced "pending"
-// silently borrows the price of the row it is centred against.
-const PENDING_RE = /pending/i
+// Words the catalog prints where a number would go: "pending" on 51 rows and
+// "Request for Quote" on the two dearest Tesseron Cognacs. Both mean a real
+// position whose price is not set, and both have to be told apart from an empty
+// price cell — otherwise a vintage row priced "pending" silently borrows the
+// price of the row it is centred against, and the unread words trail into the
+// description ("or Quote").
+const NO_PRICE_YET_RE = /pending|Request\s+for\s+Quote/i
 
 // Two rows in the September 2026 file print the thousands separator as a dot:
 // 1.970 (Giuseppe Cortese, Barbera d'Alba) and 1.020 (Muga Reserva 375ml). The
@@ -585,7 +594,7 @@ function readCells(line: string, lineNo: number, a: Anchors): LineCells {
       priceEnd = dotted.index + dotted[0].length
       console.warn(`[lovely] price ${JSON.stringify(dotted[0])} read as ${price.value} — a dot where the catalog otherwise prints a comma: ${JSON.stringify(line.trim().slice(0, 90))}`)
     } else {
-      const word = near(line, PENDING_RE, a.price, a)
+      const word = near(line, NO_PRICE_YET_RE, a.price, a)
       if (word) { price = { kind: 'pending' }; priceEnd = word.index + word[0].length }
     }
   }
