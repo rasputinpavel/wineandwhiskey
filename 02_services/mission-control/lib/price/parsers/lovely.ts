@@ -61,3 +61,39 @@ export async function isLovely(buf: Buffer, filename: string): Promise<boolean> 
     safeUnlink(path)
   }
 }
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+// Prices print as "900" or "41,960"; coerce to bare integer THB. A cell holding
+// anything else (empty, "N/A", a stray remark) means no price.
+export function toIntPrice(cell: string): number | null {
+  if (!/^[\d,]+$/.test(cell.trim())) return null
+  const digits = cell.replace(/[^\d]/g, '')
+  if (!digits) return null
+  const n = parseInt(digits, 10)
+  return Number.isFinite(n) ? n : null
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+}
+
+// The catalog prints no date anywhere in its text layer, so derive one: an
+// explicit YYYY-MM in the filename wins, then a month name in the filename with
+// the year from the PDF's ModDate, then ModDate itself.
+export function catalogDate(filename: string, modDate: Date | null): string | null {
+  const iso = filename.match(/(20\d{2})[-_.](0[1-9]|1[0-2])/)
+  if (iso) return `${iso[1]}-${iso[2]}-01`
+
+  const word = filename.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i)
+  if (word && modDate) {
+    const month = String(MONTHS[word[1].toLowerCase()]).padStart(2, '0')
+    return `${modDate.getUTCFullYear()}-${month}-01`
+  }
+
+  if (!modDate) return null
+  const m = String(modDate.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(modDate.getUTCDate()).padStart(2, '0')
+  return `${modDate.getUTCFullYear()}-${m}-${d}`
+}
