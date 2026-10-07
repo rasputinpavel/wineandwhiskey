@@ -166,3 +166,92 @@ export function matchType(left: string): { type: TypeInfo; rest: string } | null
   }
   return null
 }
+
+// ─── Table geometry ────────────────────────────────────────────────────────
+
+export type Anchors = {
+  size: number
+  alc: number | null
+  vintage: number | null
+  price: number
+  remark: number | null
+}
+
+export type Row = {
+  left: string      // Type cell + product name, possibly prefixed by a stock remark
+  size: string
+  vintage: string
+  price: string
+  remark: string
+}
+
+const HEADER_RE = /^\s*(Type|CODE)\s{2,}/
+
+// A header we can parse has Size and Price. Glassware tables carry Packing /
+// Price/Pcs instead — those we refuse, which is how the block gets skipped.
+export function columnAnchors(header: string): Anchors | null {
+  if (!HEADER_RE.test(header)) return null
+  if (/Packing|Price\/Pcs|Height\/Volume/.test(header)) return null
+
+  const at = (label: string) => {
+    const i = header.indexOf(label)
+    return i === -1 ? null : i
+  }
+  const size = at('Size')
+  const price = at('Price')
+  if (size === null || price === null) return null
+
+  return { size, alc: at('Alc%'), vintage: at('Vintage'), price, remark: at('Remark') }
+}
+
+// How far from an anchor a cell's text may start. Measured worst case on the real
+// file is 2 characters (a right-shifted "1500ml"); 8 is comfortable margin that
+// still cannot reach a neighbouring column.
+const WINDOW = 8
+
+// Finds the occurrence of `re` whose start is nearest to `anchor`, within WINDOW.
+function near(line: string, re: RegExp, anchor: number | null): RegExpExecArray | null {
+  if (anchor === null) return null
+  const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
+  let best: RegExpExecArray | null = null
+  let bestDist = Infinity
+  let m: RegExpExecArray | null
+  while ((m = rx.exec(line)) !== null) {
+    const dist = Math.abs(m.index - anchor)
+    if (dist <= WINDOW && dist < bestDist) { best = m; bestDist = dist }
+    if (m.index > anchor + WINDOW) break
+  }
+  return best
+}
+
+const SIZE_RE    = /\d{2,4}\s?(?:ml|ML|cl|CL|L)\b/
+const PRICE_RE   = /\d{1,3}(?:,\d{3})+|\d{2,5}(?=\s|$)/
+const VINTAGE_RE = /(?:19|20)\d{2}|NV/
+
+// Reads one line of a table against that table's anchors. Everything left of the
+// first located cell is the left-hand text; the remark is whatever trails the
+// price. Cells are located by regex near their anchor, never by slicing at it —
+// see the file header for why.
+export function readRow(line: string, a: Anchors): Row {
+  const sizeM    = near(line, SIZE_RE, a.size)
+  const priceM   = near(line, PRICE_RE, a.price)
+  const vintageM = near(line, VINTAGE_RE, a.vintage)
+
+  const firstCell = Math.min(
+    sizeM ? sizeM.index : Infinity,
+    priceM ? priceM.index : Infinity,
+    vintageM ? vintageM.index : Infinity,
+  )
+  const left = Number.isFinite(firstCell) ? line.slice(0, firstCell).trim() : line.trim()
+
+  const afterPrice = priceM ? priceM.index + priceM[0].length : null
+  const remark = afterPrice !== null ? line.slice(afterPrice).trim() : ''
+
+  return {
+    left,
+    size: sizeM ? sizeM[0].replace(/\s+/g, '') : '',
+    vintage: vintageM ? vintageM[0] : '',
+    price: priceM ? priceM[0] : '',
+    remark,
+  }
+}

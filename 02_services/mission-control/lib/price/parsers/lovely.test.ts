@@ -96,3 +96,79 @@ describe('matchType', () => {
     expect(matchType('')).toBeNull()
   })
 })
+
+import { columnAnchors, readRow } from './lovely'
+
+const CANARD_HDR =
+  ' Type                       CANARD-DUCHÊNE                                   Size           Alc%          Vintage          Price     Remark'
+const GELAS_HDR =
+  '  Type                                     MAISON GELAS                                      Size         Alc%         Price          Remark'
+const GLASS_HDR =
+  '   Type                                    CIGAR ASHTRAY            Size         Packing    Price/Pcs'
+
+describe('columnAnchors', () => {
+  it('reads every column of a wine table', () => {
+    const a = columnAnchors(CANARD_HDR)
+    expect(a).not.toBeNull()
+    expect(a!.size).toBe(CANARD_HDR.indexOf('Size'))
+    expect(a!.vintage).toBe(CANARD_HDR.indexOf('Vintage'))
+    expect(a!.price).toBe(CANARD_HDR.indexOf('Price'))
+  })
+
+  it('accepts a spirits table with no Vintage column', () => {
+    const a = columnAnchors(GELAS_HDR)
+    expect(a!.vintage).toBeNull()
+    expect(a!.price).toBe(GELAS_HDR.indexOf('Price'))
+  })
+
+  it('rejects glassware tables', () => {
+    expect(columnAnchors(GLASS_HDR)).toBeNull()
+  })
+
+  it('rejects anything that is not a table header', () => {
+    expect(columnAnchors('             CHAMPAGNE')).toBeNull()
+    expect(columnAnchors('')).toBeNull()
+  })
+})
+
+describe('readRow', () => {
+  const a = columnAnchors(CANARD_HDR)!
+
+  it('reads a complete row', () => {
+    const row = readRow(' CP     Canard-Duchene Champagne Brut                                      750ml            12.0           2015            2,900', a)
+    expect(row).toEqual({
+      left: 'CP     Canard-Duchene Champagne Brut',
+      size: '750ml',
+      vintage: '2015',
+      price: '2,900',
+      remark: '',
+    })
+  })
+
+  it('reads a variant row whose size prints left of the Size label', () => {
+    const row = readRow('                                                                           1500ml                                          5,520', a)
+    expect(row.left).toBe('')
+    expect(row.size).toBe('1500ml')
+    expect(row.price).toBe('5,520')
+  })
+
+  it('does not let the size bleed into the product name', () => {
+    const row = readRow('                                                                            750ml                                          2,710', a)
+    expect(row.left).toBe('')
+    expect(row.size).toBe('750ml')
+  })
+
+  it('keeps NV out of the year and reads the remark', () => {
+    const row = readRow(" CP     Canard Duchene Champagne Extra Brut 'P.181'                        750ml            12.0            NV             3,460     88 WE", a)
+    expect(row.vintage).toBe('NV')
+    expect(row.price).toBe('3,460')
+    expect(row.remark).toBe('88 WE')
+  })
+
+  it('reads a row whose name is preceded by a stock remark', () => {
+    const b = columnAnchors('  Type                                      JAVELIER-LAURIN                                       Size       Alc%         Vintage     Price   Remark')!
+    const row = readRow('out of stock    Javelier-Laurin, Bourgogne Pinot Noir                                            750ml       13.0         2020       1,500', b)
+    expect(row.left).toBe('out of stock    Javelier-Laurin, Bourgogne Pinot Noir')
+    expect(row.price).toBe('1,500')
+  })
+})
