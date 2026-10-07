@@ -104,7 +104,13 @@ Algorithm:
 3. A table starts at a header line matching `^\s*(Type|CODE)\s{2,}` that contains
    `Size`. Column anchors come from the positions of the labels `Size`, `Alc%`,
    `Vintage`, `Price`, `Remark`.
-4. Headers carrying `Packing` / `Price/Pcs` are glassware → skip the whole block.
+4. **A beverage table is recognised by requiring `Alc%` in its header**, not by
+   blocklisting glassware wording. Measured over all 262 headers in the catalog,
+   exactly 4 lack `Alc%` and they are precisely the cigar ashtray and the three
+   glassware tables — so the positive test is provably exact here, and unlike a
+   blocklist it does not depend on guessing next month's column labels. Labels are
+   matched as whole tokens: `indexOf('Price')` also finds the `Price` inside
+   `Price/Pcs`.
 5. **Cells are found by regex inside a window of ±8 characters around each anchor,
    not by slicing the line at the anchor.** Measured on the real file: variant size
    cells print up to 2 characters left of the `Size` label (`1500ml` at column 75
@@ -112,10 +118,46 @@ Algorithm:
    fragment lands in the product name. This is the single most common way a naive
    implementation corrupts this catalog.
 
+### The one rule behind every layout trap
+
+**A cell typeset alone on its line is vertically centred, and belongs to the
+adjacent rows that lack that cell.**
+
+The catalog applies this to every column, not just one. A first reading of the file
+found it on names and bottle sizes; checking a code reviewer's claims turned up four
+more shapes, all the same rule wearing a different hat:
+
+- **a name centred between its size rows** — one wine, two bottle sizes
+  (Canard-Duchêne `'Cuvee Leonie'`: 750ml / 1500ml);
+- **a name and size centred between vintage rows** — one wine, several vintages, the
+  name row carrying the size and ABV while the rows above and below carry year and
+  price (Aldridge `'Twynham' Chardonnay`: 2024 / 590 and 2025 / pending). ~62 rows.
+  The variant row has **no size of its own and must inherit it from the name row**,
+  or the position lands in the database with `volume: null`;
+- **a price centred between vintage rows** — several vintages sharing one price
+  (Yangarra `'GSM'`: 2017 and 2021 at 2,120, 2015 pending);
+- **a name wrapped over two lines with the type code between the halves** — the
+  continuation line carries its own vintage and price (Realm Cellars
+  `'Houyi Vineyard'`, Comtesse de Cherisey `'La Genelotte'`). 42 such lines. Treating
+  the continuation as a product of its own would file a junk position named
+  "Cabernet Sauvignon" at ฿12,800;
+- **a stock remark torn across lines** — `low` ends up on the type code's line and
+  `stock` prefixes the name on the next one (`low R` / `stock   Chateau Cos
+  d'Estournel`). The type code is lost unless the stock fragment is stripped first.
+
+Implement the general rule once rather than five special cases.
+
+**Where the rule runs out.** In about 20–25 clusters the text layer genuinely does
+not record which year goes with which price: Yangarra prints three vintages against
+two price values, and Comtesse de Cherisey prints `2018 / 7,245` twice. The parser
+pairs them positionally and **the coverage audit prints every cluster where vintages
+outnumber prices**, as a short list to check by eye against the PDF. Identical
+(vintage, price) pairs within one cluster are deduplicated.
+
 ### Line roles inside a table block
 
-`pdftotext` does not give one line per product. Three typesetting patterns appear,
-all verified against the real file:
+`pdftotext` does not give one line per product. These patterns appear, all verified
+against the real file:
 
 - **data line** — carries size and/or price in their columns. Yields an item. Its
   type comes from the leading code on the line, or from a pending code (below).
@@ -138,7 +180,26 @@ all verified against the real file:
   before the name: `low stock    Chateau La Pensee Lalande de Pomerol  750ml …`.
   The leading `low stock` / `out of stock` / `stock` must be stripped off the name
   and moved into the remark, or it ends up inside the product name in the database.
+- **name-continuation line** — left-hand text that matches nothing in the Type
+  vocabulary and is not a stock prefix, but ends before the `Size` column. It is the
+  tail of the previous name row; append it to that name, and treat its own cells as
+  another variant of that product.
 - **prose / banner line** — anything else. Feeds the context described above.
+  Prose is told apart from a name continuation by where it ends: a producer
+  paragraph wraps out past the `Size` column and into the cell area, a name fragment
+  stops before it. Because a block also ends at the next banner, only two prose lines
+  in the whole catalog ever reach a table block at all.
+
+Two further details the real file forces:
+
+- **`pending` is a price** — 51 rows print the word instead of a number. They are
+  real positions with no price yet, so `price` is `null` and the row is still
+  emitted. "Zero positions without a price" was therefore never an achievable
+  target; the right target is "no position without a price except where the catalog
+  prints `pending`".
+- **Banner text uses typographic hyphens** (`ENTRE‑DEUX‑MERS`, U+2011). A banner
+  matcher restricted to ASCII `-` silently drops those banners and leaks their region
+  into the next producer's rows.
 
 Each size variant becomes its own `ExtractedItem`: volume is a separate column and
 the reconciler keys on name plus volume, so two sizes are two positions.
@@ -196,12 +257,27 @@ the way `smd.test.ts` tests pure helpers. Assertions: position count, the multi-
 split, prices exact to the baht, no glassware, no `low stock` left inside a name.
 
 **Coverage check** (one-off, run during implementation, not committed as a test).
-A script counts every line in the raw `pdftotext` output that has both a volume and
-a price, and compares that against the parser's output. The bar is **zero
-unexplained lines**: each one either became a position or was deliberately skipped
-as glassware. The throwaway prototype currently reaches 767 of ~886 with 24
-unrecognised blocks and 51 positions missing a price — closing that gap to zero is
-the acceptance criterion, not an optional polish step.
+A script counts every line in the raw `pdftotext` output that carries cells, and
+compares that against the parser's output. The bar is **zero unexplained lines**:
+each one either became a position or was deliberately skipped as glassware.
+
+Targets, with the numbers measured on the September file:
+
+| Check | Target |
+|---|---|
+| positions parsed | ~886 (909 priced lines − 23 glassware) |
+| positions with no price | only where the catalog prints `pending` — 51 |
+| positions with no country | 0 |
+| positions with no category | 0 — a row that kept a pending type means a code line was lost |
+| `stock`, `ml` or a leading digit inside a name | 0 |
+| ambiguous clusters (vintages outnumber prices) | printed as a list to check by eye, ~20–25 |
+
+Two numeric traps the audit must also cover, both found by code review of the first
+implementation and both one character from firing on real data: a critic score read
+as a price (the `Remark` anchor sits exactly 8 characters from `Price` in three
+tables, so the ±8 search window must be clamped per table to the midpoint between
+anchors), and a price token read without boundaries (`102000` → `02000`, and the ABV
+`37.50` → `50`, which sits 3 characters outside the window today).
 
 ## Supplier profile
 
