@@ -66,11 +66,18 @@ export async function isLovely(buf: Buffer, filename: string): Promise<boolean> 
 
 // Prices print as "900" or "41,960"; coerce to bare integer THB. A cell holding
 // anything else (empty, "N/A", a stray remark) means no price.
+//
+// The thousands separators have to be checked as grammar, not as a character
+// set: a shape test like /^[\d,]+$/ accepts "41,96" and quietly returns 4196,
+// and "1,2,3" and quietly returns 123. A dropped digit that still looks like a
+// plausible price is the worst failure this parser can have, so a cell whose
+// grouping is malformed is refused outright.
+const PRICE_CELL_RE = /^\d{1,3}(?:,\d{3})*$|^\d+$/
+
 export function toIntPrice(cell: string): number | null {
-  if (!/^[\d,]+$/.test(cell.trim())) return null
-  const digits = cell.replace(/[^\d]/g, '')
-  if (!digits) return null
-  const n = parseInt(digits, 10)
+  const text = cell.trim()
+  if (!PRICE_CELL_RE.test(text)) return null
+  const n = parseInt(text.replace(/,/g, ''), 10)
   return Number.isFinite(n) ? n : null
 }
 

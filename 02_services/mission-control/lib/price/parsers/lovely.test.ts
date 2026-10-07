@@ -172,3 +172,25 @@ describe('readRow', () => {
     expect(row.price).toBe('1,500')
   })
 })
+
+// ─── Review fixes ──────────────────────────────────────────────────────────
+
+describe('toIntPrice — thousands grammar, not merely shape', () => {
+  it('rejects malformed thousands groups instead of dropping a digit', () => {
+    // '41,96' silently became 4196 and '1,2,3' became 123 — a plausible-looking
+    // wrong purchase price, the exact failure the file header warns about.
+    expect(toIntPrice('41,96')).toBeNull()
+    expect(toIntPrice('1,2,3')).toBeNull()
+    expect(toIntPrice('1,0200')).toBeNull()
+    expect(toIntPrice(',500')).toBeNull()
+    expect(toIntPrice('500,')).toBeNull()
+  })
+
+  it('still accepts every well-formed price in the catalog', () => {
+    expect(toIntPrice('1,020')).toBe(1020)
+    expect(toIntPrice('17,280')).toBe(17280)
+    expect(toIntPrice('90,600')).toBe(90600)   // the dearest bottle in the file
+    expect(toIntPrice('  2,710  ')).toBe(2710)
+    expect(toIntPrice('900')).toBe(900)
+  })
+})
