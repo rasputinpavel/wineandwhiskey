@@ -280,21 +280,28 @@ export function readRow(line: string, a: Anchors): Row {
   const priceM   = near(line, PRICE_RE, a.price, a)
   const vintageM = near(line, VINTAGE_RE, a.vintage, a)
 
+  // A vintage is never a price. Where the two searches land on the same token the
+  // row simply has no price cell — a name row, or one priced "pending". Without
+  // this the year would be stored as the price: the Vintage and Price columns sit
+  // as little as 10 characters apart and vintages print up to 5 characters right
+  // of their anchor, which is inside the price window.
+  const price = priceM && vintageM && priceM.index === vintageM.index ? null : priceM
+
   const firstCell = Math.min(
     sizeM ? sizeM.index : Infinity,
-    priceM ? priceM.index : Infinity,
+    price ? price.index : Infinity,
     vintageM ? vintageM.index : Infinity,
   )
   const left = Number.isFinite(firstCell) ? line.slice(0, firstCell).trim() : line.trim()
 
-  const afterPrice = priceM ? priceM.index + priceM[0].length : null
+  const afterPrice = price ? price.index + price[0].length : null
   const remark = afterPrice !== null ? line.slice(afterPrice).trim() : ''
 
   return {
     left,
     size: sizeM ? sizeM[0].replace(/\s+/g, '') : '',
     vintage: vintageM ? vintageM[0] : '',
-    price: priceM ? priceM[0] : '',
+    price: price ? price[0] : '',
     remark,
   }
 }

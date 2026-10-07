@@ -274,3 +274,43 @@ describe('per-table search window', () => {
     expect(readRow(line2, a).price).toBe('2,222')
   })
 })
+
+// Builds a header with its labels at exact columns, so a test can state the
+// geometry it is probing instead of hiding it in a wall of spaces.
+function headerAt(cols: Record<string, number>): string {
+  let s = ' Type'
+  for (const [label, col] of Object.entries(cols).sort((a, b) => a[1] - b[1])) {
+    s = s.padEnd(col, ' ') + label
+  }
+  return s
+}
+
+describe('a vintage is never a price', () => {
+  // 10 characters is the tightest Vintage->Price gap in the catalog, and vintages
+  // print as much as 5 characters right of their anchor — so a name row carrying
+  // only a vintage can put a year inside the price window.
+  const TIGHT_HDR = headerAt({ Size: 80, 'Alc%': 95, Vintage: 110, Price: 120, Remark: 134 })
+
+  it('is set up on the tightest geometry the catalog contains', () => {
+    const a = columnAnchors(TIGHT_HDR)!
+    expect(a.vintage).toBe(110)
+    expect(a.price).toBe(120)
+  })
+
+  it('leaves the price empty on a priceless name row carrying a vintage', () => {
+    const a = columnAnchors(TIGHT_HDR)!
+    const withYear = ('R    Some Wine'.padEnd(80, ' ') + '750ml').padEnd(115, ' ') + '2020'
+    expect(withYear.indexOf('2020')).toBe(115)   // +5 from Vintage, 5 from Price
+    const row = readRow(withYear, a)
+    expect(row.vintage).toBe('2020')
+    expect(row.price).toBe('')
+  })
+
+  it('still reads a real price that sits beside a vintage', () => {
+    const a = columnAnchors(TIGHT_HDR)!
+    const full = ('R    Some Wine'.padEnd(80, ' ') + '750ml').padEnd(111, ' ') + '2020' + ' '.repeat(5) + '1,500'
+    const row = readRow(full, a)
+    expect(row.vintage).toBe('2020')
+    expect(row.price).toBe('1,500')
+  })
+})
