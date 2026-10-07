@@ -102,30 +102,76 @@ Algorithm:
      on `SPIRITS` pages, the country (`DOMINICAN REPUBLIC`, `SRI LANKA`).
    - **prose paragraph** between banner and table header → producer description.
 3. A table starts at a header line matching `^\s*(Type|CODE)\s{2,}` that contains
-   `Size`. Column offsets come from the positions of the labels `Size`, `Alc%`,
-   `Vintage`, `Price`, `Remark`; each column spans from its own label to the start
-   of the next. Everything left of `Size` is the Type cell plus the product name.
+   `Size`. Column anchors come from the positions of the labels `Size`, `Alc%`,
+   `Vintage`, `Price`, `Remark`.
 4. Headers carrying `Packing` / `Price/Pcs` are glassware → skip the whole block.
-5. Rows are cut by those offsets. Classification inside a block:
-   - a row with left-hand text → a product name row;
-   - a row with no left-hand text but both a size and a price → a size variant of
-     the nearest name row, searched upward and downward within the block;
-   - each variant becomes its own `ExtractedItem` (volume is a separate column and
-     the reconciler keys on name+volume, so two sizes are two positions).
+5. **Cells are found by regex inside a window of ±8 characters around each anchor,
+   not by slicing the line at the anchor.** Measured on the real file: variant size
+   cells print up to 2 characters left of the `Size` label (`1500ml` at column 75
+   under a label at 77), so a hard slice cuts `1500ml` into `15` + `00ml` and the
+   fragment lands in the product name. This is the single most common way a naive
+   implementation corrupts this catalog.
+
+### Line roles inside a table block
+
+`pdftotext` does not give one line per product. Three typesetting patterns appear,
+all verified against the real file:
+
+- **data line** — carries size and/or price in their columns. Yields an item. Its
+  type comes from the leading code on the line, or from a pending code (below).
+- **variant line** — no left-hand text, but both size and price. It is another
+  bottle size of a neighbouring product whose own name line carries no size or
+  price. Attach it to the contiguous nameless name row above or below.
+  **A name row that already carries its own size and price never absorbs
+  neighbours.** Without this rule Goutorbe-Bouillot's 750ml / 2,010 variant gets
+  misassigned to the next product, which prints 2,570 — a wrong price in the
+  database, silently.
+- **code-only line** — the whole line is just a type code (`     R`). The code
+  belongs to the next data line. This happens whenever a row also carries a stock
+  remark.
+- **remark-only line** — the whole line is a rating (`91 WS`, `90 VN`) or a stock
+  state (`low stock`, `out of stock`). Ratings are typeset vertically centred
+  around their product, so they may sit above *and* below its name row; both
+  belong to that product. Attach to the adjacent name row — the one above when its
+  own Remark cell is empty, otherwise the one below.
+- **stock-prefixed data line** — the stock remark is rendered at the far left edge,
+  before the name: `low stock    Chateau La Pensee Lalande de Pomerol  750ml …`.
+  The leading `low stock` / `out of stock` / `stock` must be stripped off the name
+  and moved into the remark, or it ends up inside the product name in the database.
+- **prose / banner line** — anything else. Feeds the context described above.
+
+Each size variant becomes its own `ExtractedItem`: volume is a separate column and
+the reconciler keys on name plus volume, so two sizes are two positions.
+
+### The Type column vocabulary
+
+The Type cell is not separated from the product name by a reliable gap — spirits
+rows print `Armagnac Gelas, Bas Armagnac 8 Ans` with a single space. So the Type
+cell is recognised by a closed vocabulary, longest match first, anchored at the
+start of the left-hand text. Counted over all 921 data rows in this catalog:
+
+- **codes:** `R` 505, `W` 186, `SP` 26, `CP` 17, `RO` 9, `DW` 7, `FW` 3, `SW` 1,
+  `CP RO` 2, `SP RO` 2, `RO SP` 1
+- **words:** `Whisky` 35, `Rum` 12, `Armagnac` 8, `Cognac` 8, `Sherry` 6,
+  `Calvados` 6, `Gin` 5, `Brandy` 5, `Fortified` 4, `Rhum` 3, `Eau-de-Vie` 2,
+  `Vermouth` 2, `Liqueur` 1, `Aperitif` 1, `Vodka` 1, `Ceylon` (Ceylon Arrack) 1
+
+A data row whose left-hand text matches nothing in this list is a parser bug, not a
+row to drop silently — the coverage check below is what catches it.
 
 ### Field mapping
 
 | Catalog | `ExtractedItem` |
 |---|---|
 | Type code `R` / `W` / `RO` / `SP` / `CP` | `wine_type` `red` / `white` / `rose` / `sparkling` / `sparkling` |
-| Type code `DW` / `FW` / `SW` | `category: 'wine'`, `wine_type: null`, the term appended to `description` |
+| Type code `DW` / `FW` / `SW`, Type word `Sherry` / `Vermouth` / `Fortified` | `category: 'wine'`, `wine_type: null`, the term appended to `description`. These are wines, fortified or sweet — routing them to `spirits` would misfile Lustau's sherries |
 | Type code `SP RO` / `CP RO` / `RO SP` | `sparkling` — the word Rosé is already in the product name, and the price browser is more useful with these under sparkling |
-| Type as a word (`Rum`, `Rhum`, `Gin`, `Liqueur`, `Armagnac`, `Eau-de-Vie`, `Aperitif`, `Whisky`, …) | `category: 'spirits'`, `spirit_type` normalised (`Rhum` → `rum`) |
+| Type word `Whisky` / `Rum` / `Rhum` / `Gin` / `Vodka` / `Brandy` / `Cognac` / `Armagnac` / `Calvados` / `Eau-de-Vie` / `Liqueur` / `Aperitif` / `Ceylon` | `category: 'spirits'`, `spirit_type` normalised (`Rhum` → `rum`, `Ceylon` → `arrack`) |
 | Page banner / sub-banner | `country`, `region`. `CHAMPAGNE` → France, `PROSECCO` → Italy, `CAVA` → Spain |
 | `Vintage` | `year`; `NV` → `null` |
 | `Size` | `volume`, kept as printed (`750ml`) |
 | `Price` | `price`, the printed number, thousands separator stripped, no arithmetic |
-| `Remark` (`88 WE`, `91 WS`, `90 JS`) + producer paragraph | `description`, one line |
+| `Remark` — ratings (`88 WE`, `91 WS`, `90 JS`, `94 VN`) and stock states (`low stock`, `out of stock`) + producer paragraph | `description`, one line |
 | — | `grape_variety: null` (Vivino fills it), `supplier_sku: null` |
 
 Rows printing no price (out of stock / on request) yield `price: null`, as in
@@ -137,11 +183,17 @@ every product name. Widening the shared route for one supplier is not worth it.
 
 ## Testing
 
-**Fixture test.** A page extract covering the three hard cases in one file:
-a champagne table with a multi-size item, a spirits table whose Type column holds
-words (`Eau-de-Vie`, `Armagnac` — long enough to crowd the name), and a glassware
-page. Expected JSON asserts the position count, the multi-size split, prices exact
-to the baht, and that glassware produced nothing.
+**Fixture test.** Pages 2, 3 and 9 of the catalog, chosen because between them they
+contain every hard case: glassware to be skipped (p. 2), multi-size items and
+vertically centred double ratings (p. 3, Canard-Duchêne and Paul Bara), the
+no-absorb case that would otherwise take a neighbour's price (p. 3,
+Goutorbe-Bouillot), and a spirits table whose Type column holds words glued to the
+name (p. 9, Maison Gelas). The stock-prefix case lives further in, so the fixture
+also takes the Javelier-Laurin and Chateau La Pensee tables.
+
+The test runs the pure text-parsing function against the `pdftotext -layout` output,
+the way `smd.test.ts` tests pure helpers. Assertions: position count, the multi-size
+split, prices exact to the baht, no glassware, no `low stock` left inside a name.
 
 **Coverage check** (one-off, run during implementation, not committed as a test).
 A script counts every line in the raw `pdftotext` output that has both a volume and
