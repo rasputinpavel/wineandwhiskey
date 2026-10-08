@@ -1056,3 +1056,105 @@ function alignToSpine<T>(spine: number[], cells: { line: number; value: T }[]): 
   }
   return out
 }
+
+// ─── Word coordinates ──────────────────────────────────────────────────────
+//
+// The geometry comes from `pdftotext -bbox`, which gives every word its own
+// box, rather than from `-layout`, which paints the page into character cells.
+//
+// Why: `-layout` merges baselines about 4pt apart onto one text line, and that
+// is exactly the signal that says which product a centred cell belongs to. On
+// page 14 Hermandad prints
+//
+//     y=549.0        2019
+//     y=553.0  +4.0  R Hermandad, Blend (…)  750ml 14.5 1,490
+//     y=557.7  +4.7  2022
+//     y=571.6 +13.9  2022                     ← a new product starts here
+//     y=575.6  +4.0  R Hermandad, Malbec     750ml 14.5 1,490
+//     y=579.6  +4.0  2023
+//
+// and `-layout` folds 2019 onto Blend's line and the second 2022 onto Malbec's,
+// leaving the first 2022 equidistant between two products that each already
+// carry a size, a vintage and a price. Nothing in the text layer then says whose
+// it is; with coordinates the 4.7pt gap says it plainly.
+//
+// Use plain `-bbox`, never `-bbox-layout`: the latter groups words into <line>
+// elements and re-merges those 4pt baselines, which is the whole signal gone.
+
+export type Word = { x: number; y: number; text: string }
+export type WordRow = { y: number; words: Word[] }
+
+const XML_NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+
+function decodeXml(text: string): string {
+  return text.replace(/&(#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, ref: string) => {
+    if (ref.startsWith('#x') || ref.startsWith('#X')) return String.fromCodePoint(parseInt(ref.slice(2), 16))
+    if (ref.startsWith('#')) return String.fromCodePoint(parseInt(ref.slice(1), 10))
+    return XML_NAMED[ref.toLowerCase()] ?? whole
+  })
+}
+
+const PAGE_RE = /<page\b[^>]*>([\s\S]*?)<\/page>/g
+const WORD_RE = /<word\b[^>]*\bxMin="([-\d.]+)"[^>]*\byMin="([-\d.]+)"[^>]*>([\s\S]*?)<\/word>/g
+
+// Splits the whole document into pages of words. Any wrapper markup is ignored,
+// so a fixture built by concatenating one-page dumps reads the same as a
+// single whole-document dump.
+export function bboxPages(xml: string): Word[][] {
+  const pages: Word[][] = []
+  for (const page of xml.matchAll(PAGE_RE)) {
+    const words: Word[] = []
+    for (const w of page[1].matchAll(WORD_RE)) {
+      const text = decodeXml(w[3]).trim()
+      if (text) words.push({ x: parseFloat(w[1]), y: parseFloat(w[2]), text })
+    }
+    pages.push(words)
+  }
+  return pages
+}
+
+// Words printed on one baseline. Measured over the catalog: words of the same
+// visual row share a yMin exactly, so the tolerance only absorbs float noise —
+// the nearest real structure is 0.3pt away (a stock remark hanging under its
+// row) and that is deliberately left as a row of its own, for liftStockRows.
+const ROW_TOLERANCE = 0.2
+
+export function wordRows(words: Word[]): WordRow[] {
+  const rows: WordRow[] = []
+  for (const w of [...words].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const last = rows[rows.length - 1]
+    if (last && w.y - last.y <= ROW_TOLERANCE) last.words.push(w)
+    else rows.push({ y: w.y, words: [w] })
+  }
+  for (const r of rows) r.words.sort((a, b) => a.x - b.x)
+  return rows
+}
+
+export const rowText = (row: WordRow) => row.words.map(w => w.text).join(' ')
+
+// A row that is nothing but a stock remark. The catalog hangs these 0.3–3.1pt
+// under the row they belong to, sometimes in the far-left gutter and sometimes
+// in the Remark column, and they must come out of the row list before anything
+// measures the gaps between rows: on page 31 the gap from Javelier-Laurin's
+// "low stock" to the next product is 11.1pt, which would read as one cluster,
+// while the gap between the two product rows themselves is 14.2pt.
+const STOCK_ROW_RE = /^(out of stock|low stock|out of|low|stock)$/
+
+export function liftStockRows(rows: WordRow[]): { rows: WordRow[]; stock: string[][] } {
+  const kept = rows.filter(r => !STOCK_ROW_RE.test(rowText(r)))
+  const stock: string[][] = kept.map(() => [])
+  for (const row of rows) {
+    const phrase = rowText(row)
+    if (!STOCK_ROW_RE.test(phrase)) continue
+    if (!kept.length) continue
+    // The nearest surviving row: the hanger sits just under its own row, but on
+    // page 13 it is 0.9pt above the row it belongs to and 13.3pt below the one
+    // before, so nearest is the rule rather than "always the row above".
+    let best = 0
+    for (let i = 1; i < kept.length; i++) {
+      if (Math.abs(kept[i].y - row.y) < Math.abs(kept[best].y - row.y)) best = i
+    }
+    stock[best].push(phrase)
+  }
+  return { rows: kept, stock }
+}

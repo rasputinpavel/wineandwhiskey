@@ -1205,3 +1205,90 @@ describe('the one Tesseron table, which prints both oddities at once', () => {
     expect(one(items, "'Experience 01'").price).toBe(79500)
   })
 })
+
+// ─── Word coordinates ──────────────────────────────────────────────────────
+
+import { bboxPages, wordRows, rowText, liftStockRows } from './lovely'
+
+const BBOX = readFixture(joinPath(__dirname, '../__fixtures__/lovely-bbox.xml'), 'utf8')
+const BBOX_PAGES = bboxPages(BBOX)
+
+// The coordinate fixture is addressed by content, like the text one.
+function coords(marker: string): Word[] {
+  const hits = BBOX_PAGES.filter(p => p.some(w => w.text.includes(marker)))
+  if (hits.length !== 1) {
+    throw new Error(`bbox fixture: ${hits.length} pages contain ${JSON.stringify(marker)}, want exactly 1`)
+  }
+  return hits[0]
+}
+
+import type { Word } from './lovely'
+
+describe('bboxPages', () => {
+  it('reads every page of the fixture', () => {
+    expect(BBOX_PAGES).toHaveLength(21)
+    expect(BBOX_PAGES.every(p => p.length > 50)).toBe(true)
+  })
+
+  it('decodes the XML escapes pdftotext writes', () => {
+    const words = coords('HERMANDAD').map(w => w.text)
+    expect(words).toContain('Hermandad,')
+    const apostrophes = BBOX_PAGES.flat().filter(w => w.text.includes("'"))
+    expect(apostrophes.length).toBeGreaterThan(50)
+    expect(BBOX_PAGES.flat().some(w => w.text.includes('&apos;'))).toBe(false)
+    expect(BBOX_PAGES.flat().some(w => w.text.includes('&amp;'))).toBe(false)
+  })
+})
+
+describe('wordRows', () => {
+  it('keeps the baselines that -layout folds together', () => {
+    // The Hermandad cluster, which is the whole reason for this layer.
+    const rows = wordRows(coords('HERMANDAD'))
+      .filter(r => r.y > 545 && r.y < 585)
+      .map(r => [Math.round(r.y * 10) / 10, rowText(r)] as const)
+    expect(rows).toEqual([
+      [549.0, '2019'],
+      [553.0, 'R Hermandad, Blend (Malbec/ Cab/ Merlot/ Petit Verdot) 750ml 14.5 1,490'],
+      [557.7, '2022'],
+      [571.6, '2022'],
+      [575.6, 'R Hermandad, Malbec 750ml 14.5 1,490'],
+      [579.6, '2023'],
+    ])
+  })
+
+  it('leaves a stock remark hanging under its row as a row of its own', () => {
+    const rows = wordRows(coords("D'ESTOURNEL")).filter(r => r.y > 565 && r.y < 572)
+    expect(rows.map(r => rowText(r))).toEqual([
+      "R Chateau Cos d'Estournel Saint-Estephe 750ml 13 2021 9,440",
+      'low stock',
+    ])
+    expect(Math.round((rows[1].y - rows[0].y) * 10) / 10).toBe(2.3)
+  })
+})
+
+describe('liftStockRows', () => {
+  it('takes the hangers out before anything measures a gap', () => {
+    // Javelier-Laurin: four products, each with a stock remark hanging under it.
+    // Left in, the gap from one hanger to the next product is 11.1pt and the two
+    // products read as one cluster; lifted out, every gap is about 14.2pt.
+    const rows = wordRows(coords('JAVELIER-LAURIN')).filter(r => r.y > 295 && r.y < 345)
+    const { rows: kept, stock } = liftStockRows(rows)
+    expect(rows).toHaveLength(8)
+    expect(kept).toHaveLength(4)
+    expect(kept.every(r => rowText(r).startsWith('R Javelier-Laurin,'))).toBe(true)
+    expect(stock).toEqual([['out of stock'], ['low stock'], ['low stock'], ['out of stock']])
+
+    const gaps = kept.slice(1).map((r, i) => Math.round(r.y - kept[i].y))
+    expect(gaps).toEqual([14, 14, 14])
+  })
+
+  it('gives a hanger to the nearest row, not always the one above', () => {
+    // Page 13's "low stock" sits 0.9pt above the Gin it belongs to and 13.3pt
+    // below the Bourbon before it.
+    const rows = wordRows(coords('Kentucky,')).filter(r => r.y > 650 && r.y < 670)
+    const { rows: kept, stock } = liftStockRows(rows)
+    expect(kept.map(r => rowText(r).slice(0, 26)))
+      .toEqual(['Whisky Navigator, Kentucky', 'Gin Navigator, London Dry '])
+    expect(stock).toEqual([[], ['low stock']])
+  })
+})
