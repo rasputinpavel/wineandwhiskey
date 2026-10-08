@@ -12,28 +12,28 @@
 // names: of the 262 table headers in the September 2026 file exactly 4 have no
 // Alc%, and they are precisely those 4 tables.
 //
-// Why deterministic: measured on the September 2026 file, every one of the 923
-// size cells, 598 vintages and 860 prices sits within a few characters of its
-// header's column, so the tables are genuinely character-aligned. An LLM pass
-// would cost ~25 calls per upload and could misread a digit. Grape variety is the
-// one field the tables never carry, and Vivino enrichment already fills it.
+// Why deterministic: the tables are genuinely tabular, and `pdftotext -bbox`
+// gives every word its own box, so a cell's column is its x and its product is
+// its y. An LLM pass would cost ~25 calls per upload and could misread a digit.
+// Grape variety is the one field the tables never carry, and Vivino enrichment
+// already fills it.
 //
-// Four typesetting traps, all verified against the real file:
-//   1. Multi-size items put the product name vertically centred BETWEEN its
-//      size/price rows, so the name line has neither a size nor a price.
-//   2. Size cells print as much as 8 characters left of the Size label, so a hard
-//      slice at the label cuts "1500ml" into "15" + "00ml" and the fragment ends
-//      up inside the product name. Cells are therefore found by regex near the
-//      anchor, not by slicing — and each search is clamped to the midpoint
-//      between its own column and its neighbours, because the Remark column can
-//      sit as close as 6 characters right of Price.
-//   3. When a row carries a stock remark, pdftotext splits it: the type code sits
-//      alone on one line and "low stock" / "out of stock" is rendered at the far
-//      left edge, before the product name.
-//   4. Numbers that abut other numbers. A price is only ever a whole token: the
-//      catalog contains ABVs like "37.50", a price mistyped as "1.020", and
-//      vintages that sit inside the price column's reach. Every cell regex is
-//      bounded on both sides and a vintage is never accepted as a price.
+// The geometry is read from coordinates and not from `-layout` text, because
+// `-layout` paints the page into character cells and merges baselines about 4pt
+// apart onto one line — which is exactly the signal that says which product a
+// centred cell belongs to. See the note above `wordRows`.
+//
+// Three typesetting traps, all verified against the real file:
+//   1. A product spreads its cells over several baselines, with the name, the
+//      sizes, the vintages or the price centred against the rest. Which rows
+//      belong together is read from the gaps between baselines, not guessed.
+//   2. A stock remark hangs 0.3–3.1pt under the row it belongs to, sometimes in
+//      the far-left gutter and sometimes in the Remark column. It is lifted out
+//      before any gap is measured.
+//   3. Numbers printed oddly: a price with a dot for a thousands separator
+//      ("1.020"), a size with a comma inside it ("1,500ml"), and the words
+//      "pending" and "Request for Quote" where a number should be. Each is a
+//      whole cell here, so none of them can be half-read.
 //
 // Prices are RETAIL and VAT-exclusive ("NOTE : Prices are Vat Exclusive"); our
 // purchase price is about 20% lower. We store the printed number verbatim, like
@@ -44,7 +44,7 @@
 // supplier_sku stays null (same as Boozia and Richly).
 
 import type { ExtractedItem, ExtractionResult } from '../claude'
-import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout } from './_shared'
+import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout, exec } from './_shared'
 
 const writeTemp = (buf: Buffer) => writeTempShared(buf, 'lovely')
 
@@ -273,154 +273,262 @@ export function matchType(left: string): { type: TypeInfo; rest: string } | null
   return null
 }
 
-// ─── Table geometry ────────────────────────────────────────────────────────
+// ─── Reading the PDF ───────────────────────────────────────────────────────
 
-export type Anchors = {
+// Kept local rather than put in `_shared.ts` next to pdftotextLayout: no other
+// parser in the repo reads coordinates, so there is nothing to share yet. If a
+// second one needs it, it belongs there.
+//
+// `-bbox`, never `-bbox-layout` — see the note on word coordinates below.
+export async function pdftotextBbox(path: string): Promise<string> {
+  const { stdout } = await exec('pdftotext', ['-bbox', path, '-'], { maxBuffer: 64 * 1024 * 1024 })
+  return stdout
+}
+
+// ─── Word coordinates ──────────────────────────────────────────────────────
+//
+// The geometry comes from `pdftotext -bbox`, which gives every word its own
+// box, rather than from `-layout`, which paints the page into character cells.
+//
+// Why: `-layout` merges baselines about 4pt apart onto one text line, and that
+// is exactly the signal that says which product a centred cell belongs to. On
+// page 14 Hermandad prints
+//
+//     y=549.0        2019
+//     y=553.0  +4.0  R Hermandad, Blend (…)  750ml 14.5 1,490
+//     y=557.7  +4.7  2022
+//     y=571.6 +13.9  2022                     ← a new product starts here
+//     y=575.6  +4.0  R Hermandad, Malbec     750ml 14.5 1,490
+//     y=579.6  +4.0  2023
+//
+// and `-layout` folds 2019 onto Blend's line and the second 2022 onto Malbec's,
+// leaving the first 2022 equidistant between two products that each already
+// carry a size, a vintage and a price. Nothing in the text layer then says whose
+// it is; with coordinates the 4.7pt gap says it plainly.
+//
+// Use plain `-bbox`, never `-bbox-layout`: the latter groups words into <line>
+// elements and re-merges those 4pt baselines, which is the whole signal gone.
+
+export type Word = { x: number; y: number; text: string }
+export type WordRow = { y: number; words: Word[] }
+
+const XML_NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+
+function decodeXml(text: string): string {
+  return text.replace(/&(#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, ref: string) => {
+    if (ref.startsWith('#x') || ref.startsWith('#X')) return String.fromCodePoint(parseInt(ref.slice(2), 16))
+    if (ref.startsWith('#')) return String.fromCodePoint(parseInt(ref.slice(1), 10))
+    return XML_NAMED[ref.toLowerCase()] ?? whole
+  })
+}
+
+const PAGE_RE = /<page\b[^>]*>([\s\S]*?)<\/page>/g
+const WORD_RE = /<word\b[^>]*\bxMin="([-\d.]+)"[^>]*\byMin="([-\d.]+)"[^>]*>([\s\S]*?)<\/word>/g
+
+// Splits the whole document into pages of words. Any wrapper markup is ignored,
+// so a fixture built by concatenating one-page dumps reads the same as a
+// single whole-document dump.
+export function bboxPages(xml: string): Word[][] {
+  const pages: Word[][] = []
+  for (const page of xml.matchAll(PAGE_RE)) {
+    const words: Word[] = []
+    for (const w of page[1].matchAll(WORD_RE)) {
+      const text = decodeXml(w[3]).trim()
+      if (text) words.push({ x: parseFloat(w[1]), y: parseFloat(w[2]), text })
+    }
+    pages.push(words)
+  }
+  return pages
+}
+
+// Words printed on one baseline. Measured over the catalog: words of the same
+// visual row share a yMin exactly, so the tolerance only absorbs float noise —
+// the nearest real structure is 0.3pt away (a stock remark hanging under its
+// row) and that is deliberately left as a row of its own, for liftStockRows.
+const ROW_TOLERANCE = 0.2
+
+export function wordRows(words: Word[]): WordRow[] {
+  const rows: WordRow[] = []
+  for (const w of [...words].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const last = rows[rows.length - 1]
+    if (last && w.y - last.y <= ROW_TOLERANCE) last.words.push(w)
+    else rows.push({ y: w.y, words: [w] })
+  }
+  for (const r of rows) r.words.sort((a, b) => a.x - b.x)
+  return rows
+}
+
+// Words of a row as one string. The hyphen fix-up is not cosmetic: pdftotext
+// splits ENTRE‑DEUX‑MERS (U+2011) into five words with ordinary 2.2pt word gaps
+// between them, so a plain join would give "ENTRE ‑ DEUX ‑ MERS" and the banner
+// would no longer match its ASCII twin two producers later. Only the hyphen
+// characters are closed up; the catalog's own "SAINT - ESTEPHE" keeps its spaces,
+// and so do the em dashes in its in-table separators.
+const TIGHT_HYPHEN = / ?([\u2010\u2011]) ?/g
+
+export const joinWords = (words: Word[]) => words.map(w => w.text).join(' ').replace(TIGHT_HYPHEN, '$1')
+
+export const rowText = (row: WordRow) => joinWords(row.words)
+
+// A row that is nothing but a stock remark. The catalog hangs these 0.3–3.1pt
+// under the row they belong to, sometimes in the far-left gutter and sometimes
+// in the Remark column, and they must come out of the row list before anything
+// measures the gaps between rows: on page 31 the gap from Javelier-Laurin's
+// "low stock" to the next product is 11.1pt, which would read as one cluster,
+// while the gap between the two product rows themselves is 14.2pt.
+const STOCK_ROW_RE = /^(out of stock|low stock|out of|low|stock)$/
+
+export function liftStockRows(rows: WordRow[]): { rows: WordRow[]; stock: string[][] } {
+  const kept = rows.filter(r => !STOCK_ROW_RE.test(rowText(r)))
+  const stock: string[][] = kept.map(() => [])
+  for (const row of rows) {
+    const phrase = rowText(row)
+    if (!STOCK_ROW_RE.test(phrase)) continue
+    if (!kept.length) continue
+    // The nearest surviving row: the hanger sits just under its own row, but on
+    // page 13 it is 0.9pt above the row it belongs to and 13.3pt below the one
+    // before, so nearest is the rule rather than "always the row above".
+    let best = 0
+    for (let i = 1; i < kept.length; i++) {
+      if (Math.abs(kept[i].y - row.y) < Math.abs(kept[best].y - row.y)) best = i
+    }
+    stock[best].push(phrase)
+  }
+  return { rows: kept, stock }
+}
+
+// ─── Table geometry, in points ─────────────────────────────────────────────
+
+export type Columns = {
   size: number
-  // Always present in practice — columnAnchors refuses a header without it — but
-  // kept nullable so the window arithmetic treats every column uniformly.
-  alc: number | null
+  alc: number
   vintage: number | null
   price: number
   remark: number | null
+  // Words starting left of this are the Type cell and the product name.
+  leftEdge: number
 }
 
-export type Row = {
-  left: string      // Type cell + product name, possibly prefixed by a stock remark
+// Measured over all 64 pages: a size cell starts at most 12pt left of its Size
+// label, and the furthest right any product name ever starts is 23pt left of it
+// (Au Bon Climat 'Sanford & Benedict Vineyard', page 57). 17 therefore has 5pt
+// of clearance on the cell side and 6pt on the name side.
+const LEFT_GUTTER = 17
+
+// A header row, and the columns it fixes. Alc% is the gate rather than a
+// blocklist of glassware words: of the 262 headers in the September 2026 catalog
+// exactly 4 lack an Alc% column, and those 4 are precisely the cigar ashtray and
+// the three glassware tables. Matching whole words settles Price/Pcs and
+// Height/Volume for free — pdftotext gives each of those as one word, and one
+// word is either 'Price' or it is not.
+export function tableColumns(row: WordRow): Columns | null {
+  const words = row.words
+  if (!words.length) return null
+  if (words[0].text !== 'Type' && words[0].text !== 'CODE') return null
+
+  const at = (label: string) => words.find(w => w.text === label)?.x ?? null
+  const size = at('Size')
+  const alc = at('Alc%')
+  const price = at('Price')
+  if (size === null || alc === null || price === null) return null
+
+  return { size, alc, vintage: at('Vintage'), price, remark: at('Remark'), leftEdge: size - LEFT_GUTTER }
+}
+
+// A size cell: "750ml", "750 ml" (two words, joined here), "1,500ml" with the
+// comma the catalog prints once. Normalised so every 1500ml entry matches.
+const SIZE_CELL_RE = /^(?:\d{1,2},\d{3}|\d{2,4})\s?(?:ml|ML|cl|CL|L)\.?$/
+const VINTAGE_CELL_RE = /^(?:(?:19|20)\d{2}|NV)$/
+
+// Two rows print the thousands separator as a dot — 1.970 (Giuseppe Cortese,
+// Barbera d'Alba) and 1.020 (Muga Reserva 375ml) — and one more as 5.330
+// (Buisson, Meursault). The catalog never prices with decimals, so inside the
+// price column a dot is a separator. Read and warned about rather than dropped.
+const DOT_PRICE_CELL_RE = /^(\d{1,3})\.(\d{3})$/
+
+// The catalog's two ways of printing "no price yet": 51 rows say pending, and
+// the two dearest Tesseron Cognacs say Request for Quote, which straddles the
+// Price and Remark columns and so is matched across both.
+const REQUEST_RE = /^Request\s+for\s+Quote\b/i
+
+export type RowCells = {
+  y: number
+  left: string        // Type cell + product name, as printed
+  leftX: number       // where that text starts, which is what tells prose from a name
   size: string
   vintage: string
-  price: string
+  price: PriceCell
   remark: string
+  // Words standing in the Size, Alc%, Vintage or Price columns that parse as
+  // none of those. A table row has none; a producer paragraph that overran into
+  // the table has its sentence spread across all of them. The Remark column is
+  // left out, because a critic score parses as nothing by design.
+  unexplained: number
 }
 
-const HEADER_RE = /^\s*(Type|CODE)\s{2,}/
+// Reads one row against its table's columns. Every word goes to the column whose
+// label it starts nearest — exact, with no search window and no distance
+// tolerance to tune. Measured over the catalog: no cell word is ever within 4pt
+// of being equally near two labels, so the assignment is never a close call.
+export function rowCells(row: WordRow, c: Columns): RowCells {
+  const anchors: [keyof typeof cols, number][] = [['size', c.size], ['alc', c.alc], ['price', c.price]]
+  if (c.vintage !== null) anchors.push(['vintage', c.vintage])
+  if (c.remark !== null) anchors.push(['remark', c.remark])
 
-// A header we can parse has Size, Price and Alc%.
-//
-// Alc% is the gate rather than a blocklist of glassware words: over the 262 table
-// headers in the September 2026 catalog exactly 4 lack an Alc% column, and those 4
-// are precisely the cigar ashtray and the three glassware tables. A blocklist of
-// the literals Packing / Price/Pcs / Height/Volume only holds until the supplier
-// rewords a column, whereas a table of things you drink will always state strength.
-//
-// Labels are matched as whole tokens, not with indexOf: `indexOf('Price')` finds
-// the Price inside `Price/Pcs` and hands back an anchor pointing at a column of
-// per-piece glass prices.
-function labelAt(header: string, label: string): number | null {
-  const m = new RegExp(`(?<![A-Za-z/])${label}(?![A-Za-z/])`).exec(header)
-  return m ? m.index : null
-}
-
-export function columnAnchors(header: string): Anchors | null {
-  if (!HEADER_RE.test(header)) return null
-
-  const at = (label: string) => labelAt(header, label)
-  const size = at('Size')
-  const price = at('Price')
-  const alc = at('Alc%')
-  if (size === null || price === null || alc === null) return null
-
-  return { size, alc, vintage: at('Vintage'), price, remark: at('Remark') }
-}
-
-// The widest a cell search ever reaches, whatever the table geometry allows.
-const WINDOW_CAP = 8
-
-// How far left and right of its own anchor a cell may be searched. A flat window
-// of 8 was wrong: in the Paul Bara, Javelier-Laurin and Philippe Leclerc tables
-// the Remark anchor sits exactly 8 characters right of Price (as little as 6
-// elsewhere in the catalog), so a critic score typeset in the Remark column was
-// read as the price. The search is therefore clamped to the midpoint between this
-// anchor and its neighbours, which the header hands us for free.
-//
-// Verified over the whole September 2026 catalog: this loses none of the 923 size,
-// 598 vintage or 860 price cells, because real cells sit at most 4 characters
-// right of their anchor (8 left, for Size, which has no column to its left).
-function windowAround(anchor: number, a: Anchors): { left: number; right: number } {
-  const cols = [a.size, a.alc, a.vintage, a.price, a.remark]
-    .filter((v): v is number => v !== null)
-    .sort((x, y) => x - y)
-  const i = cols.indexOf(anchor)
-  const prev = i > 0 ? cols[i - 1] : null
-  const next = i >= 0 && i < cols.length - 1 ? cols[i + 1] : null
-  const half = (gap: number) => Math.min(WINDOW_CAP, Math.floor(gap / 2))
-  return {
-    left: prev === null ? WINDOW_CAP : half(anchor - prev),
-    right: next === null ? WINDOW_CAP : half(next - anchor),
+  const cols = { size: [] as Word[], alc: [] as Word[], vintage: [] as Word[], price: [] as Word[], remark: [] as Word[] }
+  const left: Word[] = []
+  for (const w of row.words) {
+    if (w.x < c.leftEdge) { left.push(w); continue }
+    let best = anchors[0]
+    for (const a of anchors) if (Math.abs(w.x - a[1]) < Math.abs(w.x - best[1])) best = a
+    cols[best[0]].push(w)
   }
-}
 
-// Finds the occurrence of `re` whose start is nearest to `anchor`, inside that
-// anchor's own window.
-function near(line: string, re: RegExp, anchor: number | null, a: Anchors): RegExpExecArray | null {
-  if (anchor === null) return null
-  const { left, right } = windowAround(anchor, a)
-  const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
-  let best: RegExpExecArray | null = null
-  let bestDist = Infinity
-  let m: RegExpExecArray | null
-  while ((m = rx.exec(line)) !== null) {
-    const offset = m.index - anchor
-    const dist = Math.abs(offset)
-    if (offset >= -left && offset <= right && dist < bestDist) { best = m; bestDist = dist }
-    if (offset > right) break
+  const join = joinWords
+  const sizeText = join(cols.size)
+  const vintageText = join(cols.vintage)
+  const priceText = join(cols.price)
+  const remarkText = join(cols.remark)
+
+  let price: PriceCell = { kind: 'none' }
+  let remark = remarkText
+  const spanning = [priceText, remarkText].filter(Boolean).join(' ')
+  if (REQUEST_RE.test(spanning)) {
+    price = { kind: 'pending' }
+    remark = spanning.replace(REQUEST_RE, '').trim()
+  } else if (/^pending$/i.test(priceText)) {
+    price = { kind: 'pending' }
+  } else {
+    const dotted = DOT_PRICE_CELL_RE.exec(priceText)
+    if (dotted) {
+      price = { kind: 'num', value: parseInt(dotted[1] + dotted[2], 10) }
+      console.warn(`[lovely] price ${JSON.stringify(priceText)} read as ${price.value} — a dot where the catalog otherwise prints a comma: ${JSON.stringify(rowText(row).slice(0, 90))}`)
+    } else {
+      const n = toIntPrice(priceText)
+      if (n !== null) price = { kind: 'num', value: n }
+    }
   }
-  return best
-}
 
-// Every cell regex is bounded on BOTH sides against digits, dots and commas, so
-// a match can only ever be a whole number as typeset. Without the left boundary:
-//   "102000"  yielded the price "02000"
-//   "37.50"   (a real ABV in the Ron Barceló table) yielded the price "50"
-//   "1.020"   (a real price on page 48, mistyped with a dot) yielded "020", i.e.
-//             a THB 1,020 bottle imported at THB 20
-//   "12000ml" yielded the size "2000ml"
-// A price with a decimal part does not occur in this catalog, so the dot form is
-// refused outright rather than truncated: no price is recoverable, a wrong one is
-// not.
-//
-// Sizes: every one of the 923 size cells in the September 2026 file is in ml, so
-// litre and centilitre forms are carried only as insurance. One cell prints a
-// thousands separator inside the number — "1,500ml", the Tesseron Extreme Rare
-// Cognac — which the comma form accepts and `readRow` normalises to 1500ml so it
-// matches the catalog's other 1500ml entries. The left boundary still stands
-// against reading "2000ml" out of "12000ml".
-const SIZE_RE    = /(?<![\d.,])(?:\d{1,2},\d{3}|\d{2,4})\s?(?:ml|ML|cl|CL|L)\b/
-const PRICE_RE   = /(?<![\d.,])(?:\d{1,3}(?:,\d{3})+|\d{2,5})(?![\d.,])/
-const VINTAGE_RE = /(?<![\d.,])(?:19|20)\d{2}(?![\d.,])|(?<![A-Za-z])NV(?![A-Za-z])/
+  const explained = (w: Word, column: 'size' | 'alc' | 'vintage' | 'price') =>
+    column === 'size' ? SIZE_CELL_RE.test(w.text) || /^(?:\d{1,2},\d{3}|\d{2,4})$/.test(w.text) || /^(?:ml|ML|cl|CL|L)\.?$/.test(w.text)
+      : column === 'alc' ? /^\d{1,2}(?:\.\d{1,2})?%?$/.test(w.text)
+      : column === 'vintage' ? VINTAGE_CELL_RE.test(w.text)
+      : /^[\d,.]+$/.test(w.text) || /^(?:pending|Request|for|Quote)$/i.test(w.text)
 
-// Reads one line of a table against that table's anchors. Everything left of the
-// first located cell is the left-hand text; the remark is whatever trails the
-// price. Cells are located by regex near their anchor, never by slicing at it —
-// see the file header for why.
-export function readRow(line: string, a: Anchors): Row {
-  const sizeM    = near(line, SIZE_RE, a.size, a)
-  const priceM   = near(line, PRICE_RE, a.price, a)
-  const vintageM = near(line, VINTAGE_RE, a.vintage, a)
-
-  // A vintage is never a price. Where the two searches land on the same token the
-  // row simply has no price cell — a name row, or one priced "pending". Without
-  // this the year would be stored as the price: the Vintage and Price columns sit
-  // as little as 10 characters apart and vintages print up to 5 characters right
-  // of their anchor, which is inside the price window.
-  const price = priceM && vintageM && priceM.index === vintageM.index ? null : priceM
-
-  const firstCell = Math.min(
-    sizeM ? sizeM.index : Infinity,
-    price ? price.index : Infinity,
-    vintageM ? vintageM.index : Infinity,
-  )
-  const left = Number.isFinite(firstCell) ? line.slice(0, firstCell).trim() : line.trim()
-
-  const afterPrice = price ? price.index + price[0].length : null
-  const remark = afterPrice !== null ? line.slice(afterPrice).trim() : ''
+  let unexplained = 0
+  for (const column of ['size', 'alc', 'vintage', 'price'] as const) {
+    for (const w of cols[column]) if (!explained(w, column)) unexplained++
+  }
 
   return {
-    left,
-    size: sizeM ? sizeM[0].replace(/[\s,]/g, '') : '',
-    vintage: vintageM ? vintageM[0] : '',
-    price: price ? price[0] : '',
+    y: row.y,
+    left: join(left),
+    leftX: left.length ? left[0].x : Infinity,
+    size: SIZE_CELL_RE.test(sizeText) ? sizeText.replace(/[\s,]/g, '').replace(/\.$/, '') : '',
+    vintage: VINTAGE_CELL_RE.test(vintageText) ? vintageText : '',
+    price,
     remark,
+    unexplained,
   }
 }
 
@@ -498,6 +606,9 @@ const COUNTRIES = new Set([
   'CHILE', 'GERMANY', 'NEW ZEALAND', 'AUSTRIA', 'SOUTH AFRICA', 'HUNGARY', 'SWITZERLAND',
   'UNITED KINGDOM', 'SCOTLAND', 'DOMINICAN REPUBLIC', 'SRI LANKA', 'PORTUGAL', 'GREECE',
   'JAPAN', 'MEXICO', 'CUBA', 'LEBANON', 'ISRAEL', 'GEORGIA', 'MOLDOVA',
+  // Spirits countries the catalog does not print today but plausibly will.
+  'PERU', 'JAMAICA', 'GUATEMALA', 'VENEZUELA', 'IRELAND', 'BARBADOS',
+  'MARTINIQUE', 'INDIA', 'TAIWAN', 'CANADA', 'BRAZIL', 'POLAND', 'SWEDEN',
 ])
 
 const countryOf = (norm: string) => BANNER_COUNTRY[norm] ?? titleCase(norm)
@@ -506,20 +617,32 @@ type Context = {
   category: string | null     // the category page banner, where the page has one
   country: string | null
   region: string | null
+  pageHadCountry: boolean     // has anything named a country since this banner?
   prose: string[]             // producer paragraph being collected
 }
 
-// Indent decides which kind of banner this is: page banners are centred
-// (indent > 30) and region sub-banners sit near the left margin.
-function applyBanner(ctx: Context, text: string, indent: number): void {
+// A banner's left edge says which kind it is. Measured over all 64 pages: page
+// banners are centred, so they start at 130pt and beyond (and every one of the 64
+// is centred within 7pt of the page's own centre line); region sub-banners start
+// at 81–91pt; the separators printed inside a table start at 31–46pt. 130 has
+// 39pt of clearance below it.
+const PAGE_BANNER_X = 130
+
+function applyBanner(ctx: Context, text: string, x: number): void {
   const norm = normBanner(text)
   ctx.prose = []
 
-  if (indent > 30) {
-    if (CATEGORY_BANNERS.has(norm)) { ctx.category = norm; ctx.region = null; return }
+  if (x >= PAGE_BANNER_X) {
+    if (CATEGORY_BANNERS.has(norm)) {
+      ctx.category = norm
+      ctx.region = null
+      ctx.pageHadCountry = false
+      return
+    }
     ctx.category = null
     ctx.country = countryOf(norm)
     ctx.region = null
+    ctx.pageHadCountry = true
     return
   }
 
@@ -533,108 +656,41 @@ function applyBanner(ctx: Context, text: string, indent: number): void {
   if (parts.length > 1 && COUNTRIES.has(parts[parts.length - 1])) {
     ctx.country = countryOf(parts[parts.length - 1])
     ctx.region = titleCase(parts.slice(0, -1).join(', '))
+    ctx.pageHadCountry = true
   } else if (COUNTRIES.has(place)) {
     ctx.country = countryOf(place)
     ctx.region = null
+    ctx.pageHadCountry = true
   } else {
-    // Not a country we know (TOKAJI): a region under whatever country the
-    // previous sub-banner established.
+    // Not a country this list knows. Usually a region under the country the
+    // previous sub-banner established (TOKAJI, under HUNGARY DESSERT WINE), but
+    // a country page for Peru or Jamaica would land here too and would quietly
+    // inherit whatever country came before — Pisco filed as Sri Lankan. So the
+    // inheritance is only allowed when this page has already named a country.
     ctx.region = titleCase(place)
+    if (!ctx.pageHadCountry && ctx.category !== 'ACCESSORIES') {
+      console.warn(`[lovely] sub-banner ${JSON.stringify(text.trim())} on a ${ctx.category} page names no country this parser knows, and none was set on the page — country left empty`)
+      ctx.country = null
+    }
   }
 }
 
-// ─── What a line carries, beyond what readRow reports ──────────────────────
+// ─── What a cell can say besides a number ──────────────────────────────────
 
-// readRow is deliberately blind to these two: both are about meaning rather
-// than geometry, and its Row type is pinned by its own tests.
 export type PriceCell =
   | { kind: 'num'; value: number }
-  | { kind: 'pending' }     // the catalog prints the word: a real position, no price yet
-  | { kind: 'none' }        // no price cell on this line at all
+  | { kind: 'pending' }     // the catalog prints a word: a real position, no price yet
+  | { kind: 'none' }        // no price cell on this row at all
 
-// Words the catalog prints where a number would go: "pending" on 51 rows and
-// "Request for Quote" on the two dearest Tesseron Cognacs. Both mean a real
-// position whose price is not set, and both have to be told apart from an empty
-// price cell — otherwise a vintage row priced "pending" silently borrows the
-// price of the row it is centred against, and the unread words trail into the
-// description ("or Quote").
-const NO_PRICE_YET_RE = /pending|Request\s+for\s+Quote/i
-
-// Two rows in the September 2026 file print the thousands separator as a dot:
-// 1.970 (Giuseppe Cortese, Barbera d'Alba) and 1.020 (Muga Reserva 375ml). The
-// catalog never prices with decimals, so inside the price column a dot is a
-// separator. Read and warned about rather than dropped — but only as a whole
-// token, because the unbounded regex used to read "1.020" as 20.
-const DOT_PRICE_RE = /(?<![\d.,])(\d{1,3})\.(\d{3})(?![\d.,])/
-
-type LineCells = {
-  line: number
-  left: string            // Type cell + name, stock prefix still attached
-  size: string
-  vintage: string
-  price: PriceCell
-  remark: string
-}
-
-function readCells(line: string, lineNo: number, a: Anchors): LineCells {
-  const row = readRow(line, a)
-
-  let price: PriceCell = { kind: 'none' }
-  let priceEnd = 0
-  if (row.price) {
-    const value = toIntPrice(row.price)
-    if (value !== null) {
-      price = { kind: 'num', value }
-      priceEnd = line.indexOf(row.price) + row.price.length
-    }
-  } else {
-    const dotted = near(line, DOT_PRICE_RE, a.price, a)
-    if (dotted) {
-      price = { kind: 'num', value: parseInt(dotted[1] + dotted[2], 10) }
-      priceEnd = dotted.index + dotted[0].length
-      console.warn(`[lovely] price ${JSON.stringify(dotted[0])} read as ${price.value} — a dot where the catalog otherwise prints a comma: ${JSON.stringify(line.trim().slice(0, 90))}`)
-    } else {
-      const word = near(line, NO_PRICE_YET_RE, a.price, a)
-      if (word) { price = { kind: 'pending' }; priceEnd = word.index + word[0].length }
-    }
-  }
-
-  // readRow only reports what trails the price, so a row that has a critic
-  // score but no price loses it (Yangarra High Sands prints "100 JS" and no
-  // price at all). Reading from the Remark anchor recovers those, clamped past
-  // the price token so it can never bite into a number.
-  const remark = row.remark || (a.remark === null
-    ? ''
-    : line.slice(Math.max(a.remark - 2, priceEnd)).trim())
-
-  return { line: lineNo, left: row.left, size: row.size, vintage: row.vintage, price, remark }
-}
-
-const hasCells = (c: LineCells) => Boolean(c.size) || Boolean(c.vintage) || c.price.kind !== 'none'
-
-// A Remark cell printed alone on its line: a critic score ("91 WS", "96+ RP",
-// "87WE 93JS", "95 RP, 94 JS") or, rarely, a bare stock state.
-const RATING_RE = /^\d{2,3}\+?\s*[A-Z]{2}(?:[\s,/]+\d{2,3}\+?\s*[A-Z]{2})*$/
+const hasCells = (c: RowCells) => Boolean(c.size) || Boolean(c.vintage) || c.price.kind !== 'none'
 
 // ─── Products ──────────────────────────────────────────────────────────────
 
+// One product: the rows of one printed cluster.
 type Product = {
   nameParts: string[]
   type: TypeInfo | null
-  // True when the type code was printed alone on its line. That is the signal
-  // that the product name is wrapped *around* the code line, and so the only
-  // case in which a second name fragment continues this product instead of
-  // starting a new one.
-  codeAlone: boolean
-  // A wrapped name has exactly two halves, one either side of the code line.
-  // Once the second has arrived the name is closed: keep absorbing and the next
-  // product's name joins this one, and its own row loses its type code.
-  tailTaken: boolean
-  own: LineCells[]        // rows printed on this product's own lines
-  ownLines: number[]
-  above: LineCells[]      // centred rows assigned from the gap above
-  below: LineCells[]      //                     ... and from the gap below
-  ownRemark: boolean      // this product printed a Remark cell of its own
+  rows: RowCells[]
   remarks: string[]
   stock: string[]
   prose: string
@@ -642,362 +698,235 @@ type Product = {
   region: string | null
 }
 
-const newProduct = (ctx: Context, prose: string): Product => ({
-  nameParts: [], type: null, codeAlone: false, tailTaken: false, own: [], ownLines: [],
-  above: [], below: [], ownRemark: false, remarks: [], stock: [], prose,
-  country: ctx.country, region: ctx.region,
-})
+// ─── The core: catalog coordinates → items ─────────────────────────────────
 
-// ─── The core: catalog text → items ────────────────────────────────────────
+// Rows closer together than this are one cluster — one product, however many
+// rows it spreads its cells over.
+//
+// Measured over all 64 pages, between the rows of a table and after the hanging
+// stock remarks have been lifted out: gaps inside a cluster are 4.0, 4.6, 4.7,
+// 5.3, 5.4, 9.3, 9.4, 10.6 and 10.7pt, and the gap from one product to the next
+// is never less than 13.1pt (Prototype, page 56). 12 sits in that empty band
+// with 1.3pt of clearance below and 1.1pt above.
+//
+// This is what replaced guessing. The old reader worked from `-layout` text,
+// where a cluster boundary is simply not recorded, and had to infer ownership
+// from how well a product's columns lined up and how evenly its rows sat around
+// its name. That inference was wrong at least once — Hermandad's lone 2022 on
+// page 14 — and silently: the row became a duplicate vintage and the dedup
+// swallowed it.
+const CLUSTER_GAP = 12
 
-export function parseCatalogText(text: string): ExtractedItem[] {
+// An all-caps row's left edge says which kind of banner it is. Measured: the
+// separators printed inside a table start at 31–46pt, region sub-banners at
+// 81–91pt, and page banners at 130pt and beyond (they are centred on the page).
+const SUB_BANNER_X = 60
+
+// Producer prose starts at 150pt and beyond; a product name, or a wrapped half
+// of one, starts at 86pt at the furthest. 120 sits in that 64pt-wide gap.
+const PROSE_X = 120
+
+export function parseCatalogText(xml: string): ExtractedItem[] {
   const items: ExtractedItem[] = []
-  const ctx: Context = { category: null, country: null, region: null, prose: [] }
+  const ctx: Context = { category: null, country: null, region: null, pageHadCountry: false, prose: [] }
+  const tally = { oneCluster: 0 }
 
-  for (const pageText of text.split('\f')) {
-    const lines = pageText.split('\n')
+  for (const pageWords of bboxPages(xml)) {
+    const { rows, stock } = liftStockRows(wordRows(pageWords))
 
-    let anchors: Anchors | null = null
-    let skipping = false              // inside a table we refuse (glassware)
-    let products: Product[] = []
-    let gaps: LineCells[][] = [[]]    // gaps[k]: centred rows printed before products[k]
-    let cur: Product | null = null
-    let prevLine = -99                // last line that fed `cur`, for adjacency
+    let columns: Columns | null = null
+    let skipping = false            // inside a table we refuse (glassware)
     let blockProse = ''
-    let heldRemarks: string[] = []    // ratings printed before their product
-    let heldStock: string[] = []
-
-    const open = (): Product => {
-      const p = newProduct(ctx, blockProse)
-      p.remarks.push(...heldRemarks)
-      p.stock.push(...heldStock)
-      heldRemarks = []
-      heldStock = []
-      products.push(p)
-      if (!gaps[products.length]) gaps[products.length] = []
-      cur = p
-      return p
-    }
+    let cluster: RowCells[] = []
+    let clusterStock: string[] = []
+    let lastY = -Infinity
 
     const flush = (): void => {
-      if (products.length) emitBlock(products, gaps, items)
-      products = []
-      gaps = [[]]
-      cur = null
-      prevLine = -99
-      heldRemarks = []
-      heldStock = []
-      anchors = null
-      skipping = false
+      if (cluster.length) {
+        items.push(...positionsOf(buildProduct(cluster, clusterStock, ctx, blockProse), tally))
+      }
+      cluster = []
+      clusterStock = []
+      lastY = -Infinity
     }
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
 
-      if (HEADER_RE.test(line)) {
+      // A header either opens a table we can read or closes whatever was open.
+      if (row.words[0].text === 'Type' || row.words[0].text === 'CODE') {
         flush()
-        anchors = columnAnchors(line)
-        skipping = anchors === null
+        columns = tableColumns(row)
+        skipping = columns === null
         blockProse = ctx.prose.join(' ').replace(/\s+/g, ' ').trim()
         ctx.prose = []
         continue
       }
 
-      const bare = line.trim()
-      const indent = line.length - line.trimStart().length
+      const text = rowText(row)
 
-      // ── outside a table ──────────────────────────────────────────────────
-      if (anchors === null) {
-        if (!bare) continue
-        if (isBannerText(bare)) applyBanner(ctx, bare, indent)
-        else if (!skipping) ctx.prose.push(bare)
+      // ── outside a table ────────────────────────────────────────────────────
+      if (columns === null) {
+        if (isBannerText(text)) applyBanner(ctx, text, row.words[0].x)
+        else if (!skipping) ctx.prose.push(text)
         continue
       }
 
-      // ── inside a beverage table ──────────────────────────────────────────
-      if (!bare) continue
+      // ── inside a beverage table ────────────────────────────────────────────
+      const cells = rowCells(row, columns)
+      const { rest } = splitStockPrefix(cells.left)
 
-      const cells = readCells(line, i, anchors)
-
-      // readRow stops the left-hand text at the first cell it located, so on a
-      // row with no size, vintage or price at all — a name row centred between
-      // its vintage rows — the Alc% and Remark columns come back as part of the
-      // name ("...'Cuvee Leonie' Brut 14.5"). A product name can never reach the
-      // Size column, because anything that does is producer prose, so that is
-      // where the name is cut.
-      const raw = cells.left
-      const rawStart = raw ? line.indexOf(raw) : 0
-      const inCellArea = Boolean(raw) && rawStart >= anchors.size
-      // The stock remark comes off before anything looks at the Type cell:
-      // otherwise "stock   Chateau Cos d'Estournel" is an unknown Type cell and
-      // the row is dropped.
-      const unstocked = splitStockPrefix(inCellArea ? '' : raw)
-      const stock = unstocked.stock
-      const restStart = unstocked.rest ? line.indexOf(unstocked.rest, rawStart) : rawStart
-      // A product name is one run of words with no wide gap in it; a producer
-      // paragraph is one long run that reaches past the Size column. Measured on
-      // that run and not on the whole left-hand text, because readRow hands back
-      // the Alc% figure as well on a row with no size, vintage or price of its
-      // own — which made "Domaine J.A. Ferret, Pouilly-Fuisse,   13.0" look like
-      // a paragraph, so its name was thrown away and the priced row under it
-      // dropped for having none.
-      const runLength = (unstocked.rest.match(/^\S+(?: \S+)*/) ?? [''])[0].length
-      const looksLikeProse = restStart + runLength >= anchors.size
-      // The name is cut at the Size column, which is what drops that Alc%.
-      const rest = unstocked.rest.slice(0, Math.max(0, anchors.size - restStart)).trimEnd()
-
-      if (!rest) {
-        // Nothing to the left of the cells: a centred cell row, a torn stock
-        // fragment, or a Remark cell printed alone on its line.
-        if (stock) {
-          if (cur) { cur.stock.push(stock); prevLine = i } else heldStock.push(stock)
-        } else if (!hasCells(cells) && cells.remark && RATING_RE.test(cells.remark)) {
-          // Ratings are typeset centred on their product, so one can sit above
-          // the name row and another below it. The row above takes it when that
-          // row printed no Remark of its own; otherwise it belongs to the next.
-          const prev = products[products.length - 1]
-          if (prev && !prev.ownRemark) prev.remarks.push(cells.remark)
-          else heldRemarks.push(cells.remark)
-          continue
-        }
-        if (hasCells(cells)) gaps[products.length] = (gaps[products.length] ?? []).concat(cells)
+      // A banner can appear while a table is still open — the next producer's
+      // region, printed before its header. Judged on the whole row, not on the
+      // left-hand part: RUPPERTSBERG, DEIDESHEIM, FORST spreads its three words
+      // across the cell columns, and reading only the first gives a region
+      // truncated to "Ruppertsberg, Deidesheim,". A row with no left-hand words
+      // at all is a Remark cell on its own baseline (a critic score in caps), not
+      // a banner.
+      if (cells.leftX < Infinity && isBannerText(text) && !hasCells(cells)) {
+        flush()
+        // A separator printed hard against the left margin heads a run of rows
+        // inside one table (TORRE DE OÑA — RIOJA ALAVESA) and says nothing about
+        // place. Anything further right is a real banner and ends the table.
+        if (cells.leftX >= SUB_BANNER_X) { columns = null; applyBanner(ctx, text, cells.leftX) }
         continue
       }
 
-      const cell = classifyTypeCell(rest)
-
-      if (cell.kind === 'matched') {
-        const continuesCode: boolean = cell.rest === '' && cur !== null && cur.type === null && i === prevLine + 1
-        const p: Product = continuesCode ? cur! : open()
-        p.type = cell.type
-        if (cell.rest === '') { p.codeAlone = true; p.tailTaken = false }
-        if (cell.rest) p.nameParts.push(cell.rest)
-        if (stock) p.stock.push(stock)
-        p.ownLines.push(i)
-        if (hasCells(cells)) p.own.push(cells)
-        if (cells.remark) { p.remarks.push(cells.remark); p.ownRemark = true }
-        cur = p
-        prevLine = i
+      // Producer prose that overran into the table. Eleven rows in the catalog,
+      // and every one is reported: a wrapped product name mistaken for prose
+      // would be thrown away with its cells, which is how a phantom priced wine
+      // ends up filed under half a sentence.
+      // Two shapes of paragraph reach a table: one indented under the brand, at
+      // 150pt and beyond, and one set at the left margin like a product row —
+      // told apart from a row by its sentence lying across the cell columns,
+      // where a table row has nothing that fails to parse. One stray word is not
+      // enough: "'Sous Roche' 2320" is a real wrapped name whose vintage the
+      // catalog mistyped.
+      const looksLikeProse = cells.leftX >= PROSE_X || cells.unexplained >= 2
+      if (rest && looksLikeProse && classifyTypeCell(rest).kind !== 'matched') {
+        flush()
+        console.warn(`[lovely] prose inside a table, discarded${hasCells(cells) ? ' WITH CELLS' : ''}: ${JSON.stringify(text.slice(0, 90))}`)
         continue
       }
 
-      if (cell.kind === 'unknown') { matchType(rest); continue }
-
-      // No Type cell: a banner, the tail of a wrapped product name, or prose.
-      if (isBannerText(rest)) {
-        // A region banner ends the table. A brand separator printed at column 0
-        // (LA RIOJA ALTA, S.A. — RIOJA) only interrupts it.
-        if (indent > 5) { flush(); applyBanner(ctx, bare, indent) }
-        else { cur = null; prevLine = -99 }
-        continue
-      }
-
-      // Producer prose runs out past the Size column and into the cell area; a
-      // wrapped name fragment stops before it. That is the whole difference
-      // between a paragraph and half a product name.
-      if (looksLikeProse) { cur = null; prevLine = -99; continue }
-
-      const continues: boolean = cur !== null && i === prevLine + 1 &&
-        (cur.nameParts.length === 0 || (cur.codeAlone && !cur.tailTaken))
-      const p: Product = continues ? cur! : open()
-      if (p.codeAlone) p.tailTaken = true
-      p.nameParts.push(rest)
-      if (stock) p.stock.push(stock)
-      p.ownLines.push(i)
-      if (hasCells(cells)) p.own.push(cells)
-      if (cells.remark) { p.remarks.push(cells.remark); p.ownRemark = true }
-      cur = p
-      prevLine = i
+      if (row.y - lastY >= CLUSTER_GAP) flush()
+      lastY = row.y
+      cluster.push(cells)
+      clusterStock.push(...(stock[i] ?? []))
     }
 
     flush()
   }
 
+  if (tally.oneCluster) {
+    console.warn(`[lovely] ${tally.oneCluster} clusters print one price for several vintages — paired as printed`)
+  }
   return items
 }
 
-// ─── Turning one producer's table into items ───────────────────────────────
+// ─── One cluster → one product ─────────────────────────────────────────────
 
-function emitBlock(products: Product[], gaps: LineCells[][], out: ExtractedItem[]): void {
-  const real = dropPhantoms(products, gaps)
-  assignCentredRows(real.products, real.gaps)
-  for (const p of real.products) out.push(...positionsOf(p))
-}
-
-// Some tables head a run of rows with a range label on its own line ("Reserva",
-// "Grand Reserva", "Acrux"), and two producer paragraphs wrap far enough to
-// reach a table block. Both read as a product with a name, no Type cell and no
-// cells of its own — which can never become a position, and so must not take
-// part in the centring either, or it competes for its neighbours' rows. Their
-// gaps are merged, so the rows they sat between go to the products that printed
-// them.
-function dropPhantoms(products: Product[], gaps: LineCells[][]): { products: Product[]; gaps: LineCells[][] } {
-  const keptProducts: Product[] = []
-  const keptGaps: LineCells[][] = [gaps[0] ?? []]
-  for (let i = 0; i < products.length; i++) {
-    const p = products[i]
-    if (p.type === null && p.own.length === 0) {
-      keptGaps[keptGaps.length - 1] = keptGaps[keptGaps.length - 1].concat(gaps[i + 1] ?? [])
-      continue
-    }
-    keptProducts.push(p)
-    keptGaps.push(gaps[i + 1] ?? [])
+function buildProduct(rows: RowCells[], stock: string[], ctx: Context, prose: string): Product {
+  const p: Product = {
+    nameParts: [], type: null, rows, remarks: [], stock: [...stock], prose,
+    country: ctx.country, region: ctx.region,
   }
-  return { products: keptProducts, gaps: keptGaps }
-}
-
-// ─── The centring rule, solved once for the whole table ────────────────────
-//
-// A cell typeset alone on its line is vertically centred and belongs to the
-// adjacent rows that lack that cell. In the text layer the vertical gaps that
-// say so are gone — a 5pt gap inside a cluster and a 14pt gap between products
-// both come out as one newline — so the grouping has to be reconstructed from
-// what the cells themselves say. Two things say it, and they are the whole rule:
-//
-//   1. a product's columns line up. Four vintages are printed against four
-//      prices, or against exactly one price that serves them all. A split that
-//      leaves three prices against four vintages is the wrong split.
-//   2. a product's extra rows are centred on its own row, so they come as
-//      evenly above and below as the count allows.
-//
-// Those two, in that order, reproduce the printed clusters everywhere they were
-// checked against the PDF's own coordinates — including the cases that look like
-// exceptions from the text alone: Goutorbe-Bouillot, where the row above is the
-// one that lacks a size and price; Bussola's Recioto, where the row below
-// already has both and still owns the cluster; and the Comtesse de Chérisey
-// tables, where vintages and prices alternate across eight lines.
-//
-// Line distance is the last word only, for the handful of gaps where neither
-// says anything.
-
-type Cost = [mismatch: number, balance: number, distance: number]
-
-const addCost = (a: Cost, b: Cost): Cost => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-const cheaper = (a: Cost, b: Cost) => (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) < 0
-
-function clusterCost(p: Product, above: LineCells[], below: LineCells[]): Cost {
-  const rows = [...above, ...p.own, ...below]
-  const lengths = [
-    rows.filter(r => r.size).length,
-    rows.filter(r => r.vintage).length,
-    rows.filter(r => r.price.kind !== 'none').length,
-  ]
-  const most = Math.max(...lengths)
-  // A column may be printed once per row, or once per *group* of rows: a price
-  // centred between two vintage rows serves both, so two prices against four
-  // vintages is as regular as four against four. An empty column is simply
-  // absent. What is irregular is a count that divides into none of it — three
-  // prices against four vintages means a row went to the wrong product.
-  const mismatch = lengths.reduce((sum, len) => sum + (len > 0 && most % len !== 0 ? 1 : 0), 0)
-
-  const lines = p.ownLines.length ? p.ownLines : [rows[0]?.line ?? 0]
-  const distance = [...above, ...below]
-    .reduce((sum, r) => sum + Math.min(...lines.map(l => Math.abs(r.line - l))), 0)
-
-  return [mismatch, Math.abs(above.length - below.length), distance]
-}
-
-// Exact: the gap between two products can only be split one way per product, so
-// the choices chain and a left-to-right pass over them finds the best whole-table
-// grouping. Tables have a handful of products and gaps of a few rows.
-function assignCentredRows(products: Product[], gaps: LineCells[][]): void {
-  const n = products.length
-  const g: LineCells[][] = []
-  for (let k = 0; k <= n; k++) g[k] = gaps[k] ?? []
-
-  if (n === 0) {
-    const stray = g.reduce((sum, rows) => sum + rows.length, 0)
-    if (stray) console.warn(`[lovely] ${stray} centred cell rows in a table with no product rows — dropped`)
-    return
-  }
-
-  // state[s] = best way to reach "s rows of the next gap given to this product"
-  type State = { cost: Cost; splits: number[] } | undefined
-  let layer: State[] = [{ cost: [0, 0, 0], splits: [0] }]
-
-  for (let i = 0; i < n; i++) {
-    const last = i === n - 1
-    const next: State[] = []
-    for (let taken = layer.length - 1; taken >= 0; taken--) {
-      const state = layer[taken]
-      if (!state) continue
-      const above = g[i].slice(taken)
-      // The gap after the last product has nobody else to go to.
-      const choices = last ? [g[i + 1].length] : countDown(g[i + 1].length)
-      for (const give of choices) {
-        const cost = addCost(state.cost, clusterCost(products[i], above, g[i + 1].slice(0, give)))
-        if (!next[give] || cheaper(cost, next[give]!.cost)) {
-          next[give] = { cost, splits: [...state.splits, give] }
-        }
+  for (const row of rows) {
+    const { stock: own, rest } = splitStockPrefix(row.left)
+    if (own) p.stock.push(own)
+    if (row.remark) p.remarks.push(row.remark)
+    if (!rest) continue
+    const cell = classifyTypeCell(rest)
+    if (cell.kind === 'matched') {
+      // One cluster is one product, so a second Type cell inside it would mean
+      // the gap threshold had merged two products. Worth hearing about.
+      if (p.type) {
+        console.warn(`[lovely] two Type cells in one cluster: ${JSON.stringify(rows.map(r => r.left).filter(Boolean).join(' / ').slice(0, 110))}`)
       }
+      p.type = cell.type
+      if (cell.rest) p.nameParts.push(cell.rest)
+    } else if (cell.kind === 'unknown') {
+      matchType(rest)
+    } else {
+      p.nameParts.push(rest)
     }
-    layer = next
   }
-
-  const splits = layer.find(Boolean)!.splits
-  for (let i = 0; i < n; i++) {
-    products[i].above = g[i].slice(splits[i])
-    products[i].below = g[i + 1].slice(0, splits[i + 1])
-  }
+  return p
 }
 
-// [k, k-1, ..., 0] — descending so that a tie hands the row to the product
-// above, which is the side the catalog's own remark rule prefers too.
-const countDown = (k: number) => Array.from({ length: k + 1 }, (_, i) => k - i)
-
-function positionsOf(p: Product): ExtractedItem[] {
+function positionsOf(p: Product, tally: { oneCluster: number }): ExtractedItem[] {
   const name = p.nameParts.join(' ').replace(/\s+/g, ' ').trim()
   if (!p.type) {
-    if (name) console.warn(`[lovely] no Type cell ever arrived for ${JSON.stringify(name)} — position dropped`)
+    if (name) console.warn(`[lovely] no Type cell in the cluster for ${JSON.stringify(name)} — position dropped`)
     return []
   }
   if (name.length < 4) {
-    console.warn(`[lovely] product name too short to be real: ${JSON.stringify(name)} — position dropped; rows ${JSON.stringify([...p.above,...p.own,...p.below].map(r=>`${r.line}:${r.size}/${r.vintage}/${JSON.stringify(r.price)}`))}`)
+    console.warn(`[lovely] product name too short to be real: ${JSON.stringify(name)} — position dropped`)
     return []
   }
 
-  const rows = [...p.above, ...p.own, ...p.below]
-  const sizes = rows.filter(r => r.size).map(r => ({ line: r.line, value: r.size }))
-  const years = rows.filter(r => r.vintage).map(r => ({ line: r.line, value: r.vintage }))
-  const prices = rows.filter(r => r.price.kind !== 'none').map(r => ({ line: r.line, value: r.price }))
-  const remarks = [...p.remarks, ...p.above.map(r => r.remark), ...p.below.map(r => r.remark)].filter(Boolean)
+  const rows = p.rows
+  const sizes = rows.filter(r => r.size).map(r => ({ y: r.y, value: r.size }))
+  const years = rows.filter(r => r.vintage).map(r => ({ y: r.y, value: r.vintage }))
+  const prices = rows.filter(r => r.price.kind !== 'none').map(r => ({ y: r.y, value: r.price }))
 
-  // Where a cluster prints more vintages than prices, the text layer does not
-  // record which year goes with which price — Yangarra's 'GSM' prints two
-  // vintages against one price value. They are paired positionally and named
-  // here, as a short list to check by eye against the PDF.
+  // A cluster with a name, a type and not one cell is not a position. It is a
+  // row the catalog prints for layout — a brand heading, or half a sentence that
+  // reached the table — and emitting it put an all-null row into the database.
+  if (!sizes.length && !years.length && !prices.length) {
+    console.warn(`[lovely] no size, vintage or price anywhere in the cluster for ${JSON.stringify(name)} — position dropped`)
+    return []
+  }
+
+  const distinctPrices = new Set(prices.map(c => (c.value.kind === 'num' ? String(c.value.value) : 'pending')))
   if (prices.length >= 1 && years.length > prices.length) {
-    const shown = prices.map(c => (c.value.kind === 'num' ? String(c.value.value) : 'pending')).join(', ')
-    const listed = years.map(c => c.value).join(', ')
-    console.warn(`[lovely] ambiguous cluster — ${years.length} vintages (${listed}) against ${prices.length} prices (${shown}): ${JSON.stringify(name)}`)
+    // Where a cluster prints more vintages than prices the text does not record
+    // which year goes with which price. Two or more distinct prices is the only
+    // genuinely ambiguous shape; "these three years all cost X" is the catalog's
+    // house style and is only counted, so the log carries one line, not 200.
+    if (distinctPrices.size >= 2) {
+      const shown = prices.map(c => (c.value.kind === 'num' ? String(c.value.value) : 'pending')).join(', ')
+      console.warn(`[lovely] ambiguous cluster — ${years.length} vintages (${years.map(c => c.value).join(', ')}) against ${prices.length} prices (${shown}): ${JSON.stringify(name)}`)
+    } else {
+      tally.oneCluster++
+    }
+  }
+
+  // One price shared across two different bottle sizes is a different animal: a
+  // magnum would go into the database at the 750ml price. It happens once in the
+  // catalog (Tolaini 'Al Passo') and must not hide among the benign ones.
+  const distinctSizes = new Set(sizes.map(c => c.value))
+  if (distinctSizes.size > 1 && distinctPrices.size === 1 && sizes.length > prices.length) {
+    console.warn(`[lovely] ONE PRICE ACROSS ${distinctSizes.size} BOTTLE SIZES (${[...distinctSizes].join(', ')}) — check against the PDF: ${JSON.stringify(name)}`)
   }
 
   const n = Math.max(1, sizes.length, years.length, prices.length)
+  // The spine is the column with a value per position; the others are lined up
+  // against it by the baselines they were printed on. Vintage wins a tie because
+  // it is the axis the catalog varies most often.
+  const spine = [years, sizes, prices].find(list => list.length === n) ?? []
+  const spineYs = spine.length ? spine.map(c => c.y) : [rows[0]?.y ?? 0]
+  const yearAt = alignToSpine(spineYs, years)
+  const priceAt = alignToSpine(spineYs, prices)
+  const sizeAt = alignToSpine(spineYs, sizes)
 
   const description = [
     p.type.note,
-    p.stock.join(' ').replace(/\s+/g, ' ').trim(),
-    ...remarks,
+    [...new Set(p.stock)].join(' ').replace(/\s+/g, ' ').trim(),
+    ...p.remarks,
     p.prose,
   ].filter(Boolean).join(' · ') || null
 
-  // The spine is the column with a value per position; the others are lined up
-  // against it by the lines they were printed on. Vintage wins a tie because it
-  // is the axis the catalog varies most often.
-  const spine = [years, sizes, prices].find(list => list.length === n) ?? []
-  const spineLines = spine.length ? spine.map(c => c.line) : [rows[0]?.line ?? 0]
-  const yearAt = alignToSpine(spineLines, years)
-  const priceAt = alignToSpine(spineLines, prices)
-  const sizeAt = alignToSpine(spineLines, sizes)
-
   const items: ExtractedItem[] = []
+  // Deduplicated in place rather than with _shared.dedupBy: the key is built from
+  // the three fields as they are being derived, not from the finished item.
   const seen = new Set<string>()
   for (let i = 0; i < n; i++) {
     const year = yearAt[i]
     const price = priceAt[i]
     const volume = sizeAt[i]
     const key = `${volume}|${year}|${price?.kind === 'num' ? price.value : null}`
-    if (seen.has(key)) continue      // the text layer prints some rows twice
+    if (seen.has(key)) continue
     seen.add(key)
     items.push({
       name,
@@ -1019,13 +948,14 @@ function positionsOf(p: Product): ExtractedItem[] {
 
 // Lines up one column's cells against the positions of the spine column.
 //
-// Each cell goes to the spine slot it was printed closest to, keeping the
-// printed order — which is what "paired positionally" has to mean once vintages
-// and prices alternate line by line, as they do in the Comtesse de Chérisey
-// tables. A slot left over then takes the nearest cell of that column, because
+// Each cell goes to the spine slot whose baseline it was printed nearest,
+// keeping the printed order — which is what "paired positionally" has to mean
+// once vintages and prices alternate row by row, as they do in the Comtesse de
+// Chérisey tables. Cluster membership is settled before this runs; all that is
+// left here is pairing inside one product. A slot left over then takes the nearest cell of that column, because
 // a cell centred between two rows serves both: that is how one price covers two
 // vintages, and how a bottle size on the name row reaches its vintage rows.
-function alignToSpine<T>(spine: number[], cells: { line: number; value: T }[]): (T | null)[] {
+function alignToSpine<T>(spine: number[], cells: { y: number; value: T }[]): (T | null)[] {
   const out: (T | null)[] = spine.map(() => null)
   if (!cells.length) return out
 
@@ -1037,13 +967,13 @@ function alignToSpine<T>(spine: number[], cells: { line: number; value: T }[]): 
   for (let i = spine.length - 1; i >= 0; i--) {
     for (let j = cells.length - 1; j >= 0; j--) {
       const skip = best[i + 1][j]
-      const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].line)
+      const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].y)
       best[i][j] = Math.min(skip, take)
     }
   }
   let j = 0
   for (let i = 0; i < spine.length && j < cells.length; i++) {
-    const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].line)
+    const take = best[i + 1][j + 1] + Math.abs(spine[i] - cells[j].y)
     if (take <= best[i + 1][j]) { out[i] = cells[j].value; j++ }
   }
 
@@ -1051,110 +981,8 @@ function alignToSpine<T>(spine: number[], cells: { line: number; value: T }[]): 
   for (let i = 0; i < spine.length; i++) {
     if (out[i] !== null) continue
     let pick = cells[0]
-    for (const c of cells) if (Math.abs(c.line - spine[i]) < Math.abs(pick.line - spine[i])) pick = c
+    for (const c of cells) if (Math.abs(c.y - spine[i]) < Math.abs(pick.y - spine[i])) pick = c
     out[i] = pick.value
   }
   return out
-}
-
-// ─── Word coordinates ──────────────────────────────────────────────────────
-//
-// The geometry comes from `pdftotext -bbox`, which gives every word its own
-// box, rather than from `-layout`, which paints the page into character cells.
-//
-// Why: `-layout` merges baselines about 4pt apart onto one text line, and that
-// is exactly the signal that says which product a centred cell belongs to. On
-// page 14 Hermandad prints
-//
-//     y=549.0        2019
-//     y=553.0  +4.0  R Hermandad, Blend (…)  750ml 14.5 1,490
-//     y=557.7  +4.7  2022
-//     y=571.6 +13.9  2022                     ← a new product starts here
-//     y=575.6  +4.0  R Hermandad, Malbec     750ml 14.5 1,490
-//     y=579.6  +4.0  2023
-//
-// and `-layout` folds 2019 onto Blend's line and the second 2022 onto Malbec's,
-// leaving the first 2022 equidistant between two products that each already
-// carry a size, a vintage and a price. Nothing in the text layer then says whose
-// it is; with coordinates the 4.7pt gap says it plainly.
-//
-// Use plain `-bbox`, never `-bbox-layout`: the latter groups words into <line>
-// elements and re-merges those 4pt baselines, which is the whole signal gone.
-
-export type Word = { x: number; y: number; text: string }
-export type WordRow = { y: number; words: Word[] }
-
-const XML_NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
-
-function decodeXml(text: string): string {
-  return text.replace(/&(#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, ref: string) => {
-    if (ref.startsWith('#x') || ref.startsWith('#X')) return String.fromCodePoint(parseInt(ref.slice(2), 16))
-    if (ref.startsWith('#')) return String.fromCodePoint(parseInt(ref.slice(1), 10))
-    return XML_NAMED[ref.toLowerCase()] ?? whole
-  })
-}
-
-const PAGE_RE = /<page\b[^>]*>([\s\S]*?)<\/page>/g
-const WORD_RE = /<word\b[^>]*\bxMin="([-\d.]+)"[^>]*\byMin="([-\d.]+)"[^>]*>([\s\S]*?)<\/word>/g
-
-// Splits the whole document into pages of words. Any wrapper markup is ignored,
-// so a fixture built by concatenating one-page dumps reads the same as a
-// single whole-document dump.
-export function bboxPages(xml: string): Word[][] {
-  const pages: Word[][] = []
-  for (const page of xml.matchAll(PAGE_RE)) {
-    const words: Word[] = []
-    for (const w of page[1].matchAll(WORD_RE)) {
-      const text = decodeXml(w[3]).trim()
-      if (text) words.push({ x: parseFloat(w[1]), y: parseFloat(w[2]), text })
-    }
-    pages.push(words)
-  }
-  return pages
-}
-
-// Words printed on one baseline. Measured over the catalog: words of the same
-// visual row share a yMin exactly, so the tolerance only absorbs float noise —
-// the nearest real structure is 0.3pt away (a stock remark hanging under its
-// row) and that is deliberately left as a row of its own, for liftStockRows.
-const ROW_TOLERANCE = 0.2
-
-export function wordRows(words: Word[]): WordRow[] {
-  const rows: WordRow[] = []
-  for (const w of [...words].sort((a, b) => a.y - b.y || a.x - b.x)) {
-    const last = rows[rows.length - 1]
-    if (last && w.y - last.y <= ROW_TOLERANCE) last.words.push(w)
-    else rows.push({ y: w.y, words: [w] })
-  }
-  for (const r of rows) r.words.sort((a, b) => a.x - b.x)
-  return rows
-}
-
-export const rowText = (row: WordRow) => row.words.map(w => w.text).join(' ')
-
-// A row that is nothing but a stock remark. The catalog hangs these 0.3–3.1pt
-// under the row they belong to, sometimes in the far-left gutter and sometimes
-// in the Remark column, and they must come out of the row list before anything
-// measures the gaps between rows: on page 31 the gap from Javelier-Laurin's
-// "low stock" to the next product is 11.1pt, which would read as one cluster,
-// while the gap between the two product rows themselves is 14.2pt.
-const STOCK_ROW_RE = /^(out of stock|low stock|out of|low|stock)$/
-
-export function liftStockRows(rows: WordRow[]): { rows: WordRow[]; stock: string[][] } {
-  const kept = rows.filter(r => !STOCK_ROW_RE.test(rowText(r)))
-  const stock: string[][] = kept.map(() => [])
-  for (const row of rows) {
-    const phrase = rowText(row)
-    if (!STOCK_ROW_RE.test(phrase)) continue
-    if (!kept.length) continue
-    // The nearest surviving row: the hanger sits just under its own row, but on
-    // page 13 it is 0.9pt above the row it belongs to and 13.3pt below the one
-    // before, so nearest is the rule rather than "always the row above".
-    let best = 0
-    for (let i = 1; i < kept.length; i++) {
-      if (Math.abs(kept[i].y - row.y) < Math.abs(kept[best].y - row.y)) best = i
-    }
-    stock[best].push(phrase)
-  }
-  return { rows: kept, stock }
 }
