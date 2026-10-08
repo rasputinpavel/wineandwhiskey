@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Import the 64-page Lovely Wines September 2026 catalog (~886 wine and spirits positions) into `wine_items` through the existing mission-control price pipeline, by adding one deterministic supplier parser.
+**Goal:** Import the 64-page Lovely Wines September 2026 catalog (~1,262 wine and spirits positions — each vintage of a wine is its own position) into `wine_items` through the existing mission-control price pipeline, by adding one deterministic supplier parser.
 
 **Architecture:** A new parser `lib/price/parsers/lovely.ts` registered in the `PARSERS` array. The parser runs `pdftotext -layout` once and hands the text to a pure function that reconstructs items from character-aligned tables. Cells are located by regex near the column anchors taken from each table's header line, never by slicing at a fixed offset. No LLM calls, no DB migration, no change to the shared upload route.
 
@@ -67,7 +67,7 @@ Follow `lib/price/parsers/smd.test.ts` — it tests pure exported helpers, not l
 |---|---|
 | Create: `lib/price/parsers/lovely.ts` | Detection, the pure text→items core, and the IO wrapper. One file, like every other parser (200–500 lines each). |
 | Create: `lib/price/parsers/lovely.test.ts` | Unit tests for every pure helper plus the core run over the fixture. |
-| Create: `lib/price/__fixtures__/lovely-pages.txt` | `pdftotext -layout` output of pages 2, 3, 9, 23, 31 — the five pages that between them contain every hard case. |
+| Create: `lib/price/__fixtures__/lovely-pages.txt` | `pdftotext -layout` output of the pages that between them contain every hard case: 2, 3, 9, 23, 31 to start, extended by Task 5 to 12 pages. Addressed by content, never by position. |
 | Modify: `lib/price/parsers/index.ts` | One import line and one `PARSERS` entry. |
 | Create: `../../07_contacts/partners/lovely-wines/profile.md` | Supplier card, including the retail/−20% fact. |
 
@@ -694,802 +694,188 @@ git commit -m "Парсер Lovely Wines: геометрия таблицы и �
 
 ---
 
-### Task 5: Simple data rows into items
-
-Start with the easy shape: a spirits table where every row is complete. Page 9 of the
-fixture holds four such tables — Ron Barceló (10 rows), Maison Gelas (13), 30 & 40
-(1), Arhumatic (3) — 27 items in total.
+### Task 5: Row assembly — the generalised centring rule
 
 **Files:**
 - Modify: `lib/price/parsers/lovely.ts`
 - Modify: `lib/price/parsers/lovely.test.ts`
+- Modify: `lib/price/__fixtures__/lovely-pages.txt` (append pages 16, 22, 46, 48, 52, 58)
 
-- [ ] **Step 1: Write the failing test**
+This task replaces what earlier drafts of this plan split across Tasks 5–9. It is
+specified as behaviour plus required tests rather than as code to copy: the earlier
+prescribed implementation was reviewed and found defective twice, and the catalog
+turned out to contain five variations of one rule rather than three special cases.
+Design the assembly yourself against the behaviour below; the helpers from Tasks 1–4
+(`columnAnchors`, `readRow`, `matchType`, `classifyTypeCell`, `toIntPrice`) are
+already in place and tested — read them before you start.
 
-Append to `lib/price/parsers/lovely.test.ts`:
+#### The rule
 
-```ts
-import { readFileSync } from 'fs'
-import { join } from 'path'
-import { parseCatalogText } from './lovely'
+**A cell typeset alone on its line is vertically centred and belongs to the adjacent
+rows that lack that cell.** The catalog applies this to names, bottle sizes, vintages
+and prices alike. Implement it once, generally, instead of special-casing each shape.
 
-const FIXTURE = readFileSync(join(__dirname, '../__fixtures__/lovely-pages.txt'), 'utf8')
-// Fixture pages, in the order they were appended: 2, 3, 9, 23, 31.
-const PAGES = FIXTURE.split('\f')
-const page = (n: 2 | 3 | 9 | 23 | 31) => PAGES[[2, 3, 9, 23, 31].indexOf(n)]
+What that means per column:
 
-describe('parseCatalogText — simple spirits rows', () => {
-  const items = parseCatalogText(page(9))
+- A **name** row with no size and no price collects the size/price rows contiguous
+  above and below it. (Canard-Duchêne `'Cuvee Leonie'`: 750ml/2,710 and 1500ml/5,520.)
+- A **variant row with no size** inherits the size from its name row. (Aldridge
+  `'Twynham' Chardonnay` carries `750ml` on the name row; the 2024/590 and
+  2025/pending rows carry none. Without inheritance those positions get
+  `volume: null`.)
+- A **price alone on its line** applies to the adjacent vintage rows that have no
+  price of their own. (Yangarra `'GSM'`: 2,120 serves 2017 and 2021; 2015 is
+  `pending`. Cantina Tollo `'Rocca Ventosa' Pinot Grigio`: 840 serves 2023, 2024 and
+  2025.)
+- A **name wrapped over two lines**, with the type code on a line between the halves,
+  joins into one name; the continuation line's own cells form another variant of that
+  same product. (Realm Cellars `'Houyi Vineyard'` + `Cabernet Sauvignon`; Comtesse de
+  Cherisey `... 1er Cru 'La` + `Genelotte'`.) Emitting the continuation as its own
+  product would file junk — a position named "Cabernet Sauvignon" at ฿12,800.
+- A **row that already carries both its own size and its own price collects nothing.**
+  Without this, Goutorbe-Bouillot's 750ml/2,010 variant is stolen by the next
+  product, which really costs 2,570 — a wrong price with no visible symptom.
 
-  it('finds every row on the page', () => {
-    expect(items).toHaveLength(27)
-  })
+Deduplicate identical `(volume, year, price)` triples within one product: the text
+layer prints Comtesse de Cherisey's `2018 / 7,245` twice.
 
-  it('reads a plain rum row', () => {
-    expect(items[0]).toMatchObject({
-      name: 'Ron Barcelo Blanco Anejado',
-      volume: '700ml',
-      price: 1300,
-      category: 'spirits',
-      spirit_type: 'rum',
-      year: null,
-      grape_variety: null,
-      supplier_sku: null,
-    })
-  })
+#### Line roles
 
-  it('strips the Type word off a name it was glued to', () => {
-    const armagnac = items.find(i => i.name === 'Gelas, Bas Armagnac 8 Ans')
-    expect(armagnac).toBeDefined()
-    expect(armagnac!.price).toBe(3125)
-    expect(armagnac!.spirit_type).toBe('armagnac')
-  })
+Within a producer's table block, classify each line as exactly one of:
 
-  it('reads the five-figure price without losing a digit', () => {
-    const ans60 = items.find(i => i.name === 'Gelas, Bas Armagnac 60 Ans')
-    expect(ans60!.price).toBe(41960)
-  })
-})
-```
+| Role | Recognised by | Effect |
+|---|---|---|
+| data row | cells present, left-hand text matches the Type vocabulary | starts a product |
+| variant row | cells present, no left-hand text | attaches per the rule above |
+| code-only row | the whole line is a type code (`     R`) | supplies the type for the next product that lacks one |
+| torn stock code | `low R` / `lowR` — a stock fragment glued to the code | strip the fragment, keep the code, remember the fragment as a remark |
+| stock-prefixed row | left-hand text begins `out of stock` / `low stock` / `stock` | strip it off the name into the remark; the type code came on an earlier line |
+| remark-only row | the line is only a rating (`91 WS`, `96+ RP`) or a stock state | attaches to the adjacent product, preferring the one above |
+| name continuation | left-hand text matches no Type word, is not a stock prefix, and **ends before the `Size` column** | joins the previous product's name |
+| prose / banner | left-hand text runs past the `Size` column into the cell area | context only, never a product |
 
-- [ ] **Step 2: Run and watch it fail**
+The last two are told apart purely by where the text ends. That is the discriminator
+that keeps a producer paragraph from becoming a ฿2,013 phantom wine.
 
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: FAIL — `parseCatalogText` is not exported.
+#### Context from banners
 
-- [ ] **Step 3: Implement the block walker for complete rows**
+Track, per page and carrying across pages:
 
-Append to `lib/price/parsers/lovely.ts`. This is the first cut — Tasks 6, 7 and 8 extend
-the same function, so keep the structure open:
+- the centred all-caps banner (indent > 30) → category or country. `CHAMPAGNE`,
+  `FRENCE SPARKLING` → France; `PROSECCO` → Italy; `CAVA`, `SPANISH CAVA` → Spain;
+  `SPIRITS`, `ACCESSORIES`, `DESSERT WINE`, `FORTIFIED WINE` are categories and set
+  no place; anything else is a country.
+- the left-indented banner → region, or the country when the page banner is `SPIRITS`.
+- the prose between a banner and the table header → the producer description.
 
-```ts
-// ─── Text → items ──────────────────────────────────────────────────────────
+Banners are title-cased before they reach the UI (`ARGENTINA` → `Argentina`). **The
+banner matcher must accept typographic hyphens** — `ENTRE‑DEUX‑MERS` uses U+2011, and
+an ASCII-only matcher drops that banner and leaks its region into the next producer.
+A block ends at the next banner, which is what keeps prose out of the tables.
 
-type Block = { anchors: Anchors; lines: string[] }
+#### Two price details
 
-// Splits a page into its producer tables. Lines before the first header (banners,
-// prose) and tables we refuse (glassware) are dropped here.
-function blocksOf(pageText: string): Block[] {
-  const lines = pageText.split('\n')
-  const blocks: Block[] = []
-  let current: Block | null = null
-  for (const line of lines) {
-    if (HEADER_RE.test(line)) {
-      const anchors = columnAnchors(line)
-      current = anchors ? { anchors, lines: [] } : null
-      if (current) blocks.push(current)
-      continue
-    }
-    if (current) current.lines.push(line)
-  }
-  return blocks
-}
+- **`pending` is a price.** 51 rows print the word instead of a number. Emit the
+  position with `price: null`; do not drop it.
+- **Two rows use a dot as the thousands separator** — `1.970` (Giuseppe Cortese,
+  Barbera d'Alba, page 46) and `1.020` (Muga Reserva 375ml, page 52). The catalog
+  never prices with decimals, so in the price cell `\d{1,3}\.\d{3}` is a thousands
+  separator: read `1.020` as 1020, and `console.warn` the row so the oddity is
+  visible. Leaving them `null` loses two real prices; reading `1.020` as 20 — which
+  the unbounded regex did before Task 4's fix — would have imported a ฿1,020 bottle
+  at ฿20.
 
-function itemFrom(row: Row, type: TypeInfo, name: string): ExtractedItem {
-  const year = /^(?:19|20)\d{2}$/.test(row.vintage) ? parseInt(row.vintage, 10) : null
-  return {
-    name,
-    country: null,
-    region: null,
-    grape_variety: null,
-    price: toIntPrice(row.price),
-    year,
-    volume: row.size || null,
-    description: null,
-    category: type.category,
-    wine_type: type.wineType,
-    spirit_type: type.spiritType,
-    supplier_sku: null,
-  }
-}
+#### Steps
 
-export function parseCatalogText(text: string): ExtractedItem[] {
-  const items: ExtractedItem[] = []
-  for (const pageText of text.split('\f')) {
-    for (const block of blocksOf(pageText)) {
-      for (const line of block.lines) {
-        if (!line.trim()) continue
-        const row = readRow(line, block.anchors)
-        if (!row.price && !row.size) continue
-        const matched = matchType(row.left)
-        if (!matched) continue
-        items.push(itemFrom(row, matched.type, matched.rest))
-      }
-    }
-  }
-  return items
-}
-```
+- [ ] **Step 1: Extend the fixture and make it addressable by content**
 
-- [ ] **Step 4: Run and watch it pass**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: PASS, 28 tests.
-
-- [ ] **Step 5: Commit**
+Append the six pages that carry the hard shapes:
 
 ```bash
-git add lib/price/parsers/lovely.ts lib/price/parsers/lovely.test.ts
-git commit -m "Парсер Lovely Wines: простые строки в позиции"
+PDF="../../.inbox/Lovely Wines Catalog_Sep Claudio.pdf"
+for p in 16 22 46 48 52 58; do
+  pdftotext -layout -f $p -l $p "$PDF" - >> lib/price/__fixtures__/lovely-pages.txt
+done
 ```
 
----
-
-### Task 6: Multi-size items and the no-absorb rule
-
-Page 3 holds the trap. Canard-Duchêne's `'Cuvee Leonie' Brut` has its name on a line
-with no size and no price, with `750ml / 2,710` above it and `1500ml / 5,520` below.
-Goutorbe-Bouillot has the same shape — and immediately after it a product that
-carries its own `750ml / 2,570`. If a complete row absorbs its neighbours, that
-second product silently takes 2,010, the previous item's price.
-
-Page 3 contains 16 positions: Canard-Duchêne 5 (one of them two sizes),
-Goutorbe-Bouillot 3 (one of them two sizes), Jean Yves de Carlini 2,
-Pierre Moncuit 2, Paul Bara 4.
-
-**Files:**
-- Modify: `lib/price/parsers/lovely.ts`
-- Modify: `lib/price/parsers/lovely.test.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `lib/price/parsers/lovely.test.ts`:
-
-```ts
-describe('parseCatalogText — multi-size items', () => {
-  const items = parseCatalogText(page(3))
-
-  it('finds every position on the champagne page', () => {
-    expect(items).toHaveLength(16)
-  })
-
-  it('splits a two-size item into two positions', () => {
-    const leonie = items.filter(i => i.name === "Canard Duchene Champagne 'Cuvee Leonie' Brut")
-    expect(leonie).toHaveLength(2)
-    expect(leonie.map(i => [i.volume, i.price])).toEqual([
-      ['750ml', 2710],
-      ['1500ml', 5520],
-    ])
-  })
-
-  it('does not let a complete row steal a neighbour variant', () => {
-    const leRu = items.find(i => i.name!.includes("Le Ru Des Charmes"))
-    expect(leRu!.price).toBe(2570)
-    expect(leRu!.volume).toBe('750ml')
-  })
-
-  it('keeps both sizes of the Goutorbe cuvée with their own prices', () => {
-    const reflets = items.filter(i => i.name!.includes('Reflets De Riviere'))
-    expect(reflets.map(i => [i.volume, i.price])).toEqual([
-      ['375ml', 1440],
-      ['750ml', 2010],
-    ])
-  })
-
-  it('reads the vintage and leaves NV null', () => {
-    expect(items.find(i => i.name === 'Canard-Duchene Champagne Brut')!.year).toBe(2015)
-    expect(items.find(i => i.name!.includes("'P.181'"))!.year).toBeNull()
-  })
-
-  it('files champagne as sparkling wine', () => {
-    expect(items.every(i => i.category === 'wine')).toBe(true)
-    expect(items.every(i => i.wine_type === 'sparkling')).toBe(true)
-  })
-})
-```
-
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: FAIL — length is 13, not 16 (the three variant rows are dropped because
-they have no Type cell).
-
-- [ ] **Step 3: Rewrite the block walker in two passes**
-
-Replace the `parseCatalogText` function in `lib/price/parsers/lovely.ts` with:
-
-```ts
-type Slot =
-  | { kind: 'item'; row: Row; type: TypeInfo; name: string; variants: Row[] }
-  | { kind: 'variant'; row: Row }
-  | { kind: 'other'; line: string }
-
-function classify(line: string, anchors: Anchors): Slot {
-  const row = readRow(line, anchors)
-  const hasCells = Boolean(row.price || row.size)
-  if (!hasCells) return { kind: 'other', line }
-  if (!row.left) return { kind: 'variant', row }
-  const matched = matchType(row.left)
-  if (!matched) return { kind: 'other', line }
-  return { kind: 'item', row, type: matched.type, name: matched.rest, variants: [] }
-}
-
-// A nameless item — name typeset between its size rows — collects the contiguous
-// variant rows directly above and below it. An item that already carries its own
-// size and price collects nothing: otherwise it steals the previous item's
-// variant, which puts a wrong price in the database with no visible symptom.
-function attachVariants(slots: Slot[]): void {
-  slots.forEach((slot, i) => {
-    if (slot.kind !== 'item') return
-    if (slot.row.size && slot.row.price) return
-
-    for (let j = i - 1; j >= 0 && slots[j].kind === 'variant'; j--) {
-      slot.variants.unshift((slots[j] as { row: Row }).row)
-      slots[j] = { kind: 'other', line: '' }
-    }
-    for (let j = i + 1; j < slots.length && slots[j].kind === 'variant'; j++) {
-      slot.variants.push((slots[j] as { row: Row }).row)
-      slots[j] = { kind: 'other', line: '' }
-    }
-  })
-}
-
-export function parseCatalogText(text: string): ExtractedItem[] {
-  const items: ExtractedItem[] = []
-  for (const pageText of text.split('\f')) {
-    for (const block of blocksOf(pageText)) {
-      const slots = block.lines
-        .filter(l => l.trim())
-        .map(l => classify(l, block.anchors))
-      attachVariants(slots)
-
-      for (const slot of slots) {
-        if (slot.kind !== 'item') continue
-        const rows = slot.variants.length > 0 ? slot.variants : [slot.row]
-        for (const row of rows) {
-          // A variant row carries its own size, price and remark, but the vintage
-          // and everything else comes from the name row.
-          const merged: Row = { ...row, vintage: row.vintage || slot.row.vintage }
-          items.push(itemFrom(merged, slot.type, slot.name))
-        }
-      }
-    }
-  }
-  return items
-}
-```
-
-- [ ] **Step 4: Run and watch it pass**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: PASS, 34 tests — page 9's 27 items must still be 27.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/price/parsers/lovely.ts lib/price/parsers/lovely.test.ts
-git commit -m "Парсер Lovely Wines: мультиобъём без воровства цены у соседа"
-```
-
----
-
-### Task 7: Stock remarks and code-only lines
-
-Page 31's Javelier-Laurin table has all four shapes of this trap:
-
-```
-     R
-out of stock    Javelier-Laurin, Bourgogne Pinot Noir      750ml  13.0  2020   1,500
-     R
-low stock       Javelier-Laurin, Gevrey-Chambertin 'Les Champs Chenys'  750ml 13.0 2019 4,490
-     R
-low stock
-                Javelier-Laurin, Gevrey-Chambertin 1er Cru 'Bel Air'    750ml 13.0 2020 5,900
-     R
-out of stock
-                Javelier-Laurin, Ruchottes-Chambertin Grand Cru         750ml 13.5 2017 12,150
-```
-
-The type code sits alone on its own line; the stock remark is rendered at the far
-left, sometimes before the name on the same line and sometimes on its own line.
-Page 23 has the single-table version with `Chateau La Pensee`.
-
-**Files:**
-- Modify: `lib/price/parsers/lovely.ts`
-- Modify: `lib/price/parsers/lovely.test.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `lib/price/parsers/lovely.test.ts`:
-
-```ts
-describe('parseCatalogText — stock remarks', () => {
-  it('reads all four Javelier-Laurin wines with clean names', () => {
-    const items = parseCatalogText(page(31))
-      .filter(i => i.name!.startsWith('Javelier-Laurin'))
-    expect(items.map(i => [i.name, i.price])).toEqual([
-      ['Javelier-Laurin, Bourgogne Pinot Noir', 1500],
-      ["Javelier-Laurin, Gevrey-Chambertin 'Les Champs Chenys'", 4490],
-      ["Javelier-Laurin, Gevrey-Chambertin 1er Cru 'Bel Air'", 5900],
-      ['Javelier-Laurin, Ruchottes-Chambertin Grand Cru', 12150],
-    ])
-  })
-
-  it('keeps the stock state in the description, never in the name', () => {
-    const items = parseCatalogText(page(31))
-    expect(items.some(i => /stock/i.test(i.name!))).toBe(false)
-    const bourgogne = items.find(i => i.name === 'Javelier-Laurin, Bourgogne Pinot Noir')
-    expect(bourgogne!.description).toContain('out of stock')
-    expect(bourgogne!.wine_type).toBe('red')
-  })
-
-  it('reads the page-23 row whose remark precedes the name', () => {
-    const pensee = parseCatalogText(page(23))
-      .find(i => i.name === 'Chateau La Pensee Lalande de Pomerol')
-    expect(pensee).toBeDefined()
-    expect(pensee!.price).toBe(1450)
-    expect(pensee!.year).toBe(2020)
-    expect(pensee!.description).toContain('low stock')
-  })
-
-  it('keeps ratings that bracket a product name', () => {
-    const reserve = parseCatalogText(page(3))
-      .find(i => i.name!.includes("'Reserve Brut'"))
-    expect(reserve!.description).toContain('91 WS')
-    expect(reserve!.description).toContain('90 VN')
-  })
-})
-```
-
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: FAIL — names still carry `out of stock`, and the bracketing ratings are lost.
-
-- [ ] **Step 3: Handle stock prefixes, pending codes and pending remarks**
-
-In `lib/price/parsers/lovely.ts`, add the recognisers next to `matchType`:
-
-```ts
-const STOCK_RE  = /^(out of stock|low stock|stock)\s+/i
-const RATING_RE = /^\d{2,3}\s?(WS|WE|JS|VN|RP|JD|D|TA|AG|WA)$/i
-
-// A line that is nothing but a type code belongs to the next data line.
-export function codeOnly(line: string): TypeInfo | null {
-  const t = line.trim()
-  if (!t || /\d/.test(t)) return null
-  const m = matchType(t)
-  return m && m.rest === '' ? m.type : null
-}
-
-// A line that is nothing but a remark: a critic score or a stock state.
-export function remarkOnly(line: string): string | null {
-  const t = line.trim()
-  if (!t) return null
-  if (RATING_RE.test(t)) return t
-  if (/^(out of stock|low stock|stock)$/i.test(t)) return t
-  return null
-}
-
-// "out of stock    Javelier-Laurin, Bourgogne Pinot Noir" → the stock state is a
-// remark rendered at the left edge, not part of the product name.
-export function splitStockPrefix(left: string): { stock: string | null; rest: string } {
-  const m = left.match(STOCK_RE)
-  if (!m) return { stock: null, rest: left }
-  return { stock: m[1], rest: left.slice(m[0].length).trim() }
-}
-```
-
-Then extend `classify`, `attachVariants` and `parseCatalogText`. Replace the three of
-them with:
-
-```ts
-type Slot =
-  | { kind: 'item'; row: Row; type: TypeInfo; name: string; variants: Row[]; remarks: string[] }
-  | { kind: 'variant'; row: Row }
-  | { kind: 'code'; type: TypeInfo }
-  | { kind: 'remark'; text: string }
-  | { kind: 'other'; line: string }
-
-function classify(line: string, anchors: Anchors): Slot {
-  const code = codeOnly(line)
-  if (code) return { kind: 'code', type: code }
-
-  const remark = remarkOnly(line)
-  if (remark) return { kind: 'remark', text: remark }
-
-  const row = readRow(line, anchors)
-  if (!row.price && !row.size) return { kind: 'other', line }
-  if (!row.left) return { kind: 'variant', row }
-
-  const { stock, rest } = splitStockPrefix(row.left)
-  const remarks = stock ? [stock] : []
-
-  // With a stock prefix the type code was printed on its own line, so the
-  // left-hand text starts at the product name and matchType finds nothing.
-  const matched = matchType(rest)
-  if (matched) {
-    return { kind: 'item', row, type: matched.type, name: matched.rest, variants: [], remarks }
-  }
-  return { kind: 'item', row, type: PENDING_TYPE, name: rest, variants: [], remarks }
-}
-
-// Placeholder for a row whose type code arrived on an earlier line; resolved in
-// parseCatalogText. Never emitted: a row that reaches the end still holding it is
-// a parser bug the coverage check must catch.
-const PENDING_TYPE: TypeInfo = { category: null, wineType: null, spiritType: null, note: null }
-
-function attachVariants(slots: Slot[]): void {
-  const isVariant = (s: Slot) => s.kind === 'variant'
-  slots.forEach((slot, i) => {
-    if (slot.kind !== 'item') return
-    if (slot.row.size && slot.row.price) return
-
-    for (let j = i - 1; j >= 0 && isVariant(slots[j]); j--) {
-      slot.variants.unshift((slots[j] as { row: Row }).row)
-      slots[j] = { kind: 'other', line: '' }
-    }
-    for (let j = i + 1; j < slots.length && isVariant(slots[j]); j++) {
-      slot.variants.push((slots[j] as { row: Row }).row)
-      slots[j] = { kind: 'other', line: '' }
-    }
-  })
-}
-
-// Remark-only lines are typeset vertically centred on their product, so one can sit
-// above its name row and another below. Both belong to that product: attach to the
-// nearest item slot, preferring the one above.
-function attachRemarks(slots: Slot[]): void {
-  slots.forEach((slot, i) => {
-    if (slot.kind !== 'remark') return
-    let target: Slot | undefined
-    for (let j = i - 1; j >= 0; j--) {
-      if (slots[j].kind === 'item') { target = slots[j]; break }
-      if (slots[j].kind === 'remark') continue
-      if (slots[j].kind === 'code') continue
-      break
-    }
-    if (!target) {
-      for (let j = i + 1; j < slots.length; j++) {
-        if (slots[j].kind === 'item') { target = slots[j]; break }
-        if (slots[j].kind === 'remark' || slots[j].kind === 'code') continue
-        break
-      }
-    }
-    if (target && target.kind === 'item') target.remarks.push(slot.text)
-    slots[i] = { kind: 'other', line: '' }
-  })
-}
-
-// A code-only line supplies the type for the next item slot that has none.
-function attachCodes(slots: Slot[]): void {
-  let pending: TypeInfo | null = null
-  for (const slot of slots) {
-    if (slot.kind === 'code') { pending = slot.type; continue }
-    if (slot.kind === 'item' && slot.type === PENDING_TYPE && pending) {
-      slot.type = pending
-      pending = null
-    }
-  }
-}
-
-export function parseCatalogText(text: string): ExtractedItem[] {
-  const items: ExtractedItem[] = []
-  for (const pageText of text.split('\f')) {
-    for (const block of blocksOf(pageText)) {
-      const slots = block.lines
-        .filter(l => l.trim())
-        .map(l => classify(l, block.anchors))
-
-      attachCodes(slots)
-      attachVariants(slots)
-      attachRemarks(slots)
-
-      for (const slot of slots) {
-        if (slot.kind !== 'item') continue
-        const rows = slot.variants.length > 0 ? slot.variants : [slot.row]
-        for (const row of rows) {
-          const merged: Row = { ...row, vintage: row.vintage || slot.row.vintage }
-          const item = itemFrom(merged, slot.type, slot.name)
-          const notes = [
-            slot.type.note,
-            ...slot.remarks,
-            merged.remark || null,
-          ].filter(Boolean)
-          item.description = notes.length ? notes.join(' · ') : null
-          items.push(item)
-        }
-      }
-    }
-  }
-  return items
-}
-```
-
-Note the ordering: `attachCodes` must run before `attachVariants`, because a
-code-only line sitting between a variant row and its name row would otherwise break
-the contiguity test.
-
-- [ ] **Step 4: Run and watch it pass**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: PASS, 38 tests. Pages 3 and 9 must still yield 16 and 27 items.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/price/parsers/lovely.ts lib/price/parsers/lovely.test.ts
-git commit -m "Парсер Lovely Wines: пометки об остатке и код типа отдельной строкой"
-```
-
----
-
-### Task 8: Page context — country, region, producer description
-
-Country and region come from the banners, not from the table. `CHAMPAGNE` means
-France, `PROSECCO` means Italy, `CAVA` means Spain; on `SPIRITS` pages the country is
-the sub-banner (`DOMINICAN REPUBLIC`). Banners print in caps and must be title-cased
-before they reach the UI.
-
-**Files:**
-- Modify: `lib/price/parsers/lovely.ts`
-- Modify: `lib/price/parsers/lovely.test.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `lib/price/parsers/lovely.test.ts`:
-
-```ts
-import { titleCase } from './lovely'
-
-describe('titleCase', () => {
-  it('turns banner caps into readable text', () => {
-    expect(titleCase('ARGENTINA')).toBe('Argentina')
-    expect(titleCase('CÔTE DE NUITS, BURGUNDY')).toBe('Côte De Nuits, Burgundy')
-    expect(titleCase('DOMINICAN REPUBLIC')).toBe('Dominican Republic')
-  })
-})
-
-describe('parseCatalogText — context', () => {
-  it('maps the champagne banner to France', () => {
-    const items = parseCatalogText(page(3))
-    expect(items.every(i => i.country === 'France')).toBe(true)
-  })
-
-  it('takes the country from the sub-banner on spirits pages', () => {
-    const items = parseCatalogText(page(9))
-    expect(items.find(i => i.name === 'Ron Barcelo Blanco Anejado')!.country)
-      .toBe('Dominican Republic')
-    expect(items.find(i => i.name === 'Gelas, Bas Armagnac 8 Ans')!.country).toBe('France')
-  })
-
-  it('reads country and region on a wine page', () => {
-    const items = parseCatalogText(page(31))
-    const javelier = items.find(i => i.name === 'Javelier-Laurin, Bourgogne Pinot Noir')!
-    expect(javelier.country).toBe('France')
-    expect(javelier.region).toBe('Côte De Nuits, Burgundy')
-  })
-
-  it('carries the producer paragraph into the description', () => {
-    const items = parseCatalogText(page(9))
-    const barcelo = items.find(i => i.name === 'Ron Barcelo Blanco Anejado')!
-    expect(barcelo.description).toContain('leading rum producers in the Dominican Republic')
-  })
-})
-```
-
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: FAIL — `titleCase` is not exported and `country` is `null` everywhere.
-
-- [ ] **Step 3: Implement context tracking**
-
-In `lib/price/parsers/lovely.ts`, add above `blocksOf`:
-
-```ts
-// ─── Page context ──────────────────────────────────────────────────────────
-
-export function titleCase(s: string): string {
-  return s.toLowerCase().replace(/(^|[\s,\-'/])([a-zà-ÿ])/g, (_, sep, ch) => sep + ch.toUpperCase())
-}
-
-// Category banners that imply a country of their own.
-const BANNER_COUNTRY: Record<string, string> = {
-  CHAMPAGNE: 'France',
-  'FRENCE SPARKLING': 'France',
-  PROSECCO: 'Italy',
-  CAVA: 'Spain',
-  'SPANISH CAVA': 'Spain',
-}
-
-// Banners that are categories, not places — they never become a country or region.
-const CATEGORY_BANNERS = new Set([
-  ...Object.keys(BANNER_COUNTRY),
-  'SPIRITS', 'ACCESSORIES', 'DESSERT WINE', 'FORTIFIED WINE',
-])
-
-const BANNER_RE = /^[A-Z&'\-.,/ÉÈÊÀÇÎÔÛ0-9 ]{3,40}$/
-
-export type Context = { country: string | null; region: string | null; producer: string | null }
-
-function isBanner(line: string): boolean {
-  const t = line.trim()
-  if (!t) return false
-  if (!BANNER_RE.test(t)) return false
-  return !/\s{2,}/.test(t)   // a banner is one phrase, not a row of cells
-}
-```
-
-Then rewrite `blocksOf` so a block carries the context it was found in, and make
-`parseCatalogText` stamp it onto the items. Replace `blocksOf` with:
-
-```ts
-type Block = { anchors: Anchors; lines: string[]; context: Context }
-
-// Walks a page top to bottom. The centred all-caps banner (indent > 30) is the
-// category or country; the left-indented one is the region, or the country on
-// SPIRITS pages. The prose between a banner and the table header describes the
-// producer. Context carries across pages, because a run of pages repeats the same
-// banner — hence the `carry` argument.
-function blocksOf(pageText: string, carry: Context): { blocks: Block[]; context: Context } {
-  const lines = pageText.split('\n')
-  const blocks: Block[] = []
-  let category: string | null = null
-  let country = carry.country
-  let region = carry.region
-  let prose: string[] = []
-  let current: Block | null = null
-
-  for (const line of lines) {
-    if (HEADER_RE.test(line)) {
-      const anchors = columnAnchors(line)
-      current = anchors
-        ? {
-            anchors,
-            lines: [],
-            context: { country, region, producer: prose.join(' ').trim() || null },
-          }
-        : null
-      if (current) blocks.push(current)
-      prose = []
-      continue
-    }
-
-    if (isBanner(line)) {
-      const text = line.trim()
-      const indent = line.length - line.trimStart().length
-      if (indent > 30) {
-        category = text
-        if (BANNER_COUNTRY[text]) country = BANNER_COUNTRY[text]
-        else if (!CATEGORY_BANNERS.has(text)) { country = titleCase(text); region = null }
-      } else if (category === 'SPIRITS') {
-        country = titleCase(text)
-        region = null
-      } else {
-        region = titleCase(text)
-      }
-      prose = []
-      current = null
-      continue
-    }
-
-    if (current) current.lines.push(line)
-    else if (line.trim()) prose.push(line.trim())
-  }
-
-  return { blocks, context: { country, region, producer: null } }
-}
-```
-
-And in `parseCatalogText`, thread the context through:
-
-```ts
-export function parseCatalogText(text: string): ExtractedItem[] {
-  const items: ExtractedItem[] = []
-  let carry: Context = { country: null, region: null, producer: null }
-
-  for (const pageText of text.split('\f')) {
-    const { blocks, context } = blocksOf(pageText, carry)
-    carry = context
-
-    for (const block of blocks) {
-      const slots = block.lines
-        .filter(l => l.trim())
-        .map(l => classify(l, block.anchors))
-
-      attachCodes(slots)
-      attachVariants(slots)
-      attachRemarks(slots)
-
-      for (const slot of slots) {
-        if (slot.kind !== 'item') continue
-        const rows = slot.variants.length > 0 ? slot.variants : [slot.row]
-        for (const row of rows) {
-          const merged: Row = { ...row, vintage: row.vintage || slot.row.vintage }
-          const item = itemFrom(merged, slot.type, slot.name)
-          item.country = block.context.country
-          item.region = block.context.region
-          const notes = [
-            slot.type.note,
-            ...slot.remarks,
-            merged.remark || null,
-            block.context.producer,
-          ].filter(Boolean)
-          item.description = notes.length ? notes.join(' · ') : null
-          items.push(item)
-        }
-      }
-    }
-  }
-  return items
-}
-```
-
-- [ ] **Step 4: Run and watch it pass**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: PASS, 43 tests.
-
-If `region` comes back holding a country on a wine page, the page's centred banner
-was not recognised — check the indent threshold against that page's actual text.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/price/parsers/lovely.ts lib/price/parsers/lovely.test.ts
-git commit -m "Парсер Lovely Wines: страна, регион и описание производителя из баннеров"
-```
-
----
-
-### Task 9: Glassware stays out
-
-**Files:**
-- Modify: `lib/price/parsers/lovely.test.ts`
-
-- [ ] **Step 1: Write the test**
-
-Append to `lib/price/parsers/lovely.test.ts`:
-
-```ts
-describe('parseCatalogText — glassware', () => {
-  it('returns nothing from the accessories page', () => {
-    expect(parseCatalogText(page(2))).toHaveLength(0)
-  })
-
-  it('never emits a Zalto glass or an ashtray from the whole fixture', () => {
-    const names = parseCatalogText(FIXTURE).map(i => i.name)
-    expect(names.some(n => /Zalto|Josephine|Ashtray|Usuhari/i.test(n!))).toBe(false)
-  })
-})
-```
-
-- [ ] **Step 2: Run it**
-
-Run: `npx vitest run lib/price/parsers/lovely.test.ts`
-Expected: PASS, 45 tests — `columnAnchors` already refuses `Packing` / `Price/Pcs`
-headers, so this test documents the behaviour rather than driving new code. If it
-fails, the glassware header slipped through `columnAnchors`.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add lib/price/parsers/lovely.test.ts
-git commit -m "Парсер Lovely Wines: стекло не попадает в позиции"
-```
-
----
+The fixture now holds pages 2, 3, 9, 23, 31, 16, 22, 46, 48, 52, 58 in that order.
+**Replace the positional `page()` helper in the test file with a content-based
+lookup** — find the page whose text contains a given marker (`'ZALTO GLASPERFEKTION'`,
+`'CANARD-DUCHÊNE'`, `'MAISON GELAS'`, `'CHATEAU LA PENSEE'`, `'JAVELIER-LAURIN'`,
+`'YANGARRA ESTATE VINEYARD'`, `"CHATEAU COS D'ESTOURNEL"`, `'GIUSEPPE CORTESE'`,
+`'CANTINA TOLLO'`, `'MUGA'`, `"O'SHAUGHNESSY"`). Indexing by position breaks the next
+time anyone appends a page, and this task appends six.
+
+- [ ] **Step 2: Write the failing tests, then implement, then make them pass**
+
+Follow TDD per behaviour, not one big bang: take the roles in the table above one at
+a time, write its test against the real fixture text, watch it fail, implement, watch
+it pass, commit. Roughly one commit per role.
+
+**Required assertions.** Values below were verified against the catalog by hand;
+where a count is given it is exact.
+
+Known-good counts and values (regression floor — these already worked before this task):
+- glassware page → **0 positions**; no position anywhere named like `Zalto`,
+  `Josephine`, `Usuhari` or `Ashtray`
+- Maison Gelas page → **27 positions**; `Ron Barcelo Blanco Anejado` 700ml ฿1300
+  spirits/rum; `Gelas, Bas Armagnac 8 Ans` ฿3125 armagnac; `Gelas, Bas Armagnac
+  60 Ans` ฿41960
+- Canard-Duchêne page → **16 positions**, every one `wine` / `sparkling` / France;
+  `'Cuvee Leonie' Brut` → two positions, 750ml ฿2710 and 1500ml ฿5520;
+  `'Le Ru Des Charmes' Rose Brut` → ฿2570 (not 2010); `'Reflets De Riviere'` → 375ml
+  ฿1440 and 750ml ฿2010; `Canard-Duchene Champagne Brut` year 2015; `'P.181'` year null
+- Javelier-Laurin → four positions ฿1500, ฿4490, ฿5900, ฿12150, country France,
+  region `Côte De Nuits, Burgundy`; no position name contains `stock`
+- `Chateau La Pensee Lalande de Pomerol` → ฿1450, year 2020, description mentions
+  `low stock`
+- Paul Bara `'Reserve Brut'` → description carries both `91 WS` and `90 VN`
+
+New behaviour this task must add:
+- `Aldridge 'Twynham' Chardonnay` → **two** positions, **both `volume: '750ml'`**,
+  year 2024 at ฿590 and year 2025 at `price: null`
+- `Yangarra Estae Vineyard 'GSM'` → name joined with its continuation
+  `(Grenache/ Shiraz/ Mourvèdre)`; years **2017 and 2021, both at ฿2,120**; no position
+  named `(Grenache/ Shiraz/ Mourvèdre)` on its own. The `2015 / pending` row below it
+  belongs to **High Sands Grenache**, not to `'GSM'` — verified against the PDF's word
+  coordinates, where the gaps inside the `'GSM'` cluster are 5.3pt and the gap before
+  `2015 pending` is 14.1pt. High Sands Grenache therefore has 2015/`null` and
+  2019/฿7,760
+- `Cantina Tollo 'Rocca Ventosa' Pinot Grigio` → name joined with `Terre di Chieti
+  IGP`; three years (2023, 2024, 2025), each ฿840
+- Realm Cellars `'Houyi Vineyard'` → name joined with `Cabernet Sauvignon`; years 2021
+  ฿16360 and 2022 ฿12800; **no position named `Cabernet Sauvignon`**
+- Comtesse de Cherisey `'La Genelotte'` → name joined across the two lines, **one
+  position**: 750ml / 2018 / ฿7,245. The repeated `2018 / 7,245` and the `2019 /
+  7,575` below it belong to `'Bois de Blagny'`, which also has 2020 and 2021 at
+  ฿10,280 — again verified against the PDF's coordinates. Deduplicate identical
+  (volume, year, price) triples within one product anyway, as a safety net
+- `Chateau Cos d'Estournel Saint-Estephe` → `wine_type: 'red'` (the `low R` code must
+  survive), name free of `stock`/`low`, description mentions the stock state
+- `Giuseppe Cortese, Barbera D'Alba Morassina` → ฿1970 from the printed `1.970`
+- `Muga Reserva, Rioja DOC` 375ml → ฿1020 from the printed `1.020`
+- the Monsanto `DW` dessert wine → `category: 'wine'`, `wine_type: null`, description
+  mentions dessert
+- no position has a name that contains a size token or is shorter than four
+  characters; **exactly one** name begins with a digit, and it is the real product
+  `30&40 Double Jus (Aperitive de Normandie)`
+- no position has `category: null`
+
+- [ ] **Step 3: Run the whole suite**
+
+Run: `npx vitest run lib/price/parsers/lovely.test.ts` then `npm test` and
+`npx tsc --noEmit`. All three must be clean, and the 62 tests from Tasks 1–4 must
+still pass unchanged — if one of them now fails, you have changed a helper's contract
+and need to say so rather than edit the old test.
+
+- [ ] **Step 4: Report the ambiguous clusters**
+
+Some clusters genuinely do not record which year goes with which price — Yangarra
+prints three vintages against two price values, Tolaini `'Al Passo'` prints two sizes
+and two vintages against one price. Pair them positionally, and **print a list of
+every cluster where vintages outnumber prices** (producer, name, the years, the
+prices) so a human can check ~20–25 of them by eye against the PDF. Include that list
+in your report.
 
 ### Task 10: Wire the parser into the pipeline
 
@@ -1631,7 +1017,8 @@ console.log('no price:       ', items.filter(i => i.price === null).length)
 console.log('no country:     ', items.filter(i => !i.country).length)
 console.log('no category:    ', items.filter(i => !i.category).length)
 console.log('stock in name:  ', items.filter(i => /stock/i.test(i.name)).length)
-console.log('digits in name: ', items.filter(i => /^\d|\d(ml|ML)$/.test(i.name)).length)
+console.log('size in name:   ', items.filter(i => /\d\s?(ml|ML)\b/.test(i.name)).length)
+console.log('digit-first:    ', items.filter(i => /^\d/.test(i.name)).length)   // expect 1: 30&40 Double Jus
 
 const byCountry = {}
 for (const i of items) byCountry[i.country ?? '—'] = (byCountry[i.country ?? '—'] ?? 0) + 1
@@ -1646,12 +1033,14 @@ available through the root `package.json` scripts; if not, run
 
 | Metric | Target | What a miss means |
 |---|---|---|
-| items parsed | ~886 — the 909 candidate lines minus the 23 glassware rows. Multi-size name rows carry no cells of their own, so they are not in the candidate count and do not shift this number | a table shape still unhandled |
-| no price | 0 | a price cell was located in the wrong column |
+| items parsed | ~1,262. Each vintage is its own position; the earlier figure of ~886 counted only lines carrying a size, and vintage rows carry a vintage and a price but no size | a table shape still unhandled |
+| no price | 59 — 57 `pending`, Giuseppe Cortese `'Scapulin'` (empty cell) and Dumol Meteor Vineyard (printed `4,.395`) | a price cell was located in the wrong column |
 | no country | 0 | a banner was not recognised |
 | no category | 0 | a row kept `PENDING_TYPE` — a type code never arrived |
 | stock in name | 0 | `splitStockPrefix` missed a variant of the remark |
-| digits in name | 0 | a size cell bled into the name — the window logic regressed |
+| size token in name | 0 | a size cell bled into the name — the window logic regressed |
+| names beginning with a digit | exactly 1, `30&40 Double Jus …` | more than one means a cell bled into a name |
+| ambiguous clusters | 214 printed, of which 213 are "N vintages share one price"; the one to check by eye is Domaine J.A. Ferret `'Tournant De Pouilly'` (page 36), four vintages against ฿3,630 and ฿3,880 | — |
 
 - [ ] **Step 3: Fix what the audit found, add a regression test for each fix**
 
