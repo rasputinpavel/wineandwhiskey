@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSales, getInventorySummary } from "./tools.js";
-import { getPaymentAlerts, formatPaymentAlerts } from "./sheets.js";
+import { getPaymentAlerts, formatPaymentAlerts, type PaymentAlert } from "./sheets.js";
 import { listPending } from "./writeoff.js";
-import { formatPendingReminder } from "./writeoff-parse.js";
+import { formatPendingReminder, type PendingRow } from "./writeoff-parse.js";
+import { criticalSource, sourceValue, sourceValueOr } from "./briefing-sources.js";
+import { describeError } from "./errors.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -33,7 +35,8 @@ export async function generateMorningBriefing(): Promise<string> {
   const todayLabel = labelFor(today);
   const yesterdayLabel = labelFor(yesterday);
 
-  const [salesYesterday, salesLastWeek, salesTwoWeeksAgo, salesMonth, inventory, paymentAlerts, pendingWriteoffs] = await Promise.all([
+  // allSettled, а не all: упавший источник портит свой абзац, а не весь брифинг.
+  const [rYesterday, rLastWeek, rTwoWeeksAgo, rMonth, rInventory, rAlerts, rPending] = await Promise.allSettled([
     getSales(yesterday, yesterday),
     getSales(sameWeekdayLastWeek, sameWeekdayLastWeek),
     getSales(sameWeekdayTwoWeeksAgo, sameWeekdayTwoWeeksAgo),
@@ -42,6 +45,18 @@ export async function generateMorningBriefing(): Promise<string> {
     getPaymentAlerts(3),
     listPending(),
   ]);
+
+  const lost = (label: string, reason: unknown) =>
+    console.error(`Briefing source lost — ${label}: ${describeError(reason)}`);
+
+  // Без вчерашних продаж брифинга нет — лучше предупреждение, чем выдумка.
+  const salesYesterday   = criticalSource(rYesterday, "продажи за вчера");
+  const salesLastWeek    = sourceValue(rLastWeek,    "продажи неделю назад",     lost);
+  const salesTwoWeeksAgo = sourceValue(rTwoWeeksAgo, "продажи две недели назад", lost);
+  const salesMonth       = sourceValue(rMonth,       "продажи за 30 дней",       lost);
+  const inventory        = sourceValue(rInventory,   "остатки на складе",        lost);
+  const paymentAlerts    = sourceValueOr(rAlerts,  "календарь платежей", [] as PaymentAlert[], lost);
+  const pendingWriteoffs = sourceValueOr(rPending, "висящие списания",   [] as PendingRow[],   lost);
 
   const prompt = `Ты — дружелюбный помощник команды винного магазина Wine & Whiskey в Таиланде.
 Каждое утро ты присылаешь команде тёплый брифинг о вчерашнем дне.

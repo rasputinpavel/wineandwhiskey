@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import cron from "node-cron";
 import { getSales, getInventory, getLowStock, getInventorySummary, getSupplier, getPurchaseOrders, getPurchaseHistory } from "./tools.js";
 import { generateMorningBriefing } from "./briefing.js";
+import { formatBriefingFailure } from "./briefing-sources.js";
 import {
   PendingExpense, PendingPhoto, WALLET_LABEL,
   bangkokDate, looksLikeExpense,
@@ -40,7 +41,7 @@ import {
   buildSliceCsv, formatSliceMessage, sliceFileName, bangkokIsoDate,
   type SliceRow,
 } from "./price-slice-format.js";
-import { describeError } from "./errors.js";
+import { describeError, isIgnorableTelegramError } from "./errors.js";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
@@ -161,10 +162,9 @@ async function sendSlice(ctx: any, waitMsgId: number, opts: {
 
 // Один путь для файла из любого входа: /price, подпись «прайс…», кнопка.
 //
-// Файл качаем ВНУТРИ try: в боте нет bot.catch, поэтому исключение из
-// downloadTelegramFile (например, файл больше 20 МБ — телеграм его не отдаёт)
-// иначе стало бы необработанным отказом, и пользователь остался бы с
-// «Читаю прайс...» навсегда.
+// Файл качаем ВНУТРИ try: иначе исключение из downloadTelegramFile (например,
+// файл больше 20 МБ — телеграм его не отдаёт) ушло бы в bot.catch, и
+// пользователь остался бы с «Читаю прайс...» навсегда.
 async function runPriceSlice(
   ctx: any,
   fetchFile: () => Promise<{ base64: string; mimeType: string; filename: string }>,
@@ -1228,7 +1228,17 @@ if (notifyChatIds.length > 0) {
         }
       }
     } catch (e) {
+      // Провал брифинга раньше был виден только в логе Railway — команда просто
+      // не получала утреннего сообщения и не знала, почему.
       console.error("Briefing failed:", e);
+      const alert = formatBriefingFailure(e);
+      for (const chatId of notifyChatIds) {
+        try {
+          await bot.api.sendMessage(chatId, alert);
+        } catch (sendErr) {
+          console.error("Briefing alert failed:", describeError(sendErr));
+        }
+      }
     }
   }, { timezone: "Asia/Bangkok" });
 
@@ -1237,5 +1247,23 @@ if (notifyChatIds.length > 0) {
   console.log("NOTIFY_CHAT_IDS not set — morning briefing disabled.");
 }
 
-bot.start();
+// Обработчик ошибок хендлеров. Без него grammY писал «No error handler was set!»
+// и ронял процесс: 7 октября 2026 бота убило `400: message is not modified`
+// с кнопки расхода. Теперь безобидное глушим, остальное логируем и живём дальше.
+bot.catch((err) => {
+  const updateId = err.ctx?.update?.update_id;
+  if (isIgnorableTelegramError(err.error)) {
+    console.warn(`Ignored Telegram error on update ${updateId}: ${describeError(err.error)}`);
+    return;
+  }
+  console.error(`Unhandled error on update ${updateId}: ${describeError(err.error)}`);
+});
+
+// Поллинг — отдельная история: 409 (чужой getUpdates) прилетает не в bot.catch,
+// а в промис bot.start(). Выходим с кодом 1 — Railway перезапустит сервис, но в
+// логе будет одна внятная строка, а не дамп необработанного исключения.
+bot.start().catch((e) => {
+  console.error(`Polling stopped: ${describeError(e)}`);
+  process.exit(1);
+});
 console.log(`Bot started. Today in Bangkok: ${todayInThailand()}`);

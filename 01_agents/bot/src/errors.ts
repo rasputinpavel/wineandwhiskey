@@ -43,3 +43,20 @@ function redact(text: string, secrets: (string | undefined)[]): string {
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "…";
 }
+
+// Ошибки Telegram, которые ничего не значат для дела. Без bot.catch такая
+// ошибка роняла процесс целиком: 7 октября 2026 нажатие кнопки расхода дало
+// `400: message is not modified` (контент и клавиатура те же), grammY написал
+// «No error handler was set!» и бот перезапустился на полуслове.
+const IGNORABLE_TELEGRAM = [
+  /message is not modified/i,
+];
+
+export function isIgnorableTelegramError(e: unknown): boolean {
+  const err = e as { description?: unknown; message?: unknown };
+  const text = [
+    typeof err?.description === "string" ? err.description : "",
+    typeof err?.message === "string" ? err.message : "",
+  ].join(" ");
+  return IGNORABLE_TELEGRAM.some((re) => re.test(text));
+}

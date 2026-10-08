@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeError } from "./errors.js";
+import { describeError, isIgnorableTelegramError } from "./errors.js";
 
 describe("describeError", () => {
   it("keeps the HTTP status and message of an SDK error", () => {
@@ -42,5 +42,28 @@ describe("describeError", () => {
   it("survives a thrown non-error", () => {
     expect(describeError("боль")).toContain("боль");
     expect(describeError(undefined)).not.toHaveLength(0);
+  });
+});
+
+describe("isIgnorableTelegramError", () => {
+  it("ignores the edit that changes nothing — it used to crash the whole bot", () => {
+    const e = Object.assign(new Error("Call to 'editMessageText' failed!"), {
+      error_code:  400,
+      description: "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+    });
+    expect(isIgnorableTelegramError(e)).toBe(true);
+  });
+
+  it("matches it by message text too", () => {
+    expect(isIgnorableTelegramError(new Error("400: Bad Request: message is not modified: ..."))).toBe(true);
+  });
+
+  it("does not ignore a real failure", () => {
+    const e = Object.assign(new Error("Call to 'sendMessage' failed!"), {
+      error_code:  403,
+      description: "Forbidden: bot was kicked from the group chat",
+    });
+    expect(isIgnorableTelegramError(e)).toBe(false);
+    expect(isIgnorableTelegramError(new TypeError("fetch failed"))).toBe(false);
   });
 });

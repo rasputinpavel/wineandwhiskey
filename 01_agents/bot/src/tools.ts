@@ -1,6 +1,8 @@
 // Loyverse tools — вызываются Claude'ом через tool use
 
 import { createClient } from "@supabase/supabase-js";
+import { withRetry } from "./retry.js";
+import { describeError } from "./errors.js";
 
 const BASE_URL = "https://api.loyverse.com/v1.0";
 
@@ -12,25 +14,38 @@ function token() {
   return process.env.LOYVERSE_API_TOKEN!;
 }
 
+const PAGE_TIMEOUT_MS = 20_000; // на одну страницу; раньше было 15 сек без повторов
+
+// Одна страница. Статус кладём в ошибку — по нему isTransient решает, повторять
+// ли вызов (429/5xx — да, 401 — нет).
+async function loyversePage(url: string, path: string): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token()}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw Object.assign(new Error(`Loyverse ${res.status}: ${path.split("?")[0]}`), { status: res.status });
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Пагинация с повторами: 8 октября 2026 одна страница не ответила за 15 секунд
+// и унесла весь утренний брифинг. Теперь медленная страница переспрашивается.
 async function loyverseFetch<T>(path: string, key: string): Promise<T[]> {
   const results: T[] = [];
   let cursor: string | undefined;
   do {
     const url = `${BASE_URL}${path}${path.includes("?") ? "&" : "?"}limit=250${cursor ? `&cursor=${cursor}` : ""}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000); // 15 сек на запрос
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token()}` },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`Loyverse ${res.status}: ${path}`);
-      const data = await res.json();
-      results.push(...(data[key] ?? []));
-      cursor = data.cursor;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const data = await withRetry(() => loyversePage(url, path), {
+      onRetry: (attempt, e, delayMs) =>
+        console.warn(`Loyverse ${path}: попытка ${attempt} не прошла (${describeError(e)}), повтор через ${delayMs} мс`),
+    });
+    results.push(...(data[key] ?? []));
+    cursor = data.cursor;
   } while (cursor);
   return results;
 }
