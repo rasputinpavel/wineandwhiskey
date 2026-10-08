@@ -175,7 +175,50 @@ and `2019 / pending` below (coordinates: 10.6pt and 10.7pt inside the cluster ag
 behave the same way. The Goutorbe case has to fall out of the general grouping —
 column regularity plus centring — not out of a hard-coded exemption.
 
-**How a cluster's boundaries are found.** `pdftotext -layout` flattens the vertical
+### Read coordinates, not character columns (decided 2026-10-08)
+
+The first implementation read `pdftotext -layout` and reconstructed which rows belong
+to which product from the text alone, using a cost model over column regularity and
+centring, solved with a dynamic program. It came out 1,261 of 1,262 positions right —
+and the one it got wrong proved the approach cannot be fixed by tuning.
+
+Page 14, in the PDF's own word coordinates:
+
+```
+y=549.0        2019
+y=553.0  +4.0  R Hermandad, Blend (Malbec/ Cab/ Merlot/ Petit Verdot)  750ml 14.5 1,490
+y=557.7  +4.7  2022      ← 4.7pt below Blend's row: it is Blend's
+y=571.6 +13.9  2022      ← 13.9pt: a new product starts here
+y=575.6  +4.0  R Hermandad, Malbec                                     750ml 14.5 1,490
+y=579.6  +4.0  2023
+```
+
+`-layout` merges baselines 4pt apart onto one text line, so in the text `2019` lands on
+Blend's line and the second `2022` on Malbec's, leaving the first `2022` exactly
+equidistant between the two products. **The ownership information is not in the text
+layer at all**, so every heuristic is guessing; four cost-tuple variants were measured
+and all were worse. The consequence today is that `Hermandad, Blend … 2022 @ ฿1,490`
+is missing from the import, hidden because the stolen row became a duplicate that
+deduplication swallowed. With different prices the same shape invents a price instead
+of dropping one.
+
+So the geometry layer reads **`pdftotext -bbox`** instead:
+
+- a **row** is the words sharing a `yMin`;
+- a **cluster** is consecutive rows whose vertical gap is under **12.5pt**. Measured
+  over the whole catalog: 424 gaps at 5pt and 443 at 14pt, with the nearest values to
+  the threshold being 11pt and 13pt — a 2pt margin on both sides. Bussola's Recioto,
+  which broke the earlier absolute rule, sits at 10.6pt inside against 14.1pt between;
+- a **column** is assigned by comparing a word's `xMin` against the header words'
+  positions — exact, so the character-window arithmetic, its per-table clamping and
+  the whole cost model and dynamic program are deleted rather than fixed.
+
+Everything above the geometry layer is unchanged: the Type vocabulary, the line roles,
+the banners and context, `pending`, the separator oddities and item construction all
+stay as they are, and their tests stay green.
+
+**How a cluster's boundaries are found in the text layer (superseded, kept for the
+reasoning).** `pdftotext -layout` flattens the vertical
 gaps that separate one product from the next: a 5pt gap inside a cluster and a 14pt
 gap between products both arrive as a single newline. So the grouping is reconstructed
 from what the cells themselves say — a column is printed once per row or once per
