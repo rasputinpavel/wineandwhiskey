@@ -726,7 +726,9 @@ const SUB_BANNER_X = 60
 // of one, starts at 86pt at the furthest. 120 sits in that 64pt-wide gap.
 const PROSE_X = 120
 
-export function parseCatalogText(xml: string): ExtractedItem[] {
+// Takes the `pdftotext -bbox` dump of the whole document. Named for what it
+// reads: the geometry is in the XML, not in laid-out text.
+export function parseCatalogXml(xml: string): ExtractedItem[] {
   const items: ExtractedItem[] = []
   const ctx: Context = { category: null, country: null, region: null, pageHadCountry: false, prose: [] }
   const tally = { oneCluster: 0 }

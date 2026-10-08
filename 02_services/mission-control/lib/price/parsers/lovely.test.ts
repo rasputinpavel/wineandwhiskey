@@ -323,7 +323,7 @@ function pageIndex(marker: string): number {
   return hits[0][0]
 }
 
-// The one page's raw XML, which is what parseCatalogText takes.
+// The one page's raw XML, which is what parseCatalogXml takes.
 const pageXml = (marker: string) => BBOX_PAGE_XML[pageIndex(marker)]
 const coords = (marker: string) => BBOX_PAGES[pageIndex(marker)]
 
@@ -355,7 +355,7 @@ describe('splitStockPrefix', () => {
   })
 })
 
-import { parseCatalogText } from './lovely'
+import { parseCatalogXml } from './lovely'
 import type { ExtractedItem } from '../claude'
 
 // Finds the one position whose name contains every fragment given. Throws when
@@ -368,14 +368,14 @@ function one(items: ExtractedItem[], ...fragments: string[]): ExtractedItem {
   return hits[0]
 }
 
-describe('parseCatalogText — tables, banners and whole data rows', () => {
+describe('parseCatalogXml — tables, banners and whole data rows', () => {
   it('yields nothing at all from the glassware and ashtray page', () => {
-    const items = parseCatalogText(pageXml('ZALTO GLASPERFEKTION'))
+    const items = parseCatalogXml(pageXml('ZALTO GLASPERFEKTION'))
     expect(items).toEqual([])
   })
 
   it('reads the spirits page whose Type words are glued to the product name', () => {
-    const items = parseCatalogText(pageXml('MAISON GELAS'))
+    const items = parseCatalogXml(pageXml('MAISON GELAS'))
     expect(items).toHaveLength(27)
 
     const barcelo = one(items, 'Ron Barcelo Blanco Anejado')
@@ -391,7 +391,7 @@ describe('parseCatalogText — tables, banners and whole data rows', () => {
   })
 
   it('takes the country from the page banner and the region from the sub-banner', () => {
-    const items = parseCatalogText(pageXml('CHATEAU HAUT POUGNAN'))
+    const items = parseCatalogXml(pageXml('CHATEAU HAUT POUGNAN'))
     const pougnan = one(items, 'Chateau Haut Pougnan Sauvignon')
     expect(pougnan).toMatchObject({
       country: 'France', region: 'Entre-Deux-Mers, Bordeaux',
@@ -403,7 +403,7 @@ describe('parseCatalogText — tables, banners and whole data rows', () => {
   })
 
   it('carries the producer paragraph into the description', () => {
-    const items = parseCatalogText(pageXml('MAISON GELAS'))
+    const items = parseCatalogXml(pageXml('MAISON GELAS'))
     expect(one(items, 'Bas Armagnac 8 Ans').description)
       .toContain('Gelas Bas-Armagnac is celebrated')
   })
@@ -425,7 +425,7 @@ function shapeOf(items: ExtractedItem[], name: string): string[] {
 
 describe('the centring rule — a cell alone on its line serves its neighbours', () => {
   it('gives a name row centred between size rows both of its sizes', () => {
-    const items = parseCatalogText(pageXml('CANARD-DUCHÊNE'))
+    const items = parseCatalogXml(pageXml('CANARD-DUCHÊNE'))
     expect(shape(items, "'Cuvee Leonie' Brut", 'Rose')).toEqual(['750ml/-/3000'])
     expect(shapeOf(items, "Canard Duchene Champagne 'Cuvee Leonie' Brut").sort())
       .toEqual(['1500ml/-/5520', '750ml/-/2710'])
@@ -442,29 +442,29 @@ describe('the centring rule — a cell alone on its line serves its neighbours',
     // above it, whose own line carries neither a size nor a price. Hand it to
     // 'Le Ru Des Charmes' below instead and that wine lands in the database at
     // 2,010 when it really costs 2,570 — a plausible wrong price.
-    const items = parseCatalogText(pageXml('GOUTORBE-BOUILLOT'))
+    const items = parseCatalogXml(pageXml('GOUTORBE-BOUILLOT'))
     expect(shape(items, "'Le Ru Des Charmes'")).toEqual(['750ml/-/2570'])
     expect(shape(items, "'Reflets De Riviere'").sort()).toEqual(['375ml/-/1440', '750ml/-/2010'])
   })
 
   it('lets a vintage-variant row inherit the size from its name row', () => {
     // Without inheritance both of these land with volume: null.
-    const items = parseCatalogText(pageXml('ALDRIDGE'))
+    const items = parseCatalogXml(pageXml('ALDRIDGE'))
     expect(shape(items, "'Twynham' Chardonnay")).toEqual(['750ml/2024/590', '750ml/2025/-'])
     expect(shape(items, "'Rams Head'")).toEqual(['750ml/2023/590', '750ml/2024/-'])
   })
 
   it('spreads a single price over the vintages centred against it', () => {
-    const tollo = parseCatalogText(pageXml('CANTINA TOLLO'))
+    const tollo = parseCatalogXml(pageXml('CANTINA TOLLO'))
     expect(shape(tollo, "'Rocca Ventosa' Pinot Grigio"))
       .toEqual(['750ml/2023/840', '750ml/2024/840', '750ml/2025/840'])
 
-    const yangarra = parseCatalogText(pageXml('YANGARRA ESTATE VINEYARD'))
+    const yangarra = parseCatalogXml(pageXml('YANGARRA ESTATE VINEYARD'))
     expect(shape(yangarra, "'GSM'")).toEqual(['750ml/2017/2120', '750ml/2021/2120'])
   })
 
   it('pairs sizes, vintages and prices positionally when each is printed', () => {
-    const muga = parseCatalogText(pageXml('MUGA'))
+    const muga = parseCatalogXml(pageXml('MUGA'))
     expect(shapeOf(muga, 'Muga Rose')).toEqual(['1500ml/2021/2320', '3000ml/2022/4770'])
     expect(shapeOf(muga, 'Muga Rose, Rioja DOC')).toEqual(['750ml/2023/1075'])
     expect(shape(muga, "'Prado Enea'"))
@@ -478,19 +478,19 @@ describe('the centring rule — a cell alone on its line serves its neighbours',
     // Giuseppe Cortese prints three vintages around the 500ml Recioto's own
     // 2018, and the Barbaresco rows either side of Rabaja carry everything of
     // their own. Both shapes come out of the same rule.
-    const items = parseCatalogText(pageXml('GIUSEPPE CORTESE'))
+    const items = parseCatalogXml(pageXml('GIUSEPPE CORTESE'))
     expect(shape(items, 'Barbaresco, Rabaja')).toEqual(['750ml/2017/4105', '750ml/2019/4105'])
     expect(shape(items, 'Barbaresco Reserva')).toEqual(['750ml/2013/6920'])
     expect(shape(items, 'Langhe, Nebbiolo')).toEqual(['750ml/2022/1580'])
 
-    const bussola = parseCatalogText(pageXml('BUSSOLA TOMMASO'))
+    const bussola = parseCatalogXml(pageXml('BUSSOLA TOMMASO'))
     expect(shape(bussola, "'Recioto' Della Valpolicella Classico TB").sort())
       .toEqual(['500ml/2017/3320', '500ml/2018/3320', '500ml/2019/-', '750ml/2008/5685'])
     expect(shape(bussola, 'Valpolicella Ripasso')).toEqual(['750ml/2019/1640', '750ml/2020/-'])
   })
 
   it('keeps every row of a five-row cluster with its own product', () => {
-    const items = parseCatalogText(pageXml('LA RIOJA ALTA'))
+    const items = parseCatalogXml(pageXml('LA RIOJA ALTA'))
     expect(shape(items, "'Gran Reserva 904'"))
       .toEqual(['750ml/2015/4770', '750ml/2016/4770', '1500ml/2015/9540', '1500ml/2016/9540'])
     expect(shape(items, "'Gran Reserva 890'"))
@@ -504,7 +504,7 @@ describe('the centring rule — a cell alone on its line serves its neighbours',
 
 describe('a name wrapped around its type code is one product, not two', () => {
   it('joins the halves of a Realm Cellars name and files no junk position', () => {
-    const items = parseCatalogText(pageXml('REALM CELLARS'))
+    const items = parseCatalogXml(pageXml('REALM CELLARS'))
     expect(shapeOf(items, "Realm Cellars ‘Houyi Vineyard’ Napa Valley, Cabernet Sauvignon"))
       .toEqual(['750ml/2021/16360', '750ml/2022/12800'])
     // Emitting the continuation on its own would file a wine called
@@ -515,20 +515,20 @@ describe('a name wrapped around its type code is one product, not two', () => {
   })
 
   it('joins a Yangarra name over its grape list', () => {
-    const items = parseCatalogText(pageXml('YANGARRA ESTATE VINEYARD'))
+    const items = parseCatalogXml(pageXml('YANGARRA ESTATE VINEYARD'))
     expect([...new Set(items.filter(i => i.name.includes("'GSM'")).map(i => i.name))])
       .toEqual(["Yangarra Estae Vineyard 'GSM' (Grenache/ Shiraz/ Mourvèdre)"])
     expect(items.some(i => i.name.startsWith('(Grenache'))).toBe(false)
   })
 
   it('joins a Cantina Tollo name over its appellation', () => {
-    const items = parseCatalogText(pageXml('CANTINA TOLLO'))
+    const items = parseCatalogXml(pageXml('CANTINA TOLLO'))
     expect([...new Set(items.filter(i => i.name.includes('Pinot Grigio')).map(i => i.name))])
       .toEqual(["Cantina Tollo 'Rocca Ventosa' Pinot Grigio Terre di Chieti IGP"])
   })
 
   it('joins a name split mid-word and keeps each cluster its own', () => {
-    const items = parseCatalogText(pageXml('DOMAINE COMTESSE DE CHERISEY'))
+    const items = parseCatalogXml(pageXml('DOMAINE COMTESSE DE CHERISEY'))
     expect(shapeOf(items, "Comtesse de Cherisey, Meursault-Blagny, 1er Cru 'La Genelotte'"))
       .toEqual(['750ml/2018/7245'])
     expect(shapeOf(items, "Comtesse de Cherisey, Meursault 'Bois de Blagny'"))
@@ -546,7 +546,7 @@ describe('a name wrapped around its type code is one product, not two', () => {
     // phantom position with a price.
     for (const marker of ['YANGARRA ESTATE VINEYARD', 'REALM CELLARS', 'MAISON GELAS',
                           'DOMAINE COMTESSE DE CHERISEY', 'GIUSEPPE CORTESE']) {
-      for (const item of parseCatalogText(pageXml(marker))) {
+      for (const item of parseCatalogXml(pageXml(marker))) {
         expect(item.name, marker).not.toMatch(/\b(is|are|the|and|with)\b/)
         expect(item.name.length, `${marker}: ${item.name}`).toBeLessThan(90)
       }
@@ -556,7 +556,7 @@ describe('a name wrapped around its type code is one product, not two', () => {
 
 describe('stock remarks, torn type codes and lone Remark cells', () => {
   it('keeps the code and the name when a stock remark splits the row', () => {
-    const items = parseCatalogText(pageXml('JAVELIER-LAURIN'))
+    const items = parseCatalogXml(pageXml('JAVELIER-LAURIN'))
     const javelier = items.filter(i => i.name.startsWith('Javelier-Laurin'))
     expect(javelier.map(i => i.price)).toEqual([1500, 4490, 5900, 12150])
     for (const i of javelier) {
@@ -572,7 +572,7 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
   })
 
   it('reads a row whose stock remark is printed before the name', () => {
-    const items = parseCatalogText(pageXml('CHATEAU LA PENSEE'))
+    const items = parseCatalogXml(pageXml('CHATEAU LA PENSEE'))
     const pensee = one(items, 'Chateau La Pensee Lalande de Pomerol')
     expect(pensee).toMatchObject({ price: 1450, year: 2020, wine_type: 'red', volume: '750ml' })
     expect(pensee.description).toContain('low stock')
@@ -582,17 +582,17 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
   it('reassembles a stock remark torn across the type code', () => {
     // "low R" on one line, "stock   <name>" on the next. Lose the halves and
     // the type code goes with them, leaving a position with no category.
-    const cos = one(parseCatalogText(pageXml("CHATEAU COS D'ESTOURNEL")), "Cos d'Estournel")
+    const cos = one(parseCatalogXml(pageXml("CHATEAU COS D'ESTOURNEL")), "Cos d'Estournel")
     expect(cos).toMatchObject({ name: "Chateau Cos d'Estournel Saint-Estephe", wine_type: 'red', price: 9440 })
     expect(cos.description).toContain('low stock')
 
-    const melka = one(parseCatalogText(pageXml('MELKA')), '(Bordeaux Blend)')
+    const melka = one(parseCatalogXml(pageXml('MELKA')), '(Bordeaux Blend)')
     expect(melka).toMatchObject({ wine_type: 'red', price: 11030, year: 2017 })
     expect(melka.description).toContain('low stock')
   })
 
   it('gives a product both of the ratings centred around it', () => {
-    const items = parseCatalogText(pageXml('PAUL BARA'))
+    const items = parseCatalogXml(pageXml('PAUL BARA'))
     const reserve = one(items, "'Reserve Brut'")
     expect(reserve.description).toContain('91 WS')
     expect(reserve.description).toContain('90 VN')
@@ -601,7 +601,7 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
   })
 
   it('hands a lone rating to the row below when the row above has its own', () => {
-    const items = parseCatalogText(pageXml("O'SHAUGHNESSY"))
+    const items = parseCatalogXml(pageXml("O'SHAUGHNESSY"))
     const howell = items.filter(i => i.name.includes("'Howell Mountain'"))
     expect(howell).toHaveLength(2)
     expect(howell[0].description).toContain('87WE 93JS')
@@ -612,9 +612,9 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
   })
 
   it('keeps a rating out of the price column', () => {
-    expect(one(parseCatalogText(pageXml('MELKA')), "'Metisse' Jumping Goat").price).toBe(11400)
+    expect(one(parseCatalogXml(pageXml('MELKA')), "'Metisse' Jumping Goat").price).toBe(11400)
     // Prints "100 JS" in the Remark column and no price of its own on that line.
-    const high = parseCatalogText(pageXml('YANGARRA ESTATE VINEYARD'))
+    const high = parseCatalogXml(pageXml('YANGARRA ESTATE VINEYARD'))
       .filter(i => i.name.includes('High Sands Grenache'))
     expect(high.map(i => i.price)).toEqual([null, 7760])
     expect(high[0].description).toContain('100 JS')
@@ -624,8 +624,8 @@ describe('stock remarks, torn type codes and lone Remark cells', () => {
 describe('prices the catalog prints oddly', () => {
   it('reads a price whose thousands separator is a dot, and says so', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const cortese = parseCatalogText(pageXml('GIUSEPPE CORTESE'))
-    const muga = parseCatalogText(pageXml('MUGA'))
+    const cortese = parseCatalogXml(pageXml('GIUSEPPE CORTESE'))
+    const muga = parseCatalogXml(pageXml('MUGA'))
     const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('thousands') || m.includes('a dot where'))
     warn.mockRestore()
 
@@ -642,14 +642,14 @@ describe('prices the catalog prints oddly', () => {
   })
 
   it('keeps "pending" as a position with no price rather than dropping it', () => {
-    const items = parseCatalogText(pageXml('TOLAINI'))
+    const items = parseCatalogXml(pageXml('TOLAINI'))
     expect(one(items, "'Valdisanti'")).toMatchObject({ year: 2022, price: null, volume: '750ml' })
     // Two sizes and two vintages against one printed price.
     expect(shape(items, "'Al Passo'")).toEqual(['750ml/2020/1300', '1500ml/2022/1300'])
   })
 
   it('files a dessert-wine code as wine with no colour', () => {
-    const monsanto = one(parseCatalogText(pageXml('CASTELLO DI MONSANTO')), "'La Chimera'")
+    const monsanto = one(parseCatalogXml(pageXml('CASTELLO DI MONSANTO')), "'La Chimera'")
     expect(monsanto).toMatchObject({ category: 'wine', wine_type: null, price: 3151, volume: '375ml' })
     expect(monsanto.description).toMatch(/dessert/i)
   })
@@ -663,7 +663,7 @@ const COORD_FIXTURE_UNPRICED = 22
 describe('invariants over every page of the fixture', () => {
   const items = (() => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const all = parseCatalogText(BBOX)
+    const all = parseCatalogXml(BBOX)
     warn.mockRestore()
     return all
   })()
@@ -717,7 +717,7 @@ describe('ambiguous clusters are named out loud', () => {
   // Those are paired positionally and reported, so a human can check them.
   function reported(marker: string): string[] {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    parseCatalogText(pageXml(marker))
+    parseCatalogXml(pageXml(marker))
     const said = warn.mock.calls.map(c => String(c[0]))
     warn.mockRestore()
     return said
@@ -753,7 +753,7 @@ describe('two shapes the full catalog turned up', () => {
     // "lowR" with no space at all, twice in the catalog. Left alone it becomes a
     // product named "lowR", the code goes with it, and the real row below —
     // Blason d'Issan at 1,845 — lands with no category and is dropped.
-    const items = parseCatalogText(pageXml('CHÂTEAU D’ISSAN'))
+    const items = parseCatalogXml(pageXml('CHÂTEAU D’ISSAN'))
     const blason = one(items, "Blason d'Issan")
     expect(blason).toMatchObject({
       name: "Blason d'Issan - Margaux", price: 1845, year: 2021,
@@ -767,7 +767,7 @@ describe('two shapes the full catalog turned up', () => {
     // to head a run of rows. They are neither a product nor a Type cell, so
     // they must not become a nameless product that takes part in the centring.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const items = parseCatalogText(pageXml('CASAS PATRONALES'))
+    const items = parseCatalogXml(pageXml('CASAS PATRONALES'))
     const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('no Type cell ever arrived'))
     warn.mockRestore()
 
@@ -787,7 +787,7 @@ describe('a run of wrapped names, one after another', () => {
     // Buisson prints three wrapped names in a row. A product whose name is
     // wrapped around its code line has exactly two halves; keep absorbing and
     // the next product's name joins this one and its own row loses its code.
-    const items = parseCatalogText(pageXml('DOMAINE HENRI & GILLES BUISSON'))
+    const items = parseCatalogXml(pageXml('DOMAINE HENRI & GILLES BUISSON'))
     expect(shapeOf(items, "Domaine Henri & Gilles Buisson, Saint-Romain 'Sous La Velle'"))
       .toEqual(['750ml/2022/2990', '750ml/2023/2990'])
     expect(shapeOf(items, "Domaine Henri & Gilles Buisson, Saint-Romain 'Sous Roche'"))
@@ -803,7 +803,7 @@ describe('a run of wrapped names, one after another', () => {
     // the Alc% along with the name, which used to push the text past the Size
     // column and make the row look like a producer paragraph. The name was then
     // thrown away and the priced row below it dropped for having none.
-    const items = parseCatalogText(pageXml('DOMAINE J.A. FERRET'))
+    const items = parseCatalogXml(pageXml('DOMAINE J.A. FERRET'))
     expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Tete de Cru 'Clos des Prouges'"))
       .toEqual(['750ml/2017/2900', '750ml/2018/2900', '750ml/2019/2900', '750ml/2020/2900'])
     expect(items.filter(i => i.price === 3880 || i.price === 3180).length).toBeGreaterThan(0)
@@ -818,7 +818,7 @@ describe('a price serves the vintages printed beside it', () => {
     // prices look like a bad split, so the 2018 row was handed to the producer
     // above; and pairing the lists by index put 2019 on the 3,880 instead of on
     // the 3,630 printed on its own line.
-    const items = parseCatalogText(pageXml('DOMAINE J.A. FERRET'))
+    const items = parseCatalogXml(pageXml('DOMAINE J.A. FERRET'))
     expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Tournant De Pouilly'"))
       .toEqual(['750ml/2018/3630', '750ml/2019/3630', '750ml/2020/3880', '750ml/2021/3880'])
     expect(shapeOf(items, "Domaine J.A. Ferret, Pouilly-Fuisse, Cuvee Hors Classe 'Les Menetrieres"))
@@ -826,7 +826,7 @@ describe('a price serves the vintages printed beside it', () => {
   })
 
   it('still pairs a cluster whose vintages and prices alternate line by line', () => {
-    const items = parseCatalogText(pageXml('DOMAINE COMTESSE DE CHERISEY'))
+    const items = parseCatalogXml(pageXml('DOMAINE COMTESSE DE CHERISEY'))
     expect(shapeOf(items, "Comtesse de Cherisey, Puligny-Montrachet, 1er Cru 'Hameau de Blagny'"))
       .toEqual(['750ml/2018/7750', '750ml/2019/8100', '750ml/2020/11000', '750ml/2021/11000'])
   })
@@ -857,7 +857,7 @@ describe('the one Tesseron table, which prints both oddities at once', () => {
   })
 
   it('treats "Request for Quote" as a price the catalog has not set', () => {
-    const items = parseCatalogText(pageXml('TESSERON COGNAC'))
+    const items = parseCatalogXml(pageXml('TESSERON COGNAC'))
 
     const extreme = one(items, 'Tesseron Extreme Rare')
     expect(extreme).toMatchObject({
@@ -962,7 +962,7 @@ describe('clusters come from the gaps between baselines', () => {
     // carry a size, a vintage and a price. The old reader gave it to Malbec,
     // where it became a duplicate vintage and the dedup swallowed it: one real
     // position, silently absent from the import.
-    const items = parseCatalogText(pageXml('HERMANDAD'))
+    const items = parseCatalogXml(pageXml('HERMANDAD'))
     expect(shapeOf(items, 'Hermandad, Blend (Malbec/ Cab/ Merlot/ Petit Verdot)'))
       .toEqual(['750ml/2019/1490', '750ml/2022/1490'])
     expect(shapeOf(items, 'Hermandad, Malbec'))
@@ -972,7 +972,7 @@ describe('clusters come from the gaps between baselines', () => {
   it('breaks a cluster at the catalog’s narrowest product gap', () => {
     // Prototype, page 56: 13.1pt and 13.2pt between products, against 4.7pt
     // inside each cluster. The threshold has to fall between those.
-    const items = parseCatalogText(pageXml('PROTOTYPE'))
+    const items = parseCatalogXml(pageXml('PROTOTYPE'))
     expect(shapeOf(items, 'Prototype, Chardonnay')).toEqual(['750ml/2022/1110', '750ml/2024/1110'])
     expect(shapeOf(items, 'Prototype, Cabernet Sauvignon')).toEqual(['750ml/2022/1110', '750ml/2024/1110'])
     expect(shapeOf(items, 'Prototype, Zinfandel')).toEqual(['750ml/2021/1110', '750ml/2022/1110'])
@@ -982,7 +982,7 @@ describe('clusters come from the gaps between baselines', () => {
     // RUPPERTSBERG, DEIDESHEIM, FORST prints its three words at 85, 207 and
     // 307pt, so two of them fall in the cell area. Reading only the left-hand
     // part truncates the region to "Ruppertsberg, Deidesheim,".
-    const items = parseCatalogText(pageXml('RUPPERTSBERG,'))
+    const items = parseCatalogXml(pageXml('RUPPERTSBERG,'))
     expect([...new Set(items.map(i => i.region))]).toContain('Ruppertsberg, Deidesheim, Forst')
   })
 
@@ -990,7 +990,7 @@ describe('clusters come from the gaps between baselines', () => {
     // The old reader searched a window of characters either side of the Price
     // anchor and had to be clamped by hand to stop a score 8 characters away
     // reading as the price. A word's own xMin settles it with nothing to tune.
-    const items = parseCatalogText(pageXml('PAUL BARA'))
+    const items = parseCatalogXml(pageXml('PAUL BARA'))
     expect(one(items, "'Special Club Brut'").price).toBe(4945)
     expect(one(items, "'Special Club Brut'").description).toContain('94 VN')
     const reserve = one(items, "'Reserve Brut'")
@@ -1004,7 +1004,7 @@ describe('what the parser refuses, and says it refuses', () => {
   it('refuses a cluster with a type and a name but not one cell', () => {
     // Emitted, it became a row of nulls in the database.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const items = parseCatalogText(`<page width="595" height="842">
+    const items = parseCatalogXml(`<page width="595" height="842">
       <word xMin="40" yMin="100" xMax="60" yMax="110">Type</word>
       <word xMin="320" yMin="100" xMax="340" yMax="110">Size</word>
       <word xMin="370" yMin="100" xMax="390" yMax="110">Alc%</word>
@@ -1023,7 +1023,7 @@ describe('what the parser refuses, and says it refuses', () => {
     // A SPIRITS page for Peru would otherwise inherit the previous page's
     // country and file Pisco as Sri Lankan.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const items = parseCatalogText(`<page width="595" height="842">
+    const items = parseCatalogXml(`<page width="595" height="842">
       <word xMin="260" yMin="40" xMax="330" yMax="52">SPIRITS</word>
       <word xMin="86" yMin="80" xMax="140" yMax="92">ATACAMA</word>
       <word xMin="40" yMin="140" xMax="60" yMax="150">Type</word>
@@ -1044,7 +1044,7 @@ describe('what the parser refuses, and says it refuses', () => {
   })
 
   it('names Peru and the other spirits countries it does know', () => {
-    const peru = parseCatalogText(`<page width="595" height="842">
+    const peru = parseCatalogXml(`<page width="595" height="842">
       <word xMin="260" yMin="40" xMax="330" yMax="52">SPIRITS</word>
       <word xMin="86" yMin="80" xMax="120" yMax="92">PERU</word>
       <word xMin="40" yMin="140" xMax="60" yMax="150">Type</word>
@@ -1063,7 +1063,7 @@ describe('what the parser refuses, and says it refuses', () => {
     // Tolaini 'Al Passo' is the only one in the catalog, and it must not hide
     // among the 213 benign "one price, several vintages" clusters.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    parseCatalogText(pageXml('TOLAINI'))
+    parseCatalogXml(pageXml('TOLAINI'))
     const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('BOTTLE SIZES'))
     warn.mockRestore()
     expect(said).toHaveLength(1)
@@ -1076,7 +1076,7 @@ describe('what the parser refuses, and says it refuses', () => {
     // A wrapped product name mistaken for prose would go with its cells, which
     // is how a phantom priced wine gets filed under half a sentence.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const items = parseCatalogText(pageXml('CLENDENEN'))
+    const items = parseCatalogXml(pageXml('CLENDENEN'))
     const said = warn.mock.calls.map(c => String(c[0])).filter(m => m.includes('prose inside a table'))
     warn.mockRestore()
     expect(said.length).toBeGreaterThanOrEqual(3)
