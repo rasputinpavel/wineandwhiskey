@@ -43,6 +43,8 @@
 // No supplier item codes anywhere except the Zalto glassware we skip, so
 // supplier_sku stays null (same as Boozia and Richly).
 
+import { PDFDocument } from 'pdf-lib'
+
 import type { ExtractedItem, ExtractionResult } from '../claude'
 import { writeTemp as writeTempShared, safeUnlink, pdftotextLayout, exec } from './_shared'
 
@@ -987,4 +989,55 @@ function alignToSpine<T>(spine: number[], cells: { y: number; value: T }[]): (T 
     out[i] = pick.value
   }
   return out
+}
+
+// ─── Entry point ───────────────────────────────────────────────────────────
+
+// The catalog prints no date in its text layer, so the PDF's own metadata is the
+// fallback behind the filename.
+export async function pdfModDate(buf: Buffer): Promise<Date | null> {
+  try {
+    const doc = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false })
+    return doc.getModificationDate() ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function parseLovely(
+  buf: Buffer,
+  filename: string,
+  onProgress?: ProgressCb,
+): Promise<ExtractionResult> {
+  await onProgress?.(10, 'reading pdf')
+
+  const path = await writeTemp(buf)
+  let xml = ''
+  try {
+    // Coordinates, not laid-out text: see the note above `wordRows`.
+    xml = await pdftotextBbox(path)
+  } finally {
+    safeUnlink(path)
+  }
+
+  await onProgress?.(40, 'parsing')
+  const items = parseCatalogXml(xml)
+  console.log(`[lovely] ${items.length} items from ${xml.split('<page').length - 1} pages`)
+
+  // An empty catalog is a failed upload, not a price list of nothing: inserted,
+  // it would expire the previous one and leave the browser blank. Either
+  // pdftotext is missing, or the catalog has been redesigned.
+  if (items.length === 0) {
+    throw new Error('Lovely Wines parser found no items — check that pdftotext is available')
+  }
+
+  const modDate = await pdfModDate(buf)
+  await onProgress?.(95, 'inserting', items.length)
+
+  return {
+    supplier_name: SUPPLIER_NAME,
+    price_list_date: catalogDate(filename, modDate),
+    currency: 'THB',
+    items,
+  }
 }

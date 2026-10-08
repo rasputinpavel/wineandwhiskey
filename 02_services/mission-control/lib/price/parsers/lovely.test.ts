@@ -1273,3 +1273,80 @@ describe('a word is a whole token, so no number can be half-read', () => {
     expect(one(items, 'Bas Armagnac 60 Ans').price).toBe(41960)
   })
 })
+
+// ─── The IO wrapper and the registry entry ─────────────────────────────────
+
+import { parseLovely } from './lovely'
+import { PDFDocument } from 'pdf-lib'
+
+// A real one-page PDF, built here rather than committed, so the wrapper is
+// exercised end to end: temp file, pdftotext -bbox, parse, cleanup.
+async function blankPdf(modDate: Date | null): Promise<Buffer> {
+  const doc = await PDFDocument.create()
+  doc.addPage([595, 842])
+  if (modDate) doc.setModificationDate(modDate)
+  return Buffer.from(await doc.save())
+}
+
+describe('parseLovely', () => {
+  it('refuses to return an empty catalog rather than importing nothing', async () => {
+    // A PDF with no table in it means pdftotext is missing, the dump is empty, or
+    // the catalog was redesigned. Any of those is worth a failed upload, not a
+    // price list of zero items that silently expires the previous one.
+    await expect(parseLovely(await blankPdf(null), 'lovely-blank.pdf'))
+      .rejects.toThrow(/found no items/i)
+  })
+
+  it('reports progress on the way through', async () => {
+    const seen: number[] = []
+    await parseLovely(await blankPdf(null), 'lovely-blank.pdf', pct => { seen.push(pct) })
+      .catch(() => {})
+    expect(seen[0]).toBe(10)
+  })
+
+  it('reads the catalog month from the filename against the PDF’s own ModDate', async () => {
+    // Exercised through the wrapper, because reading ModDate off the buffer is
+    // the one part of the date logic its own unit tests cannot reach.
+    const { pdfModDate } = await import('./lovely')
+    expect(await pdfModDate(await blankPdf(new Date('2026-09-01T03:00:00Z'))))
+      .toEqual(new Date('2026-09-01T03:00:00Z'))
+    expect(await pdfModDate(Buffer.from('not a pdf'))).toBeNull()
+  })
+})
+
+describe('the registry entry', () => {
+  // The entry's own detect, not findMatchingParser: walking the whole registry
+  // would run every parser ahead of this one over the buffer first, and several
+  // of them shell out to pdftotext and throw on anything that is not their
+  // supplier's real PDF.
+  async function lovelyEntry() {
+    const { PARSERS } = await import('./index')
+    return PARSERS.find(p => p.id === 'lovely')!
+  }
+
+  it('is registered for PDFs and claims a Lovely filename', async () => {
+    const entry = await lovelyEntry()
+    expect(entry.fileTypes).toEqual(['pdf'])
+    expect(await entry.detect(Buffer.from(''), 'Lovely Wines Catalog_Sep Claudio.pdf', 'application/pdf')).toBe(true)
+  })
+
+  it('leaves other suppliers\u2019 files alone', async () => {
+    const entry = await lovelyEntry()
+    expect(await entry.detect(Buffer.from(''), 'something-else.pdf', 'application/pdf')).toBe(false)
+  })
+
+  it('sits in the deterministic block, right after richly', async () => {
+    const { PARSERS } = await import('./index')
+    const ids = PARSERS.map(p => p.id)
+    expect(ids).toContain('lovely')
+    expect(ids.indexOf('lovely')).toBe(ids.indexOf('richly') + 1)
+  })
+
+  it('runs through the registry and reports progress the way the route expects', async () => {
+    const entry = await lovelyEntry()
+    const steps: number[] = []
+    await expect(entry.run(await blankPdf(null), 'lovely-blank.pdf', 'application/pdf', pct => { steps.push(pct) }))
+      .rejects.toThrow(/found no items/i)
+    expect(steps).toContain(10)
+  })
+})
